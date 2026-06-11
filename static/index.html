@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gestión Comercial</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f0f2f5;
+  color: #1a1a1a;
+  min-height: 100vh;
+}
+.header {
+  background: #1a56db;
+  color: white;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.15);
+}
+.header h1 { font-size: 1.3rem; font-weight: 600; letter-spacing: -0.3px; }
+.container { max-width: 960px; margin: 0 auto; padding: 20px; }
+.card {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.08);
+}
+
+.scan-area { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.scan-input {
+  flex: 1;
+  min-width: 220px;
+  padding: 14px 18px;
+  font-size: 1.3rem;
+  border: 2px solid #d1d5db;
+  border-radius: 10px;
+  outline: none;
+  transition: border .2s;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 1px;
+}
+.scan-input:focus { border-color: #1a56db; }
+.scan-input::placeholder { color: #9ca3af; font-family: -apple-system, sans-serif; letter-spacing: 0; }
+
+.btn {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s;
+  white-space: nowrap;
+}
+.btn-primary { background: #1a56db; color: white; }
+.btn-primary:hover { background: #1e40af; }
+.btn-primary:disabled { background: #93c5fd; cursor: not-allowed; }
+.btn-success { background: #059669; color: white; }
+.btn-success:hover { background: #047857; }
+.btn-danger { background: #dc2626; color: white; }
+.btn-danger:hover { background: #b91c1c; }
+.btn-outline {
+  background: white;
+  color: #1a56db;
+  border: 2px solid #1a56db;
+}
+.btn-outline:hover { background: #eff6ff; }
+.btn-sm { padding: 6px 14px; font-size: .85rem; border-radius: 8px; }
+
+.toggle-row { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.toggle-label { font-size: .9rem; font-weight: 500; color: #374151; }
+.toggle {
+  position: relative;
+  width: 48px;
+  height: 26px;
+  background: #d1d5db;
+  border-radius: 13px;
+  cursor: pointer;
+  transition: background .25s;
+  flex-shrink: 0;
+}
+.toggle.active { background: #7c3aed; }
+.toggle::after {
+  content: '';
+  position: absolute;
+  top: 3px; left: 3px;
+  width: 20px; height: 20px;
+  background: white;
+  border-radius: 50%;
+  transition: transform .25s;
+  box-shadow: 0 1px 3px rgba(0,0,0,.2);
+}
+.toggle.active::after { transform: translateX(22px); }
+.toggle-badge {
+  font-size: .75rem;
+  background: #f3e8ff;
+  color: #7c3aed;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.result-card { display: none; }
+.result-card.visible { display: flex; gap: 20px; flex-wrap: wrap; }
+.result-image {
+  width: 180px;
+  height: 180px;
+  object-fit: contain;
+  border-radius: 10px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+}
+.result-info { flex: 1; min-width: 260px; }
+.result-name { font-size: 1.2rem; font-weight: 700; margin-bottom: 6px; }
+.result-brand { color: #6b7280; font-size: .95rem; margin-bottom: 10px; }
+.result-price {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #059669;
+  margin-bottom: 6px;
+}
+.result-source {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: .8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.source-carrefour { background: #dbeafe; color: #1e40af; }
+.source-vea { background: #fee2e2; color: #991b1b; }
+.source-masonline { background: #dcfce7; color: #166534; }
+.result-meta { font-size: .85rem; color: #9ca3af; margin-top: 6px; }
+.result-cantidad { margin-top: 10px; display: flex; align-items: center; gap: 8px; }
+.result-cantidad label { font-weight: 600; font-size: .9rem; color: #374151; white-space: nowrap; }
+.cantidad-input {
+  width: 90px;
+  padding: 8px 12px;
+  font-size: 1.1rem;
+  border: 2px solid #d1d5db;
+  border-radius: 8px;
+  outline: none;
+  text-align: center;
+  font-family: 'Courier New', monospace;
+  transition: border .2s;
+}
+.cantidad-input:focus { border-color: #059669; }
+.result-actions { margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap; }
+
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  padding: 12px 20px;
+  border-radius: 10px;
+  color: white;
+  font-weight: 600;
+  font-size: .9rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,.2);
+  z-index: 1000;
+  animation: slideUp .3s ease;
+  max-width: 360px;
+}
+.toast-success { background: #059669; }
+.toast-error { background: #dc2626; }
+.toast-info { background: #1a56db; }
+@keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+.table-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.table-header h3 { font-size: 1.05rem; font-weight: 700; }
+.table-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.search-input {
+  padding: 8px 14px;
+  border: 2px solid #d1d5db;
+  border-radius: 8px;
+  font-size: .9rem;
+  outline: none;
+  width: 200px;
+}
+.search-input:focus { border-color: #1a56db; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .9rem;
+}
+th {
+  text-align: left;
+  padding: 10px 8px;
+  border-bottom: 2px solid #e5e7eb;
+  color: #6b7280;
+  font-weight: 600;
+  font-size: .8rem;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+td { padding: 10px 8px; border-bottom: 1px solid #f3f4f6; }
+tr:hover td { background: #f9fafb; }
+
+.thumb { width: 40px; height: 40px; object-fit: contain; border-radius: 6px; background: #f3f4f6; }
+
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: #9ca3af;
+}
+.empty-state p { margin-top: 8px; font-size: .95rem; }
+
+.spinner {
+  display: inline-block;
+  width: 20px; height: 20px;
+  border: 3px solid #e5e7eb;
+  border-top-color: #1a56db;
+  border-radius: 50%;
+  animation: spin .6s linear infinite;
+  vertical-align: middle;
+  margin-right: 8px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.loading-text { text-align: center; padding: 20px; color: #6b7280; }
+
+.cached-badge {
+  display: inline-block;
+  background: #fef3c7;
+  color: #92400e;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: .75rem;
+  font-weight: 600;
+  margin-left: 8px;
+}
+
+.export-select {
+  padding: 8px 12px;
+  border: 2px solid #d1d5db;
+  border-radius: 8px;
+  font-size: .85rem;
+  outline: none;
+  cursor: pointer;
+  background: white;
+}
+.export-select:focus { border-color: #1a56db; }
+
+.specs-table { width: 100%; margin-top: 12px; font-size: .85rem; }
+.specs-table td { padding: 4px 8px; border: none; }
+.specs-table td:first-child { font-weight: 600; color: #6b7280; width: 40%; white-space: nowrap; }
+.specs-section { margin-top: 12px; border-top: 1px solid #e5e7eb; padding-top: 10px; }
+.specs-section h4 { font-size: .9rem; font-weight: 700; margin-bottom: 6px; color: #374151; }
+
+.checkbox-cell { width: 32px; text-align: center; }
+input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: #1a56db; }
+
+.select-all-row { display: flex; align-items: center; gap: 8px; font-size: .85rem; color: #6b7280; margin-bottom: 4px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Gestión Comercial</h1>
+  <div class="toggle-row">
+    <span class="toggle-label">Analizar con IA</span>
+    <div class="toggle" id="iaToggle" onclick="toggleIA()"></div>
+    <span class="toggle-badge" id="iaBadge" style="display:none">IA</span>
+  </div>
+</div>
+
+<div class="container">
+
+  <div class="card">
+    <div class="scan-area">
+      <input type="text" class="scan-input" id="barcodeInput"
+             placeholder="Escanear o escribir código de barras..."
+             autofocus autocomplete="off">
+      <button class="btn btn-primary" id="lookupBtn" onclick="doLookup()">Buscar</button>
+    </div>
+
+    <div id="loadingArea" style="display:none" class="loading-text">
+      <span class="spinner"></span> Buscando producto...
+    </div>
+
+    <div id="resultCard" class="result-card">
+      <img id="resultImage" class="result-image" src="" alt="" onerror="this.style.display='none'">
+      <div class="result-info">
+        <div class="result-name" id="resultName"></div>
+        <div class="result-brand" id="resultBrand"></div>
+        <div class="result-price" id="resultPrice"></div>
+        <div>
+          <span class="result-source" id="resultSource"></span>
+          <span class="cached-badge" id="cachedBadge" style="display:none">En BD</span>
+        </div>
+        <div class="result-meta">
+          SKU: <span id="resultSku">-</span> &middot; Código: <span id="resultBarcode">-</span>
+        </div>
+        <div id="resultSpecs"></div>
+        <div class="result-cantidad" id="cantidadRow">
+          <label for="cantidadInput">Cantidad inicial:</label>
+          <input type="number" class="cantidad-input" id="cantidadInput" value="0" min="0" step="1">
+        </div>
+        <div class="result-actions">
+          <button class="btn btn-success" id="saveBtn" onclick="saveProduct()">Guardar producto</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="table-header">
+      <h3>Productos guardados</h3>
+      <div class="table-actions">
+        <input type="text" class="search-input" id="searchInput"
+               placeholder="Filtrar..." oninput="loadProducts()">
+        <select class="export-select" id="exportFormat">
+          <option value="csv">CSV</option>
+          <option value="json">JSON</option>
+        </select>
+        <button class="btn btn-outline btn-sm" onclick="exportSelected()">Exportar</button>
+      </div>
+    </div>
+    <div class="select-all-row" id="selectAllRow" style="display:none">
+      <input type="checkbox" id="selectAll" onchange="toggleSelectAll()">
+      <label for="selectAll">Seleccionar todos</label>
+      <span id="selectedCount" style="margin-left:8px"></span>
+    </div>
+    <div id="productsTable"></div>
+  </div>
+
+</div>
+
+<script>
+let iaMode = false;
+let currentProduct = null;
+let allProducts = [];
+
+function toggleIA() {
+  iaMode = !iaMode;
+  document.getElementById('iaToggle').classList.toggle('active', iaMode);
+  document.getElementById('iaBadge').style.display = iaMode ? 'inline-block' : 'none';
+}
+
+async function doLookup() {
+  const input = document.getElementById('barcodeInput');
+  const barcode = input.value.trim();
+  if (!barcode) return;
+
+  const resultCard = document.getElementById('resultCard');
+  const loadingArea = document.getElementById('loadingArea');
+  const lookupBtn = document.getElementById('lookupBtn');
+
+  resultCard.classList.remove('visible');
+  loadingArea.style.display = 'block';
+  lookupBtn.disabled = true;
+  currentProduct = null;
+
+  try {
+    const resp = await fetch('/api/lookup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ barcode, ia_mode: iaMode })
+    });
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      showToast(data.error || 'Producto no encontrado', 'error');
+      return;
+    }
+
+    currentProduct = data;
+    renderResult(data);
+    resultCard.classList.add('visible');
+    document.getElementById('cantidadInput').value = data.cantidad || 0;
+    setTimeout(() => {
+      const qty = document.getElementById('cantidadInput');
+      qty.focus();
+      qty.select();
+    }, 100);
+    if (data._cached) {
+      showToast('Producto encontrado en la base local', 'info');
+    }
+  } catch (err) {
+    showToast('Error de conexión: ' + err.message, 'error');
+  } finally {
+    loadingArea.style.display = 'none';
+    lookupBtn.disabled = false;
+    input.select();
+  }
+}
+
+function renderResult(p) {
+  document.getElementById('resultName').textContent = p.nombre;
+  document.getElementById('resultBrand').textContent = p.marca || '';
+  document.getElementById('resultPrice').textContent =
+    p.precio_referencia ? '$ ' + Number(p.precio_referencia).toLocaleString('es-AR', {minimumFractionDigits: 2}) : '—';
+
+  const sourceEl = document.getElementById('resultSource');
+  sourceEl.textContent = p.fuente || '';
+  sourceEl.className = 'result-source source-' + (p.fuente || '');
+
+  document.getElementById('cachedBadge').style.display = p._cached ? 'inline-block' : 'none';
+  document.getElementById('resultSku').textContent = p.sku || '-';
+  document.getElementById('resultBarcode').textContent = p.codigo_barras;
+
+  const img = document.getElementById('resultImage');
+  img.style.display = 'block';
+  img.src = p.imagen_url || '';
+  img.onerror = function() { this.style.display = 'none'; };
+
+  const saveBtn = document.getElementById('saveBtn');
+  if (p._cached) {
+    saveBtn.textContent = 'Actualizar producto';
+    saveBtn.className = 'btn btn-primary';
+  } else {
+    saveBtn.textContent = 'Guardar producto';
+    saveBtn.className = 'btn btn-success';
+  }
+
+  renderSpecs(p.propiedades || {});
+}
+
+function renderSpecs(props) {
+  const container = document.getElementById('resultSpecs');
+  container.innerHTML = '';
+
+  const keys = Object.keys(props);
+  if (!keys.length) return;
+
+  const simpleProps = {};
+  const groups = {};
+
+  for (const [k, v] of Object.entries(props)) {
+    if (typeof v === 'object' && v !== null && !Array.isArray(v)) {
+      groups[k] = v;
+    } else {
+      simpleProps[k] = v;
+    }
+  }
+
+  if (keys.length === 0) return;
+
+  if (Object.keys(simpleProps).length > 0) {
+    container.innerHTML += '<div class="specs-section"><h4>Propiedades</h4></div>';
+    let html = '<table class="specs-table">';
+    for (const [k, v] of Object.entries(simpleProps)) {
+      let val = '';
+      if (typeof v === 'string') {
+        try { val = JSON.parse(v); if (typeof val === 'object') val = JSON.stringify(val); else val = String(val); }
+        catch { val = v; }
+      } else {
+        val = String(v);
+      }
+      html += `<tr><td>${esc(k)}</td><td>${esc(String(val).substring(0, 200))}</td></tr>`;
+    }
+    html += '</table>';
+    container.innerHTML += html;
+  }
+
+  for (const [gname, gspecs] of Object.entries(groups)) {
+    container.innerHTML += `<div class="specs-section"><h4>${esc(gname)}</h4></div>`;
+    let html = '<table class="specs-table">';
+    for (const [k, v] of Object.entries(gspecs)) {
+      html += `<tr><td>${esc(k)}</td><td>${esc(Array.isArray(v) ? v.join(', ') : String(v))}</td></tr>`;
+    }
+    html += '</table>';
+    container.innerHTML += html;
+  }
+}
+
+async function saveProduct() {
+  if (!currentProduct) return;
+  currentProduct.cantidad = parseInt(document.getElementById('cantidadInput').value) || 0;
+  try {
+    const resp = await fetch('/api/products', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(currentProduct)
+    });
+    const data = await resp.json();
+    if (!resp.ok) { showToast(data.error, 'error'); return; }
+    showToast('Producto guardado', 'success');
+    currentProduct._cached = true;
+    renderResult(currentProduct);
+    loadProducts();
+    setTimeout(() => {
+      const input = document.getElementById('barcodeInput');
+      input.value = '';
+      input.focus();
+    }, 100);
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+  }
+}
+
+async function loadProducts() {
+  const search = document.getElementById('searchInput').value.trim();
+  const url = '/api/products' + (search ? '?search=' + encodeURIComponent(search) : '');
+  try {
+    const resp = await fetch(url);
+    allProducts = await resp.json();
+    renderTable(allProducts);
+  } catch (err) {
+    document.getElementById('productsTable').innerHTML =
+      '<div class="empty-state"><p>Error al cargar productos</p></div>';
+  }
+}
+
+function renderTable(products) {
+  const container = document.getElementById('productsTable');
+  const selectAllRow = document.getElementById('selectAllRow');
+
+  if (!products.length) {
+    container.innerHTML = '<div class="empty-state"><p>No hay productos guardados. Escaneá un código para empezar.</p></div>';
+    selectAllRow.style.display = 'none';
+    return;
+  }
+
+  selectAllRow.style.display = 'flex';
+  document.getElementById('selectAll').checked = false;
+
+  let html = '<table><thead><tr>';
+  html += '<th class="checkbox-cell"><input type="checkbox" id="headerCheck" onchange="toggleSelectAll()"></th>';
+  html += '<th></th><th>Nombre</th><th>Marca</th><th>Precio ref.</th><th>Cant.</th><th>Fuente</th><th></th>';
+  html += '</tr></thead><tbody>';
+
+  for (const p of products) {
+    const priceStr = p.precio_referencia
+      ? '$ ' + Number(p.precio_referencia).toLocaleString('es-AR', {minimumFractionDigits: 2})
+      : '—';
+    const sourceClass = 'source-' + (p.fuente || '');
+    html += `<tr data-id="${p.id}">`;
+    html += `<td class="checkbox-cell"><input type="checkbox" class="prod-check" value="${p.id}" onchange="updateSelectAll()"></td>`;
+    html += `<td>${p.imagen_url ? `<img class="thumb" src="${escAttr(p.imagen_url)}" onerror="this.style.display='none'" loading="lazy">` : ''}</td>`;
+    html += `<td><strong>${esc(p.nombre)}</strong><br><small style="color:#9ca3af">${esc(p.codigo_barras)}</small></td>`;
+    html += `<td>${esc(p.marca || '-')}</td>`;
+    html += `<td>${priceStr}</td>`;
+    html += `<td>${p.cantidad || 0}</td>`;
+    html += `<td><span class="result-source ${sourceClass}">${esc(p.fuente || '')}</span></td>`;
+    html += `<td><button class="btn btn-danger btn-sm" onclick="deleteProduct(${p.id})">Eliminar</button></td>`;
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+function toggleSelectAll() {
+  const checked = document.getElementById('selectAll').checked;
+  document.querySelectorAll('.prod-check').forEach(cb => { cb.checked = checked; });
+  document.getElementById('headerCheck').checked = checked;
+  updateSelectedCount();
+}
+
+function updateSelectAll() {
+  const checks = document.querySelectorAll('.prod-check');
+  const allChecked = checks.length > 0 && [...checks].every(c => c.checked);
+  document.getElementById('selectAll').checked = allChecked;
+  document.getElementById('headerCheck').checked = allChecked;
+  updateSelectedCount();
+}
+
+function updateSelectedCount() {
+  const count = document.querySelectorAll('.prod-check:checked').length;
+  document.getElementById('selectedCount').textContent = count > 0 ? `(${count} seleccionados)` : '';
+}
+
+function getSelectedIds() {
+  return [...document.querySelectorAll('.prod-check:checked')].map(cb => parseInt(cb.value));
+}
+
+async function deleteProduct(id) {
+  if (!confirm('¿Eliminar este producto?')) return;
+  try {
+    await fetch('/api/products/' + id, { method: 'DELETE' });
+    showToast('Producto eliminado', 'success');
+    loadProducts();
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+  }
+}
+
+function exportSelected() {
+  const ids = getSelectedIds();
+  if (!ids.length) {
+    showToast('Seleccioná al menos un producto', 'error');
+    return;
+  }
+  const formato = document.getElementById('exportFormat').value;
+  fetch('/api/products/export', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids, formato })
+  })
+  .then(resp => {
+    if (!resp.ok) return resp.json().then(d => { throw new Error(d.error); });
+    return resp.blob();
+  })
+  .then(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'productos.' + formato;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Exportado ' + ids.length + ' producto(s)', 'success');
+  })
+  .catch(err => showToast(err.message, 'error'));
+}
+
+function esc(s) {
+  const div = document.createElement('div');
+  div.textContent = s || '';
+  return div.innerHTML;
+}
+
+function escAttr(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function showToast(msg, type) {
+  const existing = document.querySelector('.toast');
+  if (existing) existing.remove();
+  const toast = document.createElement('div');
+  toast.className = 'toast toast-' + type;
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
+document.getElementById('barcodeInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    doLookup();
+  }
+});
+
+document.getElementById('cantidadInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    document.getElementById('saveBtn').focus();
+  }
+});
+
+document.getElementById('saveBtn').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    saveProduct();
+  }
+});
+
+loadProducts();
+</script>
+
+</body>
+</html>
