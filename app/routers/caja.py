@@ -149,7 +149,9 @@ def movimientos(
         "id": m.id, "tipo": m.tipo, "monto": m.monto,
         "descripcion": m.descripcion, "medio_pago": m.medio_pago,
         "referencia_tipo": m.referencia_tipo, "referencia_id": m.referencia_id,
-        "usuario_id": m.usuario_id, "sucursal_id": m.sucursal_id,
+        "usuario_id": m.usuario_id,
+        "usuario_nombre": m.usuario.nombre if m.usuario else "",
+        "sucursal_id": m.sucursal_id,
         "created_at": m.created_at.isoformat() if m.created_at else None,
     } for m in movs]
     return RespuestaLista(
