@@ -380,13 +380,14 @@
                             </div>
                         </div>
 
-                        <!-- Tarjeta de lookup interactivo (Implementando flujo recomendado punto 3.5) -->
+                        <!-- Tarjeta de lookup (producto encontrado) con precio venta y Continuar -->
                         <div x-show="lookupProduct.codigo_barras" class="p-4 bg-indigo-50/80 border-b border-indigo-100 space-y-3 shrink-0" x-transition>
                             <div class="flex justify-between items-start">
                                 <div>
-                                    <span class="text-[9px] font-bold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full border border-indigo-200 uppercase tracking-widest">Lookup Multi-fuente API 3.5</span>
+                                    <span class="text-[9px] font-bold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full border border-indigo-200 uppercase tracking-widest">Nuevo Producto</span>
                                     <h4 class="font-bold text-slate-900 text-sm mt-1" x-text="lookupProduct.nombre"></h4>
                                     <p class="text-[10px] text-slate-500 font-mono-data">Código: <span x-text="lookupProduct.codigo_barras"></span> | Ref: <span class="font-semibold text-brand-600" x-text="formatCurrency(lookupProduct.precio_referencia)"></span></p>
+                                    <p class="text-[10px] text-slate-400 mt-0.5">Marca: <span x-text="lookupProduct.marca || '—'"></span> | Cat: <span x-text="lookupProduct.categoria || '—'"></span></p>
                                 </div>
                                 <button @click="lookupProduct = {}" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
                             </div>
@@ -399,14 +400,12 @@
                                     <div x-show="lookupBadges.carrefour === 'not_found'" class="text-[10px] text-rose-500 font-bold py-1">No Disp.</div>
                                     <div x-show="typeof lookupBadges.carrefour === 'number'" class="text-xs font-bold text-emerald-600 py-1" x-text="formatCurrency(lookupBadges.carrefour)"></div>
                                 </a>
-
                                 <a :href="lookupBadges.vea_url || '#'" target="_blank" class="bg-white p-2 rounded-xl border border-slate-200 text-center block hover:border-brand-300 transition">
                                     <span class="text-[9px] text-slate-400 font-bold uppercase block">Vea</span>
                                     <div x-show="lookupBadges.vea === 'loading'" class="text-xs text-slate-400 py-1"><i class="fa-solid fa-circle-notch animate-spin text-brand-600"></i></div>
                                     <div x-show="lookupBadges.vea === 'not_found'" class="text-[10px] text-rose-500 font-bold py-1">No Disp.</div>
                                     <div x-show="typeof lookupBadges.vea === 'number'" class="text-xs font-bold text-emerald-600 py-1" x-text="formatCurrency(lookupBadges.vea)"></div>
                                 </a>
-
                                 <a :href="lookupBadges.masonline_url || '#'" target="_blank" class="bg-white p-2 rounded-xl border border-slate-200 text-center block hover:border-brand-300 transition">
                                     <span class="text-[9px] text-slate-400 font-bold uppercase block">MasOnline</span>
                                     <div x-show="lookupBadges.masonline === 'loading'" class="text-xs text-slate-400 py-1"><i class="fa-solid fa-circle-notch animate-spin text-brand-600"></i></div>
@@ -415,10 +414,41 @@
                                 </a>
                             </div>
 
-                            <div class="flex justify-end gap-2">
-                                <button @click="saveLookupToLocal(lookupProduct)" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-semibold shadow-sm transition">
-                                    <i class="fa-solid fa-floppy-disk mr-1"></i> Guardar en BD Local e Insertar
+                            <!-- Precio de venta rápido + Continuar -->
+                            <div class="flex items-end gap-3">
+                                <div class="flex-1">
+                                    <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Precio de Venta</label>
+                                    <input type="number" x-model.number="lookupProduct.quickPrecioVenta" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-mono-data font-bold focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100" placeholder="0">
+                                </div>
+                                <button @click="quickSaveAndAddToCart()" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold uppercase tracking-wider shadow-sm transition flex items-center gap-1.5">
+                                    <i class="fa-solid fa-bolt"></i> Continuar <span class="text-[9px] opacity-70">(guardar luego)</span>
                                 </button>
+                            </div>
+                        </div>
+
+                        <!-- Producto NO encontrado: mini form rápido -->
+                        <div x-show="lookupNotFound" class="p-4 bg-amber-50/80 border-b border-amber-100 space-y-3 shrink-0" x-transition>
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <span class="text-[9px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-200 uppercase tracking-widest">No Encontrado</span>
+                                    <p class="text-xs text-slate-500 mt-1 font-mono-data">Código: <span x-text="lookupNotFoundBarcode"></span></p>
+                                </div>
+                                <button @click="lookupNotFound = false" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+                            </div>
+                            <div class="space-y-2">
+                                <div>
+                                    <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Nombre rápido</label>
+                                    <input type="text" x-model="lookupNotFoundNombre" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-brand-600" placeholder="Ej: Coca Cola 2.25L">
+                                </div>
+                                <div class="flex gap-3 items-end">
+                                    <div class="flex-1">
+                                        <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Precio de Venta</label>
+                                        <input type="number" x-model.number="lookupNotFoundPrecio" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-mono-data font-bold focus:outline-none focus:border-brand-600" placeholder="0">
+                                    </div>
+                                    <button @click="quickSaveNotFound()" class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold uppercase tracking-wider shadow-sm transition flex items-center gap-1.5">
+                                        <i class="fa-solid fa-plus"></i> Agregar
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
@@ -543,9 +573,16 @@
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-2xl font-bold text-slate-950 font-display">Administración de Productos</h2>
-                            <p class="text-sm text-slate-500 mt-1">Alta, edición e inserción manual de la base de datos de productos</p>
+                            <p class="text-sm text-slate-500 mt-1">Alta, edición y búsqueda online de productos</p>
                         </div>
-                        <div class="flex gap-2">
+                        <div class="flex gap-2 items-center">
+                            <div class="relative">
+                                <i class="fa-solid fa-barcode absolute left-3 top-2.5 text-slate-400 text-xs"></i>
+                                <input type="text" x-model="productLookupBarcode" @keydown.enter="triggerProductLookup()" placeholder="Escanear código..." class="w-48 bg-white border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs font-mono focus:outline-none focus:border-brand-600 transition">
+                            </div>
+                            <button @click="triggerProductLookup()" class="px-3 py-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-semibold text-xs rounded-xl transition flex items-center gap-1">
+                                <i class="fa-solid fa-magnifying-glass"></i> Buscar
+                            </button>
                             <button @click="showModal('product_create')" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-xl flex items-center gap-1.5 shadow-sm transition">
                                 <i class="fa-solid fa-plus"></i> Registrar Producto
                             </button>
@@ -841,9 +878,17 @@
                         </template>
                     </select>
                 </div>
-                <div>
+                <!-- Stock: en creación es cantidad_inicial, en edición es ajuste -->
+                <div x-show="!productForm.id">
                     <label class="block text-xs font-bold text-slate-500 mb-1">Cantidad Inicial</label>
                     <input type="number" x-model.number="productForm.cantidad_inicial" class="w-full border rounded-xl p-2.5 text-xs font-mono" placeholder="20">
+                </div>
+                <div x-show="productForm.id" class="space-y-1">
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Stock Actual: <span class="text-brand-600 font-mono-data" x-text="productForm.stock_actual || 0"></span> u</label>
+                    <div class="flex gap-2 items-center">
+                        <span class="text-[10px] text-slate-400">Nuevo stock:</span>
+                        <input type="number" x-model.number="productForm.nuevo_stock" class="flex-1 border rounded-xl p-2 text-xs font-mono" :placeholder="productForm.stock_actual || 0">
+                    </div>
                 </div>
                 <div class="col-span-2 flex justify-end gap-2 border-t pt-4">
                     <button @click="modalActive = false" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold">Cancelar</button>
@@ -1025,6 +1070,10 @@
                 posLookupCode: '',
                 selectedPOSCategory: 'all',
                 lookupProduct: {},
+                lookupNotFound: false,
+                lookupNotFoundBarcode: '',
+                lookupNotFoundNombre: '',
+                lookupNotFoundPrecio: 0,
                 lookupBadges: { carrefour: 'loading', vea: 'loading', masonline: 'loading', carrefour_url: '', vea_url: '', masonline_url: '' },
                 posCart: { _ventaId: null, _ventaNum: null, items: [], subtotal: 0, descuento: 0, total: 0, medio_pago: 'efectivo', cliente_id: '' },
 
@@ -1032,6 +1081,7 @@
                 modalTitle: '',
                 currentModalType: '',
                 productSearch: '',
+                productLookupBarcode: '',
 
                 // Iniciar la app y comprobar si hay JWT guardado en localstorage
                 init() {
@@ -1224,59 +1274,192 @@
                     }
                 },
 
-                // Lookup Multi-fuente recomendado (Punto 3.5 API_DOCUMENTACION.md)
+                // Lookup Multi-fuente (Punto 3.5)
                 async triggerPOSLookup() {
                     if (!this.posLookupCode) return;
+                    const barcode = this.posLookupCode;
+                    this.lookupProduct = {};
+                    this.lookupNotFound = false;
 
                     try {
-                        this.addToast('info', 'Iniciando búsqueda de código de barras...');
-                        const response = await this.request('POST', '/api/productos/lookup', { barcode: this.posLookupCode, ia_mode: false });
+                        this.addToast('info', 'Buscando código de barras...');
+                        const response = await this.request('POST', '/api/productos/lookup', { barcode, ia_mode: false });
 
                         if (this.apiMode === 'real') {
                             const prod = response.data;
                             if (prod._cached) {
-                                // Ya guardado en BD local → agregar directo al carrito
                                 this.addPRODToPOS(prod);
                                 this.posLookupCode = '';
                                 this.addToast('success', `${prod.nombre} añadido al carrito.`);
                             } else {
-                                // Producto nuevo: mostrar tarjeta de lookup con badges + botón guardar
+                                prod.quickPrecioVenta = prod.precio_referencia 
+                                    ? Math.ceil(prod.precio_referencia * 1.3 / 50) * 50 
+                                    : 0;
                                 this.lookupProduct = prod;
                                 this.posLookupCode = '';
                                 this.triggerParallelSupermarketLookup(prod.codigo_barras);
                             }
                         } else {
-                            // Simulación
-                            const prodLocal = this.products.find(p => p.codigo_barras === this.posLookupCode);
+                            const prodLocal = this.products.find(p => p.codigo_barras === barcode);
                             if (prodLocal) {
                                 this.addPRODToPOS(prodLocal);
                                 this.posLookupCode = '';
-                                this.addToast('success', `${prodLocal.nombre} añadido (En BD local)`);
                                 return;
                             }
                             this.lookupProduct = {
-                                codigo_barras: this.posLookupCode,
-                                nombre: "Arroz Largo Fino Molinos Ala 1kg (Cargado externamente)",
-                                marca: "Molinos Ala",
-                                precio_referencia: 1100.0,
-                                precio_costo: 750.0,
-                                precio_venta: 1250.0,
-                                sku: "ALA779",
-                                categoria_id: 2
+                                codigo_barras: barcode, nombre: "Arroz Largo Fino 1kg",
+                                marca: "Molinos Ala", precio_referencia: 1100.0,
+                                quickPrecioVenta: 1500, categoria_id: 2
                             };
-                            this.triggerParallelSupermarketLookup(this.posLookupCode);
+                            this.triggerParallelSupermarketLookup(barcode);
                         }
                     } catch (err) {
-                        this.addToast('warning', 'Código de barras no encontrado. Crea el producto manualmente.');
-                        this.showModal('product_create');
-                        this.productForm.codigo_barras = this.posLookupCode;
+                        // Producto no encontrado → mini form
+                        this.lookupProduct = {};
+                        this.lookupNotFound = true;
+                        this.lookupNotFoundBarcode = barcode;
+                        this.lookupNotFoundNombre = '';
+                        this.lookupNotFoundPrecio = 0;
+                        this.posLookupCode = '';
                     }
+                },
+
+                // Quick-save desde lookup: guarda producto básico y lo agrega al carrito
+                async quickSaveAndAddToCart() {
+                    const prod = this.lookupProduct;
+                    if (!prod || !prod.codigo_barras) return;
+                    
+                    const precioVenta = prod.quickPrecioVenta || 0;
+                    if (precioVenta <= 0) {
+                        this.addToast('warning', 'Ingresá un precio de venta');
+                        return;
+                    }
+
+                    if (this.apiMode === 'real') {
+                        try {
+                            const saveResp = await this.request('POST', '/api/productos', {
+                                codigo_barras: prod.codigo_barras,
+                                nombre: prod.nombre,
+                                marca: prod.marca || '',
+                                descripcion: prod.descripcion || '',
+                                precio_referencia: prod.precio_referencia || 0,
+                                precio_venta: precioVenta,
+                                imagen_url: prod.imagen_url || '',
+                                sku: prod.sku || '',
+                                propiedades: prod.propiedades || {},
+                                fuente: prod.fuente || 'carrefour',
+                                categoria_id: this.getOrCreateCategoryId(prod.categoria),
+                                cantidad_inicial: 0
+                            });
+                            const saved = saveResp.data;
+                            await this.fetchProducts();
+                            saved.stock_actual = 0;
+                            this.addPRODToPOS(saved);
+                            this.lookupProduct = {};
+                            this.addToast('success', 'Producto agregado. Completalo en Productos.');
+                        } catch (e) {
+                            this.addToast('error', 'Error: ' + (e.message || ''));
+                        }
+                        return;
+                    }
+                    // Mock
+                    const newProd = {
+                        id: this.products.length + 1, codigo_barras: prod.codigo_barras,
+                        nombre: prod.nombre, marca: prod.marca || '',
+                        precio_venta: precioVenta, stock_actual: 0, categoria_id: prod.categoria_id || 1
+                    };
+                    this.products.push(newProd);
+                    this.addPRODToPOS(newProd);
+                    this.lookupProduct = {};
+                    this.addToast('success', 'Producto agregado (completar en Productos)');
+                },
+
+                // Quick-save para producto no encontrado
+                async quickSaveNotFound() {
+                    if (!this.lookupNotFoundNombre.trim()) {
+                        this.addToast('warning', 'Ingresá un nombre');
+                        return;
+                    }
+                    const precioVenta = this.lookupNotFoundPrecio || 0;
+                    if (precioVenta <= 0) {
+                        this.addToast('warning', 'Ingresá un precio');
+                        return;
+                    }
+
+                    if (this.apiMode === 'real') {
+                        try {
+                            const saveResp = await this.request('POST', '/api/productos', {
+                                codigo_barras: this.lookupNotFoundBarcode,
+                                nombre: this.lookupNotFoundNombre.trim(),
+                                precio_venta: precioVenta,
+                                fuente: 'manual',
+                                cantidad_inicial: 0
+                            });
+                            const saved = saveResp.data;
+                            await this.fetchProducts();
+                            saved.stock_actual = 0;
+                            this.addPRODToPOS(saved);
+                            this.lookupNotFound = false;
+                            this.addToast('success', 'Agregado. Completalo en Productos.');
+                        } catch (e) {
+                            this.addToast('error', 'Error: ' + (e.message || ''));
+                        }
+                        return;
+                    }
+                    const newProd = {
+                        id: this.products.length + 1, codigo_barras: this.lookupNotFoundBarcode,
+                        nombre: this.lookupNotFoundNombre.trim(), precio_venta: precioVenta,
+                        stock_actual: 0, categoria_id: 1
+                    };
+                    this.products.push(newProd);
+                    this.addPRODToPOS(newProd);
+                    this.lookupNotFound = false;
+                    this.addToast('success', 'Producto agregado (completar en Productos)');
                 },
 
                 getOrCreateCategoryId(catName) {
                     if (!catName) return null;
                     const cat = this.categories.find(c => c.nombre.toLowerCase() === catName.toLowerCase());
                     return cat ? cat.id : (this.categories.length > 0 ? this.categories[0].id : null);
+                },
+
+                // Búsqueda online desde la sección Productos (pre-llena el formulario)
+                async triggerProductLookup() {
+                    const barcode = this.productLookupBarcode.trim();
+                    if (!barcode) return;
+                    this.addToast('info', 'Buscando código de barras...');
+                    try {
+                        const response = await this.request('POST', '/api/productos/lookup', { barcode });
+                        if (this.apiMode === 'real' && response.data) {
+                            const prod = response.data;
+                            this.productForm = {
+                                codigo_barras: prod.codigo_barras || barcode,
+                                nombre: prod.nombre || '',
+                                marca: prod.marca || '',
+                                sku: prod.sku || '',
+                                precio_referencia: prod.precio_referencia || 0,
+                                precio_costo: 0,
+                                precio_venta: prod.precio_referencia ? Math.ceil(prod.precio_referencia * 1.3 / 50) * 50 : 0,
+                                imagen_url: prod.imagen_url || '',
+                                categoria_id: this.getOrCreateCategoryId(prod.categoria) || 1,
+                                cantidad_inicial: 0,
+                                fuente: prod.fuente || 'manual',
+                                propiedades: prod.propiedades || {}
+                            };
+                            this.showModal('product_create');
+                            this.modalTitle = 'Nuevo Producto (desde lookup)';
+                            this.addToast('success', 'Formulario pre-llenado con datos online');
+                        } else {
+                            this.productForm = { id: null, codigo_barras: barcode, nombre: '', marca: '', sku: '', precio_costo: 0, precio_venta: 0, categoria_id: 1, cantidad_inicial: 0 };
+                            this.showModal('product_create');
+                            this.addToast('info', 'Producto no encontrado online. Completá manualmente.');
+                        }
+                        this.productLookupBarcode = '';
+                    } catch (e) {
+                        this.productForm = { id: null, codigo_barras: barcode, nombre: '', marca: '', sku: '', precio_costo: 0, precio_venta: 0, categoria_id: 1, cantidad_inicial: 0 };
+                        this.showModal('product_create');
+                        this.productLookupBarcode = '';
+                    }
                 },
 
                 // Punto 3.5 Flujo recomendado de badges paralelos con loaders independientes
@@ -1655,7 +1838,8 @@
                         precio_costo: prod.precio_costo || 0,
                         precio_venta: prod.precio_venta || 0,
                         categoria_id: prod.categoria_id || 1,
-                        cantidad_inicial: prod.stock_actual || 0,
+                        stock_actual: prod.stock_actual || 0,
+                        nuevo_stock: null,
                         stock_minimo: prod.stock_minimo || 5
                     };
                     this.showModal('product_edit');
@@ -1674,7 +1858,6 @@
                         const method = isEdit ? 'PUT' : 'POST';
                         const url = isEdit ? `/api/productos/${this.productForm.id}` : '/api/productos';
                         
-                        // Para update, solo enviar campos cambiados
                         const payload = isEdit ? {
                             nombre: this.productForm.nombre,
                             marca: this.productForm.marca,
@@ -1686,31 +1869,43 @@
 
                         const response = await this.request(method, url, payload);
                         
+                        // Si es edición y se cambió el stock, hacer ajuste
+                        if (isEdit && this.productForm.nuevo_stock !== null && this.productForm.nuevo_stock !== undefined) {
+                            const nuevoStock = parseFloat(this.productForm.nuevo_stock);
+                            const stockActual = parseFloat(this.productForm.stock_actual) || 0;
+                            const diff = nuevoStock - stockActual;
+                            if (diff !== 0) {
+                                await this.request('PUT', `/api/productos/${this.productForm.id}/ajustar-stock`, {
+                                    cantidad: diff,
+                                    notas: 'Ajuste manual desde Productos'
+                                });
+                            }
+                        }
+
                         if (this.apiMode === 'real') {
-                            this.addToast('success', isEdit ? 'Producto actualizado' : 'Producto guardado en backend');
+                            this.addToast('success', isEdit ? 'Producto actualizado' : 'Producto guardado');
                         } else {
                             if (isEdit) {
                                 const idx = this.products.findIndex(p => p.id === this.productForm.id);
                                 if (idx >= 0) {
                                     this.products[idx] = { ...this.products[idx], ...payload };
+                                    if (this.productForm.nuevo_stock !== null) {
+                                        this.products[idx].stock_actual = parseFloat(this.productForm.nuevo_stock) || this.products[idx].stock_actual;
+                                    }
                                 }
-                                this.addToast('success', 'Producto actualizado (Modo simulador)');
                             } else {
                                 const nuevo = {
-                                    id: this.products.length + 1,
-                                    codigo_barras: this.productForm.codigo_barras,
-                                    nombre: this.productForm.nombre,
-                                    marca: this.productForm.marca,
-                                    sku: this.productForm.sku,
-                                    precio_costo: this.productForm.precio_costo,
+                                    id: this.products.length + 1, codigo_barras: this.productForm.codigo_barras,
+                                    nombre: this.productForm.nombre, marca: this.productForm.marca,
+                                    sku: this.productForm.sku, precio_costo: this.productForm.precio_costo,
                                     precio_venta: this.productForm.precio_venta,
                                     categoria_id: parseInt(this.productForm.categoria_id),
-                                    stock_actual: parseFloat(this.productForm.cantidad_inicial),
+                                    stock_actual: parseFloat(this.productForm.cantidad_inicial) || 0,
                                     stock_minimo: 5.0
                                 };
                                 this.products.push(nuevo);
-                                this.addToast('success', 'Producto creado (Modo simulador)');
                             }
+                            this.addToast('success', isEdit ? 'Producto actualizado' : 'Producto creado');
                         }
                         this.modalActive = false;
                         this.fetchProducts();

@@ -2,6 +2,7 @@
 
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.schemas.producto import (
@@ -13,6 +14,7 @@ from app.auth.dependencies import get_current_user, require_role
 from app.models.usuario import Usuario
 from app.services import producto_service
 from app.services import lookup_service as lk
+from app.services import stock_service
 
 router = APIRouter(prefix="/api/productos", tags=["Productos"])
 
@@ -152,3 +154,34 @@ def lookup(
         ia_mode=data.ia_mode,
     )
     return RespuestaData(data=result, message="Producto encontrado")
+
+
+class AjustarStockRequest(BaseModel):
+    cantidad: float = Field(...)
+    notas: Optional[str] = None
+
+
+@router.put("/{producto_id}/ajustar-stock", response_model=RespuestaData)
+def ajustar_stock(
+    producto_id: int,
+    data: AjustarStockRequest,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "encargado")),
+):
+    """Ajusta el stock de un producto (entrada o salida manual)."""
+    producto = producto_service.obtener_producto(db, producto_id)
+    if not producto:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+    tipo = "entrada" if data.cantidad > 0 else "salida"
+    try:
+        mov = stock_service.ajustar_stock(
+            db, producto_id, data.cantidad, tipo, user.id,
+            referencia_tipo="ajuste_manual",
+            notas=data.notas,
+        )
+        return RespuestaData(
+            data={"stock_anterior": mov.stock_anterior, "stock_resultante": mov.stock_resultante},
+            message=f"Stock ajustado: {mov.stock_anterior} → {mov.stock_resultante}"
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
