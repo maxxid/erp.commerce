@@ -647,8 +647,9 @@
                                                 <span x-show="(prod.stock_transito || 0) > 0" class="bg-blue-50 text-blue-700 border-blue-100 font-mono-data font-bold px-2 py-0.5 rounded-full border text-[10px]" x-text="(prod.stock_transito || 0) + ' u'"></span>
                                                 <span x-show="!(prod.stock_transito || 0) > 0" class="text-slate-300">—</span>
                                             </td>
-                                            <td class="p-4 text-xs">
+                                            <td class="p-4 text-xs flex gap-2">
                                                 <button @click="editProduct(prod)" class="text-brand-600 hover:text-brand-900 font-bold hover:underline">Editar <i class="fa-solid fa-pen-to-square"></i></button>
+                                                <button @click="deleteProduct(prod.id)" class="text-rose-500 hover:text-rose-900 font-bold hover:underline">Eliminar <i class="fa-solid fa-trash"></i></button>
                                             </td>
                                         </tr>
                                     </template>
@@ -2042,6 +2043,16 @@
                             this.addToast('success', isEdit ? 'Producto actualizado' : 'Producto creado');
                         }
                         this.modalActive = false;
+                        this.fetchProducts();
+                        this.fetchDashboardData();
+                    } catch (e) {}
+                },
+
+                async deleteProduct(id) {
+                    if (!confirm('¿Eliminar este producto? Se desactivará.')) return;
+                    try {
+                        await this.request('DELETE', `/api/productos/${id}`);
+                        this.addToast('success', 'Producto eliminado');
                         this.fetchProducts();
                         this.fetchDashboardData();
                     } catch (e) {}
