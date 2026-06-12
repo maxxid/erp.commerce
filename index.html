@@ -449,6 +449,7 @@
                         <div class="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                             <h3 class="font-bold text-slate-900 flex items-center gap-2">
                                 <i class="fa-solid fa-basket-shopping text-brand-600"></i> Carrito Actual
+                                <span x-show="posCart._ventaNum" class="text-[9px] bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full font-mono" x-text="posCart._ventaNum"></span>
                             </h3>
                             <button @click="clearPOSCart()" class="text-xs font-semibold text-accent-danger hover:underline" x-show="posCart.items && posCart.items.length > 0">Vaciar todo</button>
                         </div>
@@ -806,8 +807,8 @@
                 <button @click="modalActive = false" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
             </div>
 
-            <!-- MODAL: CREAR PRODUCTO (Cumple especificación 3.3) -->
-            <div x-show="currentModalType === 'product_create'" class="grid grid-cols-2 gap-4">
+            <!-- MODAL: CREAR/EDITAR PRODUCTO (Cumple especificación 3.3 y 3.4) -->
+            <div x-show="currentModalType === 'product_create' || currentModalType === 'product_edit'" class="grid grid-cols-2 gap-4">
                 <div>
                     <label class="block text-xs font-bold text-slate-500 mb-1">Código de barras</label>
                     <input type="text" x-model="productForm.codigo_barras" class="w-full border rounded-xl p-2.5 text-xs font-mono" placeholder="7790895000997">
@@ -964,9 +965,9 @@
         function erpApp() {
             return {
                 // Configuración de Entornos de Red de la especificación
-                apiMode: 'mock', // 'real' -> Consume localhost:8000. 'mock' -> simulación
+                apiMode: 'real', // 'real' -> Consume localhost:8000. 'mock' -> simulación
                 apiBaseUrl: 'http://localhost:8000',
-                authenticated: true,
+                authenticated: false,  // Requiere login real
                 currentUser: { id: 1, username: 'admin', nombre: 'Administrador', rol: 'admin' },
                 activeTab: 'dashboard',
                 currentTime: new Date(),
@@ -1025,7 +1026,7 @@
                 selectedPOSCategory: 'all',
                 lookupProduct: {},
                 lookupBadges: { carrefour: 'loading', vea: 'loading', masonline: 'loading', carrefour_url: '', vea_url: '', masonline_url: '' },
-                posCart: { id: null, items: [], subtotal: 0, descuento: 0, total: 0, medio_pago: 'efectivo', cliente_id: '' },
+                posCart: { _ventaId: null, _ventaNum: null, items: [], subtotal: 0, descuento: 0, total: 0, medio_pago: 'efectivo', cliente_id: '' },
 
                 modalActive: false,
                 modalTitle: '',
@@ -1041,12 +1042,11 @@
                         this.authenticated = true;
                         this.verifyCajaState();
                         this.fetchDashboardData();
-                    } else {
-                        // Por defecto iniciamos con autenticación mock para no asustar al usuario
-                        this.authenticated = true;
-                        this.verifyCajaState();
-                        this.fetchDashboardData();
+                        this.fetchCategories();
+                        this.fetchClientes();
+                        this.fetchProveedores();
                     }
+                    // Si no hay token, se muestra la pantalla de login
                 },
 
                 // Re-inicializador rápido al conmutar entre API real y simulador
@@ -1088,57 +1088,41 @@
                             headers['Authorization'] = `Bearer ${token}`;
                         }
 
-                        try {
-                            const options = { method, headers };
-                            if (body && method !== 'GET') {
-                                options.body = JSON.stringify(body);
-                            }
-
-                            const response = await fetch(url, options);
-                            const responseData = await response.json();
-
-                            this.apiLogs.unshift({
-                                timestamp,
-                                time,
-                                method,
-                                url: path,
-                                request: body || {},
-                                status: response.status,
-                                response: responseData,
-                                isReal: true
-                            });
-
-                            if (!response.ok) {
-                                throw new Error(responseData.detail || 'Error en petición de red');
-                            }
-
-                            return responseData;
-
-                        } catch (err) {
-                            console.error(err);
-                            this.apiLogs.unshift({
-                                timestamp,
-                                time,
-                                method,
-                                url: path,
-                                request: body || {},
-                                status: 500,
-                                response: { detail: err.message },
-                                isReal: true
-                            });
-                            this.addToast('error', `Error API: ${err.message}`);
-                            throw err;
+                        const options = { method, headers };
+                        if (body && method !== 'GET') {
+                            options.body = JSON.stringify(body);
                         }
+
+                        const response = await fetch(url, options);
+                        const text = await response.text();
+                        let responseData;
+                        try { responseData = JSON.parse(text); } catch { responseData = { detail: text }; }
+
+                        this.apiLogs.unshift({
+                            timestamp, time, method, url: path,
+                            request: body || {},
+                            status: response.status,
+                            response: responseData,
+                            isReal: true
+                        });
+
+                        if (!response.ok) {
+                            const errMsg = responseData.detail || 'Error en petición de red';
+                            this.addToast('error', errMsg);
+                            throw new Error(errMsg);
+                        }
+
+                        // Nuestra API devuelve {ok, data, message, total, page, page_size}
+                        return responseData;
+
                     } else {
                         // Simulación local rápida
                         await new Promise(resolve => setTimeout(resolve, 150));
                         return {
+                            _mock: true,
                             log: (status, responseData) => {
                                 this.apiLogs.unshift({
-                                    timestamp,
-                                    time,
-                                    method,
-                                    url: path,
+                                    timestamp, time, method, url: path,
                                     request: body || {},
                                     status,
                                     response: responseData,
@@ -1164,30 +1148,35 @@
                 // Auth Login Handler (Fase 1 - Sección 2.1)
                 async handleLogin() {
                     this.loggingIn = true;
+                    this.loginError = '';
                     try {
                         const response = await this.request('POST', '/api/auth/login', this.loginForm);
                         
                         if (this.apiMode === 'real') {
-                            if (response.ok && response.data.access_token) {
+                            // API devuelve {ok: true, data: {access_token, username, rol, nombre}}
+                            if (response && response.data && response.data.access_token) {
                                 localStorage.setItem('apex_token', response.data.access_token);
                                 this.authenticated = true;
                                 this.currentUser = response.data;
                                 this.addToast('success', 'Autenticado correctamente con backend');
                                 this.verifyCajaState();
                                 this.fetchDashboardData();
+                                this.fetchCategories();
+                                this.fetchClientes();
+                                this.fetchProveedores();
+                            } else {
+                                this.loginError = 'Respuesta inesperada del servidor';
                             }
                         } else {
                             // Flujo simulador
                             if (this.loginForm.username === 'admin' && this.loginForm.password === 'admin') {
                                 this.authenticated = true;
                                 this.currentUser = { id: 1, username: 'admin', nombre: 'Administrador', rol: 'admin' };
-                                response.log(200, { ok: true, message: "Login exitoso", data: { access_token: "eyJhbGciOi...", token_type: "bearer", username: "admin", rol: "admin", nombre: "Administrador" } });
                                 this.addToast('success', 'Sesión iniciada (Modo Simulador)');
                                 this.verifyCajaState();
                                 this.fetchDashboardData();
                             } else {
-                                response.log(401, { detail: "Usuario o contraseña incorrectos" });
-                                this.loginError = "Usuario o contraseña incorrectos";
+                                this.loginError = 'Usuario o contraseña incorrectos';
                                 this.addToast('error', 'Credenciales incorrectas');
                             }
                         }
@@ -1209,7 +1198,7 @@
                     try {
                         const response = await this.request('GET', '/api/dashboard/resumen');
                         if (this.apiMode === 'real') {
-                            this.dashboard = response.data;
+                            this.dashboard = response.data || this.dashboard;
                         } else {
                             // Simulación
                             const valorStockCalculado = this.products.reduce((acc, curr) => acc + (curr.precio_venta * curr.stock_actual), 0);
@@ -1241,33 +1230,52 @@
 
                     try {
                         this.addToast('info', 'Iniciando búsqueda de código de barras...');
-                        // 1. Primer lookup general para verificar en local o datos primarios
-                        const response = await this.request('POST', '/api/productos/lookup', { barcode: this.posLookupCode });
+                        const response = await this.request('POST', '/api/productos/lookup', { barcode: this.posLookupCode, ia_mode: false });
 
                         if (this.apiMode === 'real') {
                             const prod = response.data;
-                            if (response._cached) {
-                                // Ya estaba guardado en local, añadir directo al POS
+                            if (prod._cached) {
+                                // Ya guardado en BD local → agregar directo al carrito
                                 this.addPRODToPOS(prod);
                                 this.posLookupCode = '';
                                 this.addToast('success', `${prod.nombre} añadido al carrito.`);
                             } else {
-                                // No estaba guardado, disparar paralelización recomendada
-                                this.lookupProduct = prod;
-                                this.triggerParallelSupermarketLookup(this.posLookupCode);
+                                // Producto nuevo: guardar en BD, luego agregar
+                                this.addToast('info', 'Producto nuevo. Guardando en BD...');
+                                try {
+                                    const saveResp = await this.request('POST', '/api/productos', {
+                                        codigo_barras: prod.codigo_barras,
+                                        nombre: prod.nombre,
+                                        marca: prod.marca || '',
+                                        descripcion: prod.descripcion || '',
+                                        precio_referencia: prod.precio_referencia || 0,
+                                        precio_venta: prod.precio_referencia ? Math.ceil(prod.precio_referencia * 1.3 / 50) * 50 : 0,
+                                        imagen_url: prod.imagen_url || '',
+                                        sku: prod.sku || '',
+                                        propiedades: prod.propiedades || {},
+                                        fuente: prod.fuente || 'carrefour',
+                                        categoria_id: this.getOrCreateCategoryId(prod.categoria),
+                                        cantidad_inicial: 0
+                                    });
+                                    const saved = saveResp.data;
+                                    await this.fetchProducts();
+                                    saved.stock_actual = saved.stock_actual || 0;
+                                    this.addPRODToPOS(saved);
+                                    this.addToast('success', 'Producto guardado y añadido al carrito');
+                                } catch (e) {
+                                    this.addToast('error', 'Error al guardar producto: ' + e.message);
+                                }
+                                this.posLookupCode = '';
                             }
                         } else {
-                            // Simulación del flujo paralelo recomendado
+                            // Simulación
                             const prodLocal = this.products.find(p => p.codigo_barras === this.posLookupCode);
                             if (prodLocal) {
-                                response.log(200, { ok: true, message: "Encontrado en base de datos local", data: prodLocal, _cached: true });
                                 this.addPRODToPOS(prodLocal);
                                 this.posLookupCode = '';
                                 this.addToast('success', `${prodLocal.nombre} añadido (En BD local)`);
                                 return;
                             }
-
-                            // No está en local, cargamos plantilla de lookup
                             this.lookupProduct = {
                                 codigo_barras: this.posLookupCode,
                                 nombre: "Arroz Largo Fino Molinos Ala 1kg (Cargado externamente)",
@@ -1278,14 +1286,19 @@
                                 sku: "ALA779",
                                 categoria_id: 2
                             };
-                            response.log(200, { ok: true, message: "Buscando en supermercados...", data: this.lookupProduct, _cached: false });
                             this.triggerParallelSupermarketLookup(this.posLookupCode);
                         }
                     } catch (err) {
-                        this.addToast('warning', 'Código de barras no registrado. Crea el producto manualmente.');
+                        this.addToast('warning', 'Código de barras no encontrado. Crea el producto manualmente.');
                         this.showModal('product_create');
                         this.productForm.codigo_barras = this.posLookupCode;
                     }
+                },
+
+                getOrCreateCategoryId(catName) {
+                    if (!catName) return null;
+                    const cat = this.categories.find(c => c.nombre.toLowerCase() === catName.toLowerCase());
+                    return cat ? cat.id : (this.categories.length > 0 ? this.categories[0].id : null);
                 },
 
                 // Punto 3.5 Flujo recomendado de badges paralelos con loaders independientes
@@ -1343,7 +1356,7 @@
                 },
 
                 // Lógica de Venta (POS)
-                addPRODToPOS(prod) {
+                async addPRODToPOS(prod) {
                     if (!this.cajaState.abierta) {
                         this.addToast('warning', 'La caja no está abierta. Ábrala para poder realizar una venta.');
                         return;
@@ -1353,11 +1366,76 @@
                         return;
                     }
 
-                    if (!this.posCart.id) {
-                        this.posCart.id = "V-" + String(Date.now()).slice(-8);
-                        this.posCart.items = [];
+                    // Si es el primer item y estamos en modo real, crear venta en API
+                    if (this.apiMode === 'real' && !this.posCart._ventaId) {
+                        try {
+                            const ventaResp = await this.request('POST', '/api/ventas', {});
+                            if (ventaResp && ventaResp.data) {
+                                this.posCart._ventaId = ventaResp.data.id;
+                                this.posCart._ventaNum = ventaResp.data.numero;
+                                // Agregar item via API
+                                const itemResp = await this.request('POST', `/api/ventas/${this.posCart._ventaId}/items`, {
+                                    producto_id: prod.id,
+                                    cantidad: 1,
+                                    precio_unitario: prod.precio_venta
+                                });
+                                if (itemResp && itemResp.data) {
+                                    // Recargar venta para obtener subtotal real
+                                    const ventaActualizada = await this.request('GET', `/api/ventas/${this.posCart._ventaId}`);
+                                    if (ventaActualizada && ventaActualizada.data) {
+                                        this.posCart.subtotal = ventaActualizada.data.subtotal;
+                                        this.posCart.total = ventaActualizada.data.total;
+                                    }
+                                    // Guardar items localmente para UI
+                                    this.posCart.items.push({
+                                        id: itemResp.data.item_id,
+                                        producto_id: prod.id,
+                                        producto_nombre: prod.nombre,
+                                        cantidad: 1,
+                                        precio_unitario: prod.precio_venta,
+                                        subtotal: prod.precio_venta
+                                    });
+                                    return;
+                                }
+                            }
+                        } catch (e) {
+                            this.addToast('error', 'Error al crear venta: ' + e.message);
+                            return;
+                        }
                     }
 
+                    // Modo mock o items adicionales (usar items existentes + API)
+                    if (this.apiMode === 'real' && this.posCart._ventaId) {
+                        try {
+                            const itemResp = await this.request('POST', `/api/ventas/${this.posCart._ventaId}/items`, {
+                                producto_id: prod.id,
+                                cantidad: 1,
+                                precio_unitario: prod.precio_venta
+                            });
+                            if (itemResp && itemResp.data) {
+                                const ventaActualizada = await this.request('GET', `/api/ventas/${this.posCart._ventaId}`);
+                                if (ventaActualizada && ventaActualizada.data) {
+                                    this.posCart.subtotal = ventaActualizada.data.subtotal;
+                                    this.posCart.total = ventaActualizada.data.total;
+                                }
+                                this.posCart.items.push({
+                                    id: itemResp.data.item_id,
+                                    producto_id: prod.id,
+                                    producto_nombre: prod.nombre,
+                                    cantidad: 1,
+                                    precio_unitario: prod.precio_venta,
+                                    subtotal: prod.precio_venta
+                                });
+                                return;
+                            }
+                        } catch (e) {
+                            this.addToast('error', 'Error: ' + e.message);
+                            return;
+                        }
+                    }
+
+                    // Fallback mock / local
+                    if (!this.posCart.items) this.posCart.items = [];
                     const itemExistente = this.posCart.items.find(i => i.producto_id === prod.id);
                     if (itemExistente) {
                         if (itemExistente.cantidad + 1 > prod.stock_actual) {
@@ -1376,7 +1454,6 @@
                             subtotal: prod.precio_venta
                         });
                     }
-
                     this.recalcPOSCart();
                 },
 
@@ -1407,7 +1484,7 @@
                 },
 
                 clearPOSCart() {
-                    this.posCart = { id: null, items: [], subtotal: 0, descuento: 0, total: 0, medio_pago: 'efectivo', cliente_id: '' };
+                    this.posCart = { _ventaId: null, _ventaNum: null, items: [], subtotal: 0, descuento: 0, total: 0, medio_pago: 'efectivo', cliente_id: '' };
                 },
 
                 // Confirmar Venta (Flujo Completo de la especificación - Sección 6.6)
@@ -1416,63 +1493,57 @@
                         this.addToast('error', 'La caja no está abierta. Ábrala para poder cobrar.');
                         return;
                     }
+                    if (!this.posCart.items || this.posCart.items.length === 0) {
+                        this.addToast('warning', 'El carrito está vacío');
+                        return;
+                    }
 
                     this.processingSale = true;
                     try {
-                        // Si es Cuenta Corriente, validamos límite de crédito del cliente (6.6)
-                        if (this.posCart.medio_pago === 'cta_corriente') {
-                            if (!this.posCart.cliente_id) {
-                                this.addToast('warning', 'Selecciona el cliente para imputar la Cuenta Corriente');
-                                this.processingSale = false;
-                                return;
-                            }
-                            const cli = this.clientes.find(c => c.id == this.posCart.cliente_id);
-                            if (cli && (cli.saldo_cta_corriente + this.posCart.total > cli.limite_credito)) {
-                                this.addToast('error', `Excede límite de crédito de ${cli.nombre}: límite=${this.formatCurrency(cli.limite_credito)}, adeudaría=${this.formatCurrency(cli.saldo_cta_corriente + this.posCart.total)}`);
-                                this.processingSale = false;
-                                return;
-                            }
-                        }
-
-                        const response = await this.request('PUT', `/api/ventas/${this.posCart.id}/confirmar`, {
-                            medio_pago: this.posCart.medio_pago,
-                            descuento: this.posCart.descuento
-                        });
-
                         if (this.apiMode === 'real') {
-                            this.addToast('success', response.message);
+                            if (!this.posCart._ventaId) {
+                                this.addToast('error', 'No hay venta activa. Agregue productos primero.');
+                                this.processingSale = false;
+                                return;
+                            }
+                            // Si es Cta Corriente, validar cliente
+                            if (this.posCart.medio_pago === 'cta_corriente' && !this.posCart.cliente_id) {
+                                this.addToast('warning', 'Selecciona el cliente para Cuenta Corriente');
+                                this.processingSale = false;
+                                return;
+                            }
+                            const confirmBody = {
+                                medio_pago: this.posCart.medio_pago,
+                                descuento: this.posCart.descuento || 0
+                            };
+                            const response = await this.request('PUT', `/api/ventas/${this.posCart._ventaId}/confirmar`, confirmBody);
+                            if (response && response.data) {
+                                this.addToast('success', response.message || 'Venta confirmada');
+                            }
                         } else {
                             // Lógica de simulación
                             this.posCart.items.forEach(item => {
                                 const prod = this.products.find(p => p.id === item.producto_id);
                                 if (prod) prod.stock_actual -= item.cantidad;
                             });
-
                             if (this.posCart.medio_pago === 'cta_corriente' && this.posCart.cliente_id) {
                                 const cliente = this.clientes.find(c => c.id == this.posCart.cliente_id);
                                 if (cliente) cliente.saldo_cta_corriente += this.posCart.total;
                             }
-
                             this.cajaState.saldo_actual += this.posCart.total;
                             this.cajaMovimientos.unshift({
-                                id: Date.now(),
-                                tipo: 'ingreso (venta)',
-                                monto: this.posCart.total,
-                                fecha: new Date()
-                            });
-
-                            response.log(200, {
-                                ok: true,
-                                message: `Venta ${this.posCart.id} confirmada. Total: ${this.formatCurrency(this.posCart.total)}`,
-                                data: this.posCart
+                                id: Date.now(), tipo: 'ingreso (venta)',
+                                monto: this.posCart.total, fecha: new Date()
                             });
                             this.addToast('success', 'Venta confirmada exitosamente');
                         }
 
                         this.clearPOSCart();
+                        this.fetchProducts();
                         this.fetchDashboardData();
+                        this.verifyCajaState();
                     } catch (e) {
-                        // Error capturado en AJAX request
+                        // Error ya mostrado por request()
                     } finally {
                         this.processingSale = false;
                     }
@@ -1494,11 +1565,10 @@
 
                 async fetchProducts() {
                     try {
-                        const response = await this.request('GET', `/api/productos?search=${this.productSearch}`);
+                        const searchParam = this.productSearch ? `&search=${encodeURIComponent(this.productSearch)}` : '';
+                        const response = await this.request('GET', `/api/productos?page_size=200${searchParam}`);
                         if (this.apiMode === 'real') {
-                            this.products = response.data;
-                        } else {
-                            response.log(200, { ok: true, data: this.products });
+                            this.products = response.data || [];
                         }
                     } catch (e) {}
                 },
@@ -1507,53 +1577,43 @@
                     try {
                         const response = await this.request('GET', '/api/categorias');
                         if (this.apiMode === 'real') {
-                            this.categories = response.data;
-                        } else {
-                            response.log(200, { ok: true, data: this.categories });
+                            this.categories = response.data || [];
                         }
                     } catch (e) {}
                 },
 
                 async fetchClientes() {
                     try {
-                        const response = await this.request('GET', '/api/clientes');
+                        const response = await this.request('GET', '/api/clientes?page_size=200');
                         if (this.apiMode === 'real') {
-                            this.clientes = response.data;
-                        } else {
-                            response.log(200, { ok: true, data: this.clientes });
+                            this.clientes = response.data || [];
                         }
                     } catch (e) {}
                 },
 
                 async fetchProveedores() {
                     try {
-                        const response = await this.request('GET', '/api/proveedores');
+                        const response = await this.request('GET', '/api/proveedores?page_size=200');
                         if (this.apiMode === 'real') {
-                            this.proveedores = response.data;
-                        } else {
-                            response.log(200, { ok: true, data: this.proveedores });
+                            this.proveedores = response.data || [];
                         }
                     } catch (e) {}
                 },
 
                 async fetchCajaMovimientos() {
                     try {
-                        const response = await this.request('GET', '/api/caja/movimientos');
+                        const response = await this.request('GET', '/api/caja/movimientos?page_size=100');
                         if (this.apiMode === 'real') {
-                            this.cajaMovimientos = response.data;
-                        } else {
-                            response.log(200, { ok: true, data: this.cajaMovimientos });
+                            this.cajaMovimientos = response.data || [];
                         }
                     } catch (e) {}
                 },
 
                 async fetchCompras() {
                     try {
-                        const response = await this.request('GET', '/api/compras');
+                        const response = await this.request('GET', '/api/compras?page_size=200');
                         if (this.apiMode === 'real') {
-                            this.compras = response.data;
-                        } else {
-                            response.log(200, { ok: true, data: this.compras });
+                            this.compras = response.data || [];
                         }
                     } catch (e) {}
                 },
@@ -1564,7 +1624,9 @@
                     this.modalActive = true;
                     if (type === 'product_create') {
                         this.modalTitle = "Crear Nuevo Producto (Manual)";
-                        this.productForm = { codigo_barras: '', nombre: '', marca: '', sku: '', precio_costo: 0, precio_venta: 0, categoria_id: 1, cantidad_inicial: 20 };
+                        this.productForm = { id: null, codigo_barras: '', nombre: '', marca: '', sku: '', precio_costo: 0, precio_venta: 0, categoria_id: 1, cantidad_inicial: 20 };
+                    } else if (type === 'product_edit') {
+                        this.modalTitle = "Editar Producto";
                     } else if (type === 'client_create') {
                         this.modalTitle = "Registrar Cliente de Cuenta Corriente";
                         this.clientForm = { id: null, nombre: '', tipo_documento: 'DNI', numero_documento: '', telefono: '', limite_credito: 50000 };
@@ -1578,8 +1640,19 @@
                 },
 
                 editProduct(prod) {
-                    this.productForm = { ...prod };
-                    this.showModal('product_create');
+                    this.productForm = { 
+                        id: prod.id,
+                        codigo_barras: prod.codigo_barras,
+                        nombre: prod.nombre,
+                        marca: prod.marca || '',
+                        sku: prod.sku || '',
+                        precio_costo: prod.precio_costo || 0,
+                        precio_venta: prod.precio_venta || 0,
+                        categoria_id: prod.categoria_id || 1,
+                        cantidad_inicial: prod.stock_actual || 0,
+                        stock_minimo: prod.stock_minimo || 5
+                    };
+                    this.showModal('product_edit');
                     this.modalTitle = `Editar Producto #${prod.id}`;
                 },
 
@@ -1591,25 +1664,47 @@
 
                 async submitProductForm() {
                     try {
-                        const response = await this.request('POST', '/api/productos', this.productForm);
+                        const isEdit = this.productForm.id && this.currentModalType === 'product_edit';
+                        const method = isEdit ? 'PUT' : 'POST';
+                        const url = isEdit ? `/api/productos/${this.productForm.id}` : '/api/productos';
+                        
+                        // Para update, solo enviar campos cambiados
+                        const payload = isEdit ? {
+                            nombre: this.productForm.nombre,
+                            marca: this.productForm.marca,
+                            precio_venta: this.productForm.precio_venta,
+                            precio_costo: this.productForm.precio_costo,
+                            categoria_id: this.productForm.categoria_id,
+                            stock_minimo: this.productForm.stock_minimo
+                        } : this.productForm;
+
+                        const response = await this.request(method, url, payload);
+                        
                         if (this.apiMode === 'real') {
-                            this.addToast('success', 'Producto guardado en backend');
+                            this.addToast('success', isEdit ? 'Producto actualizado' : 'Producto guardado en backend');
                         } else {
-                            const nuevo = {
-                                id: this.products.length + 1,
-                                codigo_barras: this.productForm.codigo_barras,
-                                nombre: this.productForm.nombre,
-                                marca: this.productForm.marca,
-                                sku: this.productForm.sku,
-                                precio_costo: this.productForm.precio_costo,
-                                precio_venta: this.productForm.precio_venta,
-                                categoria_id: parseInt(this.productForm.categoria_id),
-                                stock_actual: parseFloat(this.productForm.cantidad_inicial),
-                                stock_minimo: 5.0
-                            };
-                            this.products.push(nuevo);
-                            response.log(200, { ok: true, message: "Producto creado", data: nuevo });
-                            this.addToast('success', 'Producto creado (Modo simulador)');
+                            if (isEdit) {
+                                const idx = this.products.findIndex(p => p.id === this.productForm.id);
+                                if (idx >= 0) {
+                                    this.products[idx] = { ...this.products[idx], ...payload };
+                                }
+                                this.addToast('success', 'Producto actualizado (Modo simulador)');
+                            } else {
+                                const nuevo = {
+                                    id: this.products.length + 1,
+                                    codigo_barras: this.productForm.codigo_barras,
+                                    nombre: this.productForm.nombre,
+                                    marca: this.productForm.marca,
+                                    sku: this.productForm.sku,
+                                    precio_costo: this.productForm.precio_costo,
+                                    precio_venta: this.productForm.precio_venta,
+                                    categoria_id: parseInt(this.productForm.categoria_id),
+                                    stock_actual: parseFloat(this.productForm.cantidad_inicial),
+                                    stock_minimo: 5.0
+                                };
+                                this.products.push(nuevo);
+                                this.addToast('success', 'Producto creado (Modo simulador)');
+                            }
                         }
                         this.modalActive = false;
                         this.fetchProducts();
@@ -1703,20 +1798,33 @@
 
                 async submitCompraForm() {
                     try {
-                        const response = await this.request('POST', '/api/compras', this.compraForm);
                         if (this.apiMode === 'real') {
-                            this.addToast('success', 'Orden de compra creada exitosamente');
+                            // Paso 1: crear la compra
+                            const compraResp = await this.request('POST', '/api/compras', {
+                                proveedor_id: this.compraForm.proveedor_id
+                            });
+                            if (!compraResp || !compraResp.data) {
+                                this.addToast('error', 'Error al crear compra');
+                                return;
+                            }
+                            const compraId = compraResp.data.id;
+                            // Paso 2: agregar item
+                            await this.request('POST', `/api/compras/${compraId}/items`, {
+                                producto_id: this.compraForm.producto_id,
+                                cantidad: this.compraForm.cantidad,
+                                precio_unitario: this.compraForm.precio_unitario
+                            });
+                            // Paso 3: recibir automáticamente
+                            await this.request('PUT', `/api/compras/${compraId}/recibir`);
+                            this.addToast('success', `Compra ${compraResp.data.numero} creada y recibida`);
                         } else {
                             const ocNum = "C-0000000" + (this.compras.length + 1);
                             const prov = this.proveedores.find(p => p.id == this.compraForm.proveedor_id);
-                            
                             const nuevaOC = {
-                                id: this.compras.length + 1,
-                                numero: ocNum,
+                                id: this.compras.length + 1, numero: ocNum,
                                 proveedor_nombre: prov ? prov.nombre : "Proveedor General",
                                 total: this.compraForm.cantidad * this.compraForm.precio_unitario,
-                                estado: 'pendiente',
-                                fecha: new Date(),
+                                estado: 'recibida', fecha: new Date(),
                                 meta_items: {
                                     producto_id: this.compraForm.producto_id,
                                     cantidad: this.compraForm.cantidad,
@@ -1724,11 +1832,15 @@
                                 }
                             };
                             this.compras.unshift(nuevaOC);
-                            response.log(200, { ok: true, message: `Orden ${ocNum} creada`, data: nuevaOC });
-                            this.addToast('success', `Orden de compra ${ocNum} creada (Pendiente)`);
+                            // Actualizar stock en mock
+                            const prod = this.products.find(p => p.id == this.compraForm.producto_id);
+                            if (prod) { prod.stock_actual += this.compraForm.cantidad; prod.precio_costo = this.compraForm.precio_unitario; }
+                            this.addToast('success', `Orden de compra ${ocNum} creada y recibida`);
                         }
                         this.modalActive = false;
                         this.fetchCompras();
+                        this.fetchProducts();
+                        this.fetchDashboardData();
                     } catch (e) {}
                 },
 
