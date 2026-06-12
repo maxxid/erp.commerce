@@ -21,7 +21,7 @@ class Settings:
     JWT_EXPIRE_MINUTES: int = int(os.getenv("JWT_EXPIRE_MINUTES", "480"))  # 8 horas
 
     # CORS
-    CORS_ORIGINS: list = ["http://localhost:5173", "http://localhost:5000", "http://127.0.0.1:5173"]
+    CORS_ORIGINS: list = ["*"]  # En producción, restringir al dominio real
 
     # App
     APP_TITLE: str = "ERP Comercio API"
