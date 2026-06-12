@@ -414,14 +414,18 @@
                                 </a>
                             </div>
 
-                            <!-- Precio de venta rápido + Continuar -->
+                            <!-- Precio de venta rápido + Cantidad + Continuar -->
                             <div class="flex items-end gap-3">
+                                <div>
+                                    <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Cantidad</label>
+                                    <input type="number" x-model.number="lookupProduct.quickCantidad" class="w-16 bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-mono-data font-bold text-center focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100" min="1" value="1">
+                                </div>
                                 <div class="flex-1">
                                     <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Precio de Venta</label>
                                     <input type="number" x-model.number="lookupProduct.quickPrecioVenta" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-mono-data font-bold focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100" placeholder="0">
                                 </div>
                                 <button @click="quickSaveAndAddToCart()" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold uppercase tracking-wider shadow-sm transition flex items-center gap-1.5">
-                                    <i class="fa-solid fa-bolt"></i> Continuar <span class="text-[9px] opacity-70">(guardar luego)</span>
+                                    <i class="fa-solid fa-bolt"></i> Continuar
                                 </button>
                             </div>
                         </div>
@@ -441,6 +445,10 @@
                                     <input type="text" x-model="lookupNotFoundNombre" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-brand-600" placeholder="Ej: Coca Cola 2.25L">
                                 </div>
                                 <div class="flex gap-3 items-end">
+                                    <div>
+                                        <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Cant.</label>
+                                        <input type="number" x-model.number="lookupNotFoundCantidad" class="w-16 bg-white border border-slate-200 rounded-xl px-2 py-2 text-sm font-mono-data font-bold text-center focus:outline-none focus:border-brand-600" min="1" value="1">
+                                    </div>
                                     <div class="flex-1">
                                         <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Precio de Venta</label>
                                         <input type="number" x-model.number="lookupNotFoundPrecio" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-mono-data font-bold focus:outline-none focus:border-brand-600" placeholder="0">
@@ -1074,6 +1082,7 @@
                 lookupNotFoundBarcode: '',
                 lookupNotFoundNombre: '',
                 lookupNotFoundPrecio: 0,
+                lookupNotFoundCantidad: 1,
                 lookupBadges: { carrefour: 'loading', vea: 'loading', masonline: 'loading', carrefour_url: '', vea_url: '', masonline_url: '' },
                 posCart: { _ventaId: null, _ventaNum: null, items: [], subtotal: 0, descuento: 0, total: 0, medio_pago: 'efectivo', cliente_id: '' },
 
@@ -1295,6 +1304,7 @@
                                 prod.quickPrecioVenta = prod.precio_referencia 
                                     ? Math.ceil(prod.precio_referencia * 1.3 / 50) * 50 
                                     : 0;
+                                prod.quickCantidad = 1;
                                 this.lookupProduct = prod;
                                 this.posLookupCode = '';
                                 this.triggerParallelSupermarketLookup(prod.codigo_barras);
@@ -1324,7 +1334,7 @@
                     }
                 },
 
-                // Quick-save desde lookup: guarda producto básico y lo agrega al carrito
+                // Quick-save desde lookup: guarda producto con stock inicial y lo agrega al carrito
                 async quickSaveAndAddToCart() {
                     const prod = this.lookupProduct;
                     if (!prod || !prod.codigo_barras) return;
@@ -1334,6 +1344,7 @@
                         this.addToast('warning', 'Ingresá un precio de venta');
                         return;
                     }
+                    const cantidad = Math.max(1, parseInt(prod.quickCantidad) || 1);
 
                     if (this.apiMode === 'real') {
                         try {
@@ -1349,12 +1360,15 @@
                                 propiedades: prod.propiedades || {},
                                 fuente: prod.fuente || 'carrefour',
                                 categoria_id: this.getOrCreateCategoryId(prod.categoria),
-                                cantidad_inicial: 0
+                                cantidad_inicial: cantidad
                             });
                             const saved = saveResp.data;
                             await this.fetchProducts();
-                            saved.stock_actual = 0;
-                            this.addPRODToPOS(saved);
+                            saved.stock_actual = cantidad;
+                            // Agregar la cantidad especificada al carrito
+                            for (let i = 0; i < cantidad; i++) {
+                                this.addPRODToPOS(saved);
+                            }
                             this.lookupProduct = {};
                             this.addToast('success', 'Producto agregado. Completalo en Productos.');
                         } catch (e) {
@@ -1366,10 +1380,11 @@
                     const newProd = {
                         id: this.products.length + 1, codigo_barras: prod.codigo_barras,
                         nombre: prod.nombre, marca: prod.marca || '',
-                        precio_venta: precioVenta, stock_actual: 0, categoria_id: prod.categoria_id || 1
+                        precio_venta: precioVenta, stock_actual: cantidad,
+                        categoria_id: prod.categoria_id || 1
                     };
                     this.products.push(newProd);
-                    this.addPRODToPOS(newProd);
+                    for (let i = 0; i < cantidad; i++) this.addPRODToPOS(newProd);
                     this.lookupProduct = {};
                     this.addToast('success', 'Producto agregado (completar en Productos)');
                 },
@@ -1385,6 +1400,7 @@
                         this.addToast('warning', 'Ingresá un precio');
                         return;
                     }
+                    const cantidad = Math.max(1, parseInt(this.lookupNotFoundCantidad) || 1);
 
                     if (this.apiMode === 'real') {
                         try {
@@ -1393,12 +1409,12 @@
                                 nombre: this.lookupNotFoundNombre.trim(),
                                 precio_venta: precioVenta,
                                 fuente: 'manual',
-                                cantidad_inicial: 0
+                                cantidad_inicial: cantidad
                             });
                             const saved = saveResp.data;
                             await this.fetchProducts();
-                            saved.stock_actual = 0;
-                            this.addPRODToPOS(saved);
+                            saved.stock_actual = cantidad;
+                            for (let i = 0; i < cantidad; i++) this.addPRODToPOS(saved);
                             this.lookupNotFound = false;
                             this.addToast('success', 'Agregado. Completalo en Productos.');
                         } catch (e) {
@@ -1409,10 +1425,10 @@
                     const newProd = {
                         id: this.products.length + 1, codigo_barras: this.lookupNotFoundBarcode,
                         nombre: this.lookupNotFoundNombre.trim(), precio_venta: precioVenta,
-                        stock_actual: 0, categoria_id: 1
+                        stock_actual: cantidad, categoria_id: 1
                     };
                     this.products.push(newProd);
-                    this.addPRODToPOS(newProd);
+                    for (let i = 0; i < cantidad; i++) this.addPRODToPOS(newProd);
                     this.lookupNotFound = false;
                     this.addToast('success', 'Producto agregado (completar en Productos)');
                 },
@@ -1550,7 +1566,8 @@
                         this.addToast('warning', 'La caja no está abierta. Ábrala para poder realizar una venta.');
                         return;
                     }
-                    if (prod.stock_actual <= 0) {
+                    // Solo bloquear en modo mock. En modo real, el backend valida stock al confirmar.
+                    if (this.apiMode !== 'real' && prod.stock_actual <= 0) {
                         this.addToast('error', `Sin stock para ${prod.nombre}`);
                         return;
                     }
