@@ -18,6 +18,7 @@ class MovimientoCaja(Base):
     tipo = Column(String(20), nullable=False)        # apertura | cierre | ingreso | egreso
     monto = Column(Float, nullable=False)
     descripcion = Column(String(200), nullable=True)
+    medio_pago = Column(String(30), nullable=True)    # efectivo | debito | credito | transferencia
     referencia_tipo = Column(String(20), nullable=True)  # venta | compra | retiro | deposito
     referencia_id = Column(Integer, nullable=True)
     usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)

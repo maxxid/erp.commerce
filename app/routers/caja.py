@@ -124,3 +124,13 @@ def movimientos(
         data=movs, total=total, page=page, page_size=page_size,
         message=f"{total} movimiento(s)"
     )
+
+
+@router.get("/resumen", response_model=RespuestaData)
+def resumen_por_medio(
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """Desglose de ingresos por medio de pago desde la última apertura."""
+    data = caja_service.obtener_resumen_por_medio_pago(db)
+    return RespuestaData(data=data)

@@ -207,6 +207,7 @@ def confirmar_venta(
             referencia_tipo="venta",
             referencia_id=venta.id,
             sucursal_id=venta.sucursal_id,
+            medio_pago=medio_pago,
         )
 
     db.commit()

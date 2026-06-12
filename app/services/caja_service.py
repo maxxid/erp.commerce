@@ -94,12 +94,14 @@ def registrar_ingreso(
     referencia_tipo: Optional[str] = None,
     referencia_id: Optional[int] = None,
     sucursal_id: int = 1,
+    medio_pago: str = "efectivo",
 ) -> MovimientoCaja:
     """Registra un ingreso de dinero (ej: pago de una venta)."""
     movimiento = MovimientoCaja(
         tipo="ingreso",
         monto=monto,
         descripcion=descripcion,
+        medio_pago=medio_pago,
         referencia_tipo=referencia_tipo,
         referencia_id=referencia_id,
         usuario_id=usuario_id,
@@ -188,3 +190,44 @@ def listar_movimientos(
     total = query.count()
     movimientos = query.offset((page - 1) * page_size).limit(page_size).all()
     return movimientos, total
+
+
+def obtener_resumen_por_medio_pago(db: Session, sucursal_id: int = 1) -> dict:
+    """Devuelve el desglose de ingresos por medio de pago desde la última apertura."""
+    from sqlalchemy import func
+    movimientos = (
+        db.query(MovimientoCaja)
+        .filter(
+            MovimientoCaja.sucursal_id == sucursal_id,
+            MovimientoCaja.tipo == "ingreso",
+            MovimientoCaja.referencia_tipo == "venta",
+        )
+        .order_by(MovimientoCaja.id.desc())
+        .all()
+    )
+
+    # Solo contar desde la última apertura
+    desglose = {"efectivo": 0, "debito": 0, "credito": 0, "transferencia": 0}
+    for m in movimientos:
+        if m.tipo == "cierre":
+            break
+        if m.tipo == "ingreso" and m.referencia_tipo == "venta":
+            mp = m.medio_pago or "efectivo"
+            if mp in desglose:
+                desglose[mp] += m.monto
+            else:
+                desglose[mp] = desglose.get(mp, 0) + m.monto
+
+    # También sumar egresos
+    egresos_total = 0
+    for m in movimientos:
+        if m.tipo == "cierre":
+            break
+        if m.tipo == "egreso":
+            egresos_total += m.monto
+
+    return {
+        "desglose": desglose,
+        "total_ingresos": sum(desglose.values()),
+        "total_egresos": egresos_total,
+    }

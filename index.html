@@ -171,7 +171,7 @@
                         <span>Productos</span>
                     </button>
 
-                    <button @click="activeTab = 'caja'; fetchCajaMovimientos()" :class="activeTab === 'caja' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150">
+                    <button @click="activeTab = 'caja'; fetchCajaMovimientos(); fetchCajaResumen()" :class="activeTab === 'caja' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150">
                         <i class="fa-solid fa-vault text-lg w-5 text-center"></i>
                         <span>Arqueos y Caja</span>
                     </button>
@@ -683,6 +683,37 @@
                                     <h4 class="text-3xl font-bold text-brand-600 mt-1 font-mono-data" x-text="formatCurrency(cajaState.saldo_actual)"></h4>
                                 </div>
 
+                                <!-- Desglose por medio de pago -->
+                                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2">
+                                    <span class="text-[10px] uppercase font-bold text-slate-400 block text-center">Ingresos por Medio de Pago</span>
+                                    <div class="space-y-1.5">
+                                        <div class="flex justify-between text-xs" x-show="cajaResumen.desglose.efectivo > 0">
+                                            <span class="text-slate-600">Efectivo</span>
+                                            <span class="font-mono-data font-bold text-emerald-600" x-text="formatCurrency(cajaResumen.desglose.efectivo)"></span>
+                                        </div>
+                                        <div class="flex justify-between text-xs" x-show="cajaResumen.desglose.debito > 0">
+                                            <span class="text-slate-600">Débito</span>
+                                            <span class="font-mono-data font-bold text-emerald-600" x-text="formatCurrency(cajaResumen.desglose.debito)"></span>
+                                        </div>
+                                        <div class="flex justify-between text-xs" x-show="cajaResumen.desglose.credito > 0">
+                                            <span class="text-slate-600">Crédito</span>
+                                            <span class="font-mono-data font-bold text-emerald-600" x-text="formatCurrency(cajaResumen.desglose.credito)"></span>
+                                        </div>
+                                        <div class="flex justify-between text-xs" x-show="cajaResumen.desglose.transferencia > 0">
+                                            <span class="text-slate-600">Transferencia</span>
+                                            <span class="font-mono-data font-bold text-emerald-600" x-text="formatCurrency(cajaResumen.desglose.transferencia)"></span>
+                                        </div>
+                                        <div class="border-t border-slate-200 pt-1.5 flex justify-between text-xs font-bold">
+                                            <span class="text-slate-700">Total Ingresos</span>
+                                            <span class="font-mono-data text-brand-600" x-text="formatCurrency(cajaResumen.total_ingresos)"></span>
+                                        </div>
+                                        <div class="flex justify-between text-xs" x-show="cajaResumen.total_egresos > 0">
+                                            <span class="text-rose-500">Egresos</span>
+                                            <span class="font-mono-data font-bold text-rose-500" x-text="formatCurrency(cajaResumen.total_egresos)"></span>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div class="flex gap-2">
                                     <button x-show="!cajaState.abierta" @click="showModal('caja_apertura')" class="flex-1 bg-brand-600 hover:bg-brand-700 text-white py-3 rounded-xl text-xs font-bold uppercase transition tracking-wider text-center">
                                         <i class="fa-solid fa-lock-open mr-1"></i> Abrir Caja
@@ -702,7 +733,10 @@
                                 <template x-for="mov in cajaMovimientos" :key="mov.id">
                                     <div class="py-3 flex justify-between items-center text-xs">
                                         <div class="space-y-1">
-                                            <span :class="mov.tipo === 'apertura' ? 'bg-indigo-50 text-brand-600 border-indigo-100' : (mov.tipo === 'cierre' ? 'bg-slate-100 text-slate-700 border-slate-200' : 'bg-emerald-50 text-accent-success border-emerald-100')" class="px-2 py-0.5 rounded border text-[9px] uppercase font-bold font-mono" x-text="mov.tipo"></span>
+                                            <div class="flex items-center gap-1.5">
+                                                <span :class="mov.tipo === 'apertura' ? 'bg-indigo-50 text-brand-600 border-indigo-100' : (mov.tipo === 'cierre' ? 'bg-slate-100 text-slate-700 border-slate-200' : 'bg-emerald-50 text-accent-success border-emerald-100')" class="px-2 py-0.5 rounded border text-[9px] uppercase font-bold font-mono" x-text="mov.tipo"></span>
+                                                <span x-show="mov.medio_pago" class="text-[9px] bg-slate-100 text-slate-500 rounded px-1.5 py-0.5 font-medium" x-text="mov.medio_pago"></span>
+                                            </div>
                                             <p class="text-slate-500 text-[10px]" x-text="formatDateShort(mov.fecha || new Date())"></p>
                                         </div>
                                         <span class="font-mono-data font-bold text-slate-900" x-text="formatCurrency(mov.monto)"></span>
@@ -1166,6 +1200,7 @@
                 cajaMovimientos: [
                     { id: 1, tipo: 'apertura', monto: 50000.0, fecha: new Date() }
                 ],
+                cajaResumen: { desglose: { efectivo: 0, debito: 0, credito: 0, transferencia: 0 }, total_ingresos: 0, total_egresos: 0 },
                 compras: [
                     { id: 1, numero: "C-00000001", proveedor_nombre: "Distribuidora SA", total: 12500, estado: 'recibida', fecha: new Date() }
                 ],
@@ -1920,6 +1955,15 @@
                         const response = await this.request('GET', '/api/caja/movimientos?page_size=100');
                         if (this.apiMode === 'real') {
                             this.cajaMovimientos = response.data || [];
+                        }
+                    } catch (e) {}
+                },
+
+                async fetchCajaResumen() {
+                    try {
+                        const response = await this.request('GET', '/api/caja/resumen');
+                        if (this.apiMode === 'real' && response.data) {
+                            this.cajaResumen = response.data;
                         }
                     } catch (e) {}
                 },
