@@ -13,6 +13,20 @@ from app.models.usuario import Usuario
 router = APIRouter(prefix="/api/clientes", tags=["Clientes"])
 
 
+def _cli_to_dict(c):
+    if not c: return None
+    return {
+        "id": c.id, "nombre": c.nombre, "tipo_documento": c.tipo_documento,
+        "numero_documento": c.numero_documento, "telefono": c.telefono,
+        "email": c.email, "direccion": c.direccion,
+        "saldo_cta_corriente": c.saldo_cta_corriente or 0,
+        "limite_credito": c.limite_credito or 0,
+        "notas": c.notas, "activo": c.activo,
+        "created_at": c.created_at.isoformat() if c.created_at else None,
+        "updated_at": c.updated_at.isoformat() if c.updated_at else None,
+    }
+
+
 class ClienteCreate(BaseModel):
     nombre: str = Field(..., min_length=1, max_length=150)
     tipo_documento: str = "DNI"
@@ -61,7 +75,7 @@ def listar(
         .all()
     )
     return RespuestaLista(
-        data=clientes, total=total, page=page, page_size=page_size,
+        data=[_cli_to_dict(c) for c in clientes], total=total, page=page, page_size=page_size,
         message=f"{total} cliente(s)"
     )
 
@@ -76,7 +90,7 @@ def obtener(
     cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
-    return RespuestaData(data=cliente)
+    return RespuestaData(data=_cli_to_dict(cliente))
 
 
 @router.post("", response_model=RespuestaData)
@@ -90,7 +104,7 @@ def crear(
     db.add(cliente)
     db.commit()
     db.refresh(cliente)
-    return RespuestaData(data=cliente, message="Cliente creado")
+    return RespuestaData(data=_cli_to_dict(cliente), message="Cliente creado")
 
 
 @router.put("/{cliente_id}", response_model=RespuestaData)
@@ -109,4 +123,4 @@ def actualizar(
         setattr(cliente, k, v)
     db.commit()
     db.refresh(cliente)
-    return RespuestaData(data=cliente, message="Cliente actualizado")
+    return RespuestaData(data=_cli_to_dict(cliente), message="Cliente actualizado")
