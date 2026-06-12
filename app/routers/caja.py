@@ -1,4 +1,4 @@
-"""Router de Caja: apertura, cierre, estado, movimientos."""
+"""Router de Caja: apertura, cierre por método, cierre total."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -17,8 +17,15 @@ class AperturaRequest(BaseModel):
     sucursal_id: int = 1
 
 
-class CierreRequest(BaseModel):
+class CierreMetodoRequest(BaseModel):
+    medio_pago: str = Field(...)
     monto_real: float = Field(..., ge=0)
+    comentario: str = ""
+    sucursal_id: int = 1
+
+
+class CierreTotalRequest(BaseModel):
+    comentario: str = ""
     sucursal_id: int = 1
 
 
@@ -33,7 +40,6 @@ def estado(
     db: Session = Depends(get_db),
     user: Usuario = Depends(get_current_user),
 ):
-    """Estado actual de la caja: abierta/cerrada, saldo."""
     state = caja_service.obtener_estado_caja(db)
     return RespuestaData(data=state)
 
@@ -44,7 +50,6 @@ def apertura(
     db: Session = Depends(get_db),
     user: Usuario = Depends(require_role("admin", "cajero")),
 ):
-    """Abre la caja con un monto inicial."""
     try:
         mov = caja_service.abrir_caja(db, data.monto_inicial, user.id, data.sucursal_id)
         return RespuestaData(
@@ -55,27 +60,48 @@ def apertura(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/cierre", response_model=RespuestaData)
-def cierre(
-    data: CierreRequest,
+@router.post("/cierre-metodo", response_model=RespuestaData)
+def cierre_metodo(
+    data: CierreMetodoRequest,
     db: Session = Depends(get_db),
     user: Usuario = Depends(require_role("admin", "cajero")),
 ):
-    """Cierra la caja con arqueo del monto real."""
+    """Cierra un medio de pago específico con su propio arqueo."""
     try:
-        mov, esperado, diferencia, desglose = caja_service.cerrar_caja(
-            db, data.monto_real, user.id, data.sucursal_id
+        mov, esperado, diferencia = caja_service.cerrar_metodo(
+            db, data.medio_pago, data.monto_real, user.id,
+            data.comentario, data.sucursal_id
+        )
+        return RespuestaData(
+            data={
+                "id": mov.id, "medio_pago": data.medio_pago,
+                "monto_real": data.monto_real, "saldo_esperado": esperado,
+                "diferencia": diferencia,
+            },
+            message=f"{data.medio_pago} cerrado. Diferencia: ${diferencia:,.2f}",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/cierre-total", response_model=RespuestaData)
+def cierre_total(
+    data: CierreTotalRequest,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "cajero")),
+):
+    """Cierra la caja completamente. Fin de la sesión."""
+    try:
+        mov, desglose = caja_service.cerrar_todo(
+            db, user.id, data.comentario, data.sucursal_id
         )
         return RespuestaData(
             data={
                 "id": mov.id,
-                "monto_real": data.monto_real,
-                "saldo_esperado": esperado,
-                "diferencia": diferencia,
-                "desglose": desglose["desglose"],
                 "total_ingresos": desglose["total_ingresos"],
+                "desglose": desglose["desglose"],
             },
-            message=f"Caja cerrada. Diferencia: ${diferencia:,.2f}",
+            message="Caja cerrada totalmente.",
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -87,7 +113,6 @@ def ingreso(
     db: Session = Depends(get_db),
     user: Usuario = Depends(require_role("admin", "cajero")),
 ):
-    """Registra un ingreso extra de dinero."""
     if not caja_service.caja_abierta(db):
         raise HTTPException(status_code=400, detail="La caja no está abierta")
     mov = caja_service.registrar_ingreso(
@@ -103,7 +128,6 @@ def egreso(
     db: Session = Depends(get_db),
     user: Usuario = Depends(require_role("admin", "cajero")),
 ):
-    """Registra un egreso/retiro de dinero."""
     if not caja_service.caja_abierta(db):
         raise HTTPException(status_code=400, detail="La caja no está abierta")
     mov = caja_service.registrar_egreso(
@@ -120,7 +144,6 @@ def movimientos(
     db: Session = Depends(get_db),
     user: Usuario = Depends(require_role("admin", "encargado")),
 ):
-    """Historial de movimientos de caja."""
     movs, total = caja_service.listar_movimientos(db, page=page, page_size=page_size)
     return RespuestaLista(
         data=movs, total=total, page=page, page_size=page_size,
@@ -133,6 +156,6 @@ def resumen_por_medio(
     db: Session = Depends(get_db),
     user: Usuario = Depends(get_current_user),
 ):
-    """Desglose de ingresos por medio de pago desde la última apertura."""
     data = caja_service.obtener_resumen_por_medio_pago(db)
+    data["metodos_cerrados"] = caja_service._metodos_ya_cerrados(db)
     return RespuestaData(data=data)

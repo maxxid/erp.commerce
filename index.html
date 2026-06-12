@@ -1063,43 +1063,47 @@
                 </div>
             </div>
 
-            <!-- MODAL: CIERRE CAJA (con desglose por medio de pago) -->
+            <!-- MODAL: CIERRE CAJA (por método con comentarios) -->
             <div x-show="currentModalType === 'caja_cierre'" class="space-y-4">
                 <div class="p-3 bg-indigo-50 text-brand-900 border border-indigo-100 rounded-xl text-xs flex justify-between">
                     <span>Monto Esperado en Sistema:</span>
                     <strong class="font-mono-data" x-text="formatCurrency(cajaState.saldo_actual)"></strong>
                 </div>
-                <!-- Desglose por medio de pago -->
-                <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-xs">
-                    <span class="font-bold text-slate-500 uppercase tracking-wider text-[10px]">Ingresos por medio de pago</span>
-                    <div class="flex justify-between" x-show="cajaResumen.desglose.efectivo > 0">
-                        <span class="text-slate-600">Efectivo</span>
-                        <span class="font-mono-data font-bold text-emerald-600" x-text="formatCurrency(cajaResumen.desglose.efectivo)"></span>
-                    </div>
-                    <div class="flex justify-between" x-show="cajaResumen.desglose.debito > 0">
-                        <span class="text-slate-600">Débito</span>
-                        <span class="font-mono-data font-bold text-emerald-600" x-text="formatCurrency(cajaResumen.desglose.debito)"></span>
-                    </div>
-                    <div class="flex justify-between" x-show="cajaResumen.desglose.credito > 0">
-                        <span class="text-slate-600">Crédito</span>
-                        <span class="font-mono-data font-bold text-emerald-600" x-text="formatCurrency(cajaResumen.desglose.credito)"></span>
-                    </div>
-                    <div class="flex justify-between" x-show="cajaResumen.desglose.transferencia > 0">
-                        <span class="text-slate-600">Transferencia</span>
-                        <span class="font-mono-data font-bold text-emerald-600" x-text="formatCurrency(cajaResumen.desglose.transferencia)"></span>
-                    </div>
-                    <div class="border-t border-slate-200 pt-1 flex justify-between font-bold">
-                        <span class="text-slate-700">Total en caja</span>
-                        <span class="font-mono-data text-brand-600" x-text="formatCurrency(cajaResumen.total_ingresos)"></span>
-                    </div>
+                <!-- Desglose por método con inputs -->
+                <div class="space-y-3">
+                    <span class="font-bold text-slate-500 uppercase tracking-wider text-[10px]">Cerrar por medio de pago</span>
+                    <template x-for="metodo in ['efectivo','debito','credito','transferencia']" :key="metodo">
+                        <div x-show="cajaResumen.desglose[metodo] > 0 || cajaResumen.metodos_cerrados?.includes(metodo)" class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                            <div class="flex justify-between items-center">
+                                <span class="font-bold text-slate-700 capitalize text-xs" x-text="metodo"></span>
+                                <span class="font-mono-data text-xs font-bold text-emerald-600" x-text="formatCurrency(cajaResumen.desglose[metodo] || 0)"></span>
+                                <span x-show="cajaResumen.metodos_cerrados?.includes(metodo)" class="text-[9px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">CERRADO</span>
+                            </div>
+                            <div x-show="!cajaResumen.metodos_cerrados?.includes(metodo)" class="flex gap-2 items-end">
+                                <div class="flex-1">
+                                    <label class="text-[9px] text-slate-400 block">Monto real</label>
+                                    <input type="number" x-model.number="cajaForm['monto_'+metodo]" class="w-full border rounded-lg p-1.5 text-xs font-mono" :placeholder="cajaResumen.desglose[metodo]">
+                                </div>
+                                <div class="flex-1">
+                                    <label class="text-[9px] text-slate-400 block">Comentario</label>
+                                    <input type="text" x-model="cajaForm['comentario_'+metodo]" class="w-full border rounded-lg p-1.5 text-xs" placeholder="Ej: faltante $50">
+                                </div>
+                                <button @click="cerrarMetodoCaja(metodo)" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-[10px] font-bold uppercase">Cerrar</button>
+                            </div>
+                        </div>
+                    </template>
                 </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 mb-1">Monto Real Contado Físicamente ($)</label>
-                    <input type="number" x-model.number="cajaForm.monto_real" class="w-full border rounded-xl p-3 text-sm font-mono" placeholder="72000">
+                <div class="border-t pt-3 space-y-2">
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Comentario general (cierre total)</label>
+                        <input type="text" x-model="cajaForm.comentario_total" class="w-full border rounded-xl p-2 text-xs" placeholder="Opcional: novedades del día">
+                    </div>
+                    <button @click="cerrarCajaTotal()" class="w-full py-3 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-lock"></i> Cerrar Todo y Finalizar Jornada
+                    </button>
                 </div>
-                <div class="flex justify-end gap-2 border-t pt-4">
+                <div class="flex justify-end">
                     <button @click="modalActive = false" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold">Cancelar</button>
-                    <button @click="submitCajaCierre()" class="px-4 py-2 bg-rose-500 text-white rounded-xl text-xs font-bold">Cerrar y Declarar Arqueo</button>
                 </div>
             </div>
 
@@ -1196,7 +1200,7 @@
                 loginForm: { username: 'admin', password: 'admin' },
                 loginError: '',
                 productForm: { codigo_barras: '', nombre: '', marca: '', sku: '', precio_costo: 0, precio_venta: 0, categoria_id: 1, cantidad_inicial: 20 },
-                cajaForm: { monto_inicial: 50000, monto_real: 0 },
+                cajaForm: { monto_inicial: 50000, monto_real: 0, comentario_total: '', monto_efectivo: null, monto_debito: null, monto_credito: null, monto_transferencia: null, comentario_efectivo: '', comentario_debito: '', comentario_credito: '', comentario_transferencia: '' },
                 compraForm: { proveedor_id: 1, producto_id: 1, cantidad: 10, precio_unitario: 800 },
                 clientForm: { id: null, nombre: '', tipo_documento: 'DNI', numero_documento: '', telefono: '', limite_credito: 50000 },
                 provForm: { id: null, nombre: '', cuit: '', telefono: '', email: '', direccion: '', nombre_contacto: '' },
@@ -2017,6 +2021,12 @@
                         this.modalTitle = "Apertura de Caja";
                     } else if (type === 'caja_cierre') {
                         this.modalTitle = "Cierre de Jornada (Arqueo)";
+                        this.cajaForm.comentario_total = '';
+                        ['efectivo','debito','credito','transferencia'].forEach(m => {
+                            this.cajaForm['monto_'+m] = null;
+                            this.cajaForm['comentario_'+m] = '';
+                        });
+                        this.fetchCajaResumen();
                     } else if (type === 'compra_create') {
                         this.modalTitle = "Crear Orden de Compra Pendiente";
                     } else if (type === 'prov_create') {
@@ -2187,26 +2197,30 @@
                     } catch (e) {}
                 },
 
-                async submitCajaCierre() {
+                async cerrarMetodoCaja(metodo) {
+                    const montoReal = this.cajaForm['monto_'+metodo] || this.cajaResumen.desglose[metodo] || 0;
+                    const comentario = this.cajaForm['comentario_'+metodo] || '';
                     try {
-                        const response = await this.request('POST', '/api/caja/cierre', this.cajaForm);
-                        if (this.apiMode === 'real') {
-                            this.cajaState.abierta = false;
-                            this.addToast('success', 'Caja cerrada y arqueo declarado');
-                        } else {
-                            const diff = this.cajaForm.monto_real - this.cajaState.saldo_actual;
-                            this.cajaState.abierta = false;
-                            this.cajaMovimientos.unshift({
-                                id: Date.now(),
-                                tipo: 'cierre',
-                                monto: this.cajaForm.monto_real,
-                                fecha: new Date()
-                            });
-                            response.log(200, { ok: true, message: `Caja cerrada. Diferencia: ${this.formatCurrency(diff)}`, data: { diferencia: diff } });
-                            this.addToast('success', `Caja cerrada con diferencia de ${this.formatCurrency(diff)}`);
-                        }
+                        const response = await this.request('POST', '/api/caja/cierre-metodo', {
+                            medio_pago: metodo, monto_real: montoReal, comentario
+                        });
+                        this.addToast('success', response.message || `${metodo} cerrado`);
+                        this.fetchCajaResumen();
+                        this.fetchCajaMovimientos();
+                        this.verifyCajaState();
+                    } catch (e) {}
+                },
+
+                async cerrarCajaTotal() {
+                    const comentario = this.cajaForm.comentario_total || '';
+                    try {
+                        const response = await this.request('POST', '/api/caja/cierre-total', { comentario });
+                        this.addToast('success', response.message || 'Jornada finalizada');
                         this.modalActive = false;
                         this.verifyCajaState();
+                        this.fetchCajaResumen();
+                        this.fetchCajaMovimientos();
+                        this.fetchDashboardData();
                     } catch (e) {}
                 },
 

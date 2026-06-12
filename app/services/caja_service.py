@@ -1,26 +1,32 @@
-"""Servicio de Caja: apertura, cierre, movimientos de fondos.
+"""Servicio de Caja: apertura, cierre por método, cierre total.
 
 Reglas de negocio:
 - Solo puede haber una caja abierta por sucursal a la vez.
 - Para vender, la caja debe estar abierta.
-- El cierre calcula el saldo esperado vs el real (arqueo).
+- Cada medio de pago se cierra independientemente con su propio arqueo.
+- Cierre total = cierra todos los métodos pendientes de una vez.
 """
 
 from typing import Optional, List, Tuple
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_
 from app.models.movimiento_caja import MovimientoCaja
 
 
 def caja_abierta(db: Session, sucursal_id: int = 1) -> bool:
-    """Verifica si hay una caja abierta (sin cerrar) en la sucursal."""
+    """Verifica si hay una caja abierta (sin cierre total)."""
     ultimo = (
         db.query(MovimientoCaja)
         .filter(MovimientoCaja.sucursal_id == sucursal_id)
         .order_by(MovimientoCaja.id.desc())
         .first()
     )
-    return ultimo is not None and ultimo.tipo != "cierre"
+    # Caja cerrada si el último movimiento es "cierre" sin medio_pago (cierre total)
+    if ultimo and ultimo.tipo == "cierre" and not ultimo.medio_pago:
+        return False
+    if ultimo is None:
+        return False
+    # Si es apertura o cierre_parcial, está abierta
+    return True
 
 
 def abrir_caja(
@@ -50,41 +56,112 @@ def abrir_caja(
     return movimiento
 
 
-def cerrar_caja(
+def cerrar_metodo(
     db: Session,
+    medio_pago: str,
     monto_real: float,
     usuario_id: int,
+    comentario: str = "",
     sucursal_id: int = 1,
-) -> Tuple[MovimientoCaja, float, float, dict]:
-    """Cierra la caja con el arqueo.
-
-    Args:
-        monto_real: El monto contado físicamente en la caja.
+) -> Tuple[MovimientoCaja, float, float]:
+    """Cierra un medio de pago específico con arqueo propio.
 
     Returns:
-        (movimiento_cierre, saldo_esperado, diferencia, desglose_por_medio_pago)
+        (movimiento, saldo_esperado, diferencia)
 
     Raises:
-        ValueError: Si no hay caja abierta.
+        ValueError: Si no hay caja abierta o el método ya fue cerrado.
     """
     if not caja_abierta(db, sucursal_id):
         raise ValueError("No hay caja abierta para cerrar.")
 
-    saldo = obtener_saldo_actual(db, sucursal_id)
-    diferencia = monto_real - saldo
     desglose = obtener_resumen_por_medio_pago(db, sucursal_id)
+    esperado = desglose["desglose"].get(medio_pago, 0)
+    diferencia = monto_real - esperado
+
+    # Verificar que no esté ya cerrado este método en esta sesión
+    ya_cerrado = (
+        db.query(MovimientoCaja)
+        .filter(
+            MovimientoCaja.sucursal_id == sucursal_id,
+            MovimientoCaja.tipo == "cierre_parcial",
+            MovimientoCaja.medio_pago == medio_pago,
+        )
+        .order_by(MovimientoCaja.id.desc())
+        .first()
+    )
+    if ya_cerrado:
+        # Verificar que el cierre no haya sido después de la última apertura
+        desde_apertura = True
+        movs = (
+            db.query(MovimientoCaja)
+            .filter(MovimientoCaja.sucursal_id == sucursal_id)
+            .order_by(MovimientoCaja.id.desc())
+            .all()
+        )
+        for m in movs:
+            if m.id == ya_cerrado.id:
+                break
+            if m.tipo == "cierre" and not m.medio_pago:
+                desde_apertura = False
+                break
+            if m.tipo == "apertura":
+                desde_apertura = True
+                break
+        if desde_apertura:
+            raise ValueError(f"El método '{medio_pago}' ya fue cerrado en esta sesión.")
+
+    desc = f"Cierre {medio_pago}. Esperado: ${esperado:,.2f}. Diferencia: ${diferencia:,.2f}"
+    if comentario:
+        desc += f" — {comentario}"
 
     movimiento = MovimientoCaja(
-        tipo="cierre",
+        tipo="cierre_parcial",
         monto=monto_real,
-        descripcion=f"Cierre de caja. Esperado: ${saldo:,.2f}. Diferencia: ${diferencia:,.2f}",
+        medio_pago=medio_pago,
+        descripcion=desc,
         usuario_id=usuario_id,
         sucursal_id=sucursal_id,
     )
     db.add(movimiento)
     db.commit()
     db.refresh(movimiento)
-    return movimiento, saldo, diferencia, desglose
+    return movimiento, esperado, diferencia
+
+
+def cerrar_todo(
+    db: Session,
+    usuario_id: int,
+    comentario: str = "",
+    sucursal_id: int = 1,
+) -> Tuple[MovimientoCaja, dict]:
+    """Cierra la caja completamente. Marca el fin de la sesión.
+
+    Returns:
+        (movimiento_cierre_total, desglose_por_medio_pago)
+    """
+    if not caja_abierta(db, sucursal_id):
+        raise ValueError("No hay caja abierta para cerrar.")
+
+    desglose = obtener_resumen_por_medio_pago(db, sucursal_id)
+    total = desglose["total_ingresos"]
+
+    desc = f"Cierre total de caja. Total ingresos: ${total:,.2f}"
+    if comentario:
+        desc += f" — {comentario}"
+
+    movimiento = MovimientoCaja(
+        tipo="cierre",
+        monto=total,
+        descripcion=desc,
+        usuario_id=usuario_id,
+        sucursal_id=sucursal_id,
+        medio_pago=None,  # null = cierre total
+    )
+    db.add(movimiento)
+    db.commit()
+    db.refresh(movimiento)
+    return movimiento, desglose
 
 
 def registrar_ingreso(
@@ -140,11 +217,7 @@ def registrar_egreso(
 
 
 def obtener_saldo_actual(db: Session, sucursal_id: int = 1) -> float:
-    """Calcula el saldo actual sumando todos los movimientos desde
-    la última apertura hasta ahora (excluyendo el cierre si existe).
-
-    Fórmula: SUM(ingresos) - SUM(egresos) + apertura_inicial.
-    """
+    """Calcula el saldo actual desde la última apertura hasta ahora."""
     movimientos = (
         db.query(MovimientoCaja)
         .filter(MovimientoCaja.sucursal_id == sucursal_id)
@@ -154,13 +227,15 @@ def obtener_saldo_actual(db: Session, sucursal_id: int = 1) -> float:
 
     saldo = 0.0
     for m in movimientos:
-        if m.tipo == "cierre":
-            saldo = 0.0  # Empezar nuevo ciclo
+        # Cierre total: fin del ciclo
+        if m.tipo == "cierre" and not m.medio_pago:
+            saldo = 0.0
             break
         if m.tipo in ("apertura", "ingreso"):
             saldo += m.monto
         elif m.tipo == "egreso":
             saldo -= m.monto
+        # Cierre parcial no afecta el saldo (es informativo)
 
     return saldo
 
@@ -169,11 +244,32 @@ def obtener_estado_caja(db: Session, sucursal_id: int = 1) -> dict:
     """Devuelve el estado actual de la caja."""
     abierta = caja_abierta(db, sucursal_id)
     saldo = obtener_saldo_actual(db, sucursal_id) if abierta else 0.0
+    metodos_cerrados = _metodos_ya_cerrados(db, sucursal_id) if abierta else []
 
     return {
         "abierta": abierta,
         "saldo_actual": saldo,
+        "metodos_cerrados": metodos_cerrados,
     }
+
+
+def _metodos_ya_cerrados(db: Session, sucursal_id: int = 1) -> list:
+    """Lista qué medios de pago ya fueron cerrados en esta sesión."""
+    movimientos = (
+        db.query(MovimientoCaja)
+        .filter(MovimientoCaja.sucursal_id == sucursal_id)
+        .order_by(MovimientoCaja.id.desc())
+        .all()
+    )
+    cerrados = set()
+    for m in movimientos:
+        if m.tipo == "cierre" and not m.medio_pago:
+            break
+        if m.tipo == "apertura":
+            break
+        if m.tipo == "cierre_parcial" and m.medio_pago:
+            cerrados.add(m.medio_pago)
+    return list(cerrados)
 
 
 def listar_movimientos(
@@ -195,7 +291,6 @@ def listar_movimientos(
 
 def obtener_resumen_por_medio_pago(db: Session, sucursal_id: int = 1) -> dict:
     """Devuelve el desglose de ingresos por medio de pago desde la última apertura."""
-    from sqlalchemy import func
     movimientos = (
         db.query(MovimientoCaja)
         .filter(
@@ -207,10 +302,9 @@ def obtener_resumen_por_medio_pago(db: Session, sucursal_id: int = 1) -> dict:
         .all()
     )
 
-    # Solo contar desde la última apertura
     desglose = {"efectivo": 0, "debito": 0, "credito": 0, "transferencia": 0}
     for m in movimientos:
-        if m.tipo == "cierre":
+        if m.tipo == "cierre" and not m.medio_pago:
             break
         if m.tipo == "ingreso" and m.referencia_tipo == "venta":
             mp = m.medio_pago or "efectivo"
@@ -219,10 +313,9 @@ def obtener_resumen_por_medio_pago(db: Session, sucursal_id: int = 1) -> dict:
             else:
                 desglose[mp] = desglose.get(mp, 0) + m.monto
 
-    # También sumar egresos
     egresos_total = 0
     for m in movimientos:
-        if m.tipo == "cierre":
+        if m.tipo == "cierre" and not m.medio_pago:
             break
         if m.tipo == "egreso":
             egresos_total += m.monto
