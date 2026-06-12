@@ -105,12 +105,12 @@ def recibir_compra(
     """Recibe la mercadería total o parcialmente: ingresa stock, actualiza costo.
 
     Args:
-        cantidades: Dict opcional {item_id: cantidad_recibida}.
-                    Si es None, recibe la cantidad total de cada item.
-                    Si cantidad_recibida < cantidad_ordenada, el resto queda en tránsito.
+        cantidades: Dict opcional {item_id: cantidad_a_recibir}.
+                    Si es None, recibe el pendiente completo de cada item.
+                    Si se especifica, recibe exactamente esa cantidad (suma a la ya recibida).
 
     Raises:
-        ValueError: Si no está pendiente o cantidad > ordenada.
+        ValueError: Si no está pendiente o cantidad > pendiente recibir.
     """
     if compra.estado != "pendiente":
         raise ValueError("Solo se pueden recibir compras pendientes")
@@ -119,18 +119,24 @@ def recibir_compra(
     todos_recibidos = True
 
     for item in compra.items:
-        cantidad_recibir = item.cantidad
+        pendiente = item.pendiente_recibir
+        if pendiente <= 0:
+            continue
+
+        cantidad_recibir = pendiente
         if cantidades and str(item.id) in cantidades:
             qty = float(cantidades[str(item.id)])
-            if qty < 0 or qty > item.cantidad:
+            if qty < 0 or qty > pendiente:
                 raise ValueError(
-                    f"Cantidad inválida para item {item.id}: recibido={qty}, ordenado={item.cantidad}"
+                    f"Cantidad inválida para item {item.id}: a recibir={qty}, pendiente={pendiente}"
                 )
             cantidad_recibir = qty
-            if qty < item.cantidad:
-                todos_recibidos = False
-            item.cantidad = qty  # Actualizar a lo realmente recibido
-            item.subtotal = qty * item.precio_unitario
+
+        item.cantidad_recibida = (item.cantidad_recibida or 0) + cantidad_recibir
+        item.subtotal = item.cantidad_recibida * item.precio_unitario
+
+        if item.pendiente_recibir > 0:
+            todos_recibidos = False
 
         producto = db.query(Producto).filter(Producto.id == item.producto_id).first()
         if producto:
@@ -142,19 +148,11 @@ def recibir_compra(
                 )
                 if item.precio_unitario:
                     producto.precio_costo = item.precio_unitario
-            # Mover de tránsito lo recibido (o todo si no se especificó cantidades)
-            traspaso = item.cantidad if not cantidades else cantidad_recibir
-            producto.stock_transito = max(0, (producto.stock_transito or 0) - traspaso)
+            producto.stock_transito = max(0, (producto.stock_transito or 0) - cantidad_recibir)
 
-    if todos_recibidos and not cantidades:
+    if todos_recibidos:
         compra.estado = "recibida"
-    elif todos_recibidos and cantidades:
-        compra.estado = "recibida"
-        _recalcular_totales(db, compra)
-    else:
-        # Recepción parcial: la compra sigue pendiente, pero se recalcula
-        _recalcular_totales(db, compra)
-
+    _recalcular_totales(db, compra)
     db.commit()
     db.refresh(compra)
     return compra
@@ -164,11 +162,13 @@ def anular_compra(db: Session, compra: Compra) -> Compra:
     """Anula una compra pendiente. Revierte stock en tránsito."""
     if compra.estado != "pendiente":
         raise ValueError("Solo se pueden anular compras pendientes")
-    # Revertir stock en tránsito
+    # Revertir stock en tránsito (solo lo pendiente de recibir)
     for item in compra.items:
-        producto = db.query(Producto).filter(Producto.id == item.producto_id).first()
-        if producto:
-            producto.stock_transito = max(0, (producto.stock_transito or 0) - item.cantidad)
+        pendiente = item.pendiente_recibir
+        if pendiente > 0:
+            producto = db.query(Producto).filter(Producto.id == item.producto_id).first()
+            if producto:
+                producto.stock_transito = max(0, (producto.stock_transito or 0) - pendiente)
     compra.estado = "anulada"
     db.commit()
     db.refresh(compra)

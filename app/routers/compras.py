@@ -29,6 +29,8 @@ def _compra_to_dict(c: Compra) -> dict:
                 "id": i.id, "producto_id": i.producto_id,
                 "producto_nombre": i.producto.nombre if i.producto else "",
                 "cantidad": i.cantidad,
+                "cantidad_recibida": i.cantidad_recibida or 0,
+                "pendiente_recibir": i.pendiente_recibir if hasattr(i, 'pendiente_recibir') else max(0, i.cantidad - (i.cantidad_recibida or 0)),
                 "precio_unitario": i.precio_unitario,
                 "subtotal": i.subtotal,
             }

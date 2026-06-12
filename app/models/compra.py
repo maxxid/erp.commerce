@@ -49,7 +49,8 @@ class CompraItem(Base):
     compra_id = Column(Integer, ForeignKey("compras.id"), nullable=False, index=True)
     producto_id = Column(Integer, ForeignKey("productos.id"), nullable=False)
 
-    cantidad = Column(Float, nullable=False)
+    cantidad = Column(Float, nullable=False)             # cantidad ordenada original
+    cantidad_recibida = Column(Float, nullable=False, default=0.0)  # cuánto ya se recibió
     precio_unitario = Column(Float, nullable=False)
     subtotal = Column(Float, nullable=False)
 
@@ -57,5 +58,9 @@ class CompraItem(Base):
     compra = relationship("Compra", back_populates="items")
     producto = relationship("Producto", back_populates="compra_items")
 
+    @property
+    def pendiente_recibir(self):
+        return max(0, self.cantidad - (self.cantidad_recibida or 0))
+
     def __repr__(self):
-        return f"<CompraItem(prod={self.producto_id}, cant={self.cantidad})>"
+        return f"<CompraItem(prod={self.producto_id}, cant={self.cantidad}, recibido={self.cantidad_recibida})>"

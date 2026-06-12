@@ -55,6 +55,7 @@ def crear_app() -> FastAPI:
     @app.on_event("startup")
     def on_startup():
         Base.metadata.create_all(bind=engine)
+        _migrate_new_columns()
         _seed_database()
 
     return app
@@ -96,6 +97,20 @@ def _seed_database():
 
 
 app = crear_app()
+
+
+def _migrate_new_columns():
+    """Agrega columnas nuevas a tablas existentes sin borrar datos (SQLite-safe)."""
+    from app.database import engine
+    import sqlalchemy as sa
+    conn = engine.connect()
+    try:
+        existentes = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(compra_items)"))]
+        if "cantidad_recibida" not in existentes:
+            conn.execute(sa.text("ALTER TABLE compra_items ADD COLUMN cantidad_recibida FLOAT NOT NULL DEFAULT 0.0"))
+            conn.commit()
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":

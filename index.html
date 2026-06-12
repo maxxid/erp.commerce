@@ -1002,7 +1002,7 @@
                             <p class="text-sm text-slate-500 mt-1">Gestión de stock de proveedores y costos de adquisición (Fase 3)</p>
                         </div>
                         <button @click="showModal('compra_create')" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-xl flex items-center gap-1.5 shadow-sm transition">
-                            <i class="fa-solid fa-plus"></i> Crear Compra Pendiente
+                            <i class="fa-solid fa-plus"></i> Crear Orden de Compra
                         </button>
                     </div>
 
@@ -1014,7 +1014,7 @@
                                     <tr class="bg-slate-50 border-b border-slate-100">
                                         <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Orden Compra</th>
                                         <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Proveedor</th>
-                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Fecha de Creación</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Ítems</th>
                                         <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Monto Total</th>
                                         <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Estado</th>
                                         <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Acciones</th>
@@ -1024,15 +1024,16 @@
                                     <template x-for="comp in compras" :key="comp.id">
                                         <tr class="hover:bg-slate-50/50 transition">
                                             <td class="p-4 font-mono-data font-bold text-slate-950" x-text="comp.numero"></td>
-                                            <td class="p-4 font-semibold text-slate-700" x-text="comp.proveedor_nombre"></td>
-                                            <td class="p-4 text-slate-500" x-text="formatDateShort(comp.fecha)"></td>
+                                            <td class="p-4 font-semibold text-slate-700 text-xs" x-text="comp.proveedor_nombre"></td>
+                                            <td class="p-4 text-slate-500 text-xs" x-text="(comp.items || []).length + ' ítem(s)'"></td>
                                             <td class="p-4 font-mono-data font-bold text-slate-900" x-text="formatCurrency(comp.total)"></td>
                                             <td class="p-4">
                                                 <span :class="comp.estado === 'recibida' ? 'bg-emerald-50 text-accent-success border-emerald-100' : (comp.estado === 'pendiente' ? 'bg-amber-50 text-accent-warning border-amber-100' : 'bg-rose-50 text-accent-danger border-rose-100')" class="px-2 py-0.5 rounded border text-[10px] font-bold uppercase" x-text="comp.estado"></span>
                                             </td>
                                             <td class="p-4 flex gap-2">
-                                                <button x-show="comp.estado === 'pendiente'" @click="receivePurchase(comp)" class="text-emerald-600 hover:text-emerald-900 font-bold hover:underline">Recibir Stock <i class="fa-solid fa-circle-check"></i></button>
-                                                <button x-show="comp.estado === 'pendiente'" @click="cancelPurchase(comp)" class="text-rose-500 hover:text-rose-900 font-bold hover:underline">Anular <i class="fa-solid fa-ban"></i></button>
+                                                <button @click="openCompraDetail(comp)" class="text-brand-600 hover:text-brand-900 font-bold hover:underline text-xs">Ver <i class="fa-solid fa-eye"></i></button>
+                                                <button x-show="comp.estado === 'pendiente'" @click="openReceiveModal(comp)" class="text-emerald-600 hover:text-emerald-900 font-bold hover:underline text-xs">Recibir <i class="fa-solid fa-circle-check"></i></button>
+                                                <button x-show="comp.estado === 'pendiente'" @click="cancelPurchase(comp)" class="text-rose-500 hover:text-rose-900 font-bold hover:underline text-xs">Anular <i class="fa-solid fa-ban"></i></button>
                                             </td>
                                         </tr>
                                     </template>
@@ -1361,37 +1362,173 @@
                 </div>
             </div>
 
-            <!-- MODAL: CREAR COMPRA (Especificación 7.3) -->
+            <!-- MODAL: CREAR ORDEN DE COMPRA (múltiples ítems) -->
             <div x-show="currentModalType === 'compra_create'" class="space-y-4">
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 mb-1">Proveedor</label>
-                    <select x-model="compraForm.proveedor_id" class="w-full border rounded-xl p-2.5 text-xs bg-white">
-                        <template x-for="prov in proveedores" :key="prov.id">
-                            <option :value="prov.id" x-text="prov.nombre"></option>
-                        </template>
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 mb-1">Producto a Ingresar</label>
-                    <select x-model="compraForm.producto_id" class="w-full border rounded-xl p-2.5 text-xs bg-white">
-                        <template x-for="p in products" :key="p.id">
-                            <option :value="p.id" x-text="p.nombre"></option>
-                        </template>
-                    </select>
-                </div>
                 <div class="grid grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 mb-1">Cantidad a Comprar</label>
-                        <input type="number" x-model.number="compraForm.cantidad" class="w-full border rounded-xl p-2.5 text-xs" placeholder="10">
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Proveedor</label>
+                        <select x-model="compraForm.proveedor_id" class="w-full border rounded-xl p-2.5 text-xs bg-white">
+                            <template x-for="prov in proveedores" :key="prov.id">
+                                <option :value="prov.id" x-text="prov.nombre"></option>
+                            </template>
+                        </select>
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 mb-1">Precio Unitario de Costo ($)</label>
-                        <input type="number" x-model.number="compraForm.precio_unitario" class="w-full border rounded-xl p-2.5 text-xs" placeholder="800">
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Notas (opcional)</label>
+                        <input type="text" x-model="compraForm.notas" class="w-full border rounded-xl p-2.5 text-xs" placeholder="Ej: pedido semanal, urgente...">
                     </div>
                 </div>
+
+                <!-- Tabla de ítems -->
+                <div class="border rounded-xl overflow-hidden">
+                    <div class="bg-slate-50 px-3 py-2 border-b flex items-center justify-between">
+                        <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Productos en la OC</span>
+                        <span x-show="compraForm.items.length > 0" class="font-mono-data text-xs font-bold text-brand-600" x-text="compraForm.items.length + ' ítem(s) — Total: ' + formatCurrency(compraForm.items.reduce((s,i)=>s+(i.subtotal||0),0))"></span>
+                    </div>
+                    <div class="max-h-48 overflow-y-auto divide-y divide-slate-100">
+                        <template x-for="(item, idx) in compraForm.items" :key="idx">
+                            <div class="flex items-center gap-2 px-3 py-2 text-xs bg-white">
+                                <span class="text-[10px] text-slate-400 font-mono w-5" x-text="idx+1"></span>
+                                <span class="flex-1 font-semibold text-slate-700 truncate" x-text="item.producto_nombre || 'Producto #'+item.producto_id"></span>
+                                <span class="text-slate-400" x-text="item.cantidad + ' u'"></span>
+                                <span class="font-mono-data text-slate-500 w-16 text-right" x-text="formatCurrency(item.precio_unitario)"></span>
+                                <span class="font-mono-data font-bold text-slate-800 w-20 text-right" x-text="formatCurrency(item.subtotal || 0)"></span>
+                                <button @click="removeCompraItemFromForm(idx)" class="text-rose-400 hover:text-rose-600"><i class="fa-solid fa-trash-can text-[10px]"></i></button>
+                            </div>
+                        </template>
+                        <div x-show="compraForm.items.length === 0" class="px-3 py-6 text-center text-xs text-slate-400">
+                            Sin productos. Agregá al menos uno usando el formulario de abajo.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Form para agregar item -->
+                <div class="grid grid-cols-5 gap-2 items-end bg-slate-50 p-3 rounded-xl">
+                    <div class="col-span-2">
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Producto</label>
+                        <select x-model="compraNewItem.producto_id" class="w-full border rounded-lg p-2 text-[11px] bg-white">
+                            <template x-for="p in products" :key="p.id">
+                                <option :value="p.id" x-text="p.nombre"></option>
+                            </template>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Cant.</label>
+                        <input type="number" x-model.number="compraNewItem.cantidad" class="w-full border rounded-lg p-2 text-[11px] font-mono text-center" min="1" placeholder="10">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">$ Costo</label>
+                        <input type="number" x-model.number="compraNewItem.precio_unitario" class="w-full border rounded-lg p-2 text-[11px] font-mono" placeholder="800">
+                    </div>
+                    <div>
+                        <button @click="addCompraItemToForm()" class="w-full py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-[10px] font-bold uppercase transition flex items-center justify-center gap-1">
+                            <i class="fa-solid fa-plus"></i> Agregar
+                        </button>
+                    </div>
+                </div>
+
                 <div class="flex justify-end gap-2 border-t pt-4">
                     <button @click="modalActive = false" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold">Cancelar</button>
-                    <button @click="submitCompraForm()" class="px-4 py-2 bg-brand-600 text-white rounded-xl text-xs font-bold">Crear OC</button>
+                    <button @click="submitCompraForm()" :disabled="compraForm.items.length === 0" :class="compraForm.items.length === 0 ? 'bg-slate-300 cursor-not-allowed text-slate-400' : 'bg-brand-600 hover:bg-brand-700 text-white'" class="px-4 py-2 rounded-xl text-xs font-bold shadow-sm">Crear Orden de Compra</button>
+                </div>
+            </div>
+
+            <!-- MODAL: RECIBIR ORDEN DE COMPRA -->
+            <div x-show="currentModalType === 'compra_receive'" class="space-y-4">
+                <div class="p-3 bg-amber-50 border border-amber-100 rounded-xl text-xs space-y-1">
+                    <div class="flex justify-between">
+                        <span class="text-slate-500">Proveedor:</span>
+                        <strong x-text="compraReceiveData.compra?.proveedor_nombre"></strong>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-500">OC:</span>
+                        <strong class="font-mono-data" x-text="compraReceiveData.compra?.numero"></strong>
+                    </div>
+                </div>
+
+                <div class="border rounded-xl overflow-hidden">
+                    <div class="bg-slate-50 px-3 py-2 border-b">
+                        <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Ítems a recibir</span>
+                    </div>
+                    <div class="max-h-64 overflow-y-auto divide-y divide-slate-100">
+                        <template x-for="item in compraReceiveData.compra?.items || []" :key="item.id">
+                            <div class="flex items-center gap-2 px-3 py-2 text-xs" :class="(item.pendiente_recibir || 0) <= 0 ? 'opacity-50 bg-slate-50' : 'bg-white'">
+                                <span class="flex-1 font-semibold text-slate-700 truncate" x-text="item.producto_nombre"></span>
+                                <span class="text-[10px] text-slate-400">Ord: <strong x-text="item.cantidad"></strong></span>
+                                <span class="text-[10px] text-emerald-600">Rec: <strong x-text="item.cantidad_recibida || 0"></strong></span>
+                                <div class="w-20">
+                                    <input type="number" x-model.number="compraReceiveData.cantidades[item.id]" 
+                                           :placeholder="item.pendiente_recibir || 0"
+                                           :disabled="(item.pendiente_recibir || 0) <= 0"
+                                           class="w-full border rounded-lg p-1.5 text-[11px] font-mono text-center focus:outline-none focus:border-brand-600"
+                                           min="0" :max="item.pendiente_recibir || 0">
+                                </div>
+                                <span class="text-[10px] text-slate-400 w-16 text-right">Pend: <strong x-text="item.pendiente_recibir || 0"></strong> u</span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-2 border-t pt-4">
+                    <button @click="modalActive = false" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold">Cancelar</button>
+                    <button @click="submitReceiveCompra()" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-sm flex items-center gap-1.5">
+                        <i class="fa-solid fa-circle-check"></i> Confirmar Recepción
+                    </button>
+                </div>
+            </div>
+
+            <!-- MODAL: DETALLE DE ORDEN DE COMPRA -->
+            <div x-show="currentModalType === 'compra_detail'" class="space-y-4">
+                <div class="grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                        <span class="text-slate-400">Número OC:</span>
+                        <p class="font-mono-data font-bold text-slate-900" x-text="compraDetailData?.numero"></p>
+                    </div>
+                    <div>
+                        <span class="text-slate-400">Proveedor:</span>
+                        <p class="font-semibold text-slate-700" x-text="compraDetailData?.proveedor_nombre"></p>
+                    </div>
+                    <div>
+                        <span class="text-slate-400">Estado:</span>
+                        <span :class="compraDetailData?.estado === 'recibida' ? 'bg-emerald-50 text-accent-success' : (compraDetailData?.estado === 'pendiente' ? 'bg-amber-50 text-accent-warning' : 'bg-rose-50 text-accent-danger')" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase" x-text="compraDetailData?.estado"></span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400">Total:</span>
+                        <p class="font-mono-data font-bold text-brand-600" x-text="formatCurrency(compraDetailData?.total || 0)"></p>
+                    </div>
+                </div>
+                <div x-show="compraDetailData?.notas" class="text-xs text-slate-500 bg-slate-50 p-2 rounded-lg" x-text="'Notas: ' + compraDetailData?.notas"></div>
+
+                <div class="border rounded-xl overflow-hidden">
+                    <div class="bg-slate-50 px-3 py-2 border-b">
+                        <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Ítems</span>
+                    </div>
+                    <table class="w-full text-left text-xs">
+                        <thead>
+                            <tr class="bg-slate-50/50 text-[10px] text-slate-400 uppercase tracking-wider">
+                                <th class="p-2">Producto</th>
+                                <th class="p-2 text-center">Ord.</th>
+                                <th class="p-2 text-center">Rec.</th>
+                                <th class="p-2 text-right">$ Unit.</th>
+                                <th class="p-2 text-right">Subtotal</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            <template x-for="item in compraDetailData?.items || []" :key="item.id">
+                                <tr>
+                                    <td class="p-2 font-semibold text-slate-700" x-text="item.producto_nombre"></td>
+                                    <td class="p-2 text-center font-mono-data" x-text="item.cantidad"></td>
+                                    <td class="p-2 text-center font-mono-data" :class="(item.cantidad_recibida || 0) >= item.cantidad ? 'text-emerald-600' : 'text-amber-600'" x-text="item.cantidad_recibida || 0"></td>
+                                    <td class="p-2 text-right font-mono-data" x-text="formatCurrency(item.precio_unitario)"></td>
+                                    <td class="p-2 text-right font-mono-data font-bold" x-text="formatCurrency(item.subtotal)"></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="flex justify-end border-t pt-4">
+                    <button @click="modalActive = false" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold">Cerrar</button>
                 </div>
             </div>
 
@@ -1523,15 +1660,18 @@
                 loginError: '',
                 productForm: { codigo_barras: '', nombre: '', marca: '', sku: '', precio_costo: 0, precio_venta: 0, categoria_id: 1, cantidad_inicial: 20 },
                 cajaForm: { monto_inicial: 50000, monto_real: 0, comentario_total: '', monto_efectivo: null, monto_debito: null, monto_credito: null, monto_transferencia: null, comentario_efectivo: '', comentario_debito: '', comentario_credito: '', comentario_transferencia: '' },
-                compraForm: { proveedor_id: 1, producto_id: 1, cantidad: 10, precio_unitario: 800 },
+                compraForm: { proveedor_id: 1, notas: '', items: [] },
+                compraNewItem: { producto_id: 1, cantidad: 10, precio_unitario: 800 },
+                compraReceiveData: { compra: null, cantidades: {} },
+                compraDetailData: null,
                 clientForm: { id: null, nombre: '', tipo_documento: 'DNI', numero_documento: '', telefono: '', limite_credito: 50000 },
                 provForm: { id: null, nombre: '', cuit: '', telefono: '', email: '', direccion: '', nombre_contacto: '' },
 
                 // Base de Datos Local Híbrida
                 products: [
-                    { id: 1, codigo_barras: "7790895000997", nombre: "Gaseosa Cola - Coca Cola Sabor Original 2.25 lts", marca: "Coca Cola", sku: "00246613", precio_costo: 900.0, precio_venta: 7500.0, categoria_id: 1, stock_actual: 50.0, stock_minimo: 5.0 },
-                    { id: 2, codigo_barras: "7791234567890", nombre: "Yerba Mate Playadito 1kg", marca: "Playadito", sku: "00123456", precio_costo: 1200.0, precio_venta: 3200.0, categoria_id: 2, stock_actual: 12.0, stock_minimo: 15.0 },
-                    { id: 3, codigo_barras: "7795555444333", nombre: "Aceite de Girasol Natura 1.5L", marca: "Natura", sku: "00998877", precio_costo: 1500.0, precio_venta: 3800.0, categoria_id: 2, stock_actual: 0.0, stock_minimo: 8.0 }
+                    { id: 1, codigo_barras: "7790895000997", nombre: "Gaseosa Cola - Coca Cola Sabor Original 2.25 lts", marca: "Coca Cola", sku: "00246613", precio_costo: 900.0, precio_venta: 7500.0, categoria_id: 1, stock_actual: 50.0, stock_transito: 0.0, stock_minimo: 5.0 },
+                    { id: 2, codigo_barras: "7791234567890", nombre: "Yerba Mate Playadito 1kg", marca: "Playadito", sku: "00123456", precio_costo: 1200.0, precio_venta: 3200.0, categoria_id: 2, stock_actual: 12.0, stock_transito: 0.0, stock_minimo: 15.0 },
+                    { id: 3, codigo_barras: "7795555444333", nombre: "Aceite de Girasol Natura 1.5L", marca: "Natura", sku: "00998877", precio_costo: 1500.0, precio_venta: 3800.0, categoria_id: 2, stock_actual: 0.0, stock_transito: 0.0, stock_minimo: 8.0 }
                 ],
                 categories: [
                     { id: 1, nombre: "Bebidas" },
@@ -1552,7 +1692,9 @@
                 ],
                 cajaResumen: { desglose: { efectivo: 0, debito: 0, credito: 0, transferencia: 0 }, total_ingresos: 0, total_egresos: 0 },
                 compras: [
-                    { id: 1, numero: "C-00000001", proveedor_nombre: "Distribuidora SA", total: 12500, estado: 'recibida', fecha: new Date() }
+                    { id: 1, numero: "C-00000001", proveedor_nombre: "Distribuidora SA", total: 12500, estado: 'recibida', fecha: new Date(), items: [
+                        { id: 1, producto_id: 1, producto_nombre: "Gaseosa Cola - Coca Cola", cantidad: 5, cantidad_recibida: 5, pendiente_recibir: 0, precio_unitario: 2500, subtotal: 12500 }
+                    ]}
                 ],
                 ventas: [],
                 ventasFilter: '',
@@ -2437,7 +2579,13 @@
                         });
                         this.fetchCajaResumen();
                     } else if (type === 'compra_create') {
-                        this.modalTitle = "Crear Orden de Compra Pendiente";
+                        this.modalTitle = "Crear Orden de Compra";
+                        this.compraForm = { proveedor_id: this.proveedores[0]?.id || 1, notas: '', items: [] };
+                        this.compraNewItem = { producto_id: this.products[0]?.id || 1, cantidad: 10, precio_unitario: 800 };
+                    } else if (type === 'compra_receive') {
+                        this.modalTitle = "Recibir Mercadería";
+                    } else if (type === 'compra_detail') {
+                        this.modalTitle = "Detalle de Orden de Compra";
                     } else if (type === 'prov_create') {
                         this.modalTitle = "Nuevo Proveedor";
                         this.provForm = { id: null, nombre: '', cuit: '', telefono: '', email: '', direccion: '', nombre_contacto: '' };
@@ -2693,45 +2841,126 @@
                 },
 
                 async submitCompraForm() {
+                    if (this.compraForm.items.length === 0) {
+                        this.addToast('warning', 'Agregá al menos un producto a la orden');
+                        return;
+                    }
                     try {
                         if (this.apiMode === 'real') {
-                            // Paso 1: crear la compra
                             const compraResp = await this.request('POST', '/api/compras', {
-                                proveedor_id: this.compraForm.proveedor_id
+                                proveedor_id: this.compraForm.proveedor_id,
+                                notas: this.compraForm.notas || null
                             });
                             if (!compraResp || !compraResp.data) {
-                                this.addToast('error', 'Error al crear compra');
+                                this.addToast('error', 'Error al crear la orden de compra');
                                 return;
                             }
                             const compraId = compraResp.data.id;
-                            // Paso 2: agregar item
-                            await this.request('POST', `/api/compras/${compraId}/items`, {
-                                producto_id: this.compraForm.producto_id,
-                                cantidad: this.compraForm.cantidad,
-                                precio_unitario: this.compraForm.precio_unitario
-                            });
-                            // Paso 3: recibir automáticamente
-                            await this.request('PUT', `/api/compras/${compraId}/recibir`);
-                            this.addToast('success', `Compra ${compraResp.data.numero} creada y recibida`);
+                            for (const item of this.compraForm.items) {
+                                await this.request('POST', `/api/compras/${compraId}/items`, {
+                                    producto_id: item.producto_id,
+                                    cantidad: item.cantidad,
+                                    precio_unitario: item.precio_unitario
+                                });
+                            }
+                            this.addToast('success', `OC ${compraResp.data.numero} creada (pendiente de recepción).`);
                         } else {
-                            const ocNum = "C-0000000" + (this.compras.length + 1);
+                            const ocNum = "C-" + String(this.compras.length + 1).padStart(8, '0');
                             const prov = this.proveedores.find(p => p.id == this.compraForm.proveedor_id);
-                            const nuevaOC = {
+                            const total = this.compraForm.items.reduce((s, i) => s + (i.cantidad * i.precio_unitario), 0);
+                            const mockItems = this.compraForm.items.map((it, idx) => ({
+                                id: idx + 1, producto_id: it.producto_id,
+                                producto_nombre: this.products.find(p => p.id == it.producto_id)?.nombre || '',
+                                cantidad: it.cantidad, cantidad_recibida: 0,
+                                pendiente_recibir: it.cantidad,
+                                precio_unitario: it.precio_unitario,
+                                subtotal: it.cantidad * it.precio_unitario
+                            }));
+                            this.compras.unshift({
                                 id: this.compras.length + 1, numero: ocNum,
                                 proveedor_nombre: prov ? prov.nombre : "Proveedor General",
-                                total: this.compraForm.cantidad * this.compraForm.precio_unitario,
-                                estado: 'recibida', fecha: new Date(),
-                                meta_items: {
-                                    producto_id: this.compraForm.producto_id,
-                                    cantidad: this.compraForm.cantidad,
-                                    precio_unitario: this.compraForm.precio_unitario
+                                total, estado: 'pendiente', fecha: new Date(),
+                                items: mockItems
+                            });
+                            // Acumular stock_transito en mock
+                            for (const it of this.compraForm.items) {
+                                const prod = this.products.find(p => p.id == it.producto_id);
+                                if (prod) prod.stock_transito = (prod.stock_transito || 0) + it.cantidad;
+                            }
+                            this.addToast('success', `OC ${ocNum} creada (pendiente).`);
+                        }
+                        this.modalActive = false;
+                        this.fetchCompras();
+                        this.fetchProducts();
+                    } catch (e) {}
+                },
+
+                addCompraItemToForm() {
+                    const prod = this.products.find(p => p.id == this.compraNewItem.producto_id);
+                    this.compraForm.items.push({
+                        producto_id: this.compraNewItem.producto_id,
+                        producto_nombre: prod ? prod.nombre : '',
+                        cantidad: this.compraNewItem.cantidad,
+                        precio_unitario: this.compraNewItem.precio_unitario,
+                        subtotal: this.compraNewItem.cantidad * this.compraNewItem.precio_unitario
+                    });
+                    this.compraNewItem = { producto_id: this.products[0]?.id || 1, cantidad: 10, precio_unitario: 800 };
+                },
+
+                removeCompraItemFromForm(idx) {
+                    this.compraForm.items.splice(idx, 1);
+                },
+
+                openReceiveModal(comp) {
+                    this.compraReceiveData = {
+                        compra: comp,
+                        cantidades: {}
+                    };
+                    if (comp.items) {
+                        comp.items.forEach(item => {
+                            const pendiente = item.pendiente_recibir || (item.cantidad - (item.cantidad_recibida || 0));
+                            if (pendiente > 0) {
+                                this.compraReceiveData.cantidades[item.id] = pendiente;
+                            }
+                        });
+                    }
+                    this.showModal('compra_receive');
+                },
+
+                async submitReceiveCompra() {
+                    const comp = this.compraReceiveData.compra;
+                    if (!comp) return;
+                    try {
+                        if (this.apiMode === 'real') {
+                            const cantidades = {};
+                            let alguna = false;
+                            for (const [itemId, qty] of Object.entries(this.compraReceiveData.cantidades)) {
+                                if (qty > 0) { cantidades[itemId] = qty; alguna = true; }
+                            }
+                            if (!alguna) {
+                                this.addToast('warning', 'Indicá al menos una cantidad a recibir');
+                                return;
+                            }
+                            await this.request('PUT', `/api/compras/${comp.id}/recibir`, { cantidades });
+                            this.addToast('success', `Recepción de ${comp.numero} registrada.`);
+                        } else {
+                            let todosRecibidos = true;
+                            for (const item of (comp.items || [])) {
+                                const qty = this.compraReceiveData.cantidades[item.id] || 0;
+                                if (qty > 0) {
+                                    item.cantidad_recibida = (item.cantidad_recibida || 0) + qty;
+                                    item.pendiente_recibir = Math.max(0, item.cantidad - item.cantidad_recibida);
+                                    const prod = this.products.find(p => p.id == item.producto_id);
+                                    if (prod) {
+                                        prod.stock_actual += qty;
+                                        prod.stock_transito = Math.max(0, (prod.stock_transito || 0) - qty);
+                                        prod.precio_costo = item.precio_unitario;
+                                    }
                                 }
-                            };
-                            this.compras.unshift(nuevaOC);
-                            // Actualizar stock en mock
-                            const prod = this.products.find(p => p.id == this.compraForm.producto_id);
-                            if (prod) { prod.stock_actual += this.compraForm.cantidad; prod.precio_costo = this.compraForm.precio_unitario; }
-                            this.addToast('success', `Orden de compra ${ocNum} creada y recibida`);
+                                if (item.pendiente_recibir > 0) todosRecibidos = false;
+                            }
+                            if (todosRecibidos) comp.estado = 'recibida';
+                            this.addToast('success', 'Mercadería ingresada al stock.');
                         }
                         this.modalActive = false;
                         this.fetchCompras();
@@ -2740,25 +2969,9 @@
                     } catch (e) {}
                 },
 
-                async receivePurchase(comp) {
-                    try {
-                        const response = await this.request('PUT', `/api/compras/${comp.id}/recibir`);
-                        if (this.apiMode === 'real') {
-                            this.addToast('success', 'Stock e inventario de costos actualizados');
-                        } else {
-                            comp.estado = 'recibida';
-                            const prod = this.products.find(p => p.id == comp.meta_items.producto_id);
-                            if (prod) {
-                                prod.stock_actual += comp.meta_items.cantidad;
-                                prod.precio_costo = comp.meta_items.precio_unitario;
-                            }
-                            response.log(200, { ok: true, message: 'Stock e inventario actualizados.' });
-                            this.addToast('success', 'Stock ingresado al inventario');
-                        }
-                        this.fetchCompras();
-                        this.fetchProducts();
-                        this.fetchDashboardData();
-                    } catch (e) {}
+                openCompraDetail(comp) {
+                    this.compraDetailData = comp;
+                    this.showModal('compra_detail');
                 },
 
                 async cancelPurchase(comp) {
