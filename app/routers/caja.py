@@ -63,7 +63,7 @@ def cierre(
 ):
     """Cierra la caja con arqueo del monto real."""
     try:
-        mov, esperado, diferencia = caja_service.cerrar_caja(
+        mov, esperado, diferencia, desglose = caja_service.cerrar_caja(
             db, data.monto_real, user.id, data.sucursal_id
         )
         return RespuestaData(
@@ -72,6 +72,8 @@ def cierre(
                 "monto_real": data.monto_real,
                 "saldo_esperado": esperado,
                 "diferencia": diferencia,
+                "desglose": desglose["desglose"],
+                "total_ingresos": desglose["total_ingresos"],
             },
             message=f"Caja cerrada. Diferencia: ${diferencia:,.2f}",
         )

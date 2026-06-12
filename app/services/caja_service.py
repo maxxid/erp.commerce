@@ -55,14 +55,14 @@ def cerrar_caja(
     monto_real: float,
     usuario_id: int,
     sucursal_id: int = 1,
-) -> Tuple[MovimientoCaja, float, float]:
+) -> Tuple[MovimientoCaja, float, float, dict]:
     """Cierra la caja con el arqueo.
 
     Args:
         monto_real: El monto contado físicamente en la caja.
 
     Returns:
-        (movimiento_cierre, saldo_esperado, diferencia)
+        (movimiento_cierre, saldo_esperado, diferencia, desglose_por_medio_pago)
 
     Raises:
         ValueError: Si no hay caja abierta.
@@ -72,6 +72,7 @@ def cerrar_caja(
 
     saldo = obtener_saldo_actual(db, sucursal_id)
     diferencia = monto_real - saldo
+    desglose = obtener_resumen_por_medio_pago(db, sucursal_id)
 
     movimiento = MovimientoCaja(
         tipo="cierre",
@@ -83,7 +84,7 @@ def cerrar_caja(
     db.add(movimiento)
     db.commit()
     db.refresh(movimiento)
-    return movimiento, saldo, diferencia
+    return movimiento, saldo, diferencia, desglose
 
 
 def registrar_ingreso(

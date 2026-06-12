@@ -1063,11 +1063,35 @@
                 </div>
             </div>
 
-            <!-- MODAL: CIERRE CAJA (Cumple especificación 5.3) -->
+            <!-- MODAL: CIERRE CAJA (con desglose por medio de pago) -->
             <div x-show="currentModalType === 'caja_cierre'" class="space-y-4">
                 <div class="p-3 bg-indigo-50 text-brand-900 border border-indigo-100 rounded-xl text-xs flex justify-between">
                     <span>Monto Esperado en Sistema:</span>
                     <strong class="font-mono-data" x-text="formatCurrency(cajaState.saldo_actual)"></strong>
+                </div>
+                <!-- Desglose por medio de pago -->
+                <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-xs">
+                    <span class="font-bold text-slate-500 uppercase tracking-wider text-[10px]">Ingresos por medio de pago</span>
+                    <div class="flex justify-between" x-show="cajaResumen.desglose.efectivo > 0">
+                        <span class="text-slate-600">Efectivo</span>
+                        <span class="font-mono-data font-bold text-emerald-600" x-text="formatCurrency(cajaResumen.desglose.efectivo)"></span>
+                    </div>
+                    <div class="flex justify-between" x-show="cajaResumen.desglose.debito > 0">
+                        <span class="text-slate-600">Débito</span>
+                        <span class="font-mono-data font-bold text-emerald-600" x-text="formatCurrency(cajaResumen.desglose.debito)"></span>
+                    </div>
+                    <div class="flex justify-between" x-show="cajaResumen.desglose.credito > 0">
+                        <span class="text-slate-600">Crédito</span>
+                        <span class="font-mono-data font-bold text-emerald-600" x-text="formatCurrency(cajaResumen.desglose.credito)"></span>
+                    </div>
+                    <div class="flex justify-between" x-show="cajaResumen.desglose.transferencia > 0">
+                        <span class="text-slate-600">Transferencia</span>
+                        <span class="font-mono-data font-bold text-emerald-600" x-text="formatCurrency(cajaResumen.desglose.transferencia)"></span>
+                    </div>
+                    <div class="border-t border-slate-200 pt-1 flex justify-between font-bold">
+                        <span class="text-slate-700">Total en caja</span>
+                        <span class="font-mono-data text-brand-600" x-text="formatCurrency(cajaResumen.total_ingresos)"></span>
+                    </div>
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-slate-500 mb-1">Monto Real Contado Físicamente ($)</label>
