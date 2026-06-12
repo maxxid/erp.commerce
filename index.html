@@ -1552,7 +1552,11 @@
                         const response = await this.request('POST', '/api/productos/lookup', { barcode });
                         if (this.apiMode === 'real' && response.data) {
                             const prod = response.data;
+                            // Abrir modal primero, luego llenar (para que showModal no resetee)
+                            this.showModal('product_create');
+                            this.modalTitle = 'Nuevo Producto (desde lookup)';
                             this.productForm = {
+                                id: null,
                                 codigo_barras: prod.codigo_barras || barcode,
                                 nombre: prod.nombre || '',
                                 marca: prod.marca || '',
@@ -1568,18 +1572,16 @@
                                 alerta_stock: false,
                                 stock_minimo: 5
                             };
-                            this.showModal('product_create');
-                            this.modalTitle = 'Nuevo Producto (desde lookup)';
                             this.addToast('success', 'Formulario pre-llenado con datos online');
                         } else {
-                            this.productForm = { id: null, codigo_barras: barcode, nombre: '', marca: '', sku: '', precio_costo: 0, precio_venta: 0, categoria_id: 1, cantidad_inicial: 0, alerta_stock: false, stock_minimo: 5 };
                             this.showModal('product_create');
+                            this.productForm = { id: null, codigo_barras: barcode, nombre: '', marca: '', sku: '', precio_costo: 0, precio_venta: 0, categoria_id: 1, cantidad_inicial: 0, alerta_stock: false, stock_minimo: 5 };
                             this.addToast('info', 'Producto no encontrado online. Completá manualmente.');
                         }
                         this.productLookupBarcode = '';
                     } catch (e) {
-                        this.productForm = { id: null, codigo_barras: barcode, nombre: '', marca: '', sku: '', precio_costo: 0, precio_venta: 0, categoria_id: 1, cantidad_inicial: 0, alerta_stock: false, stock_minimo: 5 };
                         this.showModal('product_create');
+                        this.productForm = { id: null, codigo_barras: barcode, nombre: '', marca: '', sku: '', precio_costo: 0, precio_venta: 0, categoria_id: 1, cantidad_inicial: 0, alerta_stock: false, stock_minimo: 5 };
                         this.productLookupBarcode = '';
                     }
                 },
