@@ -145,8 +145,15 @@ def movimientos(
     user: Usuario = Depends(require_role("admin", "encargado")),
 ):
     movs, total = caja_service.listar_movimientos(db, page=page, page_size=page_size)
+    data = [{
+        "id": m.id, "tipo": m.tipo, "monto": m.monto,
+        "descripcion": m.descripcion, "medio_pago": m.medio_pago,
+        "referencia_tipo": m.referencia_tipo, "referencia_id": m.referencia_id,
+        "usuario_id": m.usuario_id, "sucursal_id": m.sucursal_id,
+        "created_at": m.created_at.isoformat() if m.created_at else None,
+    } for m in movs]
     return RespuestaLista(
-        data=movs, total=total, page=page, page_size=page_size,
+        data=data, total=total, page=page, page_size=page_size,
         message=f"{total} movimiento(s)"
     )
 
