@@ -19,8 +19,11 @@ echo "========================================"
 echo "[1/7] Actualizando sistema..."
 apt update && apt upgrade -y
 
-# 2. Instalar dependencias del sistema
-echo "[2/7] Instalando dependencias..."
+# 2. Instalar Python 3.11 (Ubuntu 22.04 trae 3.10 por defecto)
+echo "[2/7] Instalando Python 3.11..."
+apt install -y software-properties-common
+add-apt-repository -y ppa:deadsnakes/ppa
+apt update
 apt install -y python3.11 python3.11-venv python3.11-dev \
     python3-pip git nginx certbot python3-certbot-nginx \
     build-essential libssl-dev
@@ -31,14 +34,22 @@ id -u $APP_USER &>/dev/null || useradd -m -s /bin/bash $APP_USER
 mkdir -p $DATA_DIR
 mkdir -p $APP_DIR
 
-# 4. Clonar repositorio (si no existe)
-if [ ! -d "$APP_DIR/.git" ]; then
-    echo "[4/7] Clonando repositorio..."
-    read -p "URL del repo GitHub: " REPO_URL
-    git clone "$REPO_URL" "$APP_DIR"
-else
-    echo "[4/7] Repositorio ya existe, actualizando..."
-    cd $APP_DIR && git pull
+# 4. Configurar repositorio
+echo "[4/7] Configurando repositorio..."
+if [ -d "$APP_DIR/.git" ]; then
+    echo "  Repositorio ya existe en $APP_DIR"
+elif [ -d "$(pwd)/.git" ] && [ "$(pwd)" != "$APP_DIR" ]; then
+    echo "  Copiando proyecto actual a $APP_DIR..."
+    cp -r "$(pwd)" "$APP_DIR"
+elif [ ! -d "$APP_DIR/.git" ]; then
+    echo "  Clonando desde GitHub..."
+    read -p "  URL del repo GitHub (o Enter para saltar): " REPO_URL
+    if [ -n "$REPO_URL" ]; then
+        git clone "$REPO_URL" "$APP_DIR"
+    else
+        echo "  ERROR: Necesito el repo. Clone manualmente en $APP_DIR y vuelva a ejecutar."
+        exit 1
+    fi
 fi
 
 # 5. Instalar dependencias Python
