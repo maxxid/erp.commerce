@@ -1,0 +1,94 @@
+"""
+ERP Comercio — Aplicación principal.
+
+FastAPI + SQLAlchemy + JWT.
+Arranca con: uvicorn app.main:app --reload
+"""
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from app.config import settings
+from app.database import engine, Base
+from app.models import *  # noqa: F401, F403 — Registrar todos los modelos
+from app.routers import auth, productos, categorias, dashboard, caja, clientes, ventas, proveedores, compras
+
+
+def crear_app() -> FastAPI:
+    """Fábrica de la aplicación FastAPI."""
+    app = FastAPI(
+        title=settings.APP_TITLE,
+        version=settings.APP_VERSION,
+        docs_url="/docs",
+        redoc_url="/redoc",
+    )
+
+    # CORS
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.CORS_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # Routers
+    app.include_router(auth.router)
+    app.include_router(productos.router)
+    app.include_router(categorias.router)
+    app.include_router(dashboard.router)
+    app.include_router(caja.router)
+    app.include_router(clientes.router)
+    app.include_router(ventas.router)
+    app.include_router(proveedores.router)
+    app.include_router(compras.router)
+
+    # Crear tablas en SQLite (desarrollo). En prod usar Alembic.
+    @app.on_event("startup")
+    def on_startup():
+        Base.metadata.create_all(bind=engine)
+        _seed_database()
+
+    return app
+
+
+def _seed_database():
+    """Inserta datos iniciales si la BD está vacía."""
+    from app.database import SessionLocal
+    from app.models.usuario import Usuario, Sucursal
+    from app.models.categoria import Categoria
+    from app.auth.security import hash_password
+
+    db = SessionLocal()
+    try:
+        if not db.query(Sucursal).first():
+            db.add(Sucursal(nombre="Sucursal Principal", direccion="Dirección principal"))
+            db.commit()
+
+        if not db.query(Usuario).first():
+            db.add(Usuario(
+                username="admin",
+                password_hash=hash_password("admin"),
+                nombre="Administrador",
+                rol="admin",
+            ))
+            db.commit()
+
+        if not db.query(Categoria).first():
+            categorias_default = [
+                "Almacén", "Bebidas", "Frescos", "Golosinas",
+                "Limpieza", "Perfumería", "Otros",
+            ]
+            for nombre in categorias_default:
+                db.add(Categoria(nombre=nombre))
+            db.commit()
+
+    finally:
+        db.close()
+
+
+app = crear_app()
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
