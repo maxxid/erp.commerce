@@ -424,7 +424,7 @@
                             </div>
 
                             <!-- Badges de comparación paralelos -->
-                            <div class="grid grid-cols-3 gap-2">
+                            <div class="grid grid-cols-4 gap-2">
                                 <a :href="lookupBadges.carrefour_url || '#'" target="_blank" class="bg-white p-2 rounded-xl border border-slate-200 text-center block hover:border-brand-300 transition">
                                     <span class="text-[9px] text-slate-400 font-bold uppercase block">Carrefour</span>
                                     <div x-show="lookupBadges.carrefour === 'loading'" class="text-xs text-slate-400 py-1"><i class="fa-solid fa-circle-notch animate-spin text-brand-600"></i></div>
@@ -442,6 +442,12 @@
                                     <div x-show="lookupBadges.masonline === 'loading'" class="text-xs text-slate-400 py-1"><i class="fa-solid fa-circle-notch animate-spin text-brand-600"></i></div>
                                     <div x-show="lookupBadges.masonline === 'not_found'" class="text-[10px] text-rose-500 font-bold py-1">No Disp.</div>
                                     <div x-show="typeof lookupBadges.masonline === 'number'" class="text-xs font-bold text-emerald-600 py-1" x-text="formatCurrency(lookupBadges.masonline)"></div>
+                                </a>
+                                <a :href="lookupBadges.supercoco_url || '#'" target="_blank" class="bg-white p-2 rounded-xl border border-slate-200 text-center block hover:border-brand-300 transition">
+                                    <span class="text-[9px] text-slate-400 font-bold uppercase block">Super Coco</span>
+                                    <div x-show="lookupBadges.supercoco === 'loading'" class="text-xs text-slate-400 py-1"><i class="fa-solid fa-circle-notch animate-spin text-brand-600"></i></div>
+                                    <div x-show="lookupBadges.supercoco === 'not_found'" class="text-[10px] text-rose-500 font-bold py-1">No Disp.</div>
+                                    <div x-show="typeof lookupBadges.supercoco === 'number'" class="text-xs font-bold text-emerald-600 py-1" x-text="formatCurrency(lookupBadges.supercoco)"></div>
                                 </a>
                             </div>
 
@@ -1723,7 +1729,7 @@
                 lookupNotFoundNombre: '',
                 lookupNotFoundPrecio: 0,
                 lookupNotFoundCantidad: 1,
-                lookupBadges: { carrefour: 'loading', vea: 'loading', masonline: 'loading', carrefour_url: '', vea_url: '', masonline_url: '' },
+                lookupBadges: { carrefour: 'loading', vea: 'loading', masonline: 'loading', supercoco: 'loading', carrefour_url: '', vea_url: '', masonline_url: '', supercoco_url: '' },
                 posCart: { _ventaId: null, _ventaNum: null, items: [], subtotal: 0, descuento: 0, total: 0, medio_pago: 'efectivo', cliente_id: '' },
 
                 modalActive: false,
@@ -2132,11 +2138,11 @@
                 // Punto 3.5 Flujo recomendado de badges paralelos con loaders independientes
                 async triggerParallelSupermarketLookup(barcode) {
                     this.lookupBadges = { 
-                        carrefour: 'loading', vea: 'loading', masonline: 'loading',
-                        carrefour_url: '', vea_url: '', masonline_url: '' 
+                        carrefour: 'loading', vea: 'loading', masonline: 'loading', supercoco: 'loading',
+                        carrefour_url: '', vea_url: '', masonline_url: '', supercoco_url: '' 
                     };
 
-                    const superstores = ['carrefour', 'vea', 'masonline'];
+                    const superstores = ['carrefour', 'vea', 'masonline', 'supercoco'];
                     superstores.forEach(async (store) => {
                         try {
                             const res = await this.request('POST', '/api/productos/lookup', { barcode: barcode, fuente: store });
@@ -2144,13 +2150,13 @@
                                 this.lookupBadges[store] = res.data.precio_referencia || 'not_found';
                                 this.lookupBadges[`${store}_url`] = res.data.url;
                             } else {
-                                // Simular tiempos de respuesta variables por supermercado
-                                const delays = { carrefour: 600, vea: 1000, masonline: 1400 };
-                                const prices = { carrefour: 1100.0, vea: 1080.0, masonline: 'not_found' };
+                                const delays = { carrefour: 600, vea: 1000, masonline: 1400, supercoco: 800 };
+                                const prices = { carrefour: 1100.0, vea: 1080.0, masonline: 'not_found', supercoco: 1050.0 };
                                 const urls = {
                                     carrefour: 'https://www.carrefour.com.ar',
                                     vea: 'https://www.vea.com.ar',
-                                    masonline: 'https://www.masonline.com.ar'
+                                    masonline: 'https://www.masonline.com.ar',
+                                    supercoco: 'https://supercoco.com.ar'
                                 };
                                 setTimeout(() => {
                                     this.lookupBadges[store] = prices[store];

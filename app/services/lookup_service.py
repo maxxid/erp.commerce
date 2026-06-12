@@ -11,7 +11,7 @@ HEADERS = {
     "Accept-Encoding": "gzip, deflate, br",
 }
 
-FUENTES = ["carrefour", "vea", "masonline"]
+FUENTES = ["carrefour", "vea", "masonline", "supercoco"]
 
 
 def _extract_json_ld(html):
@@ -353,6 +353,8 @@ def comparar_precios(barcode):
 def _lookup_fuente(barcode, fuente):
     if fuente == "carrefour":
         return _lookup_carrefour_api(barcode)
+    if fuente == "supercoco":
+        return _lookup_supercoco(barcode)
 
     search_url = f"https://www.{fuente}.com.ar/{barcode}?_q={barcode}&map=ft"
     try:
@@ -451,6 +453,89 @@ def _lookup_carrefour_api(barcode):
         "descuento": descuento,
         "categoria": _map_categoria(categorias),
     }
+
+
+def _lookup_supercoco(barcode):
+    """Busca en Super Coco (https://supercoco.com.ar) usando su búsqueda."""
+    search_url = f"https://supercoco.com.ar/s/?q={barcode}"
+    sc_headers = {"User-Agent": settings.SCRAPER_USER_AGENT}
+    try:
+        resp = requests.get(search_url, headers=sc_headers, timeout=20, allow_redirects=True)
+        resp.raise_for_status()
+    except requests.RequestException:
+        return None
+
+    data = _extract_supercoco_data(resp.text)
+    if not data:
+        return None
+
+    nombre = data.get("name", "")
+    marca = data.get("brand", {}).get("name", "") if isinstance(data.get("brand"), dict) else ""
+    sku = data.get("sku", "")
+    precio = data.get("sellingPrice") or data.get("price")
+    images = data.get("urls", {}).get("images", []) if isinstance(data.get("urls"), dict) else []
+    imagen = images[0] if images else ""
+    if imagen and not imagen.startswith("http"):
+        imagen = "https://supercoco.com.ar" + imagen
+
+    categorias = []
+    cat_path = data.get("categoryPath", []) or data.get("categoriesPath", [[]])
+    if cat_path:
+        cats = cat_path[0] if isinstance(cat_path[0], list) else cat_path
+        categorias = ["/".join(c.get("name", "") for c in cats)]
+
+    return {
+        "codigo_barras": barcode,
+        "nombre": _clean_name(nombre, categorias),
+        "marca": marca.strip() if isinstance(marca, str) else "",
+        "descripcion": data.get("descriptionPlainText", nombre).strip(),
+        "precio_referencia": float(precio) if precio else None,
+        "imagen_url": imagen.strip() if isinstance(imagen, str) else "",
+        "sku": sku.strip(),
+        "propiedades": {},
+        "fuente": "supercoco",
+        "url": search_url,
+        "descuento": _supercoco_descuento(data),
+        "categoria": _map_categoria_supercoco(data.get("categoryPath", [])),
+    }
+
+
+def _extract_supercoco_data(html):
+    """Extrae el JSON de window.data.products del HTML de Super Coco."""
+    pattern = r'window\.data\.products\s*=\s*Object\.assign\s*\(\s*window\.data\.products\s*,\s*(\{.*?\})\s*\)\s*;'
+    match = re.search(pattern, html, re.DOTALL)
+    if not match:
+        return None
+    try:
+        products = json.loads(match.group(1))
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not products:
+        return None
+    return next(iter(products.values()), None)
+
+
+def _supercoco_descuento(data):
+    """Detecta descuento en datos de Super Coco."""
+    discounted = data.get("discountedPrice")
+    price = data.get("price") or data.get("sellingPrice")
+    if discounted is not None and price is not None:
+        try:
+            dp, p = float(discounted), float(price)
+            if dp < p and dp > 0 and p <= dp * 6:
+                return {"activo": True, "precio_original": p, "precio_oferta": dp, "promocion": ""}
+        except (ValueError, TypeError):
+            pass
+    return None
+
+
+def _map_categoria_supercoco(category_path):
+    """Mapea categorías de Super Coco a las del sistema."""
+    if not category_path:
+        return ""
+    names = [c.get("name", "") for c in category_path if isinstance(c, dict)]
+    general = "/".join(names)
+    return _map_categoria([general])
 
 
 def _fix_encoding(resp):
