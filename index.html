@@ -1,0 +1,1785 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ApexERP - Frontend UI/UX Suite</title>
+    <!-- Tailwind CSS para el diseño visual premium de grado SaaS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f5f3ff',
+                            100: '#e0e7ff',
+                            200: '#c7d2fe',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            900: '#1e1b4b',
+                            950: '#0f0e26'
+                        },
+                        accent: {
+                            success: '#10b981',
+                            warning: '#f59e0b',
+                            danger: '#ef4444'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Plus Jakarta Sans', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Alpine.js para interactividad instantánea sin recarga -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- FontAwesome para iconografía corporativa de alta fidelidad -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- Google Fonts de alta legibilidad -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3, h4, .font-display { font-family: 'Plus Jakarta Sans', sans-serif; }
+        .font-mono-data { font-family: 'JetBrains Mono', monospace; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 99px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased h-screen overflow-hidden flex flex-col" x-data="erpApp()">
+
+    <!-- Banner de notificaciones (Reemplazo estético de alert()) -->
+    <div class="fixed top-4 right-4 z-50 space-y-2 pointer-events-none max-w-sm w-full">
+        <template x-for="toast in toasts" :key="toast.id">
+            <div x-transition class="p-4 rounded-xl shadow-lg border text-xs font-semibold flex items-center justify-between gap-3 pointer-events-auto transition-all"
+                 :class="{
+                     'bg-emerald-50 border-emerald-200 text-emerald-850': toast.type === 'success',
+                     'bg-rose-50 border-rose-200 text-rose-850': toast.type === 'error',
+                     'bg-amber-50 border-amber-200 text-amber-850': toast.type === 'warning',
+                     'bg-blue-50 border-blue-200 text-blue-850': toast.type === 'info'
+                 }">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid" :class="{
+                        'fa-circle-check text-emerald-600': toast.type === 'success',
+                        'fa-circle-xmark text-rose-600': toast.type === 'error',
+                        'fa-circle-exclamation text-amber-600': toast.type === 'warning',
+                        'fa-circle-info text-blue-600': toast.type === 'info'
+                    }"></i>
+                    <span x-text="toast.message"></span>
+                </div>
+                <button @click="removeToast(toast.id)" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+        </template>
+    </div>
+
+    <!-- PANTALLA DE LOGIN INICIAL (Autenticación JWT Real / Simulada) -->
+    <div x-show="!authenticated" class="fixed inset-0 bg-brand-900 z-50 flex items-center justify-center p-4" x-transition>
+        <div class="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl border border-slate-100 flex flex-col space-y-6">
+            <div class="text-center">
+                <div class="w-16 h-16 rounded-2xl bg-brand-600 text-white flex items-center justify-center text-3xl mx-auto shadow-lg shadow-brand-600/30">
+                    <i class="fa-solid fa-cubes-stacked"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-slate-900 mt-4 font-display">Ingresar a ApexERP</h2>
+                <p class="text-sm text-slate-500 mt-1">Conexión unificada con el Core de DeepSeek</p>
+                <!-- Badge de Estado de Conexión de Red -->
+                <div class="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider"
+                     :class="apiMode === 'real' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-amber-50 text-amber-600 border border-amber-200'">
+                    <span class="w-1.5 h-1.5 rounded-full animate-pulse" :class="apiMode === 'real' ? 'bg-emerald-500' : 'bg-amber-500'"></span>
+                    <span x-text="apiMode === 'real' ? 'Modo: API de Producción (8000)' : 'Modo: Simulador Offline'"></span>
+                </div>
+            </div>
+
+            <!-- Formulario de Login adaptado a la API API_DOCUMENTACION.md -->
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Usuario de prueba</label>
+                    <div class="relative">
+                        <i class="fa-regular fa-user absolute left-4 top-3.5 text-slate-400"></i>
+                        <input type="text" x-model="loginForm.username" class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600 transition">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Contraseña</label>
+                    <div class="relative">
+                        <i class="fa-solid fa-lock absolute left-4 top-3.5 text-slate-400"></i>
+                        <input type="password" x-model="loginForm.password" class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600 transition">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Banner de error dinámico -->
+            <div x-show="loginError" class="p-3 bg-rose-50 text-accent-danger rounded-xl border border-rose-100 text-xs font-medium flex items-center gap-2">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+                <span x-text="loginError"></span>
+            </div>
+
+            <button @click="handleLogin()" class="w-full bg-brand-600 hover:bg-brand-700 text-white py-3.5 rounded-xl text-sm font-semibold shadow-lg shadow-brand-600/25 transition flex items-center justify-center gap-2">
+                <span x-text="loggingIn ? 'Conectando...' : 'Conectar con JWT Bearer'"></span>
+                <i class="fa-solid" :class="loggingIn ? 'fa-spinner animate-spin' : 'fa-arrow-right'"></i>
+            </button>
+
+            <!-- Toggle de red rápido en Login -->
+            <div class="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-[11px]">
+                <span class="text-slate-500">¿No tienes el backend corriendo?</span>
+                <button @click="apiMode = (apiMode === 'real' ? 'mock' : 'real')" class="text-brand-600 font-bold hover:underline" x-text="apiMode === 'real' ? 'Usar Simulador' : 'Usar API Real'"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CONTENEDOR PRINCIPAL DEL ERP -->
+    <div class="flex-1 flex overflow-hidden w-full">
+        
+        <!-- SIDEBAR DE NAVEGACIÓN PERSISTENTE -->
+        <aside class="w-64 bg-slate-900 text-slate-300 flex flex-col justify-between border-r border-slate-800 shrink-0 z-20">
+            <div>
+                <!-- Encabezado de Marca -->
+                <div class="p-6 flex items-center gap-3 border-b border-slate-800">
+                    <div class="w-10 h-10 rounded-xl bg-brand-600 flex items-center justify-center text-white shadow-lg shadow-brand-600/30">
+                        <i class="fa-solid fa-cubes-stacked text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-white font-bold text-base leading-none">ApexERP</h1>
+                        <span class="text-[10px] text-brand-200/50 font-bold tracking-widest uppercase">DeepSeek Engine</span>
+                    </div>
+                </div>
+
+                <!-- Lista de Navegación -->
+                <nav class="p-4 space-y-1">
+                    <button @click="activeTab = 'dashboard'; fetchDashboardData()" :class="activeTab === 'dashboard' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150">
+                        <i class="fa-solid fa-chart-pie text-lg w-5 text-center"></i>
+                        <span>Dashboard</span>
+                    </button>
+
+                    <button @click="activeTab = 'pos'; verifyCajaState()" :class="activeTab === 'pos' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm transition duration-150">
+                        <div class="flex items-center gap-3.5">
+                            <i class="fa-solid fa-cash-register text-lg w-5 text-center"></i>
+                            <span>POS de Ventas</span>
+                        </div>
+                        <span :class="cajaState.abierta ? 'bg-emerald-500/20 text-accent-success border-emerald-500/30' : 'bg-rose-500/20 text-accent-danger border-rose-500/30'" class="text-[9px] font-bold px-2 py-0.5 rounded-full border" x-text="cajaState.abierta ? 'ABIERTA' : 'CERRADA'"></span>
+                    </button>
+
+                    <button @click="activeTab = 'products'; fetchProducts(); fetchCategories()" :class="activeTab === 'products' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150">
+                        <i class="fa-solid fa-boxes-stacked text-lg w-5 text-center"></i>
+                        <span>Productos</span>
+                    </button>
+
+                    <button @click="activeTab = 'caja'; fetchCajaMovimientos()" :class="activeTab === 'caja' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150">
+                        <i class="fa-solid fa-vault text-lg w-5 text-center"></i>
+                        <span>Arqueos y Caja</span>
+                    </button>
+
+                    <button @click="activeTab = 'compras'; fetchCompras(); fetchProveedores()" :class="activeTab === 'compras' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150">
+                        <i class="fa-solid fa-truck-ramp-box text-lg w-5 text-center"></i>
+                        <span>Compras / Stock</span>
+                    </button>
+
+                    <button @click="activeTab = 'clientes'; fetchClientes()" :class="activeTab === 'clientes' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150">
+                        <i class="fa-solid fa-address-book text-lg w-5 text-center"></i>
+                        <span>Clientes y Ctas. Ctes</span>
+                    </button>
+                </nav>
+            </div>
+
+            <!-- Footer con datos del usuario de API_DOCUMENTACION.md -->
+            <div class="p-4 border-t border-slate-850">
+                <div class="flex items-center gap-3 p-2.5 bg-slate-950/40 rounded-2xl border border-slate-800">
+                    <div class="w-8 h-8 rounded-xl bg-brand-500 flex items-center justify-center font-bold text-xs text-white uppercase" x-text="currentUser.username ? currentUser.username.slice(0,2) : 'AD'">
+                    </div>
+                    <div class="overflow-hidden flex-1">
+                        <h4 class="text-xs font-semibold text-white truncate" x-text="currentUser.nombre || 'Administrador'"></h4>
+                        <p class="text-[9px] text-slate-500 uppercase tracking-wider truncate font-semibold" x-text="currentUser.rol || 'admin'"></p>
+                    </div>
+                    <button @click="logout()" title="Cerrar Sesión" class="text-slate-500 hover:text-rose-400 transition ml-2">
+                        <i class="fa-solid fa-power-off"></i>
+                    </button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- ÁREA CENTRAL DE CONTENIDO -->
+        <main class="flex-1 flex flex-col min-w-0 overflow-hidden">
+            
+            <!-- HEADER GLOBAL SUPERIOR -->
+            <header class="bg-white border-b border-slate-200 h-16 shrink-0 flex items-center justify-between px-8 z-10">
+                <div class="flex items-center gap-3">
+                    <span class="text-slate-400 text-sm">ERP Fase 4 Frontend</span>
+                    <i class="fa-solid fa-chevron-right text-xs text-slate-300"></i>
+                    <span class="text-brand-600 font-semibold text-sm uppercase tracking-wider font-display" x-text="activeTab"></span>
+                </div>
+
+                <!-- API Selector de Entorno e Indicadores -->
+                <div class="flex items-center gap-4">
+                    <!-- Selector de Entorno de API real / simulador en Caliente -->
+                    <div class="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+                        <button @click="toggleApiMode('mock')" :class="apiMode === 'mock' ? 'bg-white shadow-sm font-bold text-slate-800' : 'text-slate-500'" class="px-3 py-1 rounded-lg text-[11px] uppercase tracking-wide transition duration-150">
+                            Simulador
+                        </button>
+                        <button @click="toggleApiMode('real')" :class="apiMode === 'real' ? 'bg-brand-600 text-white font-bold' : 'text-slate-500'" class="px-3 py-1 rounded-lg text-[11px] uppercase tracking-wide transition duration-150">
+                            API Real
+                        </button>
+                    </div>
+
+                    <div class="text-slate-300">|</div>
+
+                    <div class="text-sm font-medium text-slate-600 font-mono-data">
+                        <i class="fa-regular fa-clock mr-1 text-slate-400"></i> <span x-text="formatDate(currentTime)"></span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- CONTENEDOR PRINCIPAL DE PESTAÑAS (Scrollable) -->
+            <div class="flex-1 overflow-y-auto p-8">
+
+                <!-- PESTAÑA: DASHBOARD -->
+                <div x-show="activeTab === 'dashboard'" class="space-y-8" x-transition>
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-2xl font-bold text-slate-950 font-display">Resumen del Comercio</h2>
+                            <p class="text-sm text-slate-500 mt-1">Métricas reales servidas desde el endpoint <code class="bg-slate-100 px-1 py-0.5 rounded text-xs">/api/dashboard/resumen</code></p>
+                        </div>
+                        <button @click="fetchDashboardData()" class="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-sm rounded-xl flex items-center gap-2 shadow-sm transition">
+                            <i class="fa-solid fa-arrows-rotate text-brand-500"></i> Sincronizar
+                        </button>
+                    </div>
+
+                    <!-- Tarjetas KPI -->
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                        <div class="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm hover:shadow-md transition">
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">Ventas de Hoy</span>
+                                <div class="w-9 h-9 rounded-xl bg-emerald-50 text-accent-success flex items-center justify-center">
+                                    <i class="fa-solid fa-cart-shopping"></i>
+                                </div>
+                            </div>
+                            <span class="text-2xl font-bold text-slate-900 font-mono-data" x-text="formatCurrency(dashboard.ventas_hoy)"></span>
+                            <div class="text-[10px] text-accent-success font-semibold mt-2 flex items-center gap-1">
+                                <i class="fa-solid fa-arrow-trend-up"></i> Conectado con Ventas
+                            </div>
+                        </div>
+
+                        <div class="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm hover:shadow-md transition">
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">Valor de Stock</span>
+                                <div class="w-9 h-9 rounded-xl bg-indigo-50 text-brand-600 flex items-center justify-center">
+                                    <i class="fa-solid fa-boxes-stacked"></i>
+                                </div>
+                            </div>
+                            <span class="text-2xl font-bold text-slate-900 font-mono-data" x-text="formatCurrency(dashboard.valor_stock)"></span>
+                            <div class="text-[10px] text-slate-400 font-semibold mt-2">
+                                Sobre <span class="text-brand-600 font-bold" x-text="dashboard.total_productos"></span> productos activos
+                            </div>
+                        </div>
+
+                        <div class="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm hover:shadow-md transition">
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">Stock Crítico</span>
+                                <div class="w-9 h-9 rounded-xl bg-rose-50 text-accent-danger flex items-center justify-center">
+                                    <i class="fa-solid fa-triangle-exclamation"></i>
+                                </div>
+                            </div>
+                            <span class="text-2xl font-bold text-slate-900 font-mono-data" x-text="dashboard.stock_bajo"></span>
+                            <div class="text-[10px] text-accent-danger font-semibold mt-2 flex items-center gap-1">
+                                <i class="fa-solid fa-circle"></i> Requiere reabastecimiento
+                            </div>
+                        </div>
+
+                        <div class="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm hover:shadow-md transition">
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">Clientes Activos</span>
+                                <div class="w-9 h-9 rounded-xl bg-amber-50 text-accent-warning flex items-center justify-center">
+                                    <i class="fa-solid fa-users"></i>
+                                </div>
+                            </div>
+                            <span class="text-2xl font-bold text-slate-900 font-mono-data" x-text="dashboard.total_clientes"></span>
+                            <div class="text-[10px] text-slate-400 mt-2">
+                                Con cuentas corrientes
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Panel de Gráficos y Detalles -->
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div class="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm lg:col-span-2 space-y-4">
+                            <div class="flex items-center justify-between">
+                                <h3 class="font-bold text-slate-950">Dinámica Financiera del Período</h3>
+                                <span class="text-xs text-slate-400 font-semibold">Comparativa Ventas vs Compras</span>
+                            </div>
+                            
+                            <div class="space-y-4 pt-4">
+                                <div>
+                                    <div class="flex justify-between text-xs font-semibold mb-1">
+                                        <span class="text-slate-600">Ventas Registradas (Mes)</span>
+                                        <span class="text-emerald-600 font-bold" x-text="formatCurrency(dashboard.ventas_mes)"></span>
+                                    </div>
+                                    <div class="w-full bg-slate-100 rounded-full h-4 overflow-hidden">
+                                        <div class="bg-accent-success h-full rounded-full" style="width: 75%"></div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-xs font-semibold mb-1">
+                                        <span class="text-slate-600">Costos de Adquisición / Compras</span>
+                                        <span class="text-rose-500 font-bold" x-text="formatCurrency(125000)"></span>
+                                    </div>
+                                    <div class="w-full bg-slate-100 rounded-full h-4 overflow-hidden">
+                                        <div class="bg-accent-danger h-full rounded-full" style="width: 33%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Widget de Auditoría Reciente -->
+                        <div class="bg-slate-900 text-white p-6 rounded-2xl shadow-sm flex flex-col justify-between">
+                            <div>
+                                <span class="text-[10px] font-bold text-brand-200 uppercase tracking-widest">Último Producto Auditado</span>
+                                <h4 class="text-lg font-bold mt-2 font-display" x-text="dashboard.ultimo_producto.nombre"></h4>
+                                <p class="text-xs text-slate-400 mt-1">Código de barras: <span class="font-mono text-brand-100" x-text="dashboard.ultimo_producto.codigo_barras"></span></p>
+                            </div>
+                            <div class="mt-6 pt-4 border-t border-slate-800 flex justify-between items-center text-xs">
+                                <span class="text-slate-400">Registrado el:</span>
+                                <span class="font-semibold text-brand-200" x-text="formatDateShort(dashboard.ultimo_producto.fecha)"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PESTAÑA: POS DE VENTAS (3 Columnas UX de alta velocidad) -->
+                <div x-show="activeTab === 'pos'" class="h-[calc(100vh-170px)] flex gap-6 overflow-hidden -m-8 p-8" x-transition>
+                    
+                    <!-- COLUMNA 1: CATÁLOGO Y LOOKUP MULTI-FUENTE EN TIEMPO REAL -->
+                    <div class="flex-1 bg-white border border-slate-200 rounded-2xl flex flex-col overflow-hidden shadow-sm">
+                        
+                        <!-- Buscador Fijo -->
+                        <div class="p-4 border-b border-slate-100 space-y-3 bg-slate-50/50">
+                            <!-- Entrada del Escáner y trigger de lookup -->
+                            <div class="flex gap-2">
+                                <div class="relative flex-1">
+                                    <i class="fa-solid fa-barcode absolute left-4 top-3.5 text-slate-400"></i>
+                                    <input type="text" x-model="posLookupCode" @keydown.enter="triggerPOSLookup()" placeholder="Escribir o Escanear Código de Barras (Presiona Enter)" class="w-full bg-white border border-slate-200 rounded-xl pl-11 pr-4 py-2.5 text-sm font-mono focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100 transition">
+                                </div>
+                                <button @click="triggerPOSLookup()" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-xl transition flex items-center gap-1.5 shrink-0">
+                                    <i class="fa-solid fa-magnifying-glass"></i> Buscar / Escanear
+                                </button>
+                            </div>
+
+                            <!-- Filtros rápidos por categoría -->
+                            <div class="flex gap-1.5 overflow-x-auto pb-1">
+                                <button @click="selectedPOSCategory = 'all'" :class="selectedPOSCategory === 'all' ? 'bg-brand-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'" class="px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition">
+                                    Todos
+                                </button>
+                                <template x-for="cat in categories" :key="cat.id">
+                                    <button @click="selectedPOSCategory = cat.id" :class="selectedPOSCategory === cat.id ? 'bg-brand-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'" class="px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition" x-text="cat.nombre"></button>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Tarjeta de lookup interactivo (Implementando flujo recomendado punto 3.5) -->
+                        <div x-show="lookupProduct.codigo_barras" class="p-4 bg-indigo-50/80 border-b border-indigo-100 space-y-3 shrink-0" x-transition>
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <span class="text-[9px] font-bold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full border border-indigo-200 uppercase tracking-widest">Lookup Multi-fuente API 3.5</span>
+                                    <h4 class="font-bold text-slate-900 text-sm mt-1" x-text="lookupProduct.nombre"></h4>
+                                    <p class="text-[10px] text-slate-500 font-mono-data">Código: <span x-text="lookupProduct.codigo_barras"></span> | Ref: <span class="font-semibold text-brand-600" x-text="formatCurrency(lookupProduct.precio_referencia)"></span></p>
+                                </div>
+                                <button @click="lookupProduct = {}" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+                            </div>
+
+                            <!-- Badges de comparación paralelos -->
+                            <div class="grid grid-cols-3 gap-2">
+                                <a :href="lookupBadges.carrefour_url || '#'" target="_blank" class="bg-white p-2 rounded-xl border border-slate-200 text-center block hover:border-brand-300 transition">
+                                    <span class="text-[9px] text-slate-400 font-bold uppercase block">Carrefour</span>
+                                    <div x-show="lookupBadges.carrefour === 'loading'" class="text-xs text-slate-400 py-1"><i class="fa-solid fa-circle-notch animate-spin text-brand-600"></i></div>
+                                    <div x-show="lookupBadges.carrefour === 'not_found'" class="text-[10px] text-rose-500 font-bold py-1">No Disp.</div>
+                                    <div x-show="typeof lookupBadges.carrefour === 'number'" class="text-xs font-bold text-emerald-600 py-1" x-text="formatCurrency(lookupBadges.carrefour)"></div>
+                                </a>
+
+                                <a :href="lookupBadges.vea_url || '#'" target="_blank" class="bg-white p-2 rounded-xl border border-slate-200 text-center block hover:border-brand-300 transition">
+                                    <span class="text-[9px] text-slate-400 font-bold uppercase block">Vea</span>
+                                    <div x-show="lookupBadges.vea === 'loading'" class="text-xs text-slate-400 py-1"><i class="fa-solid fa-circle-notch animate-spin text-brand-600"></i></div>
+                                    <div x-show="lookupBadges.vea === 'not_found'" class="text-[10px] text-rose-500 font-bold py-1">No Disp.</div>
+                                    <div x-show="typeof lookupBadges.vea === 'number'" class="text-xs font-bold text-emerald-600 py-1" x-text="formatCurrency(lookupBadges.vea)"></div>
+                                </a>
+
+                                <a :href="lookupBadges.masonline_url || '#'" target="_blank" class="bg-white p-2 rounded-xl border border-slate-200 text-center block hover:border-brand-300 transition">
+                                    <span class="text-[9px] text-slate-400 font-bold uppercase block">MasOnline</span>
+                                    <div x-show="lookupBadges.masonline === 'loading'" class="text-xs text-slate-400 py-1"><i class="fa-solid fa-circle-notch animate-spin text-brand-600"></i></div>
+                                    <div x-show="lookupBadges.masonline === 'not_found'" class="text-[10px] text-rose-500 font-bold py-1">No Disp.</div>
+                                    <div x-show="typeof lookupBadges.masonline === 'number'" class="text-xs font-bold text-emerald-600 py-1" x-text="formatCurrency(lookupBadges.masonline)"></div>
+                                </a>
+                            </div>
+
+                            <div class="flex justify-end gap-2">
+                                <button @click="saveLookupToLocal(lookupProduct)" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-semibold shadow-sm transition">
+                                    <i class="fa-solid fa-floppy-disk mr-1"></i> Guardar en BD Local e Insertar
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Grid de catálogo de productos locales -->
+                        <div class="flex-1 overflow-y-auto p-4">
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                <template x-for="prod in filteredPOSProducts" :key="prod.id">
+                                    <div @click="addPRODToPOS(prod)" :class="prod.stock_actual <= 0 ? 'opacity-60 cursor-not-allowed' : 'hover:border-brand-600 hover:shadow-md cursor-pointer'" class="border border-slate-200 bg-white p-3.5 rounded-xl transition flex flex-col justify-between h-36">
+                                        <div>
+                                            <div class="flex justify-between items-start">
+                                                <span class="text-[10px] font-mono-data text-slate-400" x-text="prod.sku"></span>
+                                                <span :class="prod.stock_actual <= 0 ? 'bg-rose-50 text-accent-danger border-rose-100' : (prod.stock_actual <= prod.stock_minimo ? 'bg-amber-50 text-accent-warning border-amber-100' : 'bg-emerald-50 text-accent-success border-emerald-100')" class="text-[9px] font-bold px-1.5 py-0.5 rounded-md border" x-text="prod.stock_actual <= 0 ? 'Sin Stock' : prod.stock_actual + ' u'"></span>
+                                            </div>
+                                            <h4 class="text-xs font-bold text-slate-800 line-clamp-2 mt-1.5" x-text="prod.nombre"></h4>
+                                        </div>
+                                        <div class="flex justify-between items-center pt-2 border-t border-slate-50">
+                                            <span class="text-sm font-bold text-slate-900 font-mono-data" x-text="formatCurrency(prod.precio_venta)"></span>
+                                            <span class="text-[10px] text-brand-600 font-bold hover:underline" x-show="prod.stock_actual > 0">Agregar <i class="fa-solid fa-plus text-[8px]"></i></span>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- COLUMNA 2: EL CARRITO DE COMPRAS (Interactividad Fluida y Validaciones) -->
+                    <div class="w-96 bg-white border border-slate-200 rounded-2xl flex flex-col overflow-hidden shadow-sm shrink-0">
+                        <div class="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                            <h3 class="font-bold text-slate-900 flex items-center gap-2">
+                                <i class="fa-solid fa-basket-shopping text-brand-600"></i> Carrito Actual
+                            </h3>
+                            <button @click="clearPOSCart()" class="text-xs font-semibold text-accent-danger hover:underline" x-show="posCart.items && posCart.items.length > 0">Vaciar todo</button>
+                        </div>
+
+                        <!-- Items del carrito -->
+                        <div class="flex-1 overflow-y-auto p-4 space-y-3.5">
+                            
+                            <!-- Caja Cerrada Guardrail -->
+                            <div x-show="!cajaState.abierta" class="p-4 bg-rose-50 border border-rose-100 rounded-xl text-center space-y-2">
+                                <i class="fa-solid fa-lock text-accent-danger text-2xl"></i>
+                                <h4 class="text-xs font-bold text-slate-900">CAJA CERRADA</h4>
+                                <p class="text-[11px] text-slate-500">Debe realizar una apertura de caja para procesar y confirmar ventas.</p>
+                                <button @click="activeTab = 'caja'" class="px-3 py-1.5 bg-brand-600 text-white font-semibold text-xs rounded-lg transition hover:bg-brand-700">Ir a Apertura de Caja</button>
+                            </div>
+
+                            <!-- Estado Vacío -->
+                            <div x-show="cajaState.abierta && (!posCart.items || posCart.items.length === 0)" class="h-full flex flex-col items-center justify-center text-center text-slate-400 py-12">
+                                <i class="fa-solid fa-cart-flatbed text-4xl mb-3 text-slate-200"></i>
+                                <p class="text-xs font-semibold">El carrito está vacío</p>
+                                <p class="text-[10px] mt-1">Escanee un producto o haga clic en el catálogo</p>
+                            </div>
+
+                            <!-- Lista de items en carrito -->
+                            <template x-for="item in posCart.items" :key="item.id">
+                                <div class="flex justify-between gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100 relative group transition">
+                                    <div class="flex-1 min-w-0">
+                                        <h4 class="text-xs font-bold text-slate-800 truncate" x-text="item.producto_nombre"></h4>
+                                        <p class="text-[10px] text-slate-400 mt-0.5 font-mono-data" x-text="formatCurrency(item.precio_unitario) + ' /u'"></p>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <div class="flex items-center border border-slate-200 rounded-lg bg-white overflow-hidden">
+                                            <button @click="updatePOSQty(item, -1)" class="px-2 py-1 text-slate-500 hover:bg-slate-100 text-xs"><i class="fa-solid fa-minus"></i></button>
+                                            <span class="px-2 font-mono-data text-xs text-slate-800 font-bold" x-text="item.cantidad"></span>
+                                            <button @click="updatePOSQty(item, 1)" class="px-2 py-1 text-slate-500 hover:bg-slate-100 text-xs"><i class="fa-solid fa-plus"></i></button>
+                                        </div>
+                                        <button @click="removePOSItem(item)" class="text-slate-300 hover:text-accent-danger transition"><i class="fa-regular fa-trash-can"></i></button>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+
+                        <!-- Totales y Medios de pago -->
+                        <div class="p-4 bg-slate-50 border-t border-slate-100 space-y-4 shrink-0" x-show="cajaState.abierta">
+                            <div class="space-y-1.5 text-xs">
+                                <div class="flex justify-between text-slate-500">
+                                    <span>Subtotal</span>
+                                    <span class="font-mono-data" x-text="formatCurrency(posCart.subtotal)"></span>
+                                </div>
+                                <div class="flex justify-between text-slate-500 items-center">
+                                    <span>Descuento Especial</span>
+                                    <input type="number" x-model.number="posCart.descuento" @input="recalcPOSCart()" class="w-16 text-right font-mono-data text-xs border rounded p-1 bg-white" placeholder="0">
+                                </div>
+                                <div class="flex justify-between font-bold text-slate-900 text-base pt-2 border-t border-slate-200">
+                                    <span>Total Facturado</span>
+                                    <span class="font-mono-data text-brand-600" x-text="formatCurrency(posCart.total)"></span>
+                                </div>
+                            </div>
+
+                            <!-- Selector de Medios de Pago de la especificación -->
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Medio de Pago</label>
+                                <div class="grid grid-cols-2 gap-1.5">
+                                    <template x-for="pago in ['efectivo', 'debito', 'credito', 'transferencia', 'cta_corriente']" :key="pago">
+                                        <button @click="posCart.medio_pago = pago" :class="posCart.medio_pago === pago ? 'bg-brand-600 text-white border-brand-600' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'" class="py-2 border rounded-xl text-[10px] font-bold uppercase transition" x-text="pago.replace('_', ' ')"></button>
+                                    </template>
+                                </div>
+                            </div>
+
+                            <!-- Selector de Cliente (Cuentas corrientes - Verificación límite de crédito 6.6) -->
+                            <div class="space-y-1.5" x-show="posCart.medio_pago === 'cta_corriente'">
+                                <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Cliente de Cuenta Corriente</label>
+                                <select x-model="posCart.cliente_id" class="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs">
+                                    <option value="">Seleccione Cliente...</option>
+                                    <template x-for="cli in clientes" :key="cli.id">
+                                        <option :value="cli.id" x-text="cli.nombre + ' (Adeuda: ' + formatCurrency(cli.saldo_cta_corriente) + ')'"></option>
+                                    </template>
+                                </select>
+                            </div>
+
+                            <!-- Botón de Confirmación de Venta -->
+                            <button @click="confirmPOSSale()" :disabled="!posCart.items || posCart.items.length === 0 || processingSale" :class="(!posCart.items || posCart.items.length === 0 || processingSale) ? 'bg-slate-300 cursor-not-allowed text-slate-400' : 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-md shadow-emerald-500/20'" class="w-full py-3.5 rounded-xl text-xs font-bold uppercase tracking-wider transition flex items-center justify-center gap-1.5">
+                                <i class="fa-solid" :class="processingSale ? 'fa-spinner animate-spin' : 'fa-circle-check'"></i>
+                                <span x-text="processingSale ? 'Confirmando...' : 'Confirmar Venta'"></span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PESTAÑA: PRODUCTOS (Módulo de administración del inventario y creación) -->
+                <div x-show="activeTab === 'products'" class="space-y-6" x-transition>
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-2xl font-bold text-slate-950 font-display">Administración de Productos</h2>
+                            <p class="text-sm text-slate-500 mt-1">Alta, edición e inserción manual de la base de datos de productos</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button @click="showModal('product_create')" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-xl flex items-center gap-1.5 shadow-sm transition">
+                                <i class="fa-solid fa-plus"></i> Registrar Producto
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Buscador Avanzado en Tabla -->
+                    <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col">
+                        <div class="p-4 border-b border-slate-100 flex gap-4">
+                            <div class="relative flex-1">
+                                <i class="fa-solid fa-magnifying-glass absolute left-4 top-3.5 text-slate-400 text-sm"></i>
+                                <input type="text" x-model="productSearch" @input="fetchProducts()" placeholder="Filtrar por nombre, marca, SKU o código de barras..." class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-11 pr-4 py-2.5 text-sm focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100 transition">
+                            </div>
+                        </div>
+
+                        <!-- Tabla del Inventario -->
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-50 border-b border-slate-100">
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Código / SKU</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Descripción Producto</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Categoría</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Costo (Fase 3)</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Precio Venta (Fase 1)</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Stock</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100">
+                                    <template x-for="prod in products" :key="prod.id">
+                                        <tr class="hover:bg-slate-50/50 transition">
+                                            <td class="p-4 text-xs">
+                                                <span class="font-mono-data font-bold text-slate-900" x-text="prod.codigo_barras"></span>
+                                                <p class="text-[10px] text-slate-400 font-mono mt-0.5" x-text="'SKU: ' + (prod.sku || 'N/A')"></p>
+                                            </td>
+                                            <td class="p-4 text-xs">
+                                                <span class="font-bold text-slate-800" x-text="prod.nombre"></span>
+                                                <p class="text-[10px] text-slate-400" x-text="'Marca: ' + (prod.marca || 'N/A')"></p>
+                                            </td>
+                                            <td class="p-4 text-xs font-medium text-slate-600" x-text="prod.categoria_nombre || getCategoryName(prod.categoria_id)"></td>
+                                            <td class="p-4 text-xs font-mono-data font-bold text-slate-500" x-text="formatCurrency(prod.precio_costo)"></td>
+                                            <td class="p-4 text-xs font-mono-data font-bold text-slate-900" x-text="formatCurrency(prod.precio_venta)"></td>
+                                            <td class="p-4 text-xs">
+                                                <span :class="prod.stock_actual <= 0 ? 'bg-rose-50 text-accent-danger border-rose-100' : (prod.stock_actual <= prod.stock_minimo ? 'bg-amber-50 text-accent-warning border-amber-100' : 'bg-emerald-50 text-accent-success border-emerald-100')" class="font-mono-data font-bold px-2 py-0.5 rounded-full border" x-text="prod.stock_actual + ' u'"></span>
+                                            </td>
+                                            <td class="p-4 text-xs">
+                                                <button @click="editProduct(prod)" class="text-brand-600 hover:text-brand-900 font-bold hover:underline">Editar <i class="fa-solid fa-pen-to-square"></i></button>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PESTAÑA: CAJA (Arqueos, movimientos de caja) -->
+                <div x-show="activeTab === 'caja'" class="space-y-6" x-transition>
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-2xl font-bold text-slate-950 font-display">Gestión de Cajas y Arqueos</h2>
+                            <p class="text-sm text-slate-500 mt-1">Control de dinero físico basado en los flujos de apertura, cierre e ingresos/egresos</p>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        
+                        <!-- Panel de Control de Estado de Caja -->
+                        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 space-y-4">
+                            <h3 class="font-bold text-slate-900 border-b pb-3 flex items-center justify-between">
+                                <span>Caja del Día</span>
+                                <span :class="cajaState.abierta ? 'bg-emerald-100 text-accent-success' : 'bg-rose-100 text-accent-danger'" class="text-[10px] px-2 py-0.5 rounded-full font-bold" x-text="cajaState.abierta ? 'ABIERTA' : 'CERRADA'"></span>
+                            </h3>
+
+                            <div class="space-y-4">
+                                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center">
+                                    <span class="text-[10px] uppercase font-bold text-slate-400">Saldo Esperado en Sistema</span>
+                                    <h4 class="text-3xl font-bold text-brand-600 mt-1 font-mono-data" x-text="formatCurrency(cajaState.saldo_actual)"></h4>
+                                </div>
+
+                                <div class="flex gap-2">
+                                    <button x-show="!cajaState.abierta" @click="showModal('caja_apertura')" class="flex-1 bg-brand-600 hover:bg-brand-700 text-white py-3 rounded-xl text-xs font-bold uppercase transition tracking-wider text-center">
+                                        <i class="fa-solid fa-lock-open mr-1"></i> Abrir Caja
+                                    </button>
+                                    <button x-show="cajaState.abierta" @click="showModal('caja_cierre')" class="flex-1 bg-rose-500 hover:bg-rose-600 text-white py-3 rounded-xl text-xs font-bold uppercase transition tracking-wider text-center">
+                                        <i class="fa-solid fa-lock mr-1"></i> Cerrar Caja (Arqueo)
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Movimientos Historial de Caja -->
+                        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 lg:col-span-2 space-y-4">
+                            <h3 class="font-bold text-slate-900 border-b pb-3">Historial de Movimientos de Caja</h3>
+                            
+                            <div class="overflow-y-auto max-h-[300px] divide-y divide-slate-100">
+                                <template x-for="mov in cajaMovimientos" :key="mov.id">
+                                    <div class="py-3 flex justify-between items-center text-xs">
+                                        <div class="space-y-1">
+                                            <span :class="mov.tipo === 'apertura' ? 'bg-indigo-50 text-brand-600 border-indigo-100' : (mov.tipo === 'cierre' ? 'bg-slate-100 text-slate-700 border-slate-200' : 'bg-emerald-50 text-accent-success border-emerald-100')" class="px-2 py-0.5 rounded border text-[9px] uppercase font-bold font-mono" x-text="mov.tipo"></span>
+                                            <p class="text-slate-500 text-[10px]" x-text="formatDateShort(mov.fecha || new Date())"></p>
+                                        </div>
+                                        <span class="font-mono-data font-bold text-slate-900" x-text="formatCurrency(mov.monto)"></span>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PESTAÑA: COMPRAS -->
+                <div x-show="activeTab === 'compras'" class="space-y-6" x-transition>
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-2xl font-bold text-slate-950 font-display">Ordenes de Compra y Recepción</h2>
+                            <p class="text-sm text-slate-500 mt-1">Gestión de stock de proveedores y costos de adquisición (Fase 3)</p>
+                        </div>
+                        <button @click="showModal('compra_create')" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-xl flex items-center gap-1.5 shadow-sm transition">
+                            <i class="fa-solid fa-plus"></i> Crear Compra Pendiente
+                        </button>
+                    </div>
+
+                    <!-- Tabla de Historial de Compras -->
+                    <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-50 border-b border-slate-100">
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Orden Compra</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Proveedor</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Fecha de Creación</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Monto Total</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Estado</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100 text-xs">
+                                    <template x-for="comp in compras" :key="comp.id">
+                                        <tr class="hover:bg-slate-50/50 transition">
+                                            <td class="p-4 font-mono-data font-bold text-slate-950" x-text="comp.numero"></td>
+                                            <td class="p-4 font-semibold text-slate-700" x-text="comp.proveedor_nombre"></td>
+                                            <td class="p-4 text-slate-500" x-text="formatDateShort(comp.fecha)"></td>
+                                            <td class="p-4 font-mono-data font-bold text-slate-900" x-text="formatCurrency(comp.total)"></td>
+                                            <td class="p-4">
+                                                <span :class="comp.estado === 'recibida' ? 'bg-emerald-50 text-accent-success border-emerald-100' : (comp.estado === 'pendiente' ? 'bg-amber-50 text-accent-warning border-amber-100' : 'bg-rose-50 text-accent-danger border-rose-100')" class="px-2 py-0.5 rounded border text-[10px] font-bold uppercase" x-text="comp.estado"></span>
+                                            </td>
+                                            <td class="p-4 flex gap-2">
+                                                <button x-show="comp.estado === 'pendiente'" @click="receivePurchase(comp)" class="text-emerald-600 hover:text-emerald-900 font-bold hover:underline">Recibir Stock <i class="fa-solid fa-circle-check"></i></button>
+                                                <button x-show="comp.estado === 'pendiente'" @click="cancelPurchase(comp)" class="text-rose-500 hover:text-rose-900 font-bold hover:underline">Anular <i class="fa-solid fa-ban"></i></button>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PESTAÑA: CLIENTES -->
+                <div x-show="activeTab === 'clientes'" class="space-y-6" x-transition>
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-2xl font-bold text-slate-950 font-display">Clientes y Crédito Corporativo</h2>
+                            <p class="text-sm text-slate-500 mt-1">Límites de crédito, cuentas corrientes de confianza y saldos</p>
+                        </div>
+                        <button @click="showModal('client_create')" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-xl flex items-center gap-1.5 shadow-sm transition">
+                            <i class="fa-solid fa-plus"></i> Registrar Cliente
+                        </button>
+                    </div>
+
+                    <!-- Tabla de Clientes -->
+                    <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-50 border-b border-slate-100">
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Razón Social / Nombre</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Identificación</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Teléfono</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Saldo Cta Corriente</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Límite de Crédito</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100 text-xs">
+                                    <template x-for="cli in clientes" :key="cli.id">
+                                        <tr class="hover:bg-slate-50/50 transition">
+                                            <td class="p-4 font-bold text-slate-900 text-sm" x-text="cli.nombre"></td>
+                                            <td class="p-4 font-mono-data text-slate-500" x-text="cli.tipo_documento + ': ' + cli.numero_documento"></td>
+                                            <td class="p-4 text-slate-600" x-text="cli.telefono || 'N/A'"></td>
+                                            <td class="p-4 font-mono-data font-bold text-rose-600" x-text="formatCurrency(cli.saldo_cta_corriente)"></td>
+                                            <td class="p-4 font-mono-data font-bold text-emerald-600" x-text="formatCurrency(cli.limite_credito)"></td>
+                                            <td class="p-4">
+                                                <button @click="editClient(cli)" class="text-brand-600 hover:text-brand-900 font-bold hover:underline">Ajustar Límite <i class="fa-solid fa-sliders"></i></button>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- INSPECTOR DE RED API DE DEEPSEEK (CONSOLA DE DESARROLLO) -->
+            <footer class="bg-slate-900 border-t border-slate-800 text-slate-300 transition-all duration-300 relative shrink-0" :class="consoleOpen ? 'h-64' : 'h-10'">
+                <!-- Header Consola -->
+                <div class="h-10 bg-slate-950 flex items-center justify-between px-6 cursor-pointer" @click="consoleOpen = !consoleOpen">
+                    <span class="text-xs font-semibold uppercase tracking-widest text-brand-200 flex items-center gap-2">
+                        <i class="fa-solid fa-terminal" :class="apiMode === 'real' ? 'text-emerald-400' : 'text-amber-400'"></i> 
+                        API Network Live Inspector (Consola de Sincronización)
+                    </span>
+                    <div class="flex items-center gap-4">
+                        <div class="flex items-center gap-1 text-[11px] font-mono-data">
+                            <span class="text-slate-400">Endpoint Base:</span>
+                            <input type="text" x-model="apiBaseUrl" @click.stop class="bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-white text-[10px] focus:outline-none w-48">
+                        </div>
+                        <button class="text-slate-400 hover:text-white text-xs">
+                            <i class="fa-solid" :class="consoleOpen ? 'fa-chevron-down' : 'fa-chevron-up'"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Lista de logs de red reales/simulados -->
+                <div x-show="consoleOpen" class="h-54 overflow-y-auto p-4 space-y-2 font-mono text-[11px] leading-relaxed select-all">
+                    <div x-show="apiLogs.length === 0" class="text-center text-slate-500 py-8">No se han registrado peticiones HTTP aún. Interactúa con el ERP para auditar el tráfico en vivo hacia el Backend.</div>
+                    
+                    <template x-for="log in apiLogs" :key="log.timestamp">
+                        <div class="border-b border-slate-800 pb-2 space-y-1">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-slate-500 font-semibold" x-text="log.time"></span>
+                                    <span :class="log.status < 300 ? 'bg-emerald-500/20 text-accent-success' : 'bg-rose-500/20 text-accent-danger'" class="px-1.5 py-0.5 rounded text-[9px] font-bold" x-text="log.status"></span>
+                                    <span class="text-brand-300 font-bold" x-text="log.method"></span>
+                                    <span class="text-white font-semibold" x-text="log.url"></span>
+                                </div>
+                                <span class="text-[9px] text-slate-500 uppercase tracking-wider" x-text="log.isReal ? 'Real FastAPI (CORS)' : 'Simulado en Navegador'"></span>
+                            </div>
+                            <div class="pl-4 grid grid-cols-2 gap-4 text-slate-400">
+                                <div><strong class="text-slate-500">Payload Envío:</strong> <span class="text-indigo-200" x-text="JSON.stringify(log.request)"></span></div>
+                                <div><strong class="text-slate-500">Payload Respuesta:</strong> <span class="text-emerald-200" x-text="JSON.stringify(log.response)"></span></div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </footer>
+
+        </main>
+    </div>
+
+    <!-- MODAL PRINCIPAL CONTENEDOR -->
+    <div x-show="modalActive" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40 flex items-center justify-center p-4" x-transition>
+        <div class="bg-white rounded-3xl p-6 max-w-xl w-full shadow-2xl border border-slate-100 space-y-6" @click.outside="modalActive = false">
+            
+            <div class="flex justify-between items-center border-b pb-3">
+                <h3 class="text-lg font-bold text-slate-900 font-display" x-text="modalTitle"></h3>
+                <button @click="modalActive = false" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+
+            <!-- MODAL: CREAR PRODUCTO (Cumple especificación 3.3) -->
+            <div x-show="currentModalType === 'product_create'" class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Código de barras</label>
+                    <input type="text" x-model="productForm.codigo_barras" class="w-full border rounded-xl p-2.5 text-xs font-mono" placeholder="7790895000997">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Nombre</label>
+                    <input type="text" x-model="productForm.nombre" class="w-full border rounded-xl p-2.5 text-xs" placeholder="Gaseosa Cola 2.25 lts">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Marca</label>
+                    <input type="text" x-model="productForm.marca" class="w-full border rounded-xl p-2.5 text-xs" placeholder="Coca Cola">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">SKU</label>
+                    <input type="text" x-model="productForm.sku" class="w-full border rounded-xl p-2.5 text-xs font-mono" placeholder="SKU123">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Precio de costo</label>
+                    <input type="number" x-model.number="productForm.precio_costo" class="w-full border rounded-xl p-2.5 text-xs font-mono" placeholder="900">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Precio de venta</label>
+                    <input type="number" x-model.number="productForm.precio_venta" class="w-full border rounded-xl p-2.5 text-xs font-mono" placeholder="1500">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Categoría</label>
+                    <select x-model="productForm.categoria_id" class="w-full border rounded-xl p-2.5 text-xs bg-white">
+                        <template x-for="cat in categories" :key="cat.id">
+                            <option :value="cat.id" x-text="cat.nombre"></option>
+                        </template>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Cantidad Inicial</label>
+                    <input type="number" x-model.number="productForm.cantidad_inicial" class="w-full border rounded-xl p-2.5 text-xs font-mono" placeholder="20">
+                </div>
+                <div class="col-span-2 flex justify-end gap-2 border-t pt-4">
+                    <button @click="modalActive = false" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold">Cancelar</button>
+                    <button @click="submitProductForm()" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold shadow-sm">Guardar Producto</button>
+                </div>
+            </div>
+
+            <!-- MODAL: AJUSTAR LÍMITE CLIENTE -->
+            <div x-show="currentModalType === 'client_edit'" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Límite de Crédito Autorizado ($)</label>
+                    <input type="number" x-model.number="clientForm.limite_credito" class="w-full border rounded-xl p-3 text-sm font-mono" placeholder="50000">
+                </div>
+                <div class="flex justify-end gap-2 border-t pt-4">
+                    <button @click="modalActive = false" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold">Cancelar</button>
+                    <button @click="submitClientEdit()" class="px-4 py-2 bg-brand-600 text-white rounded-xl text-xs font-bold">Ajustar Límite</button>
+                </div>
+            </div>
+
+            <!-- MODAL: REGISTRAR CLIENTE NUEVO (Especificación 9.2) -->
+            <div x-show="currentModalType === 'client_create'" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Nombre Completo / Razón Social</label>
+                    <input type="text" x-model="clientForm.nombre" class="w-full border rounded-xl p-2.5 text-xs" placeholder="Juan Pérez">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Tipo Identificación</label>
+                        <select x-model="clientForm.tipo_documento" class="w-full border rounded-xl p-2.5 text-xs bg-white">
+                            <option value="DNI">DNI</option>
+                            <option value="CUIT">CUIT</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Nro Identificación</label>
+                        <input type="text" x-model="clientForm.numero_documento" class="w-full border rounded-xl p-2.5 text-xs font-mono" placeholder="30123456">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Teléfono</label>
+                    <input type="text" x-model="clientForm.telefono" class="w-full border rounded-xl p-2.5 text-xs font-mono" placeholder="1166667777">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Límite de Crédito Inicial ($)</label>
+                    <input type="number" x-model.number="clientForm.limite_credito" class="w-full border rounded-xl p-2.5 text-xs font-mono" placeholder="50000">
+                </div>
+                <div class="flex justify-end gap-2 border-t pt-4">
+                    <button @click="modalActive = false" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold">Cancelar</button>
+                    <button @click="submitClientForm()" class="px-4 py-2 bg-brand-600 text-white rounded-xl text-xs font-bold">Registrar</button>
+                </div>
+            </div>
+
+            <!-- MODAL: APERTURA CAJA (Cumple especificación 5.2) -->
+            <div x-show="currentModalType === 'caja_apertura'" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Monto de Apertura Inicial ($)</label>
+                    <input type="number" x-model.number="cajaForm.monto_inicial" class="w-full border rounded-xl p-3 text-sm font-mono" placeholder="50000">
+                </div>
+                <div class="flex justify-end gap-2 border-t pt-4">
+                    <button @click="modalActive = false" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold">Cancelar</button>
+                    <button @click="submitCajaApertura()" class="px-4 py-2 bg-brand-600 text-white rounded-xl text-xs font-bold">Abrir Caja</button>
+                </div>
+            </div>
+
+            <!-- MODAL: CIERRE CAJA (Cumple especificación 5.3) -->
+            <div x-show="currentModalType === 'caja_cierre'" class="space-y-4">
+                <div class="p-3 bg-indigo-50 text-brand-900 border border-indigo-100 rounded-xl text-xs flex justify-between">
+                    <span>Monto Esperado en Sistema:</span>
+                    <strong class="font-mono-data" x-text="formatCurrency(cajaState.saldo_actual)"></strong>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Monto Real Contado Físicamente ($)</label>
+                    <input type="number" x-model.number="cajaForm.monto_real" class="w-full border rounded-xl p-3 text-sm font-mono" placeholder="72000">
+                </div>
+                <div class="flex justify-end gap-2 border-t pt-4">
+                    <button @click="modalActive = false" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold">Cancelar</button>
+                    <button @click="submitCajaCierre()" class="px-4 py-2 bg-rose-500 text-white rounded-xl text-xs font-bold">Cerrar y Declarar Arqueo</button>
+                </div>
+            </div>
+
+            <!-- MODAL: CREAR COMPRA (Especificación 7.3) -->
+            <div x-show="currentModalType === 'compra_create'" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Proveedor</label>
+                    <select x-model="compraForm.proveedor_id" class="w-full border rounded-xl p-2.5 text-xs bg-white">
+                        <template x-for="prov in proveedores" :key="prov.id">
+                            <option :value="prov.id" x-text="prov.nombre"></option>
+                        </template>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Producto a Ingresar</label>
+                    <select x-model="compraForm.producto_id" class="w-full border rounded-xl p-2.5 text-xs bg-white">
+                        <template x-for="p in products" :key="p.id">
+                            <option :value="p.id" x-text="p.nombre"></option>
+                        </template>
+                    </select>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Cantidad a Comprar</label>
+                        <input type="number" x-model.number="compraForm.cantidad" class="w-full border rounded-xl p-2.5 text-xs" placeholder="10">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Precio Unitario de Costo ($)</label>
+                        <input type="number" x-model.number="compraForm.precio_unitario" class="w-full border rounded-xl p-2.5 text-xs" placeholder="800">
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 border-t pt-4">
+                    <button @click="modalActive = false" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold">Cancelar</button>
+                    <button @click="submitCompraForm()" class="px-4 py-2 bg-brand-600 text-white rounded-xl text-xs font-bold">Crear OC</button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        function erpApp() {
+            return {
+                // Configuración de Entornos de Red de la especificación
+                apiMode: 'mock', // 'real' -> Consume localhost:8000. 'mock' -> simulación
+                apiBaseUrl: 'http://localhost:8000',
+                authenticated: true,
+                currentUser: { id: 1, username: 'admin', nombre: 'Administrador', rol: 'admin' },
+                activeTab: 'dashboard',
+                currentTime: new Date(),
+                consoleOpen: true,
+                apiLogs: [],
+                toasts: [],
+                processingSale: false,
+                loggingIn: false,
+
+                // Formularios
+                loginForm: { username: 'admin', password: 'admin' },
+                loginError: '',
+                productForm: { codigo_barras: '', nombre: '', marca: '', sku: '', precio_costo: 0, precio_venta: 0, categoria_id: 1, cantidad_inicial: 20 },
+                cajaForm: { monto_inicial: 50000, monto_real: 0 },
+                compraForm: { proveedor_id: 1, producto_id: 1, cantidad: 10, precio_unitario: 800 },
+                clientForm: { id: null, nombre: '', tipo_documento: 'DNI', numero_documento: '', telefono: '', limite_credito: 50000 },
+
+                // Base de Datos Local Híbrida
+                products: [
+                    { id: 1, codigo_barras: "7790895000997", nombre: "Gaseosa Cola - Coca Cola Sabor Original 2.25 lts", marca: "Coca Cola", sku: "00246613", precio_costo: 900.0, precio_venta: 7500.0, categoria_id: 1, stock_actual: 50.0, stock_minimo: 5.0 },
+                    { id: 2, codigo_barras: "7791234567890", nombre: "Yerba Mate Playadito 1kg", marca: "Playadito", sku: "00123456", precio_costo: 1200.0, precio_venta: 3200.0, categoria_id: 2, stock_actual: 12.0, stock_minimo: 15.0 },
+                    { id: 3, codigo_barras: "7795555444333", nombre: "Aceite de Girasol Natura 1.5L", marca: "Natura", sku: "00998877", precio_costo: 1500.0, precio_venta: 3800.0, categoria_id: 2, stock_actual: 0.0, stock_minimo: 8.0 }
+                ],
+                categories: [
+                    { id: 1, nombre: "Bebidas" },
+                    { id: 2, nombre: "Almacén" }
+                ],
+                clientes: [
+                    { id: 1, nombre: "Juan Pérez", tipo_documento: "DNI", numero_documento: "30123456", telefono: "1166667777", saldo_cta_corriente: 22000.0, limite_credito: 50000.0 }
+                ],
+                proveedores: [
+                    { id: 1, nombre: "Distribuidora SA", cuit: "30-99999999-9", telefono: "1144445555" }
+                ],
+                cajaState: {
+                    abierta: true,
+                    saldo_actual: 72000.0
+                },
+                cajaMovimientos: [
+                    { id: 1, tipo: 'apertura', monto: 50000.0, fecha: new Date() }
+                ],
+                compras: [
+                    { id: 1, numero: "C-00000001", proveedor_nombre: "Distribuidora SA", total: 12500, estado: 'recibida', fecha: new Date() }
+                ],
+                dashboard: {
+                    total_productos: 3,
+                    valor_stock: 450000.0,
+                    total_clientes: 1,
+                    stock_bajo: 1,
+                    ventas_hoy: 22000.0,
+                    ventas_mes: 22000.0,
+                    ultimo_producto: { nombre: "Coca Cola 2.25L", codigo_barras: "7790895000997", fecha: new Date() }
+                },
+
+                // UI POS
+                posLookupCode: '',
+                selectedPOSCategory: 'all',
+                lookupProduct: {},
+                lookupBadges: { carrefour: 'loading', vea: 'loading', masonline: 'loading', carrefour_url: '', vea_url: '', masonline_url: '' },
+                posCart: { id: null, items: [], subtotal: 0, descuento: 0, total: 0, medio_pago: 'efectivo', cliente_id: '' },
+
+                modalActive: false,
+                modalTitle: '',
+                currentModalType: '',
+                productSearch: '',
+
+                // Iniciar la app y comprobar si hay JWT guardado en localstorage
+                init() {
+                    setInterval(() => { this.currentTime = new Date(); }, 1000);
+                    
+                    const savedToken = localStorage.getItem('apex_token');
+                    if (savedToken) {
+                        this.authenticated = true;
+                        this.verifyCajaState();
+                        this.fetchDashboardData();
+                    } else {
+                        // Por defecto iniciamos con autenticación mock para no asustar al usuario
+                        this.authenticated = true;
+                        this.verifyCajaState();
+                        this.fetchDashboardData();
+                    }
+                },
+
+                // Re-inicializador rápido al conmutar entre API real y simulador
+                toggleApiMode(mode) {
+                    this.apiMode = mode;
+                    this.addToast('info', `Conmutado a modo: ${mode === 'real' ? 'API FastAPI Real' : 'Simulador Offline'}`);
+                    this.verifyCajaState();
+                    this.fetchDashboardData();
+                    this.fetchProducts();
+                    this.fetchCategories();
+                    this.fetchClientes();
+                    this.fetchProveedores();
+                },
+
+                // Gestor estético de notificaciones para evitar alert()
+                addToast(type, message) {
+                    const id = Date.now();
+                    this.toasts.push({ id, type, message });
+                    setTimeout(() => { this.removeToast(id); }, 5000);
+                },
+
+                removeToast(id) {
+                    this.toasts = this.toasts.filter(t => t.id !== id);
+                },
+
+                // Motor Híbrido AJAX / fetch
+                async request(method, path, body = null) {
+                    const timestamp = Date.now();
+                    const time = new Date().toLocaleTimeString();
+                    const url = `${this.apiBaseUrl}${path}`;
+                    
+                    // Si el modo es real, hacemos el fetch real hacia FastAPI
+                    if (this.apiMode === 'real') {
+                        const headers = {
+                            'Content-Type': 'application/json'
+                        };
+                        const token = localStorage.getItem('apex_token');
+                        if (token) {
+                            headers['Authorization'] = `Bearer ${token}`;
+                        }
+
+                        try {
+                            const options = { method, headers };
+                            if (body && method !== 'GET') {
+                                options.body = JSON.stringify(body);
+                            }
+
+                            const response = await fetch(url, options);
+                            const responseData = await response.json();
+
+                            this.apiLogs.unshift({
+                                timestamp,
+                                time,
+                                method,
+                                url: path,
+                                request: body || {},
+                                status: response.status,
+                                response: responseData,
+                                isReal: true
+                            });
+
+                            if (!response.ok) {
+                                throw new Error(responseData.detail || 'Error en petición de red');
+                            }
+
+                            return responseData;
+
+                        } catch (err) {
+                            console.error(err);
+                            this.apiLogs.unshift({
+                                timestamp,
+                                time,
+                                method,
+                                url: path,
+                                request: body || {},
+                                status: 500,
+                                response: { detail: err.message },
+                                isReal: true
+                            });
+                            this.addToast('error', `Error API: ${err.message}`);
+                            throw err;
+                        }
+                    } else {
+                        // Simulación local rápida
+                        await new Promise(resolve => setTimeout(resolve, 150));
+                        return {
+                            log: (status, responseData) => {
+                                this.apiLogs.unshift({
+                                    timestamp,
+                                    time,
+                                    method,
+                                    url: path,
+                                    request: body || {},
+                                    status,
+                                    response: responseData,
+                                    isReal: false
+                                });
+                            }
+                        };
+                    }
+                },
+
+                formatCurrency(value) {
+                    return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(value);
+                },
+
+                formatDate(date) {
+                    return date.toLocaleString();
+                },
+
+                formatDateShort(date) {
+                    return new Date(date).toLocaleDateString() + ' ' + new Date(date).toLocaleTimeString();
+                },
+
+                // Auth Login Handler (Fase 1 - Sección 2.1)
+                async handleLogin() {
+                    this.loggingIn = true;
+                    try {
+                        const response = await this.request('POST', '/api/auth/login', this.loginForm);
+                        
+                        if (this.apiMode === 'real') {
+                            if (response.ok && response.data.access_token) {
+                                localStorage.setItem('apex_token', response.data.access_token);
+                                this.authenticated = true;
+                                this.currentUser = response.data;
+                                this.addToast('success', 'Autenticado correctamente con backend');
+                                this.verifyCajaState();
+                                this.fetchDashboardData();
+                            }
+                        } else {
+                            // Flujo simulador
+                            if (this.loginForm.username === 'admin' && this.loginForm.password === 'admin') {
+                                this.authenticated = true;
+                                this.currentUser = { id: 1, username: 'admin', nombre: 'Administrador', rol: 'admin' };
+                                response.log(200, { ok: true, message: "Login exitoso", data: { access_token: "eyJhbGciOi...", token_type: "bearer", username: "admin", rol: "admin", nombre: "Administrador" } });
+                                this.addToast('success', 'Sesión iniciada (Modo Simulador)');
+                                this.verifyCajaState();
+                                this.fetchDashboardData();
+                            } else {
+                                response.log(401, { detail: "Usuario o contraseña incorrectos" });
+                                this.loginError = "Usuario o contraseña incorrectos";
+                                this.addToast('error', 'Credenciales incorrectas');
+                            }
+                        }
+                    } catch (e) {
+                        this.loginError = e.message;
+                    } finally {
+                        this.loggingIn = false;
+                    }
+                },
+
+                logout() {
+                    localStorage.removeItem('apex_token');
+                    this.authenticated = false;
+                    this.addToast('info', 'Sesión cerrada');
+                },
+
+                // Métricas del dashboard (Endpoint: GET /api/dashboard/resumen)
+                async fetchDashboardData() {
+                    try {
+                        const response = await this.request('GET', '/api/dashboard/resumen');
+                        if (this.apiMode === 'real') {
+                            this.dashboard = response.data;
+                        } else {
+                            // Simulación
+                            const valorStockCalculado = this.products.reduce((acc, curr) => acc + (curr.precio_venta * curr.stock_actual), 0);
+                            const stockBajoCount = this.products.filter(p => p.stock_actual <= p.stock_minimo).length;
+
+                            this.dashboard = {
+                                total_productos: this.products.length,
+                                valor_stock: valorStockCalculado,
+                                total_clientes: this.clientes.length,
+                                stock_bajo: stockBajoCount,
+                                ventas_hoy: this.cajaState.saldo_actual - 50000.0 > 0 ? this.cajaState.saldo_actual - 50000.0 : 0,
+                                ventas_mes: this.cajaState.saldo_actual - 50000.0 > 0 ? this.cajaState.saldo_actual - 50000.0 + 125000.0 : 125000.0,
+                                ultimo_producto: {
+                                    nombre: this.products[this.products.length - 1].nombre,
+                                    codigo_barras: this.products[this.products.length - 1].codigo_barras,
+                                    fecha: new Date()
+                                }
+                            };
+                            response.log(200, { ok: true, data: this.dashboard });
+                        }
+                    } catch (e) {
+                        console.error("Dashboard offline");
+                    }
+                },
+
+                // Lookup Multi-fuente recomendado (Punto 3.5 API_DOCUMENTACION.md)
+                async triggerPOSLookup() {
+                    if (!this.posLookupCode) return;
+
+                    try {
+                        this.addToast('info', 'Iniciando búsqueda de código de barras...');
+                        // 1. Primer lookup general para verificar en local o datos primarios
+                        const response = await this.request('POST', '/api/productos/lookup', { barcode: this.posLookupCode });
+
+                        if (this.apiMode === 'real') {
+                            const prod = response.data;
+                            if (response._cached) {
+                                // Ya estaba guardado en local, añadir directo al POS
+                                this.addPRODToPOS(prod);
+                                this.posLookupCode = '';
+                                this.addToast('success', `${prod.nombre} añadido al carrito.`);
+                            } else {
+                                // No estaba guardado, disparar paralelización recomendada
+                                this.lookupProduct = prod;
+                                this.triggerParallelSupermarketLookup(this.posLookupCode);
+                            }
+                        } else {
+                            // Simulación del flujo paralelo recomendado
+                            const prodLocal = this.products.find(p => p.codigo_barras === this.posLookupCode);
+                            if (prodLocal) {
+                                response.log(200, { ok: true, message: "Encontrado en base de datos local", data: prodLocal, _cached: true });
+                                this.addPRODToPOS(prodLocal);
+                                this.posLookupCode = '';
+                                this.addToast('success', `${prodLocal.nombre} añadido (En BD local)`);
+                                return;
+                            }
+
+                            // No está en local, cargamos plantilla de lookup
+                            this.lookupProduct = {
+                                codigo_barras: this.posLookupCode,
+                                nombre: "Arroz Largo Fino Molinos Ala 1kg (Cargado externamente)",
+                                marca: "Molinos Ala",
+                                precio_referencia: 1100.0,
+                                precio_costo: 750.0,
+                                precio_venta: 1250.0,
+                                sku: "ALA779",
+                                categoria_id: 2
+                            };
+                            response.log(200, { ok: true, message: "Buscando en supermercados...", data: this.lookupProduct, _cached: false });
+                            this.triggerParallelSupermarketLookup(this.posLookupCode);
+                        }
+                    } catch (err) {
+                        this.addToast('warning', 'Código de barras no registrado. Crea el producto manualmente.');
+                        this.showModal('product_create');
+                        this.productForm.codigo_barras = this.posLookupCode;
+                    }
+                },
+
+                // Punto 3.5 Flujo recomendado de badges paralelos con loaders independientes
+                async triggerParallelSupermarketLookup(barcode) {
+                    this.lookupBadges = { 
+                        carrefour: 'loading', vea: 'loading', masonline: 'loading',
+                        carrefour_url: '', vea_url: '', masonline_url: '' 
+                    };
+
+                    const superstores = ['carrefour', 'vea', 'masonline'];
+                    superstores.forEach(async (store) => {
+                        try {
+                            const res = await this.request('POST', '/api/productos/lookup', { barcode: barcode, fuente: store });
+                            if (this.apiMode === 'real') {
+                                this.lookupBadges[store] = res.data.precio_referencia || 'not_found';
+                                this.lookupBadges[`${store}_url`] = res.data.url;
+                            } else {
+                                // Simular tiempos de respuesta variables por supermercado
+                                const delays = { carrefour: 600, vea: 1000, masonline: 1400 };
+                                const prices = { carrefour: 1100.0, vea: 1080.0, masonline: 'not_found' };
+                                const urls = {
+                                    carrefour: 'https://www.carrefour.com.ar',
+                                    vea: 'https://www.vea.com.ar',
+                                    masonline: 'https://www.masonline.com.ar'
+                                };
+                                setTimeout(() => {
+                                    this.lookupBadges[store] = prices[store];
+                                    this.lookupBadges[`${store}_url`] = urls[store];
+                                }, delays[store]);
+                            }
+                        } catch (e) {
+                            this.lookupBadges[store] = 'not_found';
+                        }
+                    });
+                },
+
+                saveLookupToLocal(prod) {
+                    const newProd = {
+                        id: this.products.length + 1,
+                        codigo_barras: prod.codigo_barras,
+                        nombre: prod.nombre,
+                        marca: prod.marca,
+                        sku: prod.sku || 'SKU_NEW',
+                        precio_costo: prod.precio_costo || 800.0,
+                        precio_venta: prod.precio_venta || 1250.0,
+                        categoria_id: prod.categoria_id || 1,
+                        stock_actual: 50.0,
+                        stock_minimo: 5.0
+                    };
+                    this.products.push(newProd);
+                    this.addPRODToPOS(newProd);
+                    this.lookupProduct = {};
+                    this.posLookupCode = '';
+                    this.addToast('success', 'Producto guardado en base de datos local e insertado en venta.');
+                },
+
+                // Lógica de Venta (POS)
+                addPRODToPOS(prod) {
+                    if (!this.cajaState.abierta) {
+                        this.addToast('warning', 'La caja no está abierta. Ábrala para poder realizar una venta.');
+                        return;
+                    }
+                    if (prod.stock_actual <= 0) {
+                        this.addToast('error', `Sin stock para ${prod.nombre}`);
+                        return;
+                    }
+
+                    if (!this.posCart.id) {
+                        this.posCart.id = "V-" + String(Date.now()).slice(-8);
+                        this.posCart.items = [];
+                    }
+
+                    const itemExistente = this.posCart.items.find(i => i.producto_id === prod.id);
+                    if (itemExistente) {
+                        if (itemExistente.cantidad + 1 > prod.stock_actual) {
+                            this.addToast('error', 'Excede el stock disponible');
+                            return;
+                        }
+                        itemExistente.cantidad++;
+                        itemExistente.subtotal = itemExistente.cantidad * itemExistente.precio_unitario;
+                    } else {
+                        this.posCart.items.push({
+                            id: Date.now(),
+                            producto_id: prod.id,
+                            producto_nombre: prod.nombre,
+                            cantidad: 1,
+                            precio_unitario: prod.precio_venta,
+                            subtotal: prod.precio_venta
+                        });
+                    }
+
+                    this.recalcPOSCart();
+                },
+
+                updatePOSQty(item, modifier) {
+                    const prod = this.products.find(p => p.id === item.producto_id);
+                    if (item.cantidad + modifier <= 0) {
+                        this.removePOSItem(item);
+                        return;
+                    }
+                    if (item.cantidad + modifier > prod.stock_actual) {
+                        this.addToast('error', 'Stock insuficiente en base de datos');
+                        return;
+                    }
+
+                    item.cantidad += modifier;
+                    item.subtotal = item.cantidad * item.precio_unitario;
+                    this.recalcPOSCart();
+                },
+
+                removePOSItem(item) {
+                    this.posCart.items = this.posCart.items.filter(i => i.id !== item.id);
+                    this.recalcPOSCart();
+                },
+
+                recalcPOSCart() {
+                    this.posCart.subtotal = this.posCart.items.reduce((acc, curr) => acc + curr.subtotal, 0);
+                    this.posCart.total = Math.max(0, this.posCart.subtotal - this.posCart.descuento);
+                },
+
+                clearPOSCart() {
+                    this.posCart = { id: null, items: [], subtotal: 0, descuento: 0, total: 0, medio_pago: 'efectivo', cliente_id: '' };
+                },
+
+                // Confirmar Venta (Flujo Completo de la especificación - Sección 6.6)
+                async confirmPOSSale() {
+                    if (!this.cajaState.abierta) {
+                        this.addToast('error', 'La caja no está abierta. Ábrala para poder cobrar.');
+                        return;
+                    }
+
+                    this.processingSale = true;
+                    try {
+                        // Si es Cuenta Corriente, validamos límite de crédito del cliente (6.6)
+                        if (this.posCart.medio_pago === 'cta_corriente') {
+                            if (!this.posCart.cliente_id) {
+                                this.addToast('warning', 'Selecciona el cliente para imputar la Cuenta Corriente');
+                                this.processingSale = false;
+                                return;
+                            }
+                            const cli = this.clientes.find(c => c.id == this.posCart.cliente_id);
+                            if (cli && (cli.saldo_cta_corriente + this.posCart.total > cli.limite_credito)) {
+                                this.addToast('error', `Excede límite de crédito de ${cli.nombre}: límite=${this.formatCurrency(cli.limite_credito)}, adeudaría=${this.formatCurrency(cli.saldo_cta_corriente + this.posCart.total)}`);
+                                this.processingSale = false;
+                                return;
+                            }
+                        }
+
+                        const response = await this.request('PUT', `/api/ventas/${this.posCart.id}/confirmar`, {
+                            medio_pago: this.posCart.medio_pago,
+                            descuento: this.posCart.descuento
+                        });
+
+                        if (this.apiMode === 'real') {
+                            this.addToast('success', response.message);
+                        } else {
+                            // Lógica de simulación
+                            this.posCart.items.forEach(item => {
+                                const prod = this.products.find(p => p.id === item.producto_id);
+                                if (prod) prod.stock_actual -= item.cantidad;
+                            });
+
+                            if (this.posCart.medio_pago === 'cta_corriente' && this.posCart.cliente_id) {
+                                const cliente = this.clientes.find(c => c.id == this.posCart.cliente_id);
+                                if (cliente) cliente.saldo_cta_corriente += this.posCart.total;
+                            }
+
+                            this.cajaState.saldo_actual += this.posCart.total;
+                            this.cajaMovimientos.unshift({
+                                id: Date.now(),
+                                tipo: 'ingreso (venta)',
+                                monto: this.posCart.total,
+                                fecha: new Date()
+                            });
+
+                            response.log(200, {
+                                ok: true,
+                                message: `Venta ${this.posCart.id} confirmada. Total: ${this.formatCurrency(this.posCart.total)}`,
+                                data: this.posCart
+                            });
+                            this.addToast('success', 'Venta confirmada exitosamente');
+                        }
+
+                        this.clearPOSCart();
+                        this.fetchDashboardData();
+                    } catch (e) {
+                        // Error capturado en AJAX request
+                    } finally {
+                        this.processingSale = false;
+                    }
+                },
+
+                // Fetchers reales / Mocks
+                async verifyCajaState() {
+                    try {
+                        const response = await this.request('GET', '/api/caja/estado');
+                        if (this.apiMode === 'real') {
+                            this.cajaState = response.data;
+                        } else {
+                            response.log(200, { ok: true, data: this.cajaState });
+                        }
+                    } catch (e) {
+                        this.addToast('error', 'Fallo al verificar estado de caja en el backend');
+                    }
+                },
+
+                async fetchProducts() {
+                    try {
+                        const response = await this.request('GET', `/api/productos?search=${this.productSearch}`);
+                        if (this.apiMode === 'real') {
+                            this.products = response.data;
+                        } else {
+                            response.log(200, { ok: true, data: this.products });
+                        }
+                    } catch (e) {}
+                },
+
+                async fetchCategories() {
+                    try {
+                        const response = await this.request('GET', '/api/categorias');
+                        if (this.apiMode === 'real') {
+                            this.categories = response.data;
+                        } else {
+                            response.log(200, { ok: true, data: this.categories });
+                        }
+                    } catch (e) {}
+                },
+
+                async fetchClientes() {
+                    try {
+                        const response = await this.request('GET', '/api/clientes');
+                        if (this.apiMode === 'real') {
+                            this.clientes = response.data;
+                        } else {
+                            response.log(200, { ok: true, data: this.clientes });
+                        }
+                    } catch (e) {}
+                },
+
+                async fetchProveedores() {
+                    try {
+                        const response = await this.request('GET', '/api/proveedores');
+                        if (this.apiMode === 'real') {
+                            this.proveedores = response.data;
+                        } else {
+                            response.log(200, { ok: true, data: this.proveedores });
+                        }
+                    } catch (e) {}
+                },
+
+                async fetchCajaMovimientos() {
+                    try {
+                        const response = await this.request('GET', '/api/caja/movimientos');
+                        if (this.apiMode === 'real') {
+                            this.cajaMovimientos = response.data;
+                        } else {
+                            response.log(200, { ok: true, data: this.cajaMovimientos });
+                        }
+                    } catch (e) {}
+                },
+
+                async fetchCompras() {
+                    try {
+                        const response = await this.request('GET', '/api/compras');
+                        if (this.apiMode === 'real') {
+                            this.compras = response.data;
+                        } else {
+                            response.log(200, { ok: true, data: this.compras });
+                        }
+                    } catch (e) {}
+                },
+
+                // Modales Controllers y Submits
+                showModal(type) {
+                    this.currentModalType = type;
+                    this.modalActive = true;
+                    if (type === 'product_create') {
+                        this.modalTitle = "Crear Nuevo Producto (Manual)";
+                        this.productForm = { codigo_barras: '', nombre: '', marca: '', sku: '', precio_costo: 0, precio_venta: 0, categoria_id: 1, cantidad_inicial: 20 };
+                    } else if (type === 'client_create') {
+                        this.modalTitle = "Registrar Cliente de Cuenta Corriente";
+                        this.clientForm = { id: null, nombre: '', tipo_documento: 'DNI', numero_documento: '', telefono: '', limite_credito: 50000 };
+                    } else if (type === 'caja_apertura') {
+                        this.modalTitle = "Apertura de Caja";
+                    } else if (type === 'caja_cierre') {
+                        this.modalTitle = "Cierre de Jornada (Arqueo)";
+                    } else if (type === 'compra_create') {
+                        this.modalTitle = "Crear Orden de Compra Pendiente";
+                    }
+                },
+
+                editProduct(prod) {
+                    this.productForm = { ...prod };
+                    this.showModal('product_create');
+                    this.modalTitle = `Editar Producto #${prod.id}`;
+                },
+
+                editClient(cli) {
+                    this.clientForm = { ...cli };
+                    this.showModal('client_edit');
+                    this.modalTitle = `Ajustar Límite de Crédito: ${cli.nombre}`;
+                },
+
+                async submitProductForm() {
+                    try {
+                        const response = await this.request('POST', '/api/productos', this.productForm);
+                        if (this.apiMode === 'real') {
+                            this.addToast('success', 'Producto guardado en backend');
+                        } else {
+                            const nuevo = {
+                                id: this.products.length + 1,
+                                codigo_barras: this.productForm.codigo_barras,
+                                nombre: this.productForm.nombre,
+                                marca: this.productForm.marca,
+                                sku: this.productForm.sku,
+                                precio_costo: this.productForm.precio_costo,
+                                precio_venta: this.productForm.precio_venta,
+                                categoria_id: parseInt(this.productForm.categoria_id),
+                                stock_actual: parseFloat(this.productForm.cantidad_inicial),
+                                stock_minimo: 5.0
+                            };
+                            this.products.push(nuevo);
+                            response.log(200, { ok: true, message: "Producto creado", data: nuevo });
+                            this.addToast('success', 'Producto creado (Modo simulador)');
+                        }
+                        this.modalActive = false;
+                        this.fetchProducts();
+                        this.fetchDashboardData();
+                    } catch (e) {}
+                },
+
+                async submitClientForm() {
+                    try {
+                        const response = await this.request('POST', '/api/clientes', this.clientForm);
+                        if (this.apiMode === 'real') {
+                            this.addToast('success', 'Cliente registrado en backend');
+                        } else {
+                            const nuevo = {
+                                id: this.clientes.length + 1,
+                                ...this.clientForm,
+                                saldo_cta_corriente: 0.0
+                            };
+                            this.clientes.push(nuevo);
+                            response.log(200, { ok: true, data: nuevo });
+                            this.addToast('success', 'Cliente registrado (Modo simulador)');
+                        }
+                        this.modalActive = false;
+                        this.fetchClientes();
+                    } catch (e) {}
+                },
+
+                async submitClientEdit() {
+                    try {
+                        const response = await this.request('PUT', `/api/clientes/${this.clientForm.id}`, {
+                            limite_credito: this.clientForm.limite_credito
+                        });
+                        if (this.apiMode === 'real') {
+                            this.addToast('success', 'Límite de crédito actualizado');
+                        } else {
+                            const cli = this.clientes.find(c => c.id == this.clientForm.id);
+                            if (cli) cli.limite_credito = this.clientForm.limite_credito;
+                            response.log(200, { ok: true });
+                            this.addToast('success', 'Límite de crédito modificado');
+                        }
+                        this.modalActive = false;
+                        this.fetchClientes();
+                    } catch (e) {}
+                },
+
+                async submitCajaApertura() {
+                    try {
+                        const response = await this.request('POST', '/api/caja/apertura', this.cajaForm);
+                        if (this.apiMode === 'real') {
+                            this.cajaState.abierta = true;
+                            this.addToast('success', 'Caja abierta en backend');
+                        } else {
+                            this.cajaState.abierta = true;
+                            this.cajaState.saldo_actual = this.cajaForm.monto_inicial;
+                            this.cajaMovimientos.unshift({
+                                id: Date.now(),
+                                tipo: 'apertura',
+                                monto: this.cajaForm.monto_inicial,
+                                fecha: new Date()
+                            });
+                            response.log(200, { ok: true, message: "Caja abierta", data: this.cajaState });
+                            this.addToast('success', 'Caja abierta con éxito');
+                        }
+                        this.modalActive = false;
+                        this.verifyCajaState();
+                    } catch (e) {}
+                },
+
+                async submitCajaCierre() {
+                    try {
+                        const response = await this.request('POST', '/api/caja/cierre', this.cajaForm);
+                        if (this.apiMode === 'real') {
+                            this.cajaState.abierta = false;
+                            this.addToast('success', 'Caja cerrada y arqueo declarado');
+                        } else {
+                            const diff = this.cajaForm.monto_real - this.cajaState.saldo_actual;
+                            this.cajaState.abierta = false;
+                            this.cajaMovimientos.unshift({
+                                id: Date.now(),
+                                tipo: 'cierre',
+                                monto: this.cajaForm.monto_real,
+                                fecha: new Date()
+                            });
+                            response.log(200, { ok: true, message: `Caja cerrada. Diferencia: ${this.formatCurrency(diff)}`, data: { diferencia: diff } });
+                            this.addToast('success', `Caja cerrada con diferencia de ${this.formatCurrency(diff)}`);
+                        }
+                        this.modalActive = false;
+                        this.verifyCajaState();
+                    } catch (e) {}
+                },
+
+                async submitCompraForm() {
+                    try {
+                        const response = await this.request('POST', '/api/compras', this.compraForm);
+                        if (this.apiMode === 'real') {
+                            this.addToast('success', 'Orden de compra creada exitosamente');
+                        } else {
+                            const ocNum = "C-0000000" + (this.compras.length + 1);
+                            const prov = this.proveedores.find(p => p.id == this.compraForm.proveedor_id);
+                            
+                            const nuevaOC = {
+                                id: this.compras.length + 1,
+                                numero: ocNum,
+                                proveedor_nombre: prov ? prov.nombre : "Proveedor General",
+                                total: this.compraForm.cantidad * this.compraForm.precio_unitario,
+                                estado: 'pendiente',
+                                fecha: new Date(),
+                                meta_items: {
+                                    producto_id: this.compraForm.producto_id,
+                                    cantidad: this.compraForm.cantidad,
+                                    precio_unitario: this.compraForm.precio_unitario
+                                }
+                            };
+                            this.compras.unshift(nuevaOC);
+                            response.log(200, { ok: true, message: `Orden ${ocNum} creada`, data: nuevaOC });
+                            this.addToast('success', `Orden de compra ${ocNum} creada (Pendiente)`);
+                        }
+                        this.modalActive = false;
+                        this.fetchCompras();
+                    } catch (e) {}
+                },
+
+                async receivePurchase(comp) {
+                    try {
+                        const response = await this.request('PUT', `/api/compras/${comp.id}/recibir`);
+                        if (this.apiMode === 'real') {
+                            this.addToast('success', 'Stock e inventario de costos actualizados');
+                        } else {
+                            comp.estado = 'recibida';
+                            const prod = this.products.find(p => p.id == comp.meta_items.producto_id);
+                            if (prod) {
+                                prod.stock_actual += comp.meta_items.cantidad;
+                                prod.precio_costo = comp.meta_items.precio_unitario;
+                            }
+                            response.log(200, { ok: true, message: 'Stock e inventario actualizados.' });
+                            this.addToast('success', 'Stock ingresado al inventario');
+                        }
+                        this.fetchCompras();
+                        this.fetchProducts();
+                        this.fetchDashboardData();
+                    } catch (e) {}
+                },
+
+                async cancelPurchase(comp) {
+                    try {
+                        const response = await this.request('PUT', `/api/compras/${comp.id}/anular`);
+                        if (this.apiMode === 'real') {
+                            this.addToast('success', 'Compra anulada');
+                        } else {
+                            comp.estado = 'anulada';
+                            response.log(200, { ok: true });
+                            this.addToast('info', 'Compra anulada con éxito');
+                        }
+                        this.fetchCompras();
+                    } catch (e) {}
+                },
+
+                getCategoryName(id) {
+                    const cat = this.categories.find(c => c.id === id);
+                    return cat ? cat.nombre : 'General';
+                },
+
+                get filteredPOSProducts() {
+                    return this.products.filter(p => {
+                        const matchCat = this.selectedPOSCategory === 'all' || p.categoria_id === this.selectedPOSCategory;
+                        return matchCat;
+                    });
+                }
+            }
+        }
+    </script>
+</body>
+</html>
