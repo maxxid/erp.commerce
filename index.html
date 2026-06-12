@@ -176,6 +176,11 @@
                         <span>Arqueos y Caja</span>
                     </button>
 
+                    <button @click="activeTab = 'ventas'; fetchVentas()" :class="activeTab === 'ventas' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150">
+                        <i class="fa-solid fa-receipt text-lg w-5 text-center"></i>
+                        <span>Ventas</span>
+                    </button>
+
                     <button @click="activeTab = 'compras'; fetchCompras(); fetchProveedores()" :class="activeTab === 'compras' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150">
                         <i class="fa-solid fa-truck-ramp-box text-lg w-5 text-center"></i>
                         <span>Compras / Stock</span>
@@ -747,6 +752,66 @@
                     </div>
                 </div>
 
+                <!-- PESTAÑA: VENTAS -->
+                <div x-show="activeTab === 'ventas'" class="space-y-6" x-transition>
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-2xl font-bold text-slate-950 font-display">Historial de Ventas</h2>
+                            <p class="text-sm text-slate-500 mt-1">Consultá y gestioná las ventas registradas</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <select x-model="ventasFilter" @change="fetchVentas()" class="border border-slate-200 rounded-xl p-2 text-xs bg-white">
+                                <option value="">Todos los estados</option>
+                                <option value="confirmada">Confirmadas</option>
+                                <option value="pendiente">Pendientes</option>
+                                <option value="anulada">Anuladas</option>
+                            </select>
+                            <button @click="fetchVentas()" class="px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl shadow-sm transition">
+                                <i class="fa-solid fa-arrows-rotate text-brand-500"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-50 border-b border-slate-100">
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Número</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Fecha</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Total</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Medio Pago</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Estado</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100 text-xs">
+                                    <template x-for="v in ventas" :key="v.id">
+                                        <tr class="hover:bg-slate-50/50 transition" :class="v.estado === 'anulada' ? 'opacity-50' : ''">
+                                            <td class="p-4 font-mono-data font-bold text-slate-900" x-text="v.numero"></td>
+                                            <td class="p-4 text-slate-500" x-text="formatDateShort(v.fecha)"></td>
+                                            <td class="p-4 font-mono-data font-bold text-brand-600" x-text="formatCurrency(v.total)"></td>
+                                            <td class="p-4">
+                                                <span class="text-[10px] bg-slate-100 text-slate-600 rounded px-2 py-0.5 font-medium capitalize" x-text="v.medio_pago?.replace('_',' ') || '—'"></span>
+                                            </td>
+                                            <td class="p-4">
+                                                <span :class="v.estado === 'confirmada' ? 'bg-emerald-50 text-accent-success border-emerald-100' : (v.estado === 'pendiente' ? 'bg-amber-50 text-accent-warning border-amber-100' : 'bg-rose-50 text-accent-danger border-rose-100')" class="px-2 py-0.5 rounded border text-[10px] font-bold uppercase" x-text="v.estado"></span>
+                                            </td>
+                                            <td class="p-4 flex gap-2">
+                                                <button @click="verDetalleVenta(v)" class="text-brand-600 hover:text-brand-900 font-bold hover:underline">Ver <i class="fa-solid fa-eye"></i></button>
+                                                <button x-show="v.estado === 'confirmada'" @click="anularVenta(v.id)" class="text-rose-500 hover:text-rose-900 font-bold hover:underline">Anular <i class="fa-solid fa-ban"></i></button>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                    <tr x-show="ventas.length === 0">
+                                        <td colspan="6" class="p-8 text-center text-slate-400 text-xs">No hay ventas registradas</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- PESTAÑA: COMPRAS -->
                 <div x-show="activeTab === 'compras'" class="space-y-6" x-transition>
                     <div class="flex items-center justify-between">
@@ -1232,6 +1297,8 @@
                 compras: [
                     { id: 1, numero: "C-00000001", proveedor_nombre: "Distribuidora SA", total: 12500, estado: 'recibida', fecha: new Date() }
                 ],
+                ventas: [],
+                ventasFilter: '',
                 dashboard: {
                     total_productos: 3,
                     valor_stock: 450000.0,
@@ -2006,6 +2073,44 @@
                 },
 
                 // Modales Controllers y Submits
+                async fetchVentas() {
+                    try {
+                        let url = '/api/ventas?page_size=200';
+                        if (this.ventasFilter) url += '&estado=' + this.ventasFilter;
+                        const response = await this.request('GET', url);
+                        if (this.apiMode === 'real') {
+                            this.ventas = response.data || [];
+                        }
+                    } catch (e) {}
+                },
+
+                async anularVenta(id) {
+                    if (!confirm('¿Anular esta venta? Se revertirá el stock y el movimiento de caja.')) return;
+                    try {
+                        await this.request('PUT', `/api/ventas/${id}/anular`);
+                        this.addToast('success', 'Venta anulada');
+                        this.fetchVentas();
+                        this.fetchProducts();
+                        this.fetchDashboardData();
+                        this.fetchCajaResumen();
+                    } catch (e) {}
+                },
+
+                verDetalleVenta(v) {
+                    const items = v.items || [];
+                    const detalle = items.map(i => 
+                        `${i.cantidad} x ${i.producto_nombre} = ${this.formatCurrency(i.subtotal)}`
+                    ).join('\n');
+                    alert(`Venta ${v.numero}\n` +
+                        `Fecha: ${this.formatDateShort(v.fecha)}\n` +
+                        `Medio: ${(v.medio_pago || 'efectivo').replace('_',' ')}\n` +
+                        `Subtotal: ${this.formatCurrency(v.subtotal)}\n` +
+                        `Descuento: ${this.formatCurrency(v.descuento || 0)}\n` +
+                        `Total: ${this.formatCurrency(v.total)}\n` +
+                        `Estado: ${v.estado}\n\n` +
+                        `Items:\n${detalle}`);
+                },
+
                 showModal(type) {
                     this.currentModalType = type;
                     this.modalActive = true;
