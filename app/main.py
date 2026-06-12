@@ -7,6 +7,7 @@ Arranca con: uvicorn app.main:app --reload
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from app.config import settings
 from app.database import engine, Base
 from app.models import *  # noqa: F401, F403 — Registrar todos los modelos
@@ -41,6 +42,13 @@ def crear_app() -> FastAPI:
     app.include_router(ventas.router)
     app.include_router(proveedores.router)
     app.include_router(compras.router)
+
+    # Servir el frontend
+    @app.get("/app")
+    async def serve_frontend():
+        import os
+        frontend_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "index.html")
+        return FileResponse(frontend_path)
 
     # Crear tablas en SQLite (desarrollo). En prod usar Alembic.
     @app.on_event("startup")
