@@ -1141,13 +1141,19 @@
                         <div x-show="cajaResumen.desglose[metodo] > 0 || cajaResumen.metodos_cerrados?.includes(metodo)" class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
                             <div class="flex justify-between items-center">
                                 <span class="font-bold text-slate-700 capitalize text-xs" x-text="metodo"></span>
-                                <span class="font-mono-data text-xs font-bold text-emerald-600" x-text="formatCurrency(cajaResumen.desglose[metodo] || 0)"></span>
+                                <span class="font-mono-data text-xs font-bold text-emerald-600">
+                                    <span x-text="formatCurrency(cajaResumen.desglose[metodo] || 0)"></span>
+                                    <span x-show="metodo === 'efectivo' && cajaResumen.apertura > 0" class="text-[9px] text-slate-400">
+                                        + Apertura <span x-text="formatCurrency(cajaResumen.apertura)"></span>
+                                    </span>
+                                </span>
                                 <span x-show="cajaResumen.metodos_cerrados?.includes(metodo)" class="text-[9px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">CERRADO</span>
                             </div>
                             <div x-show="!cajaResumen.metodos_cerrados?.includes(metodo)" class="flex gap-2 items-end">
                                 <div class="flex-1">
                                     <label class="text-[9px] text-slate-400 block">Monto real</label>
-                                    <input type="number" x-model.number="cajaForm['monto_'+metodo]" class="w-full border rounded-lg p-1.5 text-xs font-mono" :placeholder="cajaResumen.desglose[metodo]">
+                                    <input type="number" x-model.number="cajaForm['monto_'+metodo]" class="w-full border rounded-lg p-1.5 text-xs font-mono" 
+                                           :placeholder="metodo === 'efectivo' ? (cajaResumen.desglose[metodo] || 0) + (cajaResumen.apertura || 0) : (cajaResumen.desglose[metodo] || 0)">
                                 </div>
                                 <div class="flex-1">
                                     <label class="text-[9px] text-slate-400 block">Comentario</label>

@@ -68,15 +68,18 @@ def cerrar_metodo(
 
     Returns:
         (movimiento, saldo_esperado, diferencia)
-
-    Raises:
-        ValueError: Si no hay caja abierta o el método ya fue cerrado.
     """
     if not caja_abierta(db, sucursal_id):
         raise ValueError("No hay caja abierta para cerrar.")
 
     desglose = obtener_resumen_por_medio_pago(db, sucursal_id)
     esperado = desglose["desglose"].get(medio_pago, 0)
+
+    # Para efectivo: sumar el monto de apertura inicial
+    if medio_pago == "efectivo":
+        apertura_monto = _obtener_monto_apertura(db, sucursal_id)
+        esperado += apertura_monto
+
     diferencia = monto_real - esperado
 
     # Verificar que no esté ya cerrado este método en esta sesión
@@ -324,4 +327,33 @@ def obtener_resumen_por_medio_pago(db: Session, sucursal_id: int = 1) -> dict:
         "desglose": desglose,
         "total_ingresos": sum(desglose.values()),
         "total_egresos": egresos_total,
+        "apertura": _obtener_monto_apertura(db, sucursal_id),
     }
+
+
+def _obtener_monto_apertura(db: Session, sucursal_id: int = 1) -> float:
+    """Obtiene el monto de la última apertura de caja."""
+    apertura = (
+        db.query(MovimientoCaja)
+        .filter(
+            MovimientoCaja.sucursal_id == sucursal_id,
+            MovimientoCaja.tipo == "apertura",
+        )
+        .order_by(MovimientoCaja.id.desc())
+        .first()
+    )
+    if apertura:
+        # Verificar que no haya un cierre total después de esta apertura
+        cierres_posteriores = (
+            db.query(MovimientoCaja)
+            .filter(
+                MovimientoCaja.sucursal_id == sucursal_id,
+                MovimientoCaja.tipo == "cierre",
+                MovimientoCaja.medio_pago == None,
+                MovimientoCaja.id > apertura.id,
+            )
+            .first()
+        )
+        if not cierres_posteriores:
+            return apertura.monto or 0.0
+    return 0.0
