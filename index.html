@@ -898,6 +898,17 @@
                         <input type="number" x-model.number="productForm.nuevo_stock" class="flex-1 border rounded-xl p-2 text-xs font-mono" :placeholder="productForm.stock_actual || 0">
                     </div>
                 </div>
+                <!-- Stock crítico: toggle + umbral -->
+                <div class="space-y-2">
+                    <div class="flex items-center gap-2">
+                        <input type="checkbox" id="alertaStock" x-model="productForm.alerta_stock" class="w-4 h-4 accent-brand-600">
+                        <label for="alertaStock" class="text-xs font-bold text-slate-500">Alerta de stock crítico</label>
+                    </div>
+                    <div x-show="productForm.alerta_stock">
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Umbral mínimo</label>
+                        <input type="number" x-model.number="productForm.stock_minimo" class="w-full border rounded-xl p-2.5 text-xs font-mono" placeholder="5" min="1">
+                    </div>
+                </div>
                 <div class="col-span-2 flex justify-end gap-2 border-t pt-4">
                     <button @click="modalActive = false" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold">Cancelar</button>
                     <button @click="submitProductForm()" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold shadow-sm">Guardar Producto</button>
@@ -1460,19 +1471,21 @@
                                 categoria_id: this.getOrCreateCategoryId(prod.categoria) || 1,
                                 cantidad_inicial: 0,
                                 fuente: prod.fuente || 'manual',
-                                propiedades: prod.propiedades || {}
+                                propiedades: prod.propiedades || {},
+                                alerta_stock: false,
+                                stock_minimo: 5
                             };
                             this.showModal('product_create');
                             this.modalTitle = 'Nuevo Producto (desde lookup)';
                             this.addToast('success', 'Formulario pre-llenado con datos online');
                         } else {
-                            this.productForm = { id: null, codigo_barras: barcode, nombre: '', marca: '', sku: '', precio_costo: 0, precio_venta: 0, categoria_id: 1, cantidad_inicial: 0 };
+                            this.productForm = { id: null, codigo_barras: barcode, nombre: '', marca: '', sku: '', precio_costo: 0, precio_venta: 0, categoria_id: 1, cantidad_inicial: 0, alerta_stock: false, stock_minimo: 5 };
                             this.showModal('product_create');
                             this.addToast('info', 'Producto no encontrado online. Completá manualmente.');
                         }
                         this.productLookupBarcode = '';
                     } catch (e) {
-                        this.productForm = { id: null, codigo_barras: barcode, nombre: '', marca: '', sku: '', precio_costo: 0, precio_venta: 0, categoria_id: 1, cantidad_inicial: 0 };
+                        this.productForm = { id: null, codigo_barras: barcode, nombre: '', marca: '', sku: '', precio_costo: 0, precio_venta: 0, categoria_id: 1, cantidad_inicial: 0, alerta_stock: false, stock_minimo: 5 };
                         this.showModal('product_create');
                         this.productLookupBarcode = '';
                     }
@@ -1830,7 +1843,7 @@
                     this.modalActive = true;
                     if (type === 'product_create') {
                         this.modalTitle = "Crear Nuevo Producto (Manual)";
-                        this.productForm = { id: null, codigo_barras: '', nombre: '', marca: '', sku: '', precio_costo: 0, precio_venta: 0, categoria_id: 1, cantidad_inicial: 20 };
+                        this.productForm = { id: null, codigo_barras: '', nombre: '', marca: '', sku: '', precio_costo: 0, precio_venta: 0, categoria_id: 1, cantidad_inicial: 20, alerta_stock: false, stock_minimo: 5 };
                     } else if (type === 'product_edit') {
                         this.modalTitle = "Editar Producto";
                     } else if (type === 'client_create') {
@@ -1857,7 +1870,8 @@
                         categoria_id: prod.categoria_id || 1,
                         stock_actual: prod.stock_actual || 0,
                         nuevo_stock: null,
-                        stock_minimo: prod.stock_minimo || 5
+                        stock_minimo: prod.stock_minimo || 5,
+                        alerta_stock: (prod.stock_minimo || 0) > 0
                     };
                     this.showModal('product_edit');
                     this.modalTitle = `Editar Producto #${prod.id}`;
@@ -1881,8 +1895,11 @@
                             precio_venta: this.productForm.precio_venta,
                             precio_costo: this.productForm.precio_costo,
                             categoria_id: this.productForm.categoria_id,
-                            stock_minimo: this.productForm.stock_minimo
-                        } : this.productForm;
+                            stock_minimo: this.productForm.alerta_stock ? (this.productForm.stock_minimo || 5) : 0
+                        } : {
+                            ...this.productForm,
+                            stock_minimo: this.productForm.alerta_stock ? (this.productForm.stock_minimo || 5) : 0
+                        };
 
                         const response = await this.request(method, url, payload);
                         
