@@ -124,14 +124,17 @@ def quitar_item(
 @router.put("/{compra_id}/recibir", response_model=RespuestaData)
 def recibir(
     compra_id: int,
+    data: Optional[dict] = None,
     db: Session = Depends(get_db),
     user: Usuario = Depends(require_role("admin", "encargado")),
 ):
+    """Recibe la mercadería. Opcional: pasar 'cantidades': {item_id: cantidad_real}."""
     c = compra_service.obtener_compra(db, compra_id)
     if not c: raise HTTPException(status_code=404, detail="Compra no encontrada")
     try:
-        c = compra_service.recibir_compra(db, c, user.id)
-        return RespuestaData(data=_compra_to_dict(c), message=f"Compra {c.numero} recibida. Stock actualizado.")
+        cantidades = (data or {}).get("cantidades", None)
+        c = compra_service.recibir_compra(db, c, user.id, cantidades=cantidades)
+        return RespuestaData(data=_compra_to_dict(c), message=f"Compra {c.numero} recibida.")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

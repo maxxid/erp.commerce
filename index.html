@@ -181,6 +181,11 @@
                         <span>Compras / Stock</span>
                     </button>
 
+                    <button @click="activeTab = 'proveedores'; fetchProveedores()" :class="activeTab === 'proveedores' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150">
+                        <i class="fa-solid fa-industry text-lg w-5 text-center"></i>
+                        <span>Proveedores</span>
+                    </button>
+
                     <button @click="activeTab = 'clientes'; fetchClientes()" :class="activeTab === 'clientes' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150">
                         <i class="fa-solid fa-address-book text-lg w-5 text-center"></i>
                         <span>Clientes y Ctas. Ctes</span>
@@ -755,6 +760,52 @@
                     </div>
                 </div>
 
+                <!-- PESTAÑA: PROVEEDORES -->
+                <div x-show="activeTab === 'proveedores'" class="space-y-6" x-transition>
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-2xl font-bold text-slate-950 font-display">Gestión de Proveedores</h2>
+                            <p class="text-sm text-slate-500 mt-1">Administrá tus proveedores y sus productos asociados</p>
+                        </div>
+                        <button @click="showModal('prov_create')" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-xl flex items-center gap-1.5 shadow-sm transition">
+                            <i class="fa-solid fa-plus"></i> Nuevo Proveedor
+                        </button>
+                    </div>
+
+                    <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-50 border-b border-slate-100">
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Nombre</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">CUIT</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Contacto</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Teléfono</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100 text-xs">
+                                    <template x-for="prov in proveedores" :key="prov.id">
+                                        <tr class="hover:bg-slate-50/50 transition">
+                                            <td class="p-4 font-bold text-slate-900" x-text="prov.nombre"></td>
+                                            <td class="p-4 font-mono-data text-slate-500" x-text="prov.cuit || '—'"></td>
+                                            <td class="p-4 text-slate-600" x-text="prov.nombre_contacto || '—'"></td>
+                                            <td class="p-4 text-slate-500" x-text="prov.telefono || '—'"></td>
+                                            <td class="p-4 flex gap-2">
+                                                <button @click="editProveedor(prov)" class="text-brand-600 hover:text-brand-900 font-bold hover:underline">Editar <i class="fa-solid fa-pen-to-square"></i></button>
+                                                <button @click="deleteProveedor(prov.id)" class="text-rose-500 hover:text-rose-900 font-bold hover:underline">Eliminar <i class="fa-solid fa-trash"></i></button>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                    <tr x-show="proveedores.length === 0">
+                                        <td colspan="5" class="p-8 text-center text-slate-400 text-xs">No hay proveedores registrados</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- PESTAÑA: CLIENTES -->
                 <div x-show="activeTab === 'clientes'" class="space-y-6" x-transition>
                     <div class="flex items-center justify-between">
@@ -1027,6 +1078,42 @@
                 </div>
             </div>
 
+            <!-- MODAL: CREAR/EDITAR PROVEEDOR -->
+            <div x-show="currentModalType === 'prov_create' || currentModalType === 'prov_edit'" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Nombre / Razón Social</label>
+                    <input type="text" x-model="provForm.nombre" class="w-full border rounded-xl p-2.5 text-xs" placeholder="Distribuidora SA">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">CUIT</label>
+                        <input type="text" x-model="provForm.cuit" class="w-full border rounded-xl p-2.5 text-xs font-mono" placeholder="30-99999999-9">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Teléfono</label>
+                        <input type="text" x-model="provForm.telefono" class="w-full border rounded-xl p-2.5 text-xs font-mono" placeholder="1144445555">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Email</label>
+                    <input type="text" x-model="provForm.email" class="w-full border rounded-xl p-2.5 text-xs" placeholder="contacto@proveedor.com">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Persona de Contacto</label>
+                        <input type="text" x-model="provForm.nombre_contacto" class="w-full border rounded-xl p-2.5 text-xs" placeholder="Juan">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Dirección</label>
+                        <input type="text" x-model="provForm.direccion" class="w-full border rounded-xl p-2.5 text-xs" placeholder="Calle 123">
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 border-t pt-4">
+                    <button @click="modalActive = false" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold">Cancelar</button>
+                    <button @click="submitProvForm()" class="px-4 py-2 bg-brand-600 text-white rounded-xl text-xs font-bold" x-text="provForm.id ? 'Actualizar' : 'Crear'"></button>
+                </div>
+            </div>
+
         </div>
     </div>
 
@@ -1053,6 +1140,7 @@
                 cajaForm: { monto_inicial: 50000, monto_real: 0 },
                 compraForm: { proveedor_id: 1, producto_id: 1, cantidad: 10, precio_unitario: 800 },
                 clientForm: { id: null, nombre: '', tipo_documento: 'DNI', numero_documento: '', telefono: '', limite_credito: 50000 },
+                provForm: { id: null, nombre: '', cuit: '', telefono: '', email: '', direccion: '', nombre_contacto: '' },
 
                 // Base de Datos Local Híbrida
                 products: [
@@ -1860,6 +1948,11 @@
                         this.modalTitle = "Cierre de Jornada (Arqueo)";
                     } else if (type === 'compra_create') {
                         this.modalTitle = "Crear Orden de Compra Pendiente";
+                    } else if (type === 'prov_create') {
+                        this.modalTitle = "Nuevo Proveedor";
+                        this.provForm = { id: null, nombre: '', cuit: '', telefono: '', email: '', direccion: '', nombre_contacto: '' };
+                    } else if (type === 'prov_edit') {
+                        this.modalTitle = "Editar Proveedor";
                     }
                 },
 
@@ -2116,6 +2209,35 @@
                             this.addToast('info', 'Compra anulada con éxito');
                         }
                         this.fetchCompras();
+                    } catch (e) {}
+                },
+
+                // Proveedores
+                editProveedor(prov) {
+                    this.provForm = { ...prov };
+                    this.showModal('prov_edit');
+                    this.modalTitle = `Editar Proveedor: ${prov.nombre}`;
+                },
+
+                async deleteProveedor(id) {
+                    if (!confirm('¿Eliminar este proveedor?')) return;
+                    try {
+                        // Soft-delete via PUT (no tenemos DELETE endpoint, usamos activo=false)
+                        await this.request('PUT', `/api/proveedores/${id}`, { activo: false });
+                        this.addToast('success', 'Proveedor eliminado');
+                        this.fetchProveedores();
+                    } catch (e) {}
+                },
+
+                async submitProvForm() {
+                    const isEdit = this.provForm.id && this.currentModalType === 'prov_edit';
+                    const method = isEdit ? 'PUT' : 'POST';
+                    const url = isEdit ? `/api/proveedores/${this.provForm.id}` : '/api/proveedores';
+                    try {
+                        await this.request(method, url, this.provForm);
+                        this.addToast('success', isEdit ? 'Proveedor actualizado' : 'Proveedor creado');
+                        this.modalActive = false;
+                        this.fetchProveedores();
                     } catch (e) {}
                 },
 
