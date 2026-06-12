@@ -29,6 +29,7 @@ class Proveedor(Base):
                         onupdate=lambda: datetime.now(timezone.utc))
 
     compras = relationship("Compra", back_populates="proveedor")
+    productos = relationship("Producto", secondary="producto_proveedor", back_populates="proveedores")
 
     def __repr__(self):
         return f"<Proveedor(id={self.id}, nombre='{self.nombre}')>"

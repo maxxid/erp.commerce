@@ -617,6 +617,7 @@
                                         <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Costo (Fase 3)</th>
                                         <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Precio Venta (Fase 1)</th>
                                         <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Stock</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Tránsito</th>
                                         <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Acciones</th>
                                     </tr>
                                 </thead>
@@ -636,6 +637,10 @@
                                             <td class="p-4 text-xs font-mono-data font-bold text-slate-900" x-text="formatCurrency(prod.precio_venta)"></td>
                                             <td class="p-4 text-xs">
                                                 <span :class="prod.stock_actual <= 0 ? 'bg-rose-50 text-accent-danger border-rose-100' : (prod.stock_actual <= prod.stock_minimo ? 'bg-amber-50 text-accent-warning border-amber-100' : 'bg-emerald-50 text-accent-success border-emerald-100')" class="font-mono-data font-bold px-2 py-0.5 rounded-full border" x-text="prod.stock_actual + ' u'"></span>
+                                            </td>
+                                            <td class="p-4 text-xs">
+                                                <span x-show="(prod.stock_transito || 0) > 0" class="bg-blue-50 text-blue-700 border-blue-100 font-mono-data font-bold px-2 py-0.5 rounded-full border text-[10px]" x-text="(prod.stock_transito || 0) + ' u'"></span>
+                                                <span x-show="!(prod.stock_transito || 0) > 0" class="text-slate-300">—</span>
                                             </td>
                                             <td class="p-4 text-xs">
                                                 <button @click="editProduct(prod)" class="text-brand-600 hover:text-brand-900 font-bold hover:underline">Editar <i class="fa-solid fa-pen-to-square"></i></button>

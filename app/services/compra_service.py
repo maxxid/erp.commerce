@@ -73,6 +73,8 @@ def agregar_item(
     db.add(item)
     db.flush()
     _recalcular_totales(db, compra)
+    # Incrementar stock en tránsito
+    producto.stock_transito = (producto.stock_transito or 0) + cantidad
     db.commit()
     db.refresh(item)
     return item
@@ -84,6 +86,10 @@ def quitar_item(db: Session, compra: Compra, item_id: int):
     item = db.query(CompraItem).filter(CompraItem.id == item_id, CompraItem.compra_id == compra.id).first()
     if not item:
         raise ValueError("Ítem no encontrado en esta compra")
+    # Decrementar stock en tránsito
+    producto = db.query(Producto).filter(Producto.id == item.producto_id).first()
+    if producto:
+        producto.stock_transito = max(0, (producto.stock_transito or 0) - item.cantidad)
     db.delete(item)
     db.flush()
     _recalcular_totales(db, compra)
@@ -117,8 +123,11 @@ def recibir_compra(
         )
         # Actualizar precio_costo con el último costo de compra
         producto = db.query(Producto).filter(Producto.id == item.producto_id).first()
-        if producto and item.precio_unitario:
-            producto.precio_costo = item.precio_unitario
+        if producto:
+            if item.precio_unitario:
+                producto.precio_costo = item.precio_unitario
+            # Mover de tránsito a stock real
+            producto.stock_transito = max(0, (producto.stock_transito or 0) - item.cantidad)
 
     compra.estado = "recibida"
     db.commit()
@@ -127,9 +136,14 @@ def recibir_compra(
 
 
 def anular_compra(db: Session, compra: Compra) -> Compra:
-    """Anula una compra pendiente. No revierte stock porque nunca se recibió."""
+    """Anula una compra pendiente. Revierte stock en tránsito."""
     if compra.estado != "pendiente":
         raise ValueError("Solo se pueden anular compras pendientes")
+    # Revertir stock en tránsito
+    for item in compra.items:
+        producto = db.query(Producto).filter(Producto.id == item.producto_id).first()
+        if producto:
+            producto.stock_transito = max(0, (producto.stock_transito or 0) - item.cantidad)
     compra.estado = "anulada"
     db.commit()
     db.refresh(compra)

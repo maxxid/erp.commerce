@@ -185,3 +185,58 @@ def ajustar_stock(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/{producto_id}/proveedores", response_model=RespuestaData)
+def listar_proveedores_producto(
+    producto_id: int,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """Lista los proveedores asignados a un producto."""
+    producto = producto_service.obtener_producto(db, producto_id)
+    if not producto:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+    provs = [{"id": p.id, "nombre": p.nombre, "cuit": p.cuit} for p in producto.proveedores]
+    return RespuestaData(data=provs)
+
+
+@router.post("/{producto_id}/proveedores", response_model=RespuestaData)
+def asignar_proveedor(
+    producto_id: int,
+    data: dict,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "encargado")),
+):
+    """Asigna un proveedor al producto."""
+    producto = producto_service.obtener_producto(db, producto_id)
+    if not producto:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+    from app.models.proveedor import Proveedor
+    proveedor_id = data.get("proveedor_id")
+    prov = db.query(Proveedor).filter(Proveedor.id == proveedor_id).first()
+    if not prov:
+        raise HTTPException(status_code=404, detail="Proveedor no encontrado")
+    if prov not in producto.proveedores:
+        producto.proveedores.append(prov)
+        db.commit()
+    return RespuestaData(message=f"Proveedor '{prov.nombre}' asignado")
+
+
+@router.delete("/{producto_id}/proveedores/{proveedor_id}", response_model=RespuestaData)
+def quitar_proveedor(
+    producto_id: int,
+    proveedor_id: int,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "encargado")),
+):
+    """Quita un proveedor del producto."""
+    producto = producto_service.obtener_producto(db, producto_id)
+    if not producto:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+    from app.models.proveedor import Proveedor
+    prov = db.query(Proveedor).filter(Proveedor.id == proveedor_id).first()
+    if prov and prov in producto.proveedores:
+        producto.proveedores.remove(prov)
+        db.commit()
+    return RespuestaData(message="Proveedor quitado")

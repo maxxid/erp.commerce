@@ -48,6 +48,7 @@ class ProductoOut(ProductoBase):
     """Schema de respuesta con todos los campos."""
     id: int
     stock_actual: float
+    stock_transito: Optional[float] = 0.0
     activo: bool
     ia_analizado: bool
     categoria_nombre: Optional[str] = None
