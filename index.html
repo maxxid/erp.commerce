@@ -1317,8 +1317,11 @@
                         </div>
                     </template>
                 </div>
-                <div class="flex justify-end gap-2 border-t pt-4">
-                    <button @click="modalActive = false" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold">Cerrar</button>
+                <div class="flex justify-between gap-2 border-t pt-4">
+                    <button x-show="clienteTickets.length > 0" @click="imprimirTodosTickets()" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5">
+                        <i class="fa-solid fa-print"></i> Imprimir Todos con Resumen
+                    </button>
+                    <button @click="modalActive = false" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold ml-auto">Cerrar</button>
                 </div>
             </div>
 
@@ -2264,6 +2267,39 @@
                         `------------------------\n${items}\n------------------------`;
                     const win = window.open('', '_blank', 'width=400,height=500');
                     win.document.write('<pre style="font-family:monospace;font-size:12px">' + texto + '</pre>');
+                    win.document.close();
+                    setTimeout(() => win.print(), 500);
+                },
+
+                imprimirTodosTickets() {
+                    const tickets = this.clienteTickets;
+                    if (!tickets.length) return;
+                    
+                    let texto = `CLIENTE: ${this.clienteTicketsNombre}\n`;
+                    texto += `FECHA: ${new Date().toLocaleDateString()}\n`;
+                    texto += `================================\n`;
+                    
+                    let totalGeneral = 0;
+                    tickets.forEach((v, idx) => {
+                        texto += `\nTICKET #${idx + 1}: ${v.numero}\n`;
+                        texto += `FECHA: ${this.formatDateShort(v.fecha)}\n`;
+                        const items = (v.items || []).map(i => 
+                            `  ${i.cantidad} x ${i.producto_nombre} — ${this.formatCurrency(i.subtotal)}`
+                        ).join('\n');
+                        texto += items + '\n';
+                        texto += `  Subtotal: ${this.formatCurrency(v.total)}\n`;
+                        texto += `------------------------\n`;
+                        totalGeneral += v.total || 0;
+                    });
+                    
+                    texto += `\n================================\n`;
+                    texto += `RESUMEN\n`;
+                    texto += `Cantidad de tickets: ${tickets.length}\n`;
+                    texto += `Deuda Total: ${this.formatCurrency(totalGeneral)}\n`;
+                    texto += `================================\n`;
+                    
+                    const win = window.open('', '_blank', 'width=450,height=600');
+                    win.document.write('<pre style="font-family:monospace;font-size:12px;padding:20px">' + texto + '</pre>');
                     win.document.close();
                     setTimeout(() => win.print(), 500);
                 },
