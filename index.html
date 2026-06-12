@@ -1240,32 +1240,10 @@
                                 this.posLookupCode = '';
                                 this.addToast('success', `${prod.nombre} añadido al carrito.`);
                             } else {
-                                // Producto nuevo: guardar en BD, luego agregar
-                                this.addToast('info', 'Producto nuevo. Guardando en BD...');
-                                try {
-                                    const saveResp = await this.request('POST', '/api/productos', {
-                                        codigo_barras: prod.codigo_barras,
-                                        nombre: prod.nombre,
-                                        marca: prod.marca || '',
-                                        descripcion: prod.descripcion || '',
-                                        precio_referencia: prod.precio_referencia || 0,
-                                        precio_venta: prod.precio_referencia ? Math.ceil(prod.precio_referencia * 1.3 / 50) * 50 : 0,
-                                        imagen_url: prod.imagen_url || '',
-                                        sku: prod.sku || '',
-                                        propiedades: prod.propiedades || {},
-                                        fuente: prod.fuente || 'carrefour',
-                                        categoria_id: this.getOrCreateCategoryId(prod.categoria),
-                                        cantidad_inicial: 0
-                                    });
-                                    const saved = saveResp.data;
-                                    await this.fetchProducts();
-                                    saved.stock_actual = saved.stock_actual || 0;
-                                    this.addPRODToPOS(saved);
-                                    this.addToast('success', 'Producto guardado y añadido al carrito');
-                                } catch (e) {
-                                    this.addToast('error', 'Error al guardar producto: ' + e.message);
-                                }
+                                // Producto nuevo: mostrar tarjeta de lookup con badges + botón guardar
+                                this.lookupProduct = prod;
                                 this.posLookupCode = '';
+                                this.triggerParallelSupermarketLookup(prod.codigo_barras);
                             }
                         } else {
                             // Simulación
@@ -1335,7 +1313,35 @@
                     });
                 },
 
-                saveLookupToLocal(prod) {
+                async saveLookupToLocal(prod) {
+                    if (this.apiMode === 'real') {
+                        try {
+                            const saveResp = await this.request('POST', '/api/productos', {
+                                codigo_barras: prod.codigo_barras,
+                                nombre: prod.nombre,
+                                marca: prod.marca || '',
+                                descripcion: prod.descripcion || '',
+                                precio_referencia: prod.precio_referencia || 0,
+                                precio_venta: prod.precio_referencia ? Math.ceil(prod.precio_referencia * 1.3 / 50) * 50 : 0,
+                                imagen_url: prod.imagen_url || '',
+                                sku: prod.sku || '',
+                                propiedades: prod.propiedades || {},
+                                fuente: prod.fuente || 'carrefour',
+                                categoria_id: this.getOrCreateCategoryId(prod.categoria),
+                                cantidad_inicial: 0
+                            });
+                            const saved = saveResp.data;
+                            await this.fetchProducts();
+                            saved.stock_actual = saved.stock_actual || 0;
+                            this.addPRODToPOS(saved);
+                            this.lookupProduct = {};
+                            this.addToast('success', 'Producto guardado e insertado en venta');
+                        } catch (e) {
+                            this.addToast('error', 'Error al guardar: ' + (e.message || ''));
+                        }
+                        return;
+                    }
+                    // Modo mock
                     const newProd = {
                         id: this.products.length + 1,
                         codigo_barras: prod.codigo_barras,
