@@ -1242,6 +1242,39 @@
                 </div>
             </div>
 
+            <!-- MODAL: DETALLE DE VENTA -->
+            <div x-show="currentModalType === 'venta_detail'" class="space-y-4">
+                <div class="grid grid-cols-3 gap-3 text-xs">
+                    <div><span class="text-slate-400 block">Número</span><strong class="font-mono-data text-slate-900" x-text="ventaDetail.numero"></strong></div>
+                    <div><span class="text-slate-400 block">Fecha</span><strong x-text="formatDateShort(ventaDetail.fecha)"></strong></div>
+                    <div><span class="text-slate-400 block">Medio Pago</span><strong class="capitalize" x-text="(ventaDetail.medio_pago || 'efectivo').replace('_',' ')"></strong></div>
+                    <div><span class="text-slate-400 block">Subtotal</span><strong class="font-mono-data" x-text="formatCurrency(ventaDetail.subtotal)"></strong></div>
+                    <div><span class="text-slate-400 block">Descuento</span><strong class="font-mono-data text-rose-500" x-text="formatCurrency(ventaDetail.descuento || 0)"></strong></div>
+                    <div><span class="text-slate-400 block">TOTAL</span><strong class="font-mono-data text-lg text-brand-600" x-text="formatCurrency(ventaDetail.total)"></strong></div>
+                </div>
+                <div>
+                    <span :class="ventaDetail.estado === 'confirmada' ? 'bg-emerald-50 text-accent-success border-emerald-100' : (ventaDetail.estado === 'pendiente' ? 'bg-amber-50 text-accent-warning border-amber-100' : 'bg-rose-50 text-accent-danger border-rose-100')" class="px-2 py-0.5 rounded border text-[9px] font-bold uppercase" x-text="ventaDetail.estado"></span>
+                </div>
+                <div class="border-t pt-3">
+                    <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Items ({{ ventaDetail.items?.length || 0 }})</h4>
+                    <div class="space-y-2 max-h-60 overflow-y-auto">
+                        <template x-for="item in ventaDetail.items" :key="item.id">
+                            <div class="flex justify-between items-center p-2 bg-slate-50 rounded-lg text-xs">
+                                <div class="flex-1 min-w-0">
+                                    <span class="font-bold text-slate-800 truncate block" x-text="item.producto_nombre"></span>
+                                    <span class="text-[10px] text-slate-400 font-mono-data" x-text="item.cantidad + ' x ' + formatCurrency(item.precio_unitario)"></span>
+                                </div>
+                                <span class="font-mono-data font-bold text-slate-900 ml-3" x-text="formatCurrency(item.subtotal)"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 border-t pt-4">
+                    <button @click="modalActive = false" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold">Cerrar</button>
+                    <button x-show="ventaDetail.estado === 'confirmada'" @click="anularVenta(ventaDetail.id); modalActive = false" class="px-4 py-2 bg-rose-500 text-white rounded-xl text-xs font-bold">Anular Venta</button>
+                </div>
+            </div>
+
         </div>
     </div>
 
@@ -1299,6 +1332,7 @@
                 ],
                 ventas: [],
                 ventasFilter: '',
+                ventaDetail: { id: null, numero: '', fecha: '', subtotal: 0, descuento: 0, total: 0, medio_pago: '', estado: '', items: [] },
                 dashboard: {
                     total_productos: 3,
                     valor_stock: 450000.0,
@@ -2097,18 +2131,9 @@
                 },
 
                 verDetalleVenta(v) {
-                    const items = v.items || [];
-                    const detalle = items.map(i => 
-                        `${i.cantidad} x ${i.producto_nombre} = ${this.formatCurrency(i.subtotal)}`
-                    ).join('\n');
-                    alert(`Venta ${v.numero}\n` +
-                        `Fecha: ${this.formatDateShort(v.fecha)}\n` +
-                        `Medio: ${(v.medio_pago || 'efectivo').replace('_',' ')}\n` +
-                        `Subtotal: ${this.formatCurrency(v.subtotal)}\n` +
-                        `Descuento: ${this.formatCurrency(v.descuento || 0)}\n` +
-                        `Total: ${this.formatCurrency(v.total)}\n` +
-                        `Estado: ${v.estado}\n\n` +
-                        `Items:\n${detalle}`);
+                    this.ventaDetail = v;
+                    this.showModal('venta_detail');
+                    this.modalTitle = `Venta ${v.numero}`;
                 },
 
                 showModal(type) {
