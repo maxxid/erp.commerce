@@ -77,8 +77,16 @@
                 </div>
                 <button @click="removeToast(toast.id)" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
             </div>
-        </template>
-    </div>
+                    </template>
+                    <!-- Cta Corriente: informativo, no se cierra -->
+                    <div x-show="cajaResumen.cta_corriente > 0" class="p-3 bg-amber-50 border border-amber-200 rounded-xl flex justify-between items-center">
+                        <div>
+                            <span class="font-bold text-amber-700 capitalize text-xs">Cta. Corriente</span>
+                            <p class="text-[9px] text-amber-500">No ingresa en caja física</p>
+                        </div>
+                        <span class="font-mono-data text-sm font-bold text-amber-600" x-text="formatCurrency(cajaResumen.cta_corriente)"></span>
+                    </div>
+                </div>
 
     <!-- PANTALLA DE LOGIN INICIAL (Autenticación JWT Real / Simulada) -->
     <div x-show="!authenticated" class="fixed inset-0 bg-brand-900 z-50 flex items-center justify-center p-4" x-transition>
@@ -940,8 +948,9 @@
                                             <td class="p-4 text-slate-600" x-text="cli.telefono || 'N/A'"></td>
                                             <td class="p-4 font-mono-data font-bold text-rose-600" x-text="formatCurrency(cli.saldo_cta_corriente)"></td>
                                             <td class="p-4 font-mono-data font-bold text-emerald-600" x-text="formatCurrency(cli.limite_credito)"></td>
-                                            <td class="p-4">
-                                                <button @click="editClient(cli)" class="text-brand-600 hover:text-brand-900 font-bold hover:underline">Ajustar Límite <i class="fa-solid fa-sliders"></i></button>
+                                            <td class="p-4 flex gap-2">
+                                                <button @click="verTicketsCliente(cli)" class="text-brand-600 hover:text-brand-900 font-bold hover:underline">Tickets <i class="fa-solid fa-receipt"></i></button>
+                                                <button @click="editClient(cli)" class="text-brand-600 hover:text-brand-900 font-bold hover:underline">Límite <i class="fa-solid fa-sliders"></i></button>
                                             </td>
                                         </tr>
                                     </template>
@@ -1281,6 +1290,38 @@
                 </div>
             </div>
 
+            <!-- MODAL: TICKETS DE CLIENTE -->
+            <div x-show="currentModalType === 'cliente_tickets'" class="space-y-4">
+                <div x-show="clienteTickets.length === 0" class="text-center text-slate-400 text-xs py-8">No hay ventas en cuenta corriente para este cliente.</div>
+                <div class="space-y-3 max-h-96 overflow-y-auto">
+                    <template x-for="v in clienteTickets" :key="v.id">
+                        <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                            <div class="flex justify-between items-center">
+                                <div>
+                                    <span class="font-mono-data font-bold text-slate-900 text-xs" x-text="v.numero"></span>
+                                    <span class="text-[10px] text-slate-400 ml-2" x-text="formatDateShort(v.fecha)"></span>
+                                </div>
+                                <span class="font-mono-data font-bold text-rose-600" x-text="formatCurrency(v.total)"></span>
+                            </div>
+                            <div class="text-[10px] text-slate-500 space-y-1 border-t pt-2">
+                                <template x-for="item in v.items" :key="item.id">
+                                    <div class="flex justify-between">
+                                        <span x-text="item.cantidad + ' x ' + item.producto_nombre"></span>
+                                        <span class="font-mono-data" x-text="formatCurrency(item.subtotal)"></span>
+                                    </div>
+                                </template>
+                            </div>
+                            <button @click="imprimirTicket(v)" class="text-[10px] text-brand-600 hover:underline font-bold">
+                                <i class="fa-solid fa-print"></i> Imprimir Ticket
+                            </button>
+                        </div>
+                    </template>
+                </div>
+                <div class="flex justify-end gap-2 border-t pt-4">
+                    <button @click="modalActive = false" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold">Cerrar</button>
+                </div>
+            </div>
+
         </div>
     </div>
 
@@ -1339,6 +1380,8 @@
                 ventas: [],
                 ventasFilter: '',
                 ventaDetail: { id: null, numero: '', fecha: '', subtotal: 0, descuento: 0, total: 0, medio_pago: '', estado: '', items: [] },
+                clienteTickets: [],
+                clienteTicketsNombre: '',
                 dashboard: {
                     total_productos: 3,
                     valor_stock: 450000.0,
@@ -1999,7 +2042,8 @@
                             }
                             const confirmBody = {
                                 medio_pago: this.posCart.medio_pago,
-                                descuento: this.posCart.descuento || 0
+                                descuento: this.posCart.descuento || 0,
+                                cliente_id: this.posCart.cliente_id ? parseInt(this.posCart.cliente_id) : null
                             };
                             const response = await this.request('PUT', `/api/ventas/${this.posCart._ventaId}/confirmar`, confirmBody);
                             if (response && response.data) {
@@ -2196,6 +2240,32 @@
                     this.clientForm = { ...cli };
                     this.showModal('client_edit');
                     this.modalTitle = `Ajustar Límite de Crédito: ${cli.nombre}`;
+                },
+
+                async verTicketsCliente(cli) {
+                    this.clienteTicketsNombre = cli.nombre;
+                    try {
+                        const resp = await this.request('GET', `/api/ventas?cliente_id=${cli.id}&page_size=200`);
+                        this.clienteTickets = (resp.data || []).filter(v => v.medio_pago === 'cta_corriente');
+                        this.showModal('cliente_tickets');
+                        this.modalTitle = `Tickets de ${cli.nombre} — Deuda: ${this.formatCurrency(cli.saldo_cta_corriente || 0)}`;
+                    } catch (e) { this.clienteTickets = []; this.showModal('cliente_tickets'); }
+                },
+
+                imprimirTicket(v) {
+                    const items = (v.items || []).map(i => 
+                        `${i.cantidad} x ${i.producto_nombre} — ${this.formatCurrency(i.subtotal)}`
+                    ).join('\n');
+                    const texto = 
+                        `CLIENTE: ${this.clienteTicketsNombre}\n` +
+                        `TICKET: ${v.numero}\n` +
+                        `FECHA: ${this.formatDateShort(v.fecha)}\n` +
+                        `TOTAL: ${this.formatCurrency(v.total)}\n` +
+                        `------------------------\n${items}\n------------------------`;
+                    const win = window.open('', '_blank', 'width=400,height=500');
+                    win.document.write('<pre style="font-family:monospace;font-size:12px">' + texto + '</pre>');
+                    win.document.close();
+                    setTimeout(() => win.print(), 500);
                 },
 
                 async submitProductForm() {

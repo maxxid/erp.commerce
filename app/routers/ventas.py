@@ -60,6 +60,7 @@ class VentaItemAdd(BaseModel):
 class VentaConfirmar(BaseModel):
     medio_pago: str = "efectivo"
     descuento: float = 0.0
+    cliente_id: Optional[int] = None
 
 
 @router.get("", response_model=RespuestaLista)
@@ -166,6 +167,10 @@ def confirmar(
     venta = venta_service.obtener_venta(db, venta_id)
     if not venta:
         raise HTTPException(status_code=404, detail="Venta no encontrada")
+    # Si se especificó cliente_id, asignarlo antes de confirmar
+    if data.cliente_id and not venta.cliente_id:
+        venta.cliente_id = data.cliente_id
+        db.commit()
     try:
         venta = venta_service.confirmar_venta(
             db, venta, data.medio_pago, data.descuento, user.id

@@ -294,6 +294,8 @@ def listar_movimientos(
 
 def obtener_resumen_por_medio_pago(db: Session, sucursal_id: int = 1) -> dict:
     """Devuelve el desglose de ingresos por medio de pago desde la última apertura."""
+    from app.models.venta import Venta
+
     movimientos = (
         db.query(MovimientoCaja)
         .filter(
@@ -316,6 +318,23 @@ def obtener_resumen_por_medio_pago(db: Session, sucursal_id: int = 1) -> dict:
             else:
                 desglose[mp] = desglose.get(mp, 0) + m.monto
 
+    # Ventas en cta_corriente (no generan MovimientoCaja, van directo a Venta)
+    cta_corriente_total = 0.0
+    ventas_cta = (
+        db.query(Venta)
+        .filter(
+            Venta.sucursal_id == sucursal_id,
+            Venta.medio_pago == "cta_corriente",
+            Venta.estado == "confirmada",
+        )
+        .order_by(Venta.id.desc())
+        .all()
+    )
+    for v in ventas_cta:
+        # Solo contar las que están después de la última apertura
+        if _es_posterior_a_apertura(db, v.id, sucursal_id):
+            cta_corriente_total += v.total
+
     egresos_total = 0
     for m in movimientos:
         if m.tipo == "cierre" and not m.medio_pago:
@@ -327,8 +346,36 @@ def obtener_resumen_por_medio_pago(db: Session, sucursal_id: int = 1) -> dict:
         "desglose": desglose,
         "total_ingresos": sum(desglose.values()),
         "total_egresos": egresos_total,
+        "cta_corriente": cta_corriente_total,
         "apertura": _obtener_monto_apertura(db, sucursal_id),
     }
+
+
+def _es_posterior_a_apertura(db: Session, referencia_id: int, sucursal_id: int) -> bool:
+    """Verifica si un ID de referencia es posterior a la última apertura de caja."""
+    apertura = (
+        db.query(MovimientoCaja)
+        .filter(
+            MovimientoCaja.sucursal_id == sucursal_id,
+            MovimientoCaja.tipo == "apertura",
+        )
+        .order_by(MovimientoCaja.id.desc())
+        .first()
+    )
+    if not apertura:
+        return False
+    # Verificar que no haya un cierre total entre la apertura y ahora
+    cierre = (
+        db.query(MovimientoCaja)
+        .filter(
+            MovimientoCaja.sucursal_id == sucursal_id,
+            MovimientoCaja.tipo == "cierre",
+            MovimientoCaja.medio_pago == None,
+            MovimientoCaja.id > apertura.id,
+        )
+        .first()
+    )
+    return not cierre
 
 
 def _obtener_monto_apertura(db: Session, sucursal_id: int = 1) -> float:
