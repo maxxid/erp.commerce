@@ -189,6 +189,11 @@
                         <span>Ventas</span>
                     </button>
 
+                    <button @click="activeTab = 'calendario'; fetchDiaCalendario()" :class="activeTab === 'calendario' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150">
+                        <i class="fa-regular fa-calendar text-lg w-5 text-center"></i>
+                        <span>Calendario</span>
+                    </button>
+
                     <button @click="activeTab = 'compras'; fetchCompras(); fetchProveedores()" :class="activeTab === 'compras' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150">
                         <i class="fa-solid fa-truck-ramp-box text-lg w-5 text-center"></i>
                         <span>Compras / Stock</span>
@@ -830,6 +835,155 @@
                     </div>
                 </div>
 
+                <!-- PESTAÑA: CALENDARIO -->
+                <div x-show="activeTab === 'calendario'" class="space-y-6" x-transition>
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-2xl font-bold text-slate-950 font-display">Calendario de Actividad</h2>
+                            <p class="text-sm text-slate-500 mt-1">Navegá entre días para auditar todo lo que pasó</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button @click="cambiarDia(-1)" class="px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-bold text-slate-600 transition">
+                                <i class="fa-solid fa-chevron-left"></i>
+                            </button>
+                            <input type="date" x-model="calFecha" @change="fetchDiaCalendario()" class="border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono-data font-bold bg-white focus:outline-none focus:border-brand-600">
+                            <button @click="cambiarDia(1)" class="px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-bold text-slate-600 transition">
+                                <i class="fa-solid fa-chevron-right"></i>
+                            </button>
+                            <button @click="irAHoy()" class="px-3 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold transition">Hoy</button>
+                        </div>
+                    </div>
+
+                    <!-- Filtros rápidos -->
+                    <div class="flex gap-2 flex-wrap">
+                        <template x-for="filtro in ['todo','ventas','caja','compras','productos','clientes']" :key="filtro">
+                            <button @click="calFiltro = filtro" :class="calFiltro === filtro ? 'bg-brand-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'" class="px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition" x-text="filtro"></button>
+                        </template>
+                    </div>
+
+                    <!-- Panel: Ventas del día -->
+                    <div x-show="calFiltro === 'todo' || calFiltro === 'ventas'" class="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 space-y-3">
+                        <h3 class="font-bold text-slate-900 flex items-center gap-2">
+                            <i class="fa-solid fa-cart-shopping text-emerald-500"></i> Ventas
+                            <span class="text-xs font-normal text-slate-400" x-text="calData.ventas?.cantidad + ' confirmadas, $' + formatCurrency(calData.ventas?.total_dia || 0)"></span>
+                        </h3>
+                        <template x-for="v in calData.ventas?.items || []" :key="v.id">
+                            <div :class="v.estado === 'anulada' ? 'opacity-50' : ''" class="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
+                                <div class="flex justify-between text-xs">
+                                    <div>
+                                        <span class="font-mono-data font-bold" x-text="v.numero"></span>
+                                        <span class="text-slate-400 ml-2" x-text="formatDateShort(v.fecha)"></span>
+                                        <span :class="v.estado === 'confirmada' ? 'text-accent-success' : 'text-accent-danger'" class="ml-2 text-[10px] font-bold" x-text="v.estado"></span>
+                                    </div>
+                                    <span class="font-mono-data font-bold text-brand-600" x-text="formatCurrency(v.total)"></span>
+                                </div>
+                                <div class="text-[10px] text-slate-500 space-y-0.5 border-t pt-2">
+                                    <template x-for="item in v.items" :key="item.id">
+                                        <div class="flex justify-between">
+                                            <span x-text="item.cantidad + ' x ' + item.producto_nombre"></span>
+                                            <span class="font-mono-data" x-text="formatCurrency(item.subtotal)"></span>
+                                        </div>
+                                    </template>
+                                </div>
+                                <div class="flex justify-between text-[10px]">
+                                    <span class="capitalize bg-slate-200 px-1.5 py-0.5 rounded" x-text="v.medio_pago?.replace('_',' ') || '—'"></span>
+                                    <span x-show="v.descuento > 0" class="text-rose-500">Desc: -<span x-text="formatCurrency(v.descuento)"></span></span>
+                                </div>
+                            </div>
+                        </template>
+                        <p x-show="!(calData.ventas?.items || []).length" class="text-xs text-slate-400 text-center py-4">Sin ventas este día</p>
+                    </div>
+
+                    <!-- Panel: Caja -->
+                    <div x-show="calFiltro === 'todo' || calFiltro === 'caja'" class="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 space-y-3">
+                        <h3 class="font-bold text-slate-900 flex items-center gap-2">
+                            <i class="fa-solid fa-vault text-amber-500"></i> Caja
+                            <span class="text-xs font-normal text-slate-400" x-text="'Ingresos: ' + formatCurrency(calData.caja?.ingresos_totales || 0) + ' | Egresos: ' + formatCurrency(calData.caja?.egresos_totales || 0)"></span>
+                        </h3>
+                        <template x-for="m in calData.caja?.movimientos || []" :key="m.id">
+                            <div class="flex justify-between items-center p-2 bg-slate-50 rounded-lg text-xs">
+                                <div class="flex items-center gap-2">
+                                    <span :class="m.tipo === 'apertura' ? 'bg-indigo-50 text-brand-600 border-indigo-100' : (m.tipo.includes('cierre') ? 'bg-rose-50 text-accent-danger border-rose-100' : 'bg-emerald-50 text-accent-success border-emerald-100')" class="px-1.5 py-0.5 rounded border text-[9px] uppercase font-bold font-mono" x-text="m.tipo"></span>
+                                    <span x-show="m.medio_pago" class="text-[9px] text-slate-400 capitalize" x-text="m.medio_pago"></span>
+                                    <span class="text-slate-500 text-[10px]" x-text="m.descripcion?.substring(0,60)"></span>
+                                </div>
+                                <div class="text-right">
+                                    <span class="font-mono-data font-bold" :class="m.tipo === 'egreso' ? 'text-rose-500' : 'text-slate-900'" x-text="m.tipo === 'egreso' ? '-' + formatCurrency(m.monto) : formatCurrency(m.monto)"></span>
+                                    <p class="text-[9px] text-slate-400" x-text="m.usuario_nombre"></p>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Panel: Compras -->
+                    <div x-show="(calFiltro === 'todo' || calFiltro === 'compras') && (calData.compras?.items || []).length > 0" class="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 space-y-3">
+                        <h3 class="font-bold text-slate-900 flex items-center gap-2">
+                            <i class="fa-solid fa-truck-ramp-box text-blue-500"></i> Compras Recibidas
+                            <span class="text-xs font-normal text-slate-400" x-text="calData.compras?.recibidas + ' recibidas'"></span>
+                        </h3>
+                        <template x-for="c in calData.compras?.items || []" :key="c.id">
+                            <div class="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
+                                <div class="flex justify-between text-xs">
+                                    <div>
+                                        <span class="font-mono-data font-bold" x-text="c.numero"></span>
+                                        <span class="text-slate-400 ml-2" x-text="c.proveedor_nombre"></span>
+                                    </div>
+                                    <span class="font-mono-data font-bold text-brand-600" x-text="formatCurrency(c.total)"></span>
+                                </div>
+                                <div class="text-[10px] text-slate-500 space-y-0.5 border-t pt-2">
+                                    <template x-for="item in c.items" :key="item.id">
+                                        <div class="flex justify-between">
+                                            <span x-text="item.cantidad + ' x ' + item.producto_nombre"></span>
+                                            <span class="font-mono-data" x-text="formatCurrency(item.subtotal)"></span>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Panel: Productos -->
+                    <div x-show="calFiltro === 'todo' || calFiltro === 'productos'" class="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 space-y-3">
+                        <h3 class="font-bold text-slate-900 flex items-center gap-2">
+                            <i class="fa-solid fa-boxes-stacked text-indigo-500"></i> Productos
+                            <span class="text-xs font-normal text-slate-400" x-text="calData.productos?.nuevos + ' nuevos, ' + calData.productos?.modificados + ' modificados'"></span>
+                        </h3>
+                        <div x-show="(calData.productos?.nuevos_lista || []).length > 0" class="space-y-1">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase">Nuevos</p>
+                            <template x-for="p in calData.productos?.nuevos_lista || []" :key="'n'+p.id">
+                                <div class="flex justify-between text-xs p-2 bg-emerald-50 rounded-lg">
+                                    <span class="font-bold" x-text="p.nombre"></span>
+                                    <span class="font-mono-data text-slate-400" x-text="p.codigo_barras"></span>
+                                </div>
+                            </template>
+                        </div>
+                        <div x-show="(calData.productos?.modificados_lista || []).length > 0" class="space-y-1">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase mt-2">Modificados</p>
+                            <template x-for="p in calData.productos?.modificados_lista || []" :key="'m'+p.id">
+                                <div class="flex justify-between text-xs p-2 bg-amber-50 rounded-lg">
+                                    <span class="font-bold" x-text="p.nombre"></span>
+                                    <span class="font-mono-data text-slate-400" x-text="p.codigo_barras"></span>
+                                </div>
+                            </template>
+                        </div>
+                        <p x-show="!(calData.productos?.nuevos || calData.productos?.modificados)" class="text-xs text-slate-400 text-center py-4">Sin actividad en productos</p>
+                    </div>
+
+                    <!-- Panel: Clientes -->
+                    <div x-show="(calFiltro === 'todo' || calFiltro === 'clientes') && calData.clientes?.nuevos > 0" class="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 space-y-3">
+                        <h3 class="font-bold text-slate-900 flex items-center gap-2">
+                            <i class="fa-solid fa-address-book text-purple-500"></i> Clientes Nuevos
+                            <span class="text-xs font-normal text-slate-400" x-text="calData.clientes?.nuevos + ' registrados'"></span>
+                        </h3>
+                        <template x-for="c in calData.clientes?.lista || []" :key="c.id">
+                            <div class="flex justify-between text-xs p-2 bg-purple-50 rounded-lg">
+                                <span class="font-bold" x-text="c.nombre"></span>
+                                <span class="font-mono-data text-slate-400" x-text="c.telefono || ''"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
                 <!-- PESTAÑA: COMPRAS -->
                 <div x-show="activeTab === 'compras'" class="space-y-6" x-transition>
                     <div class="flex items-center justify-between">
@@ -1395,6 +1549,9 @@
                 ventaDetail: { id: null, numero: '', fecha: '', subtotal: 0, descuento: 0, total: 0, medio_pago: '', estado: '', items: [] },
                 clienteTickets: [],
                 clienteTicketsNombre: '',
+                calFecha: new Date().toISOString().split('T')[0],
+                calData: { ventas: {}, caja: {}, compras: {}, productos: {}, clientes: {} },
+                calFiltro: 'todo',
                 dashboard: {
                     total_productos: 3,
                     valor_stock: 450000.0,
@@ -2197,6 +2354,27 @@
                     this.ventaDetail = v;
                     this.showModal('venta_detail');
                     this.modalTitle = `Venta ${v.numero}`;
+                },
+
+                async fetchDiaCalendario() {
+                    try {
+                        const response = await this.request('GET', `/api/calendario/dia?fecha=${this.calFecha}`);
+                        if (this.apiMode === 'real') {
+                            this.calData = response.data || this.calData;
+                        }
+                    } catch (e) {}
+                },
+
+                cambiarDia(offset) {
+                    const d = new Date(this.calFecha + 'T00:00:00');
+                    d.setDate(d.getDate() + offset);
+                    this.calFecha = d.toISOString().split('T')[0];
+                    this.fetchDiaCalendario();
+                },
+
+                irAHoy() {
+                    this.calFecha = new Date().toISOString().split('T')[0];
+                    this.fetchDiaCalendario();
                 },
 
                 showModal(type) {
