@@ -109,6 +109,11 @@
 
             <!-- Activación de licencia -->
             <div x-show="licenseChecked && (!hasLicense || !licenseValid)" class="space-y-4">
+                <div x-show="machineId" class="p-2 bg-slate-50 border border-slate-200 rounded-lg text-center">
+                    <span class="text-[9px] text-slate-400 uppercase block">ID de esta máquina</span>
+                    <span class="text-xs font-mono-data font-bold text-slate-600 select-all" x-text="machineId"></span>
+                    <span class="text-[9px] text-slate-400 block mt-0.5">Enviá este ID a tu proveedor para recibir la clave</span>
+                </div>
                 <div>
                     <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Clave de Licencia</label>
                     <input type="text" x-model="licenseKey" @keydown.enter="activateLicense()" placeholder="APX-XXXX-XXXX-XXXX" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-mono text-center uppercase focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600 transition">
@@ -1329,6 +1334,7 @@
                                     <tr class="bg-slate-50 border-b border-slate-100">
                                         <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Clave</th>
                                         <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Cliente</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Máquina</th>
                                         <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Expiración</th>
                                         <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Estado</th>
                                     </tr>
@@ -1338,6 +1344,7 @@
                                         <tr class="hover:bg-slate-50/50 transition">
                                             <td class="p-4 font-mono-data text-slate-600" x-text="l.clave"></td>
                                             <td class="p-4 font-semibold text-slate-700" x-text="l.cliente"></td>
+                                            <td class="p-4 font-mono-data text-[10px] text-slate-400" x-text="l.machine_id || '—'"></td>
                                             <td class="p-4 text-slate-500" x-text="formatDateShort(l.fecha_expiracion)"></td>
                                             <td class="p-4">
                                                 <span :class="l.activa ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-50 text-slate-400 border-slate-100'" class="px-2 py-0.5 rounded border text-[10px] font-bold uppercase" x-text="l.activa ? 'Activa' : 'Inactiva'"></span>
@@ -2061,6 +2068,11 @@
                     <input type="text" x-model="licenciaForm.cliente" class="w-full border rounded-xl p-2.5 text-xs" placeholder="Kiosco San Martín">
                 </div>
                 <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">ID de Máquina del cliente</label>
+                    <input type="text" x-model="licenciaForm.machine_id" class="w-full border rounded-xl p-2.5 text-xs font-mono" placeholder="a3f7b9c2d10e4f6a">
+                    <p class="text-[9px] text-slate-400 mt-1">El cliente ve este ID en su pantalla de activación</p>
+                </div>
+                <div>
                     <label class="block text-xs font-bold text-slate-500 mb-1">Días de vigencia</label>
                     <input type="number" x-model.number="licenciaForm.dias" class="w-full border rounded-xl p-2.5 text-xs font-mono" min="1" max="365">
                 </div>
@@ -2244,7 +2256,7 @@
                 auditoriaEvents: [],
                 pendientesEtiquetar: [],
                 licenciasList: [],
-                licenciaForm: { cliente: '', dias: 30 },
+                licenciaForm: { cliente: '', machine_id: '', dias: 30 },
                 licenciaGenerada: '',
                 loggingIn: false,
 
@@ -2257,6 +2269,7 @@
                 licenseKey: '',
                 licenseError: '',
                 licenseOk: '',
+                machineId: '',
                 productForm: { codigo_barras: '', nombre: '', marca: '', sku: '', precio_costo: 0, precio_venta: 0, categoria_id: 1, cantidad_inicial: 20 },
                 cajaForm: { monto_inicial: 50000, monto_real: 0, comentario_total: '', monto_efectivo: null, monto_debito: null, monto_credito: null, monto_transferencia: null, comentario_efectivo: '', comentario_debito: '', comentario_credito: '', comentario_transferencia: '' },
                 compraForm: { proveedor_id: 1, notas: '', items: [] },
@@ -2452,6 +2465,8 @@
                             this.hasLicense = resp.data.tiene_licencia;
                             this.licenseValid = resp.data.valida;
                         }
+                        const mid = await this.request('GET', '/api/licencia/machine-id');
+                        if (mid && mid.data) this.machineId = mid.data.machine_id;
                     } catch (e) {
                         this.hasLicense = false;
                         this.licenseValid = false;
@@ -3392,7 +3407,7 @@
                         this.modalTitle = "Editar Usuario";
                     } else if (type === 'licencia_create') {
                         this.modalTitle = "Generar Nueva Licencia";
-                        this.licenciaForm = { cliente: '', dias: 30 };
+                        this.licenciaForm = { cliente: '', machine_id: '', dias: 30 };
                         this.licenciaGenerada = '';
                     } else if (type === 'prov_create') {
                         this.modalTitle = "Nuevo Proveedor";
@@ -3904,9 +3919,14 @@
                 },
 
                 async generateLicencia() {
+                    if (!this.licenciaForm.cliente || !this.licenciaForm.machine_id) {
+                        this.addToast('warning', 'Completá cliente y machine ID');
+                        return;
+                    }
                     try {
                         const resp = await this.request('POST', '/api/licencia/generar', {
                             cliente: this.licenciaForm.cliente,
+                            machine_id: this.licenciaForm.machine_id,
                             dias: this.licenciaForm.dias
                         });
                         if (resp && resp.data) {

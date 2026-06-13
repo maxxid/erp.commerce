@@ -101,12 +101,15 @@ def _seed_database():
             db.commit()
 
         if not db.query(Licencia).first():
+            from app.services.licencia_service import generar_clave, obtener_machine_id
+            mid = obtener_machine_id()
             exp_demo = datetime.now(timezone.utc) + timedelta(days=30)
             db.add(Licencia(
-                clave=generar_clave("DEMO", exp_demo),
+                clave=generar_clave("DEMO", mid, exp_demo),
                 cliente="DEMO - Licencia de prueba",
+                machine_id=mid,
                 fecha_expiracion=exp_demo,
-                activa=True,
+                activa=True,  # demo empieza activada
             ))
             db.commit()
 
@@ -130,6 +133,11 @@ def _migrate_new_columns():
         existentes_prod = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(productos)"))]
         if "precio_etiqueta" not in existentes_prod:
             conn.execute(sa.text("ALTER TABLE productos ADD COLUMN precio_etiqueta FLOAT"))
+            conn.commit()
+        existentes_lic = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(licencias)"))]
+        if "machine_id" not in existentes_lic:
+            conn.execute(sa.text("ALTER TABLE licencias ADD COLUMN machine_id VARCHAR(200)"))
+            conn.commit()
     finally:
         conn.close()
 

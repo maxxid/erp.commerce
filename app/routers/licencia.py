@@ -20,7 +20,15 @@ class ActivarRequest(BaseModel):
 
 class GenerarRequest(BaseModel):
     cliente: str = Field(..., min_length=1, max_length=200)
+    machine_id: str = Field(..., min_length=1, max_length=200)
     dias: int = Field(default=30, ge=1, le=365)
+
+
+@router.get("/machine-id", response_model=RespuestaData)
+def machine_id():
+    """Devuelve el ID único de esta máquina."""
+    mid = licencia_service.obtener_machine_id()
+    return RespuestaData(data={"machine_id": mid}, message="ID de máquina")
 
 
 @router.get("/estado", response_model=RespuestaData)
@@ -52,10 +60,14 @@ def estado(db: Session = Depends(get_db)):
 @router.post("/activar", response_model=RespuestaData)
 def activar(data: ActivarRequest, db: Session = Depends(get_db)):
     """Activa una licencia con la clave proporcionada. No requiere auth."""
-    lic = licencia_service.activar_licencia(db, data.clave)
+    mid = licencia_service.obtener_machine_id()
+    lic = licencia_service.activar_licencia(db, data.clave, mid)
     if not lic:
-        raise HTTPException(status_code=400, detail="Clave inválida o ya utilizada")
-    dias = max(0, (lic.fecha_expiracion - datetime.now(timezone.utc)).days)
+        raise HTTPException(status_code=400, detail="Clave inválida, ya utilizada, o no corresponde a esta máquina")
+    exp = lic.fecha_expiracion
+    if exp and exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    dias = max(0, (exp - datetime.now(timezone.utc)).days) if exp else 0
     return RespuestaData(
         data={
             "cliente": lic.cliente,
@@ -69,7 +81,7 @@ def activar(data: ActivarRequest, db: Session = Depends(get_db)):
 @router.post("/generar", response_model=RespuestaData)
 def generar(data: GenerarRequest, db: Session = Depends(get_db), user: Usuario = Depends(require_role("admin"))):
     """Genera una nueva clave de licencia (solo admin)."""
-    resultado = licencia_service.crear_licencia(db, data.cliente, data.dias)
+    resultado = licencia_service.crear_licencia(db, data.cliente, data.machine_id, data.dias)
     return RespuestaData(data=resultado, message=f"Licencia generada: {resultado['clave']}")
 
 
@@ -80,6 +92,7 @@ def historial(db: Session = Depends(get_db), user: Usuario = Depends(require_rol
     data = [
         {
             "id": l.id, "clave": l.clave, "cliente": l.cliente,
+            "machine_id": l.machine_id,
             "fecha_inicio": l.fecha_inicio.isoformat() if l.fecha_inicio else None,
             "fecha_expiracion": l.fecha_expiracion.isoformat() if l.fecha_expiracion else None,
             "activa": l.activa,

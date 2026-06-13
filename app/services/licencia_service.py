@@ -1,7 +1,10 @@
-"""Servicio de Licencia: generar, activar, validar, verificar expiración."""
+"""Servicio de Licencia: generar, activar, validar, verificar expiración con machine binding."""
 
 import hmac
 import hashlib
+import platform
+import uuid
+import subprocess
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 from sqlalchemy.orm import Session
@@ -10,7 +13,6 @@ from app.config import settings
 
 
 def _hmac_sign(message: str) -> str:
-    """Firma un mensaje con HMAC-SHA256 usando JWT_SECRET."""
     return hmac.new(
         settings.JWT_SECRET.encode(),
         message.encode(),
@@ -18,51 +20,96 @@ def _hmac_sign(message: str) -> str:
     ).hexdigest()[:12]
 
 
-def generar_clave(cliente: str, fecha_expiracion: datetime) -> str:
-    """Genera una clave de licencia firmada."""
-    msg = f"{cliente}|{int(fecha_expiracion.timestamp())}"
-    firma = _hmac_sign(msg)
+def obtener_machine_id() -> str:
+    """Genera un ID único para esta máquina basado en hardware (hostname + disco)."""
+    hostname = platform.node() or "unknown"
+
+    # Obtener serial del disco C: (Windows) o volumen raíz (Linux)
+    disco = ""
+    try:
+        if platform.system() == "Windows":
+            result = subprocess.run(
+                ["wmic", "diskdrive", "get", "serialnumber"],
+                capture_output=True, text=True, timeout=5
+            )
+            lines = [l.strip() for l in result.stdout.splitlines() if l.strip() and "SerialNumber" not in l]
+            disco = lines[0] if lines else ""
+        else:
+            result = subprocess.run(
+                ["lsblk", "-o", "UUID", "-n", "-d"],
+                capture_output=True, text=True, timeout=5
+            )
+            disco = result.stdout.strip().split("\n")[0] if result.stdout.strip() else ""
+    except Exception:
+        pass
+
+    if not disco:
+        # Fallback: usar MAC address
+        try:
+            mac = uuid.getnode()
+            disco = format(mac, "x")
+        except Exception:
+            disco = "fallback"
+
+    # Generar hash corto del hardware
+    raw = f"{hostname}|{disco}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+def generar_clave(cliente: str, machine_id: str, fecha_expiracion: datetime) -> str:
+    """Genera una clave de licencia firmada con HMAC atada a la máquina."""
+    msg = f"{cliente}|{machine_id}|{int(fecha_expiracion.timestamp())}"
+    firma = _hmac_sign(msg).upper()
     return f"APX-{firma[:4]}-{firma[4:8]}-{firma[8:12]}"
 
 
-def validar_clave(cliente: str, fecha_expiracion: datetime, clave: str) -> bool:
-    """Verifica que una clave sea válida para los parámetros dados."""
-    esperada = generar_clave(cliente, fecha_expiracion)
+def validar_clave(cliente: str, machine_id: str, fecha_expiracion: datetime, clave: str) -> bool:
+    esperada = generar_clave(cliente, machine_id, fecha_expiracion)
     return clave.upper().replace(" ", "") == esperada.upper()
 
 
-def crear_licencia(db: Session, cliente: str, dias: int = 30) -> dict:
+def crear_licencia(db: Session, cliente: str, machine_id: str, dias: int = 30) -> dict:
     """Crea una nueva licencia con clave firmada (uso admin)."""
     expiracion = datetime.now(timezone.utc) + timedelta(days=dias)
-    clave = generar_clave(cliente, expiracion)
+    clave = generar_clave(cliente, machine_id, expiracion)
     lic = Licencia(
         clave=clave,
         cliente=cliente,
+        machine_id=machine_id,
         fecha_expiracion=expiracion,
     )
     db.add(lic)
     db.commit()
     db.refresh(lic)
     return {
-        "id": lic.id,
-        "clave": lic.clave,
-        "cliente": lic.cliente,
+        "id": lic.id, "clave": lic.clave, "cliente": lic.cliente,
+        "machine_id": lic.machine_id,
         "fecha_inicio": lic.fecha_inicio.isoformat(),
         "fecha_expiracion": lic.fecha_expiracion.isoformat(),
         "activa": lic.activa,
     }
 
 
-def activar_licencia(db: Session, clave: str) -> Optional[Licencia]:
-    """Activa una licencia a partir de la clave."""
+def activar_licencia(db: Session, clave: str, machine_id: str) -> Optional[Licencia]:
+    """Activa una licencia. Valida que la clave corresponda a esta máquina y no esté usada."""
     clave = clave.upper().replace(" ", "")
-    lic = db.query(Licencia).filter(Licencia.clave == clave, Licencia.activa == False).first()
-    if lic:
-        lic.activa = True
-        if lic.fecha_expiracion < datetime.now(timezone.utc):
-            lic.fecha_expiracion = datetime.now(timezone.utc) + timedelta(days=30)
-            lic.fecha_inicio = datetime.now(timezone.utc)
-        db.commit()
+    lic = db.query(Licencia).filter(Licencia.clave == clave).first()
+    if not lic:
+        return None
+    if lic.activa:
+        return None
+    if lic.machine_id and lic.machine_id != machine_id:
+        return None
+    lic.activa = True
+    lic.machine_id = machine_id
+    exp = lic.fecha_expiracion
+    if exp and exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    if exp and exp < now:
+        lic.fecha_expiracion = now + timedelta(days=30)
+        lic.fecha_inicio = now
+    db.commit()
     return lic
 
 
