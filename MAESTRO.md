@@ -33,9 +33,10 @@ Producto
 ├── imagen_url: str (nullable)
 ├── sku: str (nullable)
 ├── propiedades: JSON           -- ingredientes, nutrición, sellos, etc.
-├── fuente: str                 -- "carrefour" | "vea" | "masonline" | "manual"
+├── fuente: str                 -- "carrefour" | "vea" | "masonline" | "supercoco" | "manual"
 ├── categoria_id: int (FK → Categoria)
 ├── stock_actual: Decimal (default 0)
+├── stock_transito: Decimal (default 0)  -- mercadería pedida, aún no recibida
 ├── stock_minimo: Decimal (default 0)
 ├── activo: bool (default True)
 ├── ia_analizado: bool (default False)
@@ -173,7 +174,8 @@ CompraItem
 ├── id: int (PK)
 ├── compra_id: int (FK → Compra, NOT NULL)
 ├── producto_id: int (FK → Producto, NOT NULL)
-├── cantidad: Decimal (NOT NULL)
+├── cantidad: Decimal (NOT NULL)            -- cantidad ordenada original
+├── cantidad_recibida: Decimal (default 0)  -- cuánto se recibió realmente
 ├── precio_unitario: Decimal (NOT NULL)
 ├── subtotal: Decimal (NOT NULL)
 ```
@@ -454,7 +456,15 @@ erp-comercio/
 6. **Soft delete**: Productos y clientes no se borran físicamente, se
    desactivan (activo=False).
 7. **Lookup**: La búsqueda por código de barras busca primero en BD local,
-   luego en fuentes externas (Carrefour → Vea → Masonline).
+   luego consulta 4 fuentes en paralelo (Carrefour, Vea, MasOnline, Super Coco).
+   La primera que responde llena el card; las demás muestran badges de comparación.
+8. **Carga manual POS**: Formato `*Nombre*Precio` desde el escáner crea un
+   producto al vuelo con stock inicial 99.
+9. **Live search POS**: Al tipear texto en el buscador, la grilla de productos
+   se filtra en vivo (coincidencia parcial). Enter agrega el primer resultado.
+10. **Stock en tránsito**: Al crear una OC pendiente, el stock_transito se acumula.
+    Al recibir (parcial o total), el tránsito baja y el stock real sube. Si se
+    anula, solo se revierte el tránsito pendiente.
 
 ## 9. FORMATO DE RESPUESTA ESTÁNDAR
 

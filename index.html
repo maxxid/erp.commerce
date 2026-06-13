@@ -208,6 +208,13 @@
                         <i class="fa-solid fa-address-book text-lg w-5 text-center"></i>
                         <span>Clientes y Ctas. Ctes</span>
                     </button>
+
+                    <hr class="border-slate-800 my-2">
+
+                    <button @click="showModal('help')" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150 text-slate-400 hover:bg-slate-800 hover:text-white">
+                        <i class="fa-solid fa-circle-question text-lg w-5 text-center"></i>
+                        <span>Ayuda y Atajos</span>
+                    </button>
                 </nav>
             </div>
 
@@ -1543,6 +1550,77 @@
                 </div>
             </div>
 
+            <!-- MODAL: AYUDA Y ATAJOS -->
+            <div x-show="currentModalType === 'help'" class="space-y-4 max-h-[70vh] overflow-y-auto">
+                <div class="space-y-4 text-xs text-slate-600 leading-relaxed">
+
+                    <!-- Sección: POS y Escáner -->
+                    <div class="p-3 bg-brand-50 border border-brand-100 rounded-xl">
+                        <h4 class="font-bold text-brand-700 text-sm mb-2"><i class="fa-solid fa-cash-register mr-1"></i> POS de Ventas — Escáner</h4>
+                        <ul class="space-y-1.5 list-disc pl-4">
+                            <li><strong>Código de barras:</strong> escaneá o tipeá el código y presioná <span class="bg-slate-200 px-1.5 py-0.5 rounded font-mono text-[10px]">Enter</span>. Si existe en el sistema, va directo al carrito. Si no, busca en Carrefour, Vea, MasOnline y Super Coco.</li>
+                            <li><strong>Carga manual rápida:</strong> <span class="bg-slate-200 px-1.5 py-0.5 rounded font-mono text-[10px]">*Nombre*Precio</span> + <span class="bg-slate-200 px-1.5 py-0.5 rounded font-mono text-[10px]">Enter</span>. Ej: <span class="bg-slate-200 px-1.5 py-0.5 rounded font-mono text-[10px]">*COCA 1.5L*1500</span>. Crea un producto al vuelo con stock=99.</li>
+                            <li><strong>Búsqueda por texto:</strong> tipeá cualquier palabra (ej: "coca") y la grilla se filtra en vivo. <span class="bg-slate-200 px-1.5 py-0.5 rounded font-mono text-[10px]">Enter</span> agrega el primer resultado al carrito.</li>
+                            <li><strong>Mientras busca en fuentes externas:</strong> podés seguir cargando productos del catálogo, modificar el carrito, o cambiar el medio de pago. Nada se bloquea. Si escaneás otro código, las búsquedas anteriores se guardan en cola y aparecen al liberar el card.</li>
+                        </ul>
+                    </div>
+
+                    <!-- Sección: Atajos de teclado -->
+                    <div class="p-3 bg-amber-50 border border-amber-100 rounded-xl">
+                        <h4 class="font-bold text-amber-700 text-sm mb-2"><i class="fa-solid fa-keyboard mr-1"></i> Atajos de Teclado</h4>
+                        <div class="grid grid-cols-2 gap-1.5">
+                            <div class="flex justify-between"><span>Escanear / Buscar</span><span class="bg-slate-200 px-1.5 py-0.5 rounded font-mono text-[10px]">Enter</span></div>
+                            <div class="flex justify-between"><span>Ir a medios de pago</span><span class="bg-slate-200 px-1.5 py-0.5 rounded font-mono text-[10px]">Tab</span></div>
+                            <div class="flex justify-between"><span>Seleccionar Efectivo</span><span class="bg-slate-200 px-1.5 py-0.5 rounded font-mono text-[10px]">1</span></div>
+                            <div class="flex justify-between"><span>Seleccionar Débito</span><span class="bg-slate-200 px-1.5 py-0.5 rounded font-mono text-[10px]">2</span></div>
+                            <div class="flex justify-between"><span>Seleccionar Crédito</span><span class="bg-slate-200 px-1.5 py-0.5 rounded font-mono text-[10px]">3</span></div>
+                            <div class="flex justify-between"><span>Seleccionar Transferencia</span><span class="bg-slate-200 px-1.5 py-0.5 rounded font-mono text-[10px]">4</span></div>
+                            <div class="flex justify-between"><span>Seleccionar Cta. Corriente</span><span class="bg-slate-200 px-1.5 py-0.5 rounded font-mono text-[10px]">5</span></div>
+                            <div class="flex justify-between"><span>Navegar medios de pago</span><span class="bg-slate-200 px-1.5 py-0.5 rounded font-mono text-[10px]">← →</span></div>
+                            <div class="flex justify-between"><span>Confirmar venta</span><span class="bg-slate-200 px-1.5 py-0.5 rounded font-mono text-[10px]">Enter</span> (en pagos)</div>
+                        </div>
+                    </div>
+
+                    <!-- Sección: Órdenes de Compra -->
+                    <div class="p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
+                        <h4 class="font-bold text-emerald-700 text-sm mb-2"><i class="fa-solid fa-truck-ramp-box mr-1"></i> Flujo de Órdenes de Compra (2 pasos)</h4>
+                        <ol class="space-y-1.5 list-decimal pl-4">
+                            <li><strong>Crear OC:</strong> elegí proveedor, agregá uno o más productos con cantidad y precio de costo. La OC queda <span class="text-amber-600 font-bold">pendiente</span> y el stock aparece como <span class="text-amber-600 font-bold">stock en tránsito</span>.</li>
+                            <li><strong>Recibir mercadería:</strong> cuando llega el pedido, botón <span class="text-emerald-600 font-bold">Recibir</span> en la tabla. Podés recibir cantidades parciales (ej: pediste 10, llegaron 7). El tránsito baja y el stock real sube. Si se recibió todo → estado <span class="text-emerald-600 font-bold">recibida</span>.</li>
+                        </ol>
+                    </div>
+
+                    <!-- Sección: Conceptos clave -->
+                    <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                        <h4 class="font-bold text-slate-700 text-sm mb-2"><i class="fa-solid fa-lightbulb mr-1"></i> Conceptos Clave</h4>
+                        <ul class="space-y-1.5 list-disc pl-4">
+                            <li><strong>Stock en tránsito:</strong> mercadería pedida al proveedor que aún no se recibió. Visible en la API de productos. Se acumula al crear OC, baja al recibir.</li>
+                            <li><strong>Caja — cierre por método:</strong> cada medio de pago se cierra por separado (efectivo, débito, crédito, transferencia). El cierre total finaliza la jornada.</li>
+                            <li><strong>Cuenta corriente:</strong> ventas a crédito no generan movimiento de caja. El saldo se registra en el cliente.</li>
+                            <li><strong>Movimiento de stock:</strong> nunca se modifica directamente. Cada entrada/salida genera un registro de auditoría.</li>
+                            <li><strong>Soft-delete:</strong> los productos y proveedores no se borran, se desactivan (<span class="font-mono text-[10px]">activo=False</span>).</li>
+                        </ul>
+                    </div>
+
+                    <!-- Sección: Fuentes de búsqueda -->
+                    <div class="p-3 bg-indigo-50 border border-indigo-100 rounded-xl">
+                        <h4 class="font-bold text-indigo-700 text-sm mb-2"><i class="fa-solid fa-magnifying-glass mr-1"></i> Fuentes de Búsqueda de Productos</h4>
+                        <div class="grid grid-cols-2 gap-1 text-[11px]">
+                            <div><strong>1. Carrefour</strong> <span class="text-slate-400">(API, ~1s)</span></div>
+                            <div><strong>2. Vea</strong> <span class="text-slate-400">(HTML, ~3s)</span></div>
+                            <div><strong>3. MasOnline</strong> <span class="text-slate-400">(HTML, ~3s)</span></div>
+                            <div><strong>4. Super Coco</strong> <span class="text-slate-400">(HTML, ~2s)</span></div>
+                        </div>
+                        <p class="text-[10px] text-slate-400 mt-2">Las 4 fuentes se consultan en paralelo. La primera que responde llena el card. Las demás muestran sus precios en badges de comparación.</p>
+                    </div>
+
+                </div>
+
+                <div class="flex justify-end border-t pt-4">
+                    <button @click="modalActive = false" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold">Cerrar</button>
+                </div>
+            </div>
+
             <!-- MODAL: CREAR/EDITAR PROVEEDOR -->
             <div x-show="currentModalType === 'prov_create' || currentModalType === 'prov_edit'" class="space-y-4">
                 <div>
@@ -2729,6 +2807,8 @@
                         this.modalTitle = "Recibir Mercadería";
                     } else if (type === 'compra_detail') {
                         this.modalTitle = "Detalle de Orden de Compra";
+                    } else if (type === 'help') {
+                        this.modalTitle = "Guía Rápida y Atajos de Teclado";
                     } else if (type === 'prov_create') {
                         this.modalTitle = "Nuevo Proveedor";
                         this.provForm = { id: null, nombre: '', cuit: '', telefono: '', email: '', direccion: '', nombre_contacto: '' };
