@@ -393,7 +393,7 @@
                             <div class="flex gap-2">
                                 <div class="relative flex-1">
                                     <i class="fa-solid fa-barcode absolute left-4 top-3.5 text-slate-400"></i>
-                                    <input type="text" x-ref="posScanInput" x-model="posLookupCode" @keydown.enter="triggerPOSLookup()" @keydown.tab.prevent="$refs.pagoSection ? $refs.pagoSection.focus() : null" placeholder="Escanear Código de Barras (Enter)" class="w-full bg-white border border-slate-200 rounded-xl pl-11 pr-4 py-2.5 text-sm font-mono focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100 transition">
+                                    <input type="text" x-ref="posScanInput" x-model="posLookupCode" @input="handlePOSInput()" @keydown.enter="triggerPOSLookup()" @keydown.tab.prevent="$refs.pagoSection ? $refs.pagoSection.focus() : null" placeholder="Escanear código, *nombre*precio, o buscar texto..." class="w-full bg-white border border-slate-200 rounded-xl pl-11 pr-4 py-2.5 text-sm font-mono focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100 transition">
                                 </div>
                                 <button @click="triggerPOSLookup()" tabindex="-1" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-xl transition flex items-center gap-1.5 shrink-0">
                                     <i class="fa-solid fa-magnifying-glass"></i> Buscar / Escanear
@@ -1727,6 +1727,7 @@
 
                 // UI POS
                 posLookupCode: '',
+                posTextSearch: '',
                 selectedPOSCategory: 'all',
                 lookupProduct: {},
                 _lookupToken: 0,
@@ -1936,14 +1937,80 @@
                     }
                 },
 
+                handlePOSInput() {
+                    const val = this.posLookupCode || '';
+                    if (val.startsWith('*')) {
+                        this.posTextSearch = ''; // modo manual, no filtrar
+                    } else if (val.length > 0 && !/^\d+$/.test(val)) {
+                        this.posTextSearch = val; // texto → live filter
+                    } else {
+                        this.posTextSearch = ''; // numérico o vacío → sin filtro
+                    }
+                },
+
                 // Lookup Multi-fuente (Punto 3.5) — v2: card inmediato + paralelo + abort
                 async triggerPOSLookup() {
                     if (!this.posLookupCode) return;
-                    const barcode = this.posLookupCode;
+                    const raw = this.posLookupCode;
                     this.posLookupCode = '';
+                    this.posTextSearch = '';
                     this.lookupNotFound = false;
 
-                    // 1) Si existe localmente → agregar directo al carrito
+                    // 1) Carga manual rápida: *NOMBRE*PRECIO
+                    if (raw.startsWith('*')) {
+                        const parts = raw.split('*');
+                        const nombre = (parts[1] || '').trim();
+                        const precio = parseFloat(parts[2] || '0');
+                        if (!nombre || precio <= 0) {
+                            this.addToast('warning', 'Formato: *Nombre*Precio. Ej: *COCA 1.5L*1500');
+                            this.$nextTick(() => { if (this.$refs.posScanInput) this.$refs.posScanInput.focus(); });
+                            return;
+                        }
+                        if (this.apiMode === 'real') {
+                            try {
+                                const saveResp = await this.request('POST', '/api/productos', {
+                                    codigo_barras: `*MANUAL*${Date.now()}`,
+                                    nombre, precio_venta: precio, fuente: 'manual',
+                                    cantidad_inicial: 99
+                                });
+                                if (saveResp && saveResp.data) {
+                                    const saved = saveResp.data;
+                                    saved.stock_actual = 99;
+                                    await this.fetchProducts();
+                                    this.addPRODToPOS(saved);
+                                    this.addToast('success', `${nombre} agregado ($${precio}).`);
+                                }
+                            } catch (e) {
+                                this.addToast('error', 'Error al crear producto manual');
+                            }
+                        } else {
+                            const tempProd = {
+                                id: this.products.length + 1, codigo_barras: `*MANUAL*${Date.now()}`,
+                                nombre, marca: '', precio_venta: precio, stock_actual: 99,
+                                categoria_id: this.categories[0]?.id || 1
+                            };
+                            this.products.push(tempProd);
+                            this.addPRODToPOS(tempProd);
+                            this.addToast('success', `${nombre} agregado ($${precio}). Completar en Productos.`);
+                        }
+                        this.$nextTick(() => { if (this.$refs.posScanInput) this.$refs.posScanInput.focus(); });
+                        return;
+                    }
+
+                    // 2) Texto → buscar entre productos locales (live filter ya muestra opciones)
+                    const filtered = this.filteredPOSProducts;
+                    if (filtered.length > 0 && !/^\d+$/.test(raw) && raw.length >= 2) {
+                        const prod = filtered[0];
+                        this._lookupToken++;
+                        this.lookupProduct = {};
+                        await this.addPRODToPOS(prod);
+                        this.addToast('success', `${prod.nombre} añadido al carrito.`);
+                        this.$nextTick(() => { if (this.$refs.posScanInput) this.$refs.posScanInput.focus(); this.showNextPending(); });
+                        return;
+                    }
+
+                    // 3) Barcode → buscar localmente o en fuentes externas
+                    const barcode = raw;
                     const prodLocal = this.products.find(p => p.codigo_barras === barcode);
                     if (prodLocal) {
                         this._lookupToken++; // aborta búsquedas en vuelo
@@ -3101,7 +3168,9 @@
                 get filteredPOSProducts() {
                     return this.products.filter(p => {
                         const matchCat = this.selectedPOSCategory === 'all' || p.categoria_id === this.selectedPOSCategory;
-                        return matchCat;
+                        const matchText = !this.posTextSearch || 
+                            (p.nombre && p.nombre.toLowerCase().includes(this.posTextSearch.toLowerCase()));
+                        return matchCat && matchText;
                     });
                 },
                 get maxVal7() {
