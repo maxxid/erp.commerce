@@ -1,9 +1,10 @@
 """Servicio de respaldo: backup local + sincronización con Cloudflare R2.
 
 - Backup local: copia la DB a la carpeta backups/ con timestamp.
+- Config R2: persistida en tabla Configuracion (claves r2_endpoint, r2_access_key, etc.)
+  con fallback a variables de entorno.
 - Subir/bajar de R2 (S3-compatible).
 - Listar backups locales y remotos.
-- Restauración: descarga y deja listo para reemplazo manual.
 """
 
 import os
@@ -11,9 +12,9 @@ import shutil
 import gzip
 import glob
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Optional, List, Dict
+from sqlalchemy.orm import Session
 from app.config import settings
-
 
 BACKUP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "backups")
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "erp_comercio.db")
@@ -23,19 +24,59 @@ def _ensure_backup_dir():
     os.makedirs(BACKUP_DIR, exist_ok=True)
 
 
-def _r2_client():
-    """Crea un cliente S3 para Cloudflare R2."""
+def _make_r2_client(cfg: dict):
+    """Crea un cliente S3 boto3 con la configuración dada."""
     import boto3
     return boto3.client(
         "s3",
-        endpoint_url=settings.R2_ENDPOINT,
-        aws_access_key_id=settings.R2_ACCESS_KEY,
-        aws_secret_access_key=settings.R2_SECRET_KEY,
+        endpoint_url=cfg["endpoint"],
+        aws_access_key_id=cfg["access_key"],
+        aws_secret_access_key=cfg["secret_key"],
     )
 
 
+def _get_r2_config(db: Session) -> Optional[dict]:
+    """Obtiene la configuración R2: primero DB, luego env vars."""
+    from app.models.configuracion import Configuracion
+
+    if db:
+        rows = db.query(Configuracion).filter(Configuracion.clave.in_([
+            "r2_endpoint", "r2_access_key", "r2_secret_key", "r2_bucket"
+        ])).all()
+        cfg_db = {r.clave: r.valor for r in rows}
+        if cfg_db.get("r2_endpoint") and cfg_db.get("r2_access_key") and cfg_db.get("r2_secret_key"):
+            return {
+                "endpoint": cfg_db["r2_endpoint"],
+                "access_key": cfg_db["r2_access_key"],
+                "secret_key": cfg_db["r2_secret_key"],
+                "bucket": cfg_db.get("r2_bucket", "erp-backups"),
+            }
+
+    # Fallback a env vars
+    if settings.R2_ENDPOINT and settings.R2_ACCESS_KEY and settings.R2_SECRET_KEY:
+        return {
+            "endpoint": settings.R2_ENDPOINT,
+            "access_key": settings.R2_ACCESS_KEY,
+            "secret_key": settings.R2_SECRET_KEY,
+            "bucket": settings.R2_BUCKET,
+        }
+    return None
+
+
+def _guardar_r2_config(db: Session, claves: dict):
+    """Guarda la configuración R2 en la tabla Configuracion."""
+    from app.models.configuracion import Configuracion
+    for clave, valor in claves.items():
+        row = db.query(Configuracion).filter(Configuracion.clave == clave).first()
+        if row:
+            row.valor = valor
+        else:
+            db.add(Configuracion(clave=clave, valor=valor, descripcion=f"R2: {clave}"))
+    db.commit()
+
+
 def crear_backup_local() -> str:
-    """Crea un backup comprimido (.gz) en la carpeta backups/. Retorna el nombre del archivo."""
+    """Crea un backup comprimido (.gz). Retorna el nombre del archivo."""
     _ensure_backup_dir()
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     filename = f"erp_comercio_{ts}.db.gz"
@@ -49,7 +90,6 @@ def crear_backup_local() -> str:
 
 
 def listar_backups_locales() -> List[dict]:
-    """Lista los backups locales disponibles."""
     _ensure_backup_dir()
     files = sorted(glob.glob(os.path.join(BACKUP_DIR, "*.db.gz")), reverse=True)
     resultados = []
@@ -61,28 +101,28 @@ def listar_backups_locales() -> List[dict]:
     return resultados
 
 
-def subir_a_r2(filename: str) -> bool:
-    """Sube un backup local a Cloudflare R2."""
-    if not settings.R2_ENABLED:
+def subir_a_r2(filename: str, db: Session) -> bool:
+    cfg = _get_r2_config(db)
+    if not cfg:
         return False
     filepath = os.path.join(BACKUP_DIR, filename)
     if not os.path.exists(filepath):
         return False
     try:
-        client = _r2_client()
-        client.upload_file(filepath, settings.R2_BUCKET, filename)
+        client = _make_r2_client(cfg)
+        client.upload_file(filepath, cfg["bucket"], filename)
         return True
     except Exception:
         return False
 
 
-def listar_backups_r2() -> List[dict]:
-    """Lista backups en Cloudflare R2."""
-    if not settings.R2_ENABLED:
+def listar_backups_r2(db: Session) -> List[dict]:
+    cfg = _get_r2_config(db)
+    if not cfg:
         return []
     try:
-        client = _r2_client()
-        resp = client.list_objects_v2(Bucket=settings.R2_BUCKET, MaxKeys=50)
+        client = _make_r2_client(cfg)
+        resp = client.list_objects_v2(Bucket=cfg["bucket"], MaxKeys=50)
         resultados = []
         for obj in resp.get("Contents", []):
             resultados.append({
@@ -97,22 +137,21 @@ def listar_backups_r2() -> List[dict]:
         return []
 
 
-def descargar_de_r2(filename: str) -> Optional[str]:
-    """Descarga un backup de R2 a la carpeta local. Retorna la ruta local."""
-    if not settings.R2_ENABLED:
+def descargar_de_r2(filename: str, db: Session) -> Optional[str]:
+    cfg = _get_r2_config(db)
+    if not cfg:
         return None
     _ensure_backup_dir()
     filepath = os.path.join(BACKUP_DIR, filename)
     try:
-        client = _r2_client()
-        client.download_file(settings.R2_BUCKET, filename, filepath)
+        client = _make_r2_client(cfg)
+        client.download_file(cfg["bucket"], filename, filepath)
         return filepath
     except Exception:
         return None
 
 
 def eliminar_backup_local(filename: str) -> bool:
-    """Elimina un backup local."""
     filepath = os.path.join(BACKUP_DIR, filename)
     if os.path.exists(filepath):
         os.remove(filepath)
@@ -121,7 +160,6 @@ def eliminar_backup_local(filename: str) -> bool:
 
 
 def _limpiar_backups_locales():
-    """Conserva solo los últimos N backups locales."""
     if settings.BACKUP_KEEP_LOCAL <= 0:
         return
     files = sorted(glob.glob(os.path.join(BACKUP_DIR, "*.db.gz")))
@@ -130,10 +168,14 @@ def _limpiar_backups_locales():
 
 
 def backup_automatico():
-    """Crea backup local y sube a R2 si está habilitado."""
+    """Crea backup local y sube a R2 si está configurado."""
+    from app.database import SessionLocal
     try:
         nombre = crear_backup_local()
-        if settings.R2_ENABLED:
-            subir_a_r2(nombre)
+        db = SessionLocal()
+        try:
+            subir_a_r2(nombre, db)
+        finally:
+            db.close()
     except Exception:
         pass

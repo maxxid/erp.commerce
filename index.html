@@ -1172,10 +1172,58 @@
                         <div>
                             <h2 class="text-2xl font-bold text-slate-950 font-display">Respaldos y Sincronización</h2>
                             <p class="text-sm text-slate-500 mt-1">
-                                <span x-show="backupStatus.r2_habilitado"><i class="fa-solid fa-circle-check text-emerald-500 mr-1"></i> Cloudflare R2 conectado</span>
-                                <span x-show="!backupStatus.r2_habilitado"><i class="fa-solid fa-circle-exclamation text-amber-500 mr-1"></i> R2 no configurado — solo backups locales</span>
+                                <span x-show="backupStatus.r2_habilitado"><i class="fa-solid fa-circle-check text-emerald-500 mr-1"></i> R2: <span x-text="backupStatus.r2_bucket || ''"></span></span>
+                                <span x-show="!backupStatus.r2_habilitado"><i class="fa-solid fa-triangle-exclamation text-amber-500 mr-1"></i> R2 no configurado</span>
                                 <span x-show="backupStatus.backup_automatico_min > 0" class="ml-3"><i class="fa-solid fa-clock text-blue-500 mr-1"></i> Auto: cada <span x-text="backupStatus.backup_automatico_min"></span> min</span>
                             </p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button @click="createBackup()" :disabled="processingBackup" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-xl flex items-center gap-1.5 shadow-sm transition">
+                                <i class="fa-solid" :class="processingBackup ? 'fa-spinner animate-spin' : 'fa-floppy-disk'"></i> Crear Backup
+                            </button>
+                            <button @click="fetchBackupStatus()" class="px-3 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl transition">
+                                <i class="fa-solid fa-arrows-rotate"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Configuración R2 -->
+                    <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                        <div class="p-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between cursor-pointer" @click="showR2Config = !showR2Config">
+                            <h3 class="font-bold text-slate-800 text-sm"><i class="fa-solid fa-cloud mr-2 text-sky-400"></i> Cloudflare R2 — Configuración</h3>
+                            <i class="fa-solid text-slate-400 text-xs" :class="showR2Config ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                        </div>
+                        <div x-show="showR2Config" class="p-4 space-y-3" x-transition>
+                            <p class="text-[10px] text-slate-400">Creá un bucket R2 en Cloudflare y obtené las credenciales S3 desde el panel de R2.</p>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Endpoint</label>
+                                    <input type="text" x-model="r2Form.endpoint" class="w-full border rounded-lg p-2 text-xs font-mono" placeholder="https://xxx.r2.cloudflarestorage.com">
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Bucket</label>
+                                    <input type="text" x-model="r2Form.bucket" class="w-full border rounded-lg p-2 text-xs font-mono" placeholder="erp-backups">
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Access Key ID</label>
+                                    <input type="text" x-model="r2Form.access_key" class="w-full border rounded-lg p-2 text-xs font-mono" placeholder="abc123...">
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Secret Access Key</label>
+                                    <input type="password" x-model="r2Form.secret_key" class="w-full border rounded-lg p-2 text-xs font-mono" placeholder="••••••••">
+                                </div>
+                            </div>
+                            <div class="flex gap-2 justify-end">
+                                <button @click="testR2Connection()" :disabled="testingR2" class="px-3 py-1.5 border border-slate-200 hover:bg-slate-50 rounded-lg text-xs font-bold transition">
+                                    <i class="fa-solid" :class="testingR2 ? 'fa-spinner animate-spin' : 'fa-plug'"></i> Probar Conexión
+                                </button>
+                                <button @click="saveR2Config()" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold transition">
+                                    <i class="fa-solid fa-floppy-disk"></i> Guardar
+                                </button>
+                            </div>
+                            <p x-show="r2TestResult" :class="r2TestOk ? 'text-emerald-600' : 'text-rose-500'" class="text-[10px] font-bold" x-text="r2TestResult"></p>
+                        </div>
+                    </div>
                         </div>
                         <div class="flex gap-2">
                             <button @click="createBackup()" :disabled="processingBackup" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-xl flex items-center gap-1.5 shadow-sm transition">
@@ -1898,6 +1946,11 @@
                 processingSale: false,
                 processingBackup: false,
                 backupStatus: { r2_habilitado: false, backup_automatico_min: 0, backups_locales: 0, ultimo_backup: null },
+                showR2Config: false,
+                r2Form: { endpoint: '', access_key: '', secret_key: '', bucket: 'erp-backups' },
+                testingR2: false,
+                r2TestResult: '',
+                r2TestOk: false,
                 localBackups: [],
                 r2Backups: [],
                 loggingIn: false,
@@ -3503,6 +3556,34 @@
                     let s = bytes;
                     while (s >= 1024 && i < u.length - 1) { s /= 1024; i++; }
                     return s.toFixed(i > 0 ? 1 : 0) + ' ' + u[i];
+                },
+
+                async testR2Connection() {
+                    this.testingR2 = true;
+                    this.r2TestResult = '';
+                    try {
+                        const resp = await this.request('POST', '/api/backups/test-r2', this.r2Form);
+                        this.r2TestOk = true;
+                        this.r2TestResult = resp.message || 'OK';
+                    } catch (e) {
+                        this.r2TestOk = false;
+                        this.r2TestResult = e.message || 'Error';
+                    }
+                    this.testingR2 = false;
+                },
+
+                async saveR2Config() {
+                    if (!this.r2Form.endpoint || !this.r2Form.access_key || !this.r2Form.secret_key) {
+                        this.addToast('warning', 'Completá todos los campos de R2');
+                        return;
+                    }
+                    try {
+                        await this.request('PUT', '/api/backups/config-r2', this.r2Form);
+                        this.addToast('success', 'Configuración R2 guardada');
+                        await this.fetchBackupStatus();
+                    } catch (e) {
+                        this.addToast('error', 'Error al guardar: ' + (e.message || ''));
+                    }
                 },
 
                 get filteredPOSProducts() {
