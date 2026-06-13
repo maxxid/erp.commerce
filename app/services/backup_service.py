@@ -109,8 +109,11 @@ def subir_a_r2(filename: str, db: Session) -> bool:
     if not os.path.exists(filepath):
         return False
     try:
+        from app.services.licencia_service import obtener_machine_id
+        mid = obtener_machine_id()
         client = _make_r2_client(cfg)
-        client.upload_file(filepath, cfg["bucket"], filename)
+        key = f"backups/{mid}/{filename}"
+        client.upload_file(filepath, cfg["bucket"], key)
         return True
     except Exception:
         return False
@@ -121,12 +124,15 @@ def listar_backups_r2(db: Session) -> List[dict]:
     if not cfg:
         return []
     try:
+        from app.services.licencia_service import obtener_machine_id
+        mid = obtener_machine_id()
         client = _make_r2_client(cfg)
-        resp = client.list_objects_v2(Bucket=cfg["bucket"], MaxKeys=50)
+        resp = client.list_objects_v2(Bucket=cfg["bucket"], Prefix=f"backups/{mid}/", MaxKeys=50)
         resultados = []
         for obj in resp.get("Contents", []):
             resultados.append({
-                "nombre": obj["Key"],
+                "nombre": obj["Key"].split("/")[-1],
+                "key": obj["Key"],
                 "size": obj["Size"],
                 "fecha": obj["LastModified"].isoformat(),
                 "ubicacion": "r2",
@@ -142,10 +148,13 @@ def descargar_de_r2(filename: str, db: Session) -> Optional[str]:
     if not cfg:
         return None
     _ensure_backup_dir()
+    from app.services.licencia_service import obtener_machine_id
+    mid = obtener_machine_id()
     filepath = os.path.join(BACKUP_DIR, filename)
     try:
         client = _make_r2_client(cfg)
-        client.download_file(cfg["bucket"], filename, filepath)
+        key = f"backups/{mid}/{filename}"
+        client.download_file(cfg["bucket"], key, filepath)
         return filepath
     except Exception:
         return None
