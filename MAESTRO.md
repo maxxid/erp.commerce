@@ -455,16 +455,22 @@ erp-comercio/
    su saldo. El límite de crédito no se puede exceder.
 6. **Soft delete**: Productos y clientes no se borran físicamente, se
    desactivan (activo=False).
-7. **Lookup**: La búsqueda por código de barras busca primero en BD local,
-   luego consulta 4 fuentes en paralelo (Carrefour, Vea, MasOnline, Super Coco).
-   La primera que responde llena el card; las demás muestran badges de comparación.
+7. **Lookup**: La búsqueda por código de barras busca en este orden:
+   DB local → catálogo central (catalogo_completo.json) → 4 fuentes externas
+   en paralelo (Carrefour, Vea, MasOnline, Super Coco). La primera que responde
+   llena el card; las demás muestran badges de comparación.
 8. **Carga manual POS**: Formato `*Nombre*Precio` desde el escáner crea un
-   producto al vuelo con stock inicial 99.
+   producto al vuelo con stock inicial 10 y costo 0.
 9. **Live search POS**: Al tipear texto en el buscador, la grilla de productos
    se filtra en vivo (coincidencia parcial). Enter agrega el primer resultado.
 10. **Stock en tránsito**: Al crear una OC pendiente, el stock_transito se acumula.
     Al recibir (parcial o total), el tránsito baja y el stock real sube. Si se
     anula, solo se revierte el tránsito pendiente.
+11. **Catálogo central**: Cada cliente exporta sus productos con código de barras
+    real (no *MANUAL*) a R2 en `catalogo/{machine_id}/productos.json`. El admin
+    mergea todos los catálogos y sube `catalogo_completo.json`. Los clientes lo
+    descargan para buscar productos offline sin depender de fuentes externas.
+    La exportación se dispara automáticamente al cerrar caja.
 
 ## 9. FORMATO DE RESPUESTA ESTÁNDAR
 
