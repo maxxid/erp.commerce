@@ -161,7 +161,7 @@
 
                 <!-- Lista de Navegación -->
                 <nav class="p-4 space-y-1">
-                    <button @click="activeTab = 'dashboard'; fetchDashboardData()" :class="activeTab === 'dashboard' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150">
+                    <button @click="activeTab = 'dashboard'; fetchDashboardData(); fetchPendientesEtiquetar()" :class="activeTab === 'dashboard' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150">
                         <i class="fa-solid fa-chart-pie text-lg w-5 text-center"></i>
                         <span>Dashboard</span>
                     </button>
@@ -366,7 +366,7 @@
                     </div>
 
                     <!-- VISTA COMPLETA (admin / encargado) -->
-                    <div x-show="!dashboardSimple">
+                    <div x-show="!dashboardSimple" class="space-y-6">
                     <!-- KPI Cards -->
                     <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                         <div class="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm text-center">
@@ -2260,8 +2260,10 @@
                     const savedToken = localStorage.getItem('apex_token');
                     if (savedToken) {
                         this.authenticated = true;
+                        this.activeTab = 'dashboard';
                         this.verifyCajaState();
                         this.fetchDashboardData();
+                        this.fetchPendientesEtiquetar();
                         this.fetchCategories();
                         this.fetchClientes();
                         this.fetchProveedores();
