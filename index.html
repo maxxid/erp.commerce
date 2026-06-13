@@ -2623,14 +2623,14 @@
                                 const saveResp = await this.request('POST', '/api/productos', {
                                     codigo_barras: `*MANUAL*${Date.now()}`,
                                     nombre, precio_venta: precio, fuente: 'manual',
-                                    cantidad_inicial: 10
+                                    cantidad_inicial: 10, precio_costo: 0
                                 });
                                 if (saveResp && saveResp.data) {
                                     const saved = saveResp.data;
                                     saved.stock_actual = 10;
                                     await this.fetchProducts();
                                     this.addPRODToPOS(saved);
-                                    this.addToast('success', `${nombre} agregado ($${precio}). Ajusta el stock real en Productos.`);
+                                    this.addToast('success', `${nombre} agregado. Andá a Productos > Editar para ajustar stock y costo real.`);
                                 }
                             } catch (e) {
                                 this.addToast('error', 'Error al crear producto manual');
@@ -2638,12 +2638,12 @@
                         } else {
                             const tempProd = {
                                 id: this.products.length + 1, codigo_barras: `*MANUAL*${Date.now()}`,
-                                nombre, marca: '', precio_venta: precio, stock_actual: 10,
+                                nombre, marca: '', precio_venta: precio, precio_costo: 0, stock_actual: 10,
                                 categoria_id: this.categories[0]?.id || 1
                             };
                             this.products.push(tempProd);
                             this.addPRODToPOS(tempProd);
-                            this.addToast('success', `${nombre} agregado ($${precio}). Ajusta el stock real en Productos.`);
+                            this.addToast('success', `${nombre} agregado. Andá a Productos > Editar para ajustar stock y costo real.`);
                         }
                         this.$nextTick(() => { if (this.$refs.posScanInput) this.$refs.posScanInput.focus(); });
                         return;
