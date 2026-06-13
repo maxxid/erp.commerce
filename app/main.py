@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from app.config import settings
 from app.database import engine, Base
 from app.models import *  # noqa: F401, F403 — Registrar todos los modelos
-from app.routers import auth, productos, categorias, dashboard, caja, clientes, ventas, proveedores, compras, calendario, backups, usuarios, auditoria
+from app.routers import auth, productos, categorias, dashboard, caja, clientes, ventas, proveedores, compras, calendario, backups, usuarios, auditoria, licencia
 
 
 def crear_app() -> FastAPI:
@@ -46,6 +46,7 @@ def crear_app() -> FastAPI:
     app.include_router(backups.router)
     app.include_router(usuarios.router)
     app.include_router(auditoria.router)
+    app.include_router(licencia.router)
 
     # Servir el frontend
     @app.get("/app")
@@ -70,7 +71,10 @@ def _seed_database():
     from app.database import SessionLocal
     from app.models.usuario import Usuario, Sucursal
     from app.models.categoria import Categoria
+    from app.models.licencia import Licencia
     from app.auth.security import hash_password
+    from app.services.licencia_service import generar_clave
+    from datetime import datetime, timezone, timedelta
 
     db = SessionLocal()
     try:
@@ -94,6 +98,16 @@ def _seed_database():
             ]
             for nombre in categorias_default:
                 db.add(Categoria(nombre=nombre))
+            db.commit()
+
+        if not db.query(Licencia).first():
+            exp_demo = datetime.now(timezone.utc) + timedelta(days=30)
+            db.add(Licencia(
+                clave=generar_clave("DEMO", exp_demo),
+                cliente="DEMO - Licencia de prueba",
+                fecha_expiracion=exp_demo,
+                activa=True,
+            ))
             db.commit()
 
     finally:

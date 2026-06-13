@@ -8,6 +8,7 @@ from app.auth.security import verificar_password, hash_password, crear_token
 from app.auth.dependencies import get_current_user, require_role
 from app.models.usuario import Usuario
 from app.schemas.common import RespuestaData
+from app.services import licencia_service
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
@@ -35,6 +36,10 @@ class TokenResponse(BaseModel):
 @router.post("/login", response_model=RespuestaData[TokenResponse])
 def login(data: LoginRequest, db: Session = Depends(get_db)):
     """Autentica un usuario y devuelve un token JWT."""
+    # Verificar licencia
+    if not licencia_service.licencia_valida(db):
+        raise HTTPException(status_code=402, detail="Licencia expirada o inválida")
+
     user = db.query(Usuario).filter(Usuario.username == data.username).first()
 
     if not user or not verificar_password(data.password, user.password_hash):

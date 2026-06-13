@@ -88,27 +88,42 @@
                     </div>
                 </div>
 
-    <!-- PANTALLA DE LOGIN INICIAL (Autenticación JWT Real / Simulada) -->
+    <!-- PANTALLA DE LOGIN / ACTIVACIÓN DE LICENCIA -->
     <div x-show="!authenticated" class="fixed inset-0 bg-brand-900 z-50 flex items-center justify-center p-4" x-transition>
         <div class="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl border border-slate-100 flex flex-col space-y-6">
             <div class="text-center">
                 <div class="w-16 h-16 rounded-2xl bg-brand-600 text-white flex items-center justify-center text-3xl mx-auto shadow-lg shadow-brand-600/30">
                     <i class="fa-solid fa-cubes-stacked"></i>
                 </div>
-                <h2 class="text-2xl font-bold text-slate-900 mt-4 font-display">Ingresar a ApexERP</h2>
-                <p class="text-sm text-slate-500 mt-1">Conexión unificada con el Core de DeepSeek</p>
-                <!-- Badge de Estado de Conexión de Red -->
-                <div class="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider"
+                <h2 class="text-2xl font-bold text-slate-900 mt-4 font-display" x-text="!licenseChecked ? 'Cargando...' : (hasLicense && licenseValid ? 'Ingresar a ApexERP' : 'Activar Licencia')"></h2>
+                <p x-show="!licenseChecked" class="text-sm text-slate-400 mt-1"><i class="fa-solid fa-circle-notch animate-spin mr-1"></i> Verificando licencia...</p>
+                <p x-show="licenseChecked && hasLicense && licenseValid" class="text-sm text-slate-500 mt-1">Conexión unificada con el Core de DeepSeek</p>
+                <p x-show="licenseChecked && hasLicense && !licenseValid" class="text-sm text-rose-500 mt-1 font-bold">Tu licencia expiró. Ingresá una nueva clave para continuar.</p>
+                <p x-show="licenseChecked && !hasLicense" class="text-sm text-slate-500 mt-1">Ingresá la clave de licencia proporcionada por tu proveedor</p>
+                <div x-show="licenseChecked && hasLicense && licenseValid" class="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider"
                      :class="apiMode === 'real' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-amber-50 text-amber-600 border border-amber-200'">
                     <span class="w-1.5 h-1.5 rounded-full animate-pulse" :class="apiMode === 'real' ? 'bg-emerald-500' : 'bg-amber-500'"></span>
-                    <span x-text="apiMode === 'real' ? 'Modo: API de Producción (8000)' : 'Modo: Simulador Offline'"></span>
+                    <span x-text="apiMode === 'real' ? 'Modo: API de Producción' : 'Modo: Simulador Offline'"></span>
                 </div>
             </div>
 
-            <!-- Formulario de Login adaptado a la API API_DOCUMENTACION.md -->
-            <div class="space-y-4">
+            <!-- Activación de licencia -->
+            <div x-show="licenseChecked && (!hasLicense || !licenseValid)" class="space-y-4">
                 <div>
-                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Usuario de prueba</label>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Clave de Licencia</label>
+                    <input type="text" x-model="licenseKey" @keydown.enter="activateLicense()" placeholder="APX-XXXX-XXXX-XXXX" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-mono text-center uppercase focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600 transition">
+                </div>
+                <div x-show="licenseError" class="p-2 bg-rose-50 text-rose-600 rounded-lg text-xs text-center" x-text="licenseError"></div>
+                <div x-show="licenseOk" class="p-2 bg-emerald-50 text-emerald-600 rounded-lg text-xs text-center" x-text="licenseOk"></div>
+                <button @click="activateLicense()" class="w-full bg-brand-600 hover:bg-brand-700 text-white py-3 rounded-xl text-sm font-semibold transition">
+                    <i class="fa-solid fa-key mr-2"></i> Activar Licencia
+                </button>
+            </div>
+
+            <!-- Login form (solo si licencia válida) -->
+            <div x-show="licenseChecked && hasLicense && licenseValid" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Usuario</label>
                     <div class="relative">
                         <i class="fa-regular fa-user absolute left-4 top-3.5 text-slate-400"></i>
                         <input type="text" x-model="loginForm.username" @keydown.enter.prevent="$refs.loginPassword.focus()" class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600 transition">
@@ -121,23 +136,21 @@
                         <input type="password" x-ref="loginPassword" x-model="loginForm.password" @keydown.enter="handleLogin()" class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600 transition">
                     </div>
                 </div>
-            </div>
 
-            <!-- Banner de error dinámico -->
-            <div x-show="loginError" class="p-3 bg-rose-50 text-accent-danger rounded-xl border border-rose-100 text-xs font-medium flex items-center gap-2">
-                <i class="fa-solid fa-triangle-exclamation"></i>
-                <span x-text="loginError"></span>
-            </div>
+                <div x-show="loginError" class="p-3 bg-rose-50 text-accent-danger rounded-xl border border-rose-100 text-xs font-medium flex items-center gap-2">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                    <span x-text="loginError"></span>
+                </div>
 
-            <button @click="handleLogin()" class="w-full bg-brand-600 hover:bg-brand-700 text-white py-3.5 rounded-xl text-sm font-semibold shadow-lg shadow-brand-600/25 transition flex items-center justify-center gap-2">
-                <span x-text="loggingIn ? 'Conectando...' : 'Conectar con JWT Bearer'"></span>
-                <i class="fa-solid" :class="loggingIn ? 'fa-spinner animate-spin' : 'fa-arrow-right'"></i>
-            </button>
+                <button @click="handleLogin()" class="w-full bg-brand-600 hover:bg-brand-700 text-white py-3.5 rounded-xl text-sm font-semibold shadow-lg shadow-brand-600/25 transition flex items-center justify-center gap-2">
+                    <span x-text="loggingIn ? 'Conectando...' : 'Conectar con JWT Bearer'"></span>
+                    <i class="fa-solid" :class="loggingIn ? 'fa-spinner animate-spin' : 'fa-arrow-right'"></i>
+                </button>
 
-            <!-- Toggle de red rápido en Login -->
-            <div class="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-[11px]">
-                <span class="text-slate-500">¿No tienes el backend corriendo?</span>
-                <button @click="apiMode = (apiMode === 'real' ? 'mock' : 'real')" class="text-brand-600 font-bold hover:underline" x-text="apiMode === 'real' ? 'Usar Simulador' : 'Usar API Real'"></button>
+                <div class="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-[11px]">
+                    <span class="text-slate-500">¿Sin backend?</span>
+                    <button @click="apiMode = (apiMode === 'real' ? 'mock' : 'real')" class="text-brand-600 font-bold hover:underline" x-text="apiMode === 'real' ? 'Usar Simulador' : 'Usar API Real'"></button>
+                </div>
             </div>
         </div>
     </div>
@@ -224,6 +237,11 @@
                     <button @click="activeTab = 'usuarios'; fetchUsuarios()" x-show="currentUser.rol === 'admin'" :class="activeTab === 'usuarios' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150 text-slate-400">
                         <i class="fa-solid fa-users-gear text-lg w-5 text-center"></i>
                         <span>Usuarios</span>
+                    </button>
+
+                    <button @click="activeTab = 'licencias'; fetchLicenciasHistorial()" x-show="currentUser.rol === 'admin'" :class="activeTab === 'licencias' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150 text-slate-400">
+                        <i class="fa-solid fa-key text-lg w-5 text-center"></i>
+                        <span>Licencias</span>
                     </button>
 
                     <button @click="activeTab = 'auditoria'; fetchAuditoria()" x-show="currentUser.rol === 'admin'" :class="activeTab === 'auditoria' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150 text-slate-400">
@@ -1292,6 +1310,46 @@
                     </div>
                 </div>
 
+                <!-- PESTAÑA: LICENCIAS -->
+                <div x-show="activeTab === 'licencias'" class="space-y-6" x-transition>
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-2xl font-bold text-slate-950 font-display">Gestión de Licencias</h2>
+                            <p class="text-sm text-slate-500 mt-1">Generá claves de activación para tus clientes</p>
+                        </div>
+                        <button @click="showModal('licencia_create')" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-xl flex items-center gap-1.5 shadow-sm transition">
+                            <i class="fa-solid fa-plus"></i> Generar Licencia
+                        </button>
+                    </div>
+
+                    <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-50 border-b border-slate-100">
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Clave</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Cliente</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Expiración</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100 text-xs">
+                                    <template x-for="l in licenciasList" :key="l.id">
+                                        <tr class="hover:bg-slate-50/50 transition">
+                                            <td class="p-4 font-mono-data text-slate-600" x-text="l.clave"></td>
+                                            <td class="p-4 font-semibold text-slate-700" x-text="l.cliente"></td>
+                                            <td class="p-4 text-slate-500" x-text="formatDateShort(l.fecha_expiracion)"></td>
+                                            <td class="p-4">
+                                                <span :class="l.activa ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-50 text-slate-400 border-slate-100'" class="px-2 py-0.5 rounded border text-[10px] font-bold uppercase" x-text="l.activa ? 'Activa' : 'Inactiva'"></span>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- PESTAÑA: AUDITORÍA -->
                 <div x-show="activeTab === 'auditoria'" class="space-y-6" x-transition>
                     <div class="flex items-center justify-between">
@@ -1996,6 +2054,27 @@
                 </div>
             </div>
 
+            <!-- MODAL: GENERAR LICENCIA -->
+            <div x-show="currentModalType === 'licencia_create'" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Cliente (razón social)</label>
+                    <input type="text" x-model="licenciaForm.cliente" class="w-full border rounded-xl p-2.5 text-xs" placeholder="Kiosco San Martín">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Días de vigencia</label>
+                    <input type="number" x-model.number="licenciaForm.dias" class="w-full border rounded-xl p-2.5 text-xs font-mono" min="1" max="365">
+                </div>
+                <div x-show="licenciaGenerada" class="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2">
+                    <p class="text-[10px] font-bold text-emerald-700 uppercase">Clave generada (copiala ahora)</p>
+                    <p class="font-mono-data text-lg font-bold text-emerald-800 text-center select-all" x-text="licenciaGenerada"></p>
+                    <p class="text-[10px] text-emerald-600">Cliente: <strong x-text="licenciaForm.cliente"></strong> | Vence: <strong x-text="licenciaForm.dias + ' días'"></strong></p>
+                </div>
+                <div class="flex justify-end gap-2 border-t pt-4">
+                    <button @click="modalActive = false; licenciaGenerada = ''" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold">Cerrar</button>
+                    <button @click="generateLicencia()" :disabled="!licenciaForm.cliente" :class="!licenciaForm.cliente ? 'bg-slate-300 cursor-not-allowed text-slate-400' : 'bg-brand-600 hover:bg-brand-700 text-white'" class="px-4 py-2 rounded-xl text-xs font-bold">Generar</button>
+                </div>
+            </div>
+
             <!-- MODAL: CREAR/EDITAR USUARIO -->
             <div x-show="currentModalType === 'usuario_create' || currentModalType === 'usuario_edit'" class="space-y-4">
                 <div>
@@ -2164,11 +2243,20 @@
                 usuarioForm: { id: null, username: '', nombre: '', password: '', rol: 'cajero', activo: true },
                 auditoriaEvents: [],
                 pendientesEtiquetar: [],
+                licenciasList: [],
+                licenciaForm: { cliente: '', dias: 30 },
+                licenciaGenerada: '',
                 loggingIn: false,
 
                 // Formularios
                 loginForm: { username: 'admin', password: 'admin' },
                 loginError: '',
+                licenseChecked: false,
+                hasLicense: false,
+                licenseValid: false,
+                licenseKey: '',
+                licenseError: '',
+                licenseOk: '',
                 productForm: { codigo_barras: '', nombre: '', marca: '', sku: '', precio_costo: 0, precio_venta: 0, categoria_id: 1, cantidad_inicial: 20 },
                 cajaForm: { monto_inicial: 50000, monto_real: 0, comentario_total: '', monto_efectivo: null, monto_debito: null, monto_credito: null, monto_transferencia: null, comentario_efectivo: '', comentario_debito: '', comentario_credito: '', comentario_transferencia: '' },
                 compraForm: { proveedor_id: 1, notas: '', items: [] },
@@ -2251,24 +2339,13 @@
                 init() {
                     setInterval(() => { this.currentTime = new Date(); }, 1000);
                     
+                    this.checkLicense();
+
                     // Cargar configuración de fuentes desde localStorage
                     const savedSettings = localStorage.getItem('apex_lookup_settings');
                     if (savedSettings) {
                         try { this.lookupSettings = JSON.parse(savedSettings); } catch (e) {}
                     }
-
-                    const savedToken = localStorage.getItem('apex_token');
-                    if (savedToken) {
-                        this.authenticated = true;
-                        this.activeTab = 'dashboard';
-                        this.verifyCajaState();
-                        this.fetchDashboardData();
-                        this.fetchPendientesEtiquetar();
-                        this.fetchCategories();
-                        this.fetchClientes();
-                        this.fetchProveedores();
-                    }
-                    // Si no hay token, se muestra la pantalla de login
                 },
 
                 // Re-inicializador rápido al conmutar entre API real y simulador
@@ -2368,6 +2445,54 @@
                 },
 
                 // Auth Login Handler (Fase 1 - Sección 2.1)
+                async checkLicense() {
+                    try {
+                        const resp = await this.request('GET', '/api/licencia/estado');
+                        if (resp && resp.data) {
+                            this.hasLicense = resp.data.tiene_licencia;
+                            this.licenseValid = resp.data.valida;
+                        }
+                    } catch (e) {
+                        this.hasLicense = false;
+                        this.licenseValid = false;
+                    }
+                    this.licenseChecked = true;
+                    if (this.hasLicense && this.licenseValid) {
+                        this.checkAutoLogin();
+                    }
+                },
+
+                async activateLicense() {
+                    this.licenseError = '';
+                    this.licenseOk = '';
+                    if (!this.licenseKey) return;
+                    try {
+                        const resp = await this.request('POST', '/api/licencia/activar', { clave: this.licenseKey });
+                        if (resp && resp.data) {
+                            this.licenseOk = resp.message;
+                            this.hasLicense = true;
+                            this.licenseValid = true;
+                            this.licenseKey = '';
+                        }
+                    } catch (e) {
+                        this.licenseError = e.message || 'Clave inválida';
+                    }
+                },
+
+                checkAutoLogin() {
+                    const savedToken = localStorage.getItem('apex_token');
+                    if (savedToken) {
+                        this.authenticated = true;
+                        this.activeTab = 'dashboard';
+                        this.verifyCajaState();
+                        this.fetchDashboardData();
+                        this.fetchPendientesEtiquetar();
+                        this.fetchCategories();
+                        this.fetchClientes();
+                        this.fetchProveedores();
+                    }
+                },
+
                 async handleLogin() {
                     this.loggingIn = true;
                     this.loginError = '';
@@ -3265,6 +3390,10 @@
                         this.usuarioForm = { id: null, username: '', nombre: '', password: '', rol: 'cajero', activo: true };
                     } else if (type === 'usuario_edit') {
                         this.modalTitle = "Editar Usuario";
+                    } else if (type === 'licencia_create') {
+                        this.modalTitle = "Generar Nueva Licencia";
+                        this.licenciaForm = { cliente: '', dias: 30 };
+                        this.licenciaGenerada = '';
                     } else if (type === 'prov_create') {
                         this.modalTitle = "Nuevo Proveedor";
                         this.provForm = { id: null, nombre: '', cuit: '', telefono: '', email: '', direccion: '', nombre_contacto: '' };
@@ -3764,6 +3893,28 @@
                         const resp = await this.request('GET', '/api/productos/pendientes-etiquetar');
                         if (resp && resp.data) this.pendientesEtiquetar = resp.data;
                     } catch (e) {}
+                },
+
+                // Licencias
+                async fetchLicenciasHistorial() {
+                    try {
+                        const resp = await this.request('GET', '/api/licencia/historial');
+                        if (resp && resp.data) this.licenciasList = resp.data;
+                    } catch (e) {}
+                },
+
+                async generateLicencia() {
+                    try {
+                        const resp = await this.request('POST', '/api/licencia/generar', {
+                            cliente: this.licenciaForm.cliente,
+                            dias: this.licenciaForm.dias
+                        });
+                        if (resp && resp.data) {
+                            this.licenciaGenerada = resp.data.clave;
+                            this.addToast('success', 'Licencia generada');
+                            this.fetchLicenciasHistorial();
+                        }
+                    } catch (e) { this.addToast('error', 'Error: ' + (e.message || '')); }
                 },
 
                 async marcarEtiquetado(id) {

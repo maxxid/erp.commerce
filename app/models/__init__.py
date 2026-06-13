@@ -16,6 +16,7 @@ from app.models.movimiento_stock import MovimientoStock
 from app.models.movimiento_caja import MovimientoCaja
 from app.models.configuracion import Configuracion
 from app.models.auditoria import Auditoria
+from app.models.licencia import Licencia
 
 __all__ = [
     "Categoria",
@@ -32,4 +33,5 @@ __all__ = [
     "MovimientoCaja",
     "Configuracion",
     "Auditoria",
+    "Licencia",
 ]
