@@ -12,6 +12,7 @@ from app.schemas.producto import (
 from app.schemas.common import RespuestaData, RespuestaLista
 from app.auth.dependencies import get_current_user, require_role
 from app.models.usuario import Usuario
+from app.models.producto import Producto
 from app.services import producto_service
 from app.services import lookup_service as lk
 from app.services import stock_service
@@ -38,6 +39,52 @@ def listar(
         data=productos, total=total, page=page, page_size=page_size,
         message=f"{total} producto(s)"
     )
+
+
+@router.get("/pendientes-etiquetar", response_model=RespuestaLista)
+def pendientes_etiquetar(
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """Productos cuyo precio_venta cambió y necesitan re-etiquetado."""
+    productos = (
+        db.query(Producto)
+        .filter(
+            Producto.activo == True,
+            Producto.precio_venta.isnot(None),
+            (Producto.precio_etiqueta.is_(None)) | (Producto.precio_etiqueta != Producto.precio_venta),
+        )
+        .all()
+    )
+    data = [
+        {
+            "id": p.id, "nombre": p.nombre, "codigo_barras": p.codigo_barras,
+            "precio_venta": p.precio_venta, "precio_etiqueta": p.precio_etiqueta,
+        }
+        for p in productos
+    ]
+    return RespuestaLista(data=data, total=len(data), message=f"{len(data)} producto(s) necesitan etiquetado")
+
+
+class MarcarEtiquetadoRequest(BaseModel):
+    productos_ids: list[int]
+
+
+@router.post("/marcar-etiquetado", response_model=RespuestaData)
+def marcar_etiquetado(
+    data: MarcarEtiquetadoRequest,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "encargado")),
+):
+    """Marca productos como etiquetados (precio_etiqueta = precio_venta)."""
+    count = 0
+    for pid in data.productos_ids:
+        p = db.query(Producto).filter(Producto.id == pid).first()
+        if p:
+            p.precio_etiqueta = p.precio_venta
+            count += 1
+    db.commit()
+    return RespuestaData(data={"marcados": count}, message=f"{count} producto(s) marcados como etiquetados")
 
 
 @router.get("/{producto_id}", response_model=RespuestaData[ProductoOut])

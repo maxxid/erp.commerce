@@ -14,6 +14,7 @@ class ProductoBase(BaseModel):
     precio_referencia: Optional[float] = None
     precio_costo: Optional[float] = None
     precio_venta: Optional[float] = None
+    precio_etiqueta: Optional[float] = None
     imagen_url: Optional[str] = None
     sku: Optional[str] = None
     propiedades: Optional[dict] = None
@@ -35,6 +36,7 @@ class ProductoUpdate(BaseModel):
     precio_referencia: Optional[float] = None
     precio_costo: Optional[float] = None
     precio_venta: Optional[float] = None
+    precio_etiqueta: Optional[float] = None
     imagen_url: Optional[str] = None
     sku: Optional[str] = None
     propiedades: Optional[dict] = None
@@ -49,6 +51,7 @@ class ProductoOut(ProductoBase):
     id: int
     stock_actual: float
     stock_transito: Optional[float] = 0.0
+    precio_etiqueta: Optional[float] = None
     activo: bool
     ia_analizado: bool
     categoria_nombre: Optional[str] = None

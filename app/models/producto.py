@@ -35,6 +35,7 @@ class Producto(Base):
     precio_referencia = Column(Float, nullable=True)
     precio_costo = Column(Float, nullable=True)
     precio_venta = Column(Float, nullable=True)
+    precio_etiqueta = Column(Float, nullable=True)   # último precio impreso en etiqueta. Si != precio_venta, necesita re-etiquetado.
 
     imagen_url = Column(String(500), nullable=True)
     sku = Column(String(50), nullable=True)

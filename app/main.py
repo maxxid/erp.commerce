@@ -113,6 +113,9 @@ def _migrate_new_columns():
         if "cantidad_recibida" not in existentes:
             conn.execute(sa.text("ALTER TABLE compra_items ADD COLUMN cantidad_recibida FLOAT NOT NULL DEFAULT 0.0"))
             conn.commit()
+        existentes_prod = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(productos)"))]
+        if "precio_etiqueta" not in existentes_prod:
+            conn.execute(sa.text("ALTER TABLE productos ADD COLUMN precio_etiqueta FLOAT"))
     finally:
         conn.close()
 

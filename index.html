@@ -294,11 +294,79 @@
                             <h2 class="text-2xl font-bold text-slate-950 font-display">Resumen del Comercio</h2>
                             <p class="text-sm text-slate-500 mt-1">KPIs en tiempo real</p>
                         </div>
-                        <button @click="fetchDashboardData()" class="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-sm rounded-xl flex items-center gap-2 shadow-sm transition">
-                            <i class="fa-solid fa-arrows-rotate text-brand-500"></i> Sincronizar
-                        </button>
+                        <div class="flex items-center gap-3">
+                            <button x-show="currentUser.rol === 'admin' || currentUser.rol === 'encargado'" @click="dashboardSimple = !dashboardSimple; fetchDashboardData()" class="text-[10px] font-bold text-slate-400 hover:text-brand-600 transition flex items-center gap-1">
+                                <i class="fa-solid" :class="dashboardSimple ? 'fa-toggle-off' : 'fa-toggle-on'"></i> 
+                                <span x-text="dashboardSimple ? 'Vista simple' : 'Vista completa'"></span>
+                            </button>
+                            <button @click="fetchDashboardData(); fetchPendientesEtiquetar()" class="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-sm rounded-xl flex items-center gap-2 shadow-sm transition">
+                                <i class="fa-solid fa-arrows-rotate text-brand-500"></i> Sincronizar
+                            </button>
+                        </div>
                     </div>
 
+                    <!-- VISTA SIMPLIFICADA (cajero / repositor) -->
+                    <div x-show="dashboardSimple" class="space-y-6">
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div class="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm text-center">
+                                <div class="text-[10px] font-bold text-slate-400 uppercase">Ventas Hoy</div>
+                                <div class="text-xl font-bold text-emerald-600 font-mono-data mt-1" x-text="formatCurrency(dashboard.ventas_hoy)"></div>
+                                <div class="text-[10px] text-slate-400 mt-0.5" x-text="dashboard.cant_ventas_hoy + ' tickets'"></div>
+                            </div>
+                            <div class="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm text-center">
+                                <div class="text-[10px] font-bold text-slate-400 uppercase">Efectivo Hoy</div>
+                                <div class="text-xl font-bold text-emerald-600 font-mono-data mt-1" x-text="formatCurrency(cajaResumen.desglose?.efectivo || 0)"></div>
+                            </div>
+                            <div class="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm text-center">
+                                <div class="text-[10px] font-bold text-slate-400 uppercase">Transferencia</div>
+                                <div class="text-xl font-bold text-blue-600 font-mono-data mt-1" x-text="formatCurrency(cajaResumen.desglose?.transferencia || 0)"></div>
+                            </div>
+                            <div class="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm text-center">
+                                <div class="text-[10px] font-bold text-slate-400 uppercase">Stock Crítico</div>
+                                <div class="text-xl font-bold text-rose-600 font-mono-data mt-1" x-text="dashboard.stock_bajo"></div>
+                                <div class="text-[10px] text-rose-400 mt-0.5">bajo mínimo</div>
+                            </div>
+                        </div>
+
+                        <!-- Pendientes etiquetar -->
+                        <div x-show="pendientesEtiquetar.length > 0" class="bg-amber-50 border border-amber-200 p-5 rounded-2xl shadow-sm">
+                            <div class="flex items-center justify-between mb-3">
+                                <h3 class="font-bold text-amber-800 text-sm"><i class="fa-solid fa-tag mr-2"></i> Productos que necesitan re-etiquetado</h3>
+                                <button @click="marcarTodosEtiquetado()" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-[10px] font-bold uppercase transition">
+                                    Marcar todos como etiquetados
+                                </button>
+                            </div>
+                            <div class="space-y-1.5">
+                                <template x-for="p in pendientesEtiquetar" :key="p.id">
+                                    <div class="flex justify-between items-center text-xs bg-white p-2.5 rounded-lg border border-amber-100">
+                                        <div>
+                                            <span class="font-bold text-slate-800" x-text="p.nombre"></span>
+                                            <span class="text-[10px] text-slate-400 ml-2 font-mono" x-text="p.codigo_barras"></span>
+                                        </div>
+                                        <div class="flex items-center gap-3">
+                                            <span class="text-[10px] text-slate-400">Etiqueta: <span class="font-mono-data" x-text="formatCurrency(p.precio_etiqueta)"></span> →</span>
+                                            <span class="font-mono-data font-bold text-amber-700" x-text="formatCurrency(p.precio_venta)"></span>
+                                            <button @click="marcarEtiquetado(p.id)" class="text-[10px] text-brand-600 hover:underline font-bold">✓ Listo</button>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Alertas de stock (simplificado) -->
+                        <div x-show="(dashboard.stock_critico || []).length > 0" class="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm">
+                            <h3 class="font-bold text-rose-600 text-sm mb-3">⚠️ Stock Crítico</h3>
+                            <template x-for="p in dashboard.stock_critico || []" :key="'c'+p.id">
+                                <div class="flex justify-between text-xs p-2 bg-rose-50 rounded-lg mb-1">
+                                    <span class="font-bold truncate flex-1" x-text="p.nombre"></span>
+                                    <span class="font-mono-data font-bold text-rose-600" x-text="p.stock_actual + ' / ' + p.stock_minimo"></span>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- VISTA COMPLETA (admin / encargado) -->
+                    <div x-show="!dashboardSimple">
                     <!-- KPI Cards -->
                     <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                         <div class="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm text-center">
@@ -335,7 +403,6 @@
 
                     <!-- Charts row -->
                     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <!-- Últimos 7 días -->
                         <div class="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm">
                             <h3 class="font-bold text-slate-900 text-sm mb-4">Ventas — Últimos 7 Días</h3>
                             <div class="flex items-end gap-1 h-32">
@@ -348,8 +415,6 @@
                                 </template>
                             </div>
                         </div>
-
-                        <!-- Picos por hora -->
                         <div class="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm">
                             <h3 class="font-bold text-slate-900 text-sm mb-4">Picos por Hora (Hoy)</h3>
                             <div class="flex items-end gap-px h-32">
@@ -365,7 +430,6 @@
 
                     <!-- Rankings + Alertas -->
                     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <!-- Top productos del mes -->
                         <div class="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm">
                             <h3 class="font-bold text-slate-900 text-sm mb-3">🏆 Top Productos del Mes</h3>
                             <div class="space-y-2">
@@ -380,8 +444,6 @@
                                 <p x-show="!(dashboard.top_productos_mes || []).length" class="text-xs text-slate-400 text-center py-4">Sin ventas este mes</p>
                             </div>
                         </div>
-
-                        <!-- Alertas de stock -->
                         <div class="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm space-y-4">
                             <h3 class="font-bold text-slate-900 text-sm">⚠️ Alertas de Stock</h3>
                             <div x-show="(dashboard.stock_critico || []).length > 0">
@@ -404,6 +466,7 @@
                             </div>
                             <p x-show="!(dashboard.stock_critico || []).length && !(dashboard.sin_stock || []).length" class="text-xs text-slate-400 text-center py-4">Todo en orden</p>
                         </div>
+                    </div>
                     </div>
                 </div>
 
@@ -2082,8 +2145,9 @@
                 authenticated: false,  // Requiere login real
                 currentUser: { id: 1, username: 'admin', nombre: 'Administrador', rol: 'admin' },
                 activeTab: 'dashboard',
+                dashboardSimple: false,
                 currentTime: new Date(),
-                consoleOpen: true,
+                consoleOpen: false,
                 apiLogs: [],
                 toasts: [],
                 processingSale: false,
@@ -2099,6 +2163,7 @@
                 usuarios: [],
                 usuarioForm: { id: null, username: '', nombre: '', password: '', rol: 'cajero', activo: true },
                 auditoriaEvents: [],
+                pendientesEtiquetar: [],
                 loggingIn: false,
 
                 // Formularios
@@ -2308,11 +2373,12 @@
                         const response = await this.request('POST', '/api/auth/login', this.loginForm);
                         
                         if (this.apiMode === 'real') {
-                            // API devuelve {ok: true, data: {access_token, username, rol, nombre}}
                             if (response && response.data && response.data.access_token) {
                                 localStorage.setItem('apex_token', response.data.access_token);
                                 this.authenticated = true;
                                 this.currentUser = response.data;
+                                this.activeTab = 'dashboard';
+                                this.dashboardSimple = (response.data.rol === 'cajero' || response.data.rol === 'repositor');
                                 this.addToast('success', 'Autenticado correctamente con backend');
                                 this.verifyCajaState();
                                 this.fetchDashboardData();
@@ -2327,6 +2393,8 @@
                             if (this.loginForm.username === 'admin' && this.loginForm.password === 'admin') {
                                 this.authenticated = true;
                                 this.currentUser = { id: 1, username: 'admin', nombre: 'Administrador', rol: 'admin' };
+                                this.activeTab = 'dashboard';
+                                this.dashboardSimple = false;
                                 this.addToast('success', 'Sesión iniciada (Modo Simulador)');
                                 this.verifyCajaState();
                                 this.fetchDashboardData();
@@ -3686,6 +3754,32 @@
                     this.provForm = { ...prov };
                     this.showModal('prov_edit');
                     this.modalTitle = `Editar Proveedor: ${prov.nombre}`;
+                },
+
+                // Etiquetado
+                async fetchPendientesEtiquetar() {
+                    try {
+                        const resp = await this.request('GET', '/api/productos/pendientes-etiquetar');
+                        if (resp && resp.data) this.pendientesEtiquetar = resp.data;
+                    } catch (e) {}
+                },
+
+                async marcarEtiquetado(id) {
+                    try {
+                        await this.request('POST', '/api/productos/marcar-etiquetado', { productos_ids: [id] });
+                        this.addToast('success', 'Producto marcado como etiquetado');
+                        this.fetchPendientesEtiquetar();
+                    } catch (e) {}
+                },
+
+                async marcarTodosEtiquetado() {
+                    const ids = this.pendientesEtiquetar.map(p => p.id);
+                    if (ids.length === 0) return;
+                    try {
+                        await this.request('POST', '/api/productos/marcar-etiquetado', { productos_ids: ids });
+                        this.addToast('success', `${ids.length} productos marcados`);
+                        this.fetchPendientesEtiquetar();
+                    } catch (e) {}
                 },
 
                 async deleteProveedor(id) {
