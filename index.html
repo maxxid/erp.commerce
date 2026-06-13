@@ -259,6 +259,10 @@
 
                     <div class="text-slate-300">|</div>
 
+                    <button @click="showModal('settings')" class="text-slate-400 hover:text-slate-600 transition" title="Ajustes de búsqueda">
+                        <i class="fa-solid fa-gear"></i>
+                    </button>
+
                     <div class="text-sm font-medium text-slate-600 font-mono-data">
                         <i class="fa-regular fa-clock mr-1 text-slate-400"></i> <span x-text="formatDate(currentTime)"></span>
                     </div>
@@ -441,24 +445,28 @@
                                     <span class="text-[9px] text-slate-400 font-bold uppercase block">Carrefour</span>
                                     <div x-show="lookupBadges.carrefour === 'loading'" class="text-xs text-slate-400 py-1"><i class="fa-solid fa-circle-notch animate-spin text-brand-600"></i></div>
                                     <div x-show="lookupBadges.carrefour === 'not_found'" class="text-[10px] text-rose-500 font-bold py-1">No Disp.</div>
+                                    <div x-show="lookupBadges.carrefour === 'disabled'" class="text-[10px] text-slate-300 font-bold py-1">—</div>
                                     <div x-show="typeof lookupBadges.carrefour === 'number'" class="text-xs font-bold text-emerald-600 py-1" x-text="formatCurrency(lookupBadges.carrefour)"></div>
                                 </a>
                                 <a :href="lookupBadges.vea_url || '#'" target="_blank" class="bg-white p-2 rounded-xl border border-slate-200 text-center block hover:border-brand-300 transition">
                                     <span class="text-[9px] text-slate-400 font-bold uppercase block">Vea</span>
                                     <div x-show="lookupBadges.vea === 'loading'" class="text-xs text-slate-400 py-1"><i class="fa-solid fa-circle-notch animate-spin text-brand-600"></i></div>
                                     <div x-show="lookupBadges.vea === 'not_found'" class="text-[10px] text-rose-500 font-bold py-1">No Disp.</div>
+                                    <div x-show="lookupBadges.vea === 'disabled'" class="text-[10px] text-slate-300 font-bold py-1">—</div>
                                     <div x-show="typeof lookupBadges.vea === 'number'" class="text-xs font-bold text-emerald-600 py-1" x-text="formatCurrency(lookupBadges.vea)"></div>
                                 </a>
                                 <a :href="lookupBadges.masonline_url || '#'" target="_blank" class="bg-white p-2 rounded-xl border border-slate-200 text-center block hover:border-brand-300 transition">
                                     <span class="text-[9px] text-slate-400 font-bold uppercase block">MasOnline</span>
                                     <div x-show="lookupBadges.masonline === 'loading'" class="text-xs text-slate-400 py-1"><i class="fa-solid fa-circle-notch animate-spin text-brand-600"></i></div>
                                     <div x-show="lookupBadges.masonline === 'not_found'" class="text-[10px] text-rose-500 font-bold py-1">No Disp.</div>
+                                    <div x-show="lookupBadges.masonline === 'disabled'" class="text-[10px] text-slate-300 font-bold py-1">—</div>
                                     <div x-show="typeof lookupBadges.masonline === 'number'" class="text-xs font-bold text-emerald-600 py-1" x-text="formatCurrency(lookupBadges.masonline)"></div>
                                 </a>
                                 <a :href="lookupBadges.supercoco_url || '#'" target="_blank" class="bg-white p-2 rounded-xl border border-slate-200 text-center block hover:border-brand-300 transition">
                                     <span class="text-[9px] text-slate-400 font-bold uppercase block">Super Coco</span>
                                     <div x-show="lookupBadges.supercoco === 'loading'" class="text-xs text-slate-400 py-1"><i class="fa-solid fa-circle-notch animate-spin text-brand-600"></i></div>
                                     <div x-show="lookupBadges.supercoco === 'not_found'" class="text-[10px] text-rose-500 font-bold py-1">No Disp.</div>
+                                    <div x-show="lookupBadges.supercoco === 'disabled'" class="text-[10px] text-slate-300 font-bold py-1">—</div>
                                     <div x-show="typeof lookupBadges.supercoco === 'number'" class="text-xs font-bold text-emerald-600 py-1" x-text="formatCurrency(lookupBadges.supercoco)"></div>
                                 </a>
                             </div>
@@ -1621,6 +1629,53 @@
                 </div>
             </div>
 
+            <!-- MODAL: AJUSTES DE BÚSQUEDA -->
+            <div x-show="currentModalType === 'settings'" class="space-y-4">
+                <div class="space-y-4 text-xs text-slate-600">
+                    <!-- Timeout -->
+                    <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                        <label class="block font-bold text-slate-700 mb-1"><i class="fa-solid fa-stopwatch mr-1"></i> Tiempo máximo de espera por fuente</label>
+                        <div class="flex items-center gap-2">
+                            <input type="number" x-model.number="lookupSettings.timeout" min="3" max="30" class="w-20 border rounded-lg p-2 text-sm font-mono text-center">
+                            <span class="text-slate-400">segundos</span>
+                            <span class="text-[10px] text-slate-400">(cada fuente se cancela si excede este tiempo)</span>
+                        </div>
+                    </div>
+
+                    <!-- Toggle por fuente -->
+                    <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                        <label class="block font-bold text-slate-700 mb-1"><i class="fa-solid fa-magnifying-glass mr-1"></i> Fuentes de búsqueda habilitadas</label>
+                        <template x-for="src in [
+                            { key: 'carrefour', label: 'Carrefour', icon: 'fa-truck-fast', color: 'text-blue-600' },
+                            { key: 'vea', label: 'Vea', icon: 'fa-store', color: 'text-emerald-600' },
+                            { key: 'masonline', label: 'MasOnline', icon: 'fa-cart-shopping', color: 'text-purple-600' },
+                            { key: 'supercoco', label: 'Super Coco', icon: 'fa-basket-shopping', color: 'text-amber-600' }
+                        ]" :key="src.key">
+                            <div class="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-white transition">
+                                <span class="flex items-center gap-2">
+                                    <i class="fa-solid" :class="src.icon + ' ' + src.color"></i>
+                                    <span x-text="src.label"></span>
+                                </span>
+                                <button @click="lookupSettings.sources[src.key] = !lookupSettings.sources[src.key]"
+                                        :class="lookupSettings.sources[src.key] ? 'bg-brand-600' : 'bg-slate-300'"
+                                        class="relative w-10 h-5 rounded-full transition-colors duration-200">
+                                    <span :class="lookupSettings.sources[src.key] ? 'translate-x-5' : 'translate-x-0.5'" 
+                                          class="absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200"></span>
+                                </button>
+                            </div>
+                        </template>
+                    </div>
+
+                    <p class="text-[10px] text-slate-400 text-center">
+                        La configuración se guarda automáticamente en este navegador.
+                    </p>
+                </div>
+
+                <div class="flex justify-end gap-2 border-t pt-4">
+                    <button @click="saveLookupSettings(); modalActive = false" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold">Listo</button>
+                </div>
+            </div>
+
             <!-- MODAL: CREAR/EDITAR PROVEEDOR -->
             <div x-show="currentModalType === 'prov_create' || currentModalType === 'prov_edit'" class="space-y-4">
                 <div>
@@ -1810,6 +1865,7 @@
                 lookupProduct: {},
                 _lookupToken: 0,
                 _pendingResults: [],
+                lookupSettings: { sources: { carrefour: true, vea: true, masonline: true, supercoco: true }, timeout: 15 },
                 lookupNotFound: false,
                 lookupNotFoundBarcode: '',
                 lookupNotFoundNombre: '',
@@ -1828,6 +1884,12 @@
                 init() {
                     setInterval(() => { this.currentTime = new Date(); }, 1000);
                     
+                    // Cargar configuración de fuentes desde localStorage
+                    const savedSettings = localStorage.getItem('apex_lookup_settings');
+                    if (savedSettings) {
+                        try { this.lookupSettings = JSON.parse(savedSettings); } catch (e) {}
+                    }
+
                     const savedToken = localStorage.getItem('apex_token');
                     if (savedToken) {
                         this.authenticated = true;
@@ -2119,6 +2181,11 @@
                     });
                 },
 
+                saveLookupSettings() {
+                    localStorage.setItem('apex_lookup_settings', JSON.stringify(this.lookupSettings));
+                    this.addToast('info', 'Ajustes guardados');
+                },
+
                 showNextPending() {
                     if (this._pendingResults.length > 0 && !this.lookupProduct.codigo_barras) {
                         this.lookupProduct = this._pendingResults.shift();
@@ -2127,36 +2194,43 @@
 
                 // Búsqueda paralela en las 4 fuentes (reemplaza la vieja llamada secuencial)
                 async triggerExternalLookup(barcode, token) {
-                    this.lookupBadges = {
-                        carrefour: 'loading', vea: 'loading', masonline: 'loading', supercoco: 'loading',
-                        carrefour_url: '', vea_url: '', masonline_url: '', supercoco_url: ''
-                    };
+                    // Inicializar badges: 'loading' para habilitadas, 'disabled' para el resto
+                    const allSources = ['carrefour', 'vea', 'masonline', 'supercoco'];
+                    this.lookupBadges = {};
+                    allSources.forEach(s => {
+                        this.lookupBadges[s] = this.lookupSettings.sources[s] ? 'loading' : 'disabled';
+                        this.lookupBadges[`${s}_url`] = '';
+                    });
 
-                    const sources = ['carrefour', 'vea', 'masonline', 'supercoco'];
+                    const sources = allSources.filter(s => this.lookupSettings.sources[s]);
+                    if (sources.length === 0) {
+                        this.lookupProduct = {};
+                        this.lookupNotFound = true;
+                        this.lookupNotFoundBarcode = barcode;
+                        this.lookupNotFoundNombre = '';
+                        this.lookupNotFoundPrecio = 0;
+                        this.lookupNotFoundCantidad = 1;
+                        return;
+                    }
+
                     let foundAny = false;
                     let completedCount = 0;
+                    const timeoutMs = (this.lookupSettings.timeout || 15) * 1000;
                     
                     const onSourceComplete = (source, result) => {
-                        // Si este lookup fue abortado por uno nuevo, guardar resultado en cola
                         if (this._lookupToken !== token) {
                             if (result && result.precio_referencia) {
                                 const r = {
-                                    codigo_barras: barcode,
-                                    nombre: result.nombre || '',
-                                    marca: result.marca || '',
-                                    descripcion: result.descripcion || '',
+                                    codigo_barras: barcode, nombre: result.nombre || '',
+                                    marca: result.marca || '', descripcion: result.descripcion || '',
                                     precio_referencia: result.precio_referencia || 0,
-                                    imagen_url: result.imagen_url || '',
-                                    sku: result.sku || '',
-                                    propiedades: result.propiedades || {},
-                                    fuente: source,
+                                    imagen_url: result.imagen_url || '', sku: result.sku || '',
+                                    propiedades: result.propiedades || {}, fuente: source,
                                     categoria: result.categoria || '',
                                     quickPrecioVenta: result.precio_referencia 
                                         ? Math.ceil(result.precio_referencia * 1.3 / 50) * 50 : 0,
-                                    quickCantidad: 1,
-                                    _loading: false,
+                                    quickCantidad: 1, _loading: false,
                                 };
-                                // Evitar duplicados: solo agregar si no hay uno con el mismo código
                                 if (!this._pendingResults.some(p => p.codigo_barras === barcode)) {
                                     this._pendingResults.push(r);
                                 }
@@ -2182,17 +2256,14 @@
                                     fuente: source,
                                     categoria: result.categoria || '',
                                     quickPrecioVenta: result.precio_referencia 
-                                        ? Math.ceil(result.precio_referencia * 1.3 / 50) * 50 
-                                        : 0,
-                                    quickCantidad: 1,
-                                    _loading: false,
+                                        ? Math.ceil(result.precio_referencia * 1.3 / 50) * 50 : 0,
+                                    quickCantidad: 1, _loading: false,
                                 };
                             }
                         } else {
                             this.lookupBadges[source] = 'not_found';
                         }
 
-                        // Todas las fuentes completaron sin encontrar nada → mostrar form manual
                         if (completedCount >= sources.length && !foundAny) {
                             this.lookupProduct = {};
                             this.lookupNotFound = true;
@@ -2205,9 +2276,17 @@
 
                     sources.forEach(source => {
                         if (this.apiMode === 'real') {
-                            this.request('POST', '/api/productos/lookup', { barcode, fuente: source, ia_mode: false })
-                                .then(res => onSourceComplete(source, res.data))
-                                .catch(() => onSourceComplete(source, null));
+                            const controller = new AbortController();
+                            const timer = setTimeout(() => controller.abort(), timeoutMs);
+                            fetch(`${this.apiBaseUrl}/api/productos/lookup`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('apex_token') || ''}` },
+                                body: JSON.stringify({ barcode, fuente: source, ia_mode: false }),
+                                signal: controller.signal
+                            })
+                            .then(res => res.json())
+                            .then(res => { clearTimeout(timer); onSourceComplete(source, res.data); })
+                            .catch(() => { clearTimeout(timer); onSourceComplete(source, null); });
                         } else {
                             const delays = { carrefour: 600, vea: 1000, masonline: 1400, supercoco: 800 };
                             const prices = { carrefour: 1100.0, vea: 1080.0, masonline: null, supercoco: 1050.0 };
@@ -2217,16 +2296,14 @@
                                 masonline: 'https://www.masonline.com.ar',
                                 supercoco: 'https://supercoco.com.ar'
                             };
-                            setTimeout(() => {
+                            const tid = setTimeout(() => {
                                 const price = prices[source];
                                 onSourceComplete(source, price ? {
                                     nombre: `Producto ${source} - ${barcode}`,
-                                    marca: source,
-                                    precio_referencia: price,
-                                    categoria: 'Almacén',
-                                    url: urls[source]
+                                    marca: source, precio_referencia: price,
+                                    categoria: 'Almacén', url: urls[source]
                                 } : null);
-                            }, delays[source]);
+                            }, Math.min(delays[source], timeoutMs));
                         }
                     });
                 },
@@ -2809,6 +2886,8 @@
                         this.modalTitle = "Detalle de Orden de Compra";
                     } else if (type === 'help') {
                         this.modalTitle = "Guía Rápida y Atajos de Teclado";
+                    } else if (type === 'settings') {
+                        this.modalTitle = "Ajustes de Búsqueda";
                     } else if (type === 'prov_create') {
                         this.modalTitle = "Nuevo Proveedor";
                         this.provForm = { id: null, nombre: '', cuit: '', telefono: '', email: '', direccion: '', nombre_contacto: '' };
