@@ -109,9 +109,27 @@ def _seed_database():
                 cliente="DEMO - Licencia de prueba",
                 machine_id=mid,
                 fecha_expiracion=exp_demo,
-                activa=True,  # demo empieza activada
+                activa=True,
             ))
             db.commit()
+        else:
+            # Verificar si hay licencia válida para esta máquina
+            from app.services.licencia_service import licencia_valida, obtener_machine_id
+            if not licencia_valida(db):
+                # Si expiró o cambió de máquina, generar trial fresco
+                mid = obtener_machine_id()
+                exp_demo = datetime.now(timezone.utc) + timedelta(days=30)
+                from app.services.licencia_service import generar_clave
+                nueva = Licencia(
+                    clave=generar_clave("DEMO-TRIAL", mid, exp_demo),
+                    cliente="DEMO-TRIAL - 30 días de prueba",
+                    machine_id=mid,
+                    fecha_expiracion=exp_demo,
+                    activa=True,
+                )
+                db.add(nueva)
+                db.commit()
+                print(f"[Licencia] Nueva licencia trial generada: {nueva.clave}")
 
     finally:
         db.close()
