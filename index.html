@@ -156,8 +156,34 @@
                     <span class="text-slate-500">¿Sin backend?</span>
                     <button @click="apiMode = (apiMode === 'real' ? 'mock' : 'real')" class="text-brand-600 font-bold hover:underline" x-text="apiMode === 'real' ? 'Usar Simulador' : 'Usar API Real'"></button>
                 </div>
-            </div>
-        </div>
+                    </div>
+
+                    <!-- Catálogo de Productos -->
+                    <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                        <div class="p-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+                            <h3 class="font-bold text-slate-800 text-sm"><i class="fa-solid fa-database mr-2 text-indigo-400"></i> Catálogo de Productos</h3>
+                            <span class="text-[10px] text-slate-400 font-mono" x-text="catalogoStatus.exportables + ' exportables'"></span>
+                        </div>
+                        <div class="p-4 space-y-3">
+                            <div class="flex items-center gap-2 text-xs text-slate-500">
+                                <span x-show="catalogoStatus.catalogo_cargado"><i class="fa-solid fa-circle-check text-emerald-500"></i> Catálogo central cargado: <strong x-text="catalogoStatus.total_productos"></strong> productos</span>
+                                <span x-show="!catalogoStatus.catalogo_cargado"><i class="fa-solid fa-circle text-slate-300"></i> Catálogo central no cargado</span>
+                                <span x-show="catalogoStatus.ultimo_export" class="ml-auto text-[10px]">Último export: <span x-text="formatDateShort(catalogoStatus.ultimo_export)"></span></span>
+                            </div>
+                            <div class="flex gap-2">
+                                <button @click="exportarCatalogo()" :disabled="processingBackup" class="px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-[10px] font-bold uppercase transition">
+                                    <i class="fa-solid" :class="processingBackup ? 'fa-spinner animate-spin' : 'fa-upload'"></i> Exportar y Subir
+                                </button>
+                                <button @click="descargarCatalogoCentral()" x-show="backupStatus.r2_habilitado" class="px-3 py-1.5 border border-slate-200 hover:bg-slate-50 rounded-lg text-[10px] font-bold text-slate-600 transition">
+                                    <i class="fa-solid fa-download"></i> Descargar Catálogo Central
+                                </button>
+                                <button @click="importarCatalogoLocal()" x-show="catalogoStatus.total_productos > 0" class="px-3 py-1.5 border border-slate-200 hover:bg-slate-50 rounded-lg text-[10px] font-bold text-slate-600 transition">
+                                    <i class="fa-solid fa-file-import"></i> Recargar en Memoria
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
     </div>
 
     <!-- CONTENEDOR PRINCIPAL DEL ERP -->
@@ -234,7 +260,7 @@
                         <span>Ayuda y Atajos</span>
                     </button>
 
-                    <button @click="activeTab = 'backups'; fetchBackupStatus()" x-show="currentUser.rol === 'admin' || currentUser.rol === 'encargado'" :class="activeTab === 'backups' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150 text-slate-400">
+                    <button @click="activeTab = 'backups'; fetchBackupStatus(); fetchCatalogoStatus()" x-show="currentUser.rol === 'admin' || currentUser.rol === 'encargado'" :class="activeTab === 'backups' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150 text-slate-400">
                         <i class="fa-solid fa-cloud-arrow-up text-lg w-5 text-center"></i>
                         <span>Respaldos</span>
                     </button>
@@ -2127,6 +2153,20 @@ PESTAÑA: USUARIOS -->
                         </template>
                     </div>
 
+                    <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                        <label class="block font-bold text-slate-700 mb-1"><i class="fa-solid fa-cloud-download mr-1"></i> Catálogo central</label>
+                        <div class="flex items-center justify-between py-1.5 px-2 rounded-lg">
+                            <span class="text-xs">Descargar catálogo al iniciar sesión</span>
+                            <button @click="lookupSettings.autoDownloadCatalogo = !lookupSettings.autoDownloadCatalogo"
+                                    :class="lookupSettings.autoDownloadCatalogo ? 'bg-brand-600' : 'bg-slate-300'"
+                                    class="relative w-10 h-5 rounded-full transition-colors duration-200">
+                                <span :class="lookupSettings.autoDownloadCatalogo ? 'translate-x-5' : 'translate-x-0.5'"
+                                      class="absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200"></span>
+                            </button>
+                        </div>
+                        <p class="text-[9px] text-slate-400">Descarga catalogo_completo.json de R2 en cada login para buscar productos offline.</p>
+                    </div>
+
                     <p class="text-[10px] text-slate-400 text-center">
                         La configuración se guarda automáticamente en este navegador.
                     </p>
@@ -2337,6 +2377,7 @@ PESTAÑA: USUARIOS -->
                 auditoriaEvents: [],
                 pendientesEtiquetar: [],
                 licenciasList: [],
+                catalogoStatus: { exportables: 0, catalogo_cargado: false, total_productos: 0, ultimo_export: null },
                 licenciaForm: { cliente: '', machine_id: '', dias: 30 },
                 licenciaGenerada: '',
                 loggingIn: false,
@@ -2414,7 +2455,7 @@ PESTAÑA: USUARIOS -->
                 lookupProduct: {},
                 _lookupToken: 0,
                 _pendingResults: [],
-                lookupSettings: { sources: { carrefour: true, vea: true, masonline: true, supercoco: true }, timeout: 15 },
+                lookupSettings: { sources: { carrefour: true, vea: true, masonline: true, supercoco: true }, timeout: 15, autoDownloadCatalogo: false },
                 lookupNotFound: false,
                 lookupNotFoundBarcode: '',
                 lookupNotFoundNombre: '',
@@ -2586,6 +2627,9 @@ PESTAÑA: USUARIOS -->
                         this.fetchCategories();
                         this.fetchClientes();
                         this.fetchProveedores();
+                        if (this.lookupSettings.autoDownloadCatalogo) {
+                            this.descargarCatalogoCentral();
+                        }
                     }
                 },
 
@@ -2608,6 +2652,9 @@ PESTAÑA: USUARIOS -->
                                 this.fetchCategories();
                                 this.fetchClientes();
                                 this.fetchProveedores();
+                                if (this.lookupSettings.autoDownloadCatalogo) {
+                                    this.descargarCatalogoCentral();
+                                }
                             } else {
                                 this.loginError = 'Respuesta inesperada del servidor';
                             }
@@ -2621,6 +2668,9 @@ PESTAÑA: USUARIOS -->
                                 this.addToast('success', 'Sesión iniciada (Modo Simulador)');
                                 this.verifyCajaState();
                                 this.fetchDashboardData();
+                                if (this.lookupSettings.autoDownloadCatalogo) {
+                                    this.descargarCatalogoCentral();
+                                }
                             } else {
                                 this.loginError = 'Usuario o contraseña incorrectos';
                                 this.addToast('error', 'Credenciales incorrectas');
@@ -4007,6 +4057,44 @@ PESTAÑA: USUARIOS -->
                         if (semanalResp && semanalResp.data) this.reporteSemanal = semanalResp.data;
                         if (mensualResp && mensualResp.data) this.reporteMensual = mensualResp.data;
                         if (trimestralResp && trimestralResp.data) this.reporteTrimestral = trimestralResp.data;
+                    } catch (e) {}
+                },
+
+                // Catalogo
+                async fetchCatalogoStatus() {
+                    try {
+                        const resp = await this.request('GET', '/api/catalogo/estado');
+                        if (resp && resp.data) this.catalogoStatus = resp.data;
+                    } catch (e) {}
+                },
+
+                async exportarCatalogo() {
+                    this.processingBackup = true;
+                    try {
+                        const resp = await this.request('POST', '/api/catalogo/exportar');
+                        if (resp && resp.data) {
+                            this.addToast('success', resp.message);
+                            await this.fetchCatalogoStatus();
+                        }
+                    } catch (e) { this.addToast('error', 'Error al exportar: ' + (e.message || '')); }
+                    this.processingBackup = false;
+                },
+
+                async descargarCatalogoCentral() {
+                    try {
+                        const resp = await this.request('POST', '/api/catalogo/descargar?filename=catalogo_completo.json');
+                        if (resp && resp.data) {
+                            await this.importarCatalogoLocal();
+                            this.addToast('success', 'Catálogo central descargado e importado');
+                        }
+                    } catch (e) { this.addToast('error', 'Error: ' + (e.message || '')); }
+                },
+
+                async importarCatalogoLocal() {
+                    try {
+                        const resp = await this.request('GET', '/api/catalogo/estado');
+                        this.addToast('success', `Catálogo recargado: ${this.catalogoStatus.total_productos || 0} productos`);
+                        await this.fetchCatalogoStatus();
                     } catch (e) {}
                 },
 

@@ -16,6 +16,7 @@ from app.models.producto import Producto
 from app.services import producto_service
 from app.services import lookup_service as lk
 from app.services import stock_service
+from app.services import catalogo_service
 
 router = APIRouter(prefix="/api/productos", tags=["Productos"])
 
@@ -156,8 +157,8 @@ def lookup(
 ):
     """Busca un producto por código de barras en fuentes externas.
 
-    Primero busca en la base local. Si no existe, busca en:
-    Carrefour → Vea → Masonline.
+    Primero busca en la base local, luego en el catálogo central
+    (catalogo_completo.json), y finalmente en fuentes externas.
     """
     barcode = data.barcode.strip()
 
@@ -178,6 +179,24 @@ def lookup(
             ia_mode=data.ia_mode,
         )
         return RespuestaData(data=result, message="Encontrado en base local")
+
+    # Buscar en catálogo central (catalogo_completo.json)
+    cat = catalogo_service.buscar_en_catalogo(barcode)
+    if cat:
+        result = ProductoLookupResponse(
+            codigo_barras=barcode,
+            nombre=cat.get("nombre", ""),
+            marca=cat.get("marca", ""),
+            descripcion=cat.get("descripcion", ""),
+            precio_referencia=cat.get("precio_referencia"),
+            imagen_url=cat.get("imagen_url", ""),
+            sku=cat.get("sku", ""),
+            propiedades=cat.get("propiedades"),
+            fuente="catalogo_central",
+            categoria=cat.get("categoria_nombre", ""),
+            ia_mode=data.ia_mode,
+        )
+        return RespuestaData(data=result, message="Encontrado en catálogo central")
 
     producto = lk.lookup_producto(barcode, fuente=data.fuente)
     if not producto:

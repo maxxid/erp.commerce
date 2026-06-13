@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 from app.database import get_db
 from app.services import caja_service
+from app.services import catalogo_service
 from app.schemas.common import RespuestaData, RespuestaLista
 from app.auth.dependencies import get_current_user, require_role
 from app.models.usuario import Usuario
@@ -95,6 +96,11 @@ def cierre_total(
         mov, desglose = caja_service.cerrar_todo(
             db, user.id, data.comentario, data.sucursal_id
         )
+        # Auto-exportar catálogo al cerrar caja
+        try:
+            catalogo_service.subir_catalogo_a_r2(db)
+        except Exception:
+            pass
         return RespuestaData(
             data={
                 "id": mov.id,
