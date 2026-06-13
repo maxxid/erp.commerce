@@ -355,8 +355,8 @@
                                 <div class="text-[10px] font-bold text-slate-400 uppercase">Transferencia</div>
                                 <div class="text-xl font-bold text-blue-600 font-mono-data mt-1" x-text="formatCurrency(cajaResumen.desglose?.transferencia || 0)"></div>
                             </div>
-                            <div class="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm text-center">
-                                <div class="text-[10px] font-bold text-slate-400 uppercase">Margen Bruto Hoy</div>
+                        <div x-show="currentUser.rol === 'admin' || currentUser.rol === 'encargado'" class="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm text-center">
+                            <div class="text-[10px] font-bold text-slate-400 uppercase">Margen Bruto Hoy</div>
                                 <div :class="dashboard.margen_pct_hoy >= 0 ? 'text-emerald-600' : 'text-rose-600'" class="text-xl font-bold font-mono-data mt-1" x-text="formatCurrency(dashboard.margen_bruto_hoy || 0)"></div>
                                 <div class="text-[10px] text-slate-400 mt-0.5" x-text="(dashboard.margen_pct_hoy || 0) + '%'"></div>
                             </div>
