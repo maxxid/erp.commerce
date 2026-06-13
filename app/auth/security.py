@@ -1,7 +1,5 @@
 """
-Seguridad: hashing de contraseñas y creación/verificación de JWT.
-
-Usa bcrypt para passwords y HS256 para tokens JWT.
+Seguridad: hashing de contraseñas (SHA256) y creación/verificación de JWT.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -10,7 +8,13 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from app.config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["sha256_crypt"], deprecated="auto")
+
+# Soporte para contraseñas viejas (bcrypt) si existen en DB
+try:
+    pwd_context = CryptContext(schemes=["sha256_crypt", "bcrypt"], deprecated="auto")
+except Exception:
+    pwd_context = CryptContext(schemes=["sha256_crypt"], deprecated="auto")
 
 
 def verificar_password(plain: str, hashed: str) -> bool:
