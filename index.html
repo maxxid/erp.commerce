@@ -111,14 +111,14 @@
                     <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Usuario de prueba</label>
                     <div class="relative">
                         <i class="fa-regular fa-user absolute left-4 top-3.5 text-slate-400"></i>
-                        <input type="text" x-model="loginForm.username" class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600 transition">
+                        <input type="text" x-model="loginForm.username" @keydown.enter.prevent="$refs.loginPassword.focus()" class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600 transition">
                     </div>
                 </div>
                 <div>
                     <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Contraseña</label>
                     <div class="relative">
                         <i class="fa-solid fa-lock absolute left-4 top-3.5 text-slate-400"></i>
-                        <input type="password" x-model="loginForm.password" class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600 transition">
+                        <input type="password" x-ref="loginPassword" x-model="loginForm.password" @keydown.enter="handleLogin()" class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600 transition">
                     </div>
                 </div>
             </div>
