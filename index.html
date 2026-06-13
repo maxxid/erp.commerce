@@ -328,6 +328,17 @@
                         </div>
                     </div>
 
+                    <!-- Banner de alertas -->
+                    <div x-show="dashboardAlertas.length > 0" class="space-y-1.5">
+                        <template x-for="a in dashboardAlertas" :key="a.tipo">
+                            <div :class="a.nivel === 'danger' ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-amber-50 border-amber-200 text-amber-700'" class="px-4 py-2 rounded-xl border text-xs font-bold flex items-center gap-2">
+                                <span x-show="a.nivel === 'danger'">🔴</span>
+                                <span x-show="a.nivel === 'warning'">🟡</span>
+                                <span x-text="a.mensaje"></span>
+                            </div>
+                        </template>
+                    </div>
+
                     <!-- VISTA SIMPLIFICADA (cajero / repositor) -->
                     <div x-show="dashboardSimple" class="space-y-6">
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -343,6 +354,11 @@
                             <div class="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm text-center">
                                 <div class="text-[10px] font-bold text-slate-400 uppercase">Transferencia</div>
                                 <div class="text-xl font-bold text-blue-600 font-mono-data mt-1" x-text="formatCurrency(cajaResumen.desglose?.transferencia || 0)"></div>
+                            </div>
+                            <div class="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm text-center">
+                                <div class="text-[10px] font-bold text-slate-400 uppercase">Margen Bruto Hoy</div>
+                                <div :class="dashboard.margen_pct_hoy >= 0 ? 'text-emerald-600' : 'text-rose-600'" class="text-xl font-bold font-mono-data mt-1" x-text="formatCurrency(dashboard.margen_bruto_hoy || 0)"></div>
+                                <div class="text-[10px] text-slate-400 mt-0.5" x-text="(dashboard.margen_pct_hoy || 0) + '%'"></div>
                             </div>
                             <div class="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm text-center">
                                 <div class="text-[10px] font-bold text-slate-400 uppercase">Stock Crítico</div>
@@ -422,6 +438,11 @@
                             <div :class="dashboard.tendencia >= 0 ? 'text-emerald-600' : 'text-rose-600'" class="text-xl font-bold font-mono-data mt-1" x-text="(dashboard.tendencia >= 0 ? '+' : '') + dashboard.tendencia + '%'"></div>
                             <div class="text-[10px] text-slate-400 mt-0.5">vs semana anterior</div>
                         </div>
+                        <div class="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm text-center">
+                            <div class="text-[10px] font-bold text-slate-400 uppercase">Margen Bruto</div>
+                            <div :class="dashboard.margen_pct_mes >= 0 ? 'text-emerald-600' : 'text-rose-600'" class="text-xl font-bold font-mono-data mt-1" x-text="formatCurrency(dashboard.margen_bruto_mes || 0)"></div>
+                            <div class="text-[10px] text-slate-400 mt-0.5" x-text="(dashboard.margen_pct_mes || 0) + '%'"></div>
+                        </div>
                     </div>
 
                     <!-- Charts row -->
@@ -488,6 +509,42 @@
                                 </template>
                             </div>
                             <p x-show="!(dashboard.stock_critico || []).length && !(dashboard.sin_stock || []).length" class="text-xs text-slate-400 text-center py-4">Todo en orden</p>
+                        </div>
+                    </div>
+
+                    <!-- Reporte Semanal -->
+                    <div x-show="dashboardSemanal.ventas_actual > 0" class="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm">
+                        <h3 class="font-bold text-slate-900 text-sm mb-4">📊 Reporte Semanal (vs semana anterior)</h3>
+                        <div class="grid grid-cols-3 gap-4 mb-4">
+                            <div class="text-center p-3 bg-slate-50 rounded-xl">
+                                <div class="text-[10px] text-slate-400 uppercase">Ventas</div>
+                                <div class="font-mono-data font-bold text-slate-800" x-text="formatCurrency(dashboardSemanal.ventas_actual)"></div>
+                                <div :class="dashboardSemanal.diff_ventas_pct >= 0 ? 'text-emerald-600' : 'text-rose-600'" class="text-[10px] font-bold" x-text="(dashboardSemanal.diff_ventas_pct >= 0 ? '+' : '') + dashboardSemanal.diff_ventas_pct + '%'"></div>
+                            </div>
+                            <div class="text-center p-3 bg-slate-50 rounded-xl">
+                                <div class="text-[10px] text-slate-400 uppercase">Margen</div>
+                                <div class="font-mono-data font-bold text-slate-800" x-text="formatCurrency(dashboardSemanal.margen_actual)"></div>
+                                <div :class="dashboardSemanal.diff_margen_pct >= 0 ? 'text-emerald-600' : 'text-rose-600'" class="text-[10px] font-bold" x-text="(dashboardSemanal.diff_margen_pct >= 0 ? '+' : '') + dashboardSemanal.diff_margen_pct + '%'"></div>
+                            </div>
+                            <div class="text-center p-3 bg-slate-50 rounded-xl">
+                                <div class="text-[10px] text-slate-400 uppercase">Tickets</div>
+                                <div class="font-mono-data font-bold text-slate-800" x-text="dashboardSemanal.tickets_actual"></div>
+                                <div :class="dashboardSemanal.diff_tickets_pct >= 0 ? 'text-emerald-600' : 'text-rose-600'" class="text-[10px] font-bold" x-text="(dashboardSemanal.diff_tickets_pct >= 0 ? '+' : '') + dashboardSemanal.diff_tickets_pct + '%'"></div>
+                            </div>
+                        </div>
+                        <!-- Top productos semana -->
+                        <div x-show="(dashboardSemanal.top_productos_semana || []).length > 0">
+                            <span class="text-[10px] font-bold text-slate-400 uppercase">Top Semanal</span>
+                            <div class="space-y-1 mt-1">
+                                <template x-for="(p, idx) in (dashboardSemanal.top_productos_semana || []).slice(0,5)" :key="p.id">
+                                    <div class="flex items-center gap-2 text-xs p-1.5 bg-slate-50 rounded-lg">
+                                        <span class="font-bold text-slate-400 w-4" x-text="'#'+(idx+1)"></span>
+                                        <span class="flex-1 truncate font-semibold" x-text="p.nombre"></span>
+                                        <span class="text-slate-500" x-text="p.cantidad + 'u'"></span>
+                                        <span class="font-mono-data font-bold text-emerald-600" x-text="formatCurrency(p.total)"></span>
+                                    </div>
+                                </template>
+                            </div>
                         </div>
                     </div>
                     </div>
@@ -2237,6 +2294,8 @@
                 currentUser: { id: 1, username: 'admin', nombre: 'Administrador', rol: 'admin' },
                 activeTab: 'dashboard',
                 dashboardSimple: false,
+                dashboardAlertas: [],
+                dashboardSemanal: {},
                 currentTime: new Date(),
                 consoleOpen: false,
                 apiLogs: [],
@@ -2561,9 +2620,15 @@
                 // Métricas del dashboard (Endpoint: GET /api/dashboard/resumen)
                 async fetchDashboardData() {
                     try {
-                        const response = await this.request('GET', '/api/dashboard/resumen');
+                        const [resumenResp, alertasResp, semanalResp] = await Promise.all([
+                            this.request('GET', '/api/dashboard/resumen'),
+                            this.request('GET', '/api/dashboard/alertas'),
+                            this.request('GET', '/api/dashboard/semanal'),
+                        ]);
                         if (this.apiMode === 'real') {
-                            this.dashboard = response.data || this.dashboard;
+                            if (resumenResp && resumenResp.data) this.dashboard = resumenResp.data;
+                            if (alertasResp && alertasResp.data) this.dashboardAlertas = alertasResp.data.alertas || [];
+                            if (semanalResp && semanalResp.data) this.dashboardSemanal = semanalResp.data;
                         } else {
                             // Simulación
                             const valorStockCalculado = this.products.reduce((acc, curr) => acc + (curr.precio_venta * curr.stock_actual), 0);
