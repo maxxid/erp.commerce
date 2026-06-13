@@ -411,16 +411,21 @@
                             </div>
                         </div>
 
-                        <!-- Tarjeta de lookup (producto encontrado) con precio venta y Continuar -->
+                        <!-- Tarjeta de lookup (producto encontrado / buscando) con precio venta y Continuar -->
                         <div x-show="lookupProduct.codigo_barras" class="p-4 bg-indigo-50/80 border-b border-indigo-100 space-y-3 shrink-0" x-transition>
                             <div class="flex justify-between items-start">
                                 <div>
-                                    <span class="text-[9px] font-bold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full border border-indigo-200 uppercase tracking-widest">Nuevo Producto</span>
-                                    <h4 class="font-bold text-slate-900 text-sm mt-1" x-text="lookupProduct.nombre"></h4>
-                                    <p class="text-[10px] text-slate-500 font-mono-data">Código: <span x-text="lookupProduct.codigo_barras"></span> | Ref: <span class="font-semibold text-brand-600" x-text="formatCurrency(lookupProduct.precio_referencia)"></span></p>
-                                    <p class="text-[10px] text-slate-400 mt-0.5">Marca: <span x-text="lookupProduct.marca || '—'"></span> | Cat: <span x-text="lookupProduct.categoria || '—'"></span></p>
+                                    <span x-show="!lookupProduct._loading" class="text-[9px] font-bold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full border border-indigo-200 uppercase tracking-widest">Nuevo Producto</span>
+                                    <span x-show="lookupProduct._loading" class="text-[9px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-200 uppercase tracking-widest"><i class="fa-solid fa-circle-notch animate-spin mr-1"></i> Buscando...</span>
+                                    <h4 x-show="!lookupProduct._loading" class="font-bold text-slate-900 text-sm mt-1" x-text="lookupProduct.nombre"></h4>
+                                    <h4 x-show="lookupProduct._loading" class="font-bold text-slate-500 text-sm mt-1"><i class="fa-solid fa-circle-notch animate-spin mr-1"></i> Consultando Carrefour, Vea, MasOnline y Super Coco...</h4>
+                                    <p class="text-[10px] text-slate-500 font-mono-data">Código: <span x-text="lookupProduct.codigo_barras"></span> | Ref: 
+                                        <span x-show="!lookupProduct._loading" class="font-semibold text-brand-600" x-text="formatCurrency(lookupProduct.precio_referencia)"></span>
+                                        <span x-show="lookupProduct._loading"><i class="fa-solid fa-circle-notch animate-spin text-brand-400 text-[8px]"></i></span>
+                                    </p>
+                                    <p x-show="!lookupProduct._loading" class="text-[10px] text-slate-400 mt-0.5">Marca: <span x-text="lookupProduct.marca || '—'"></span> | Cat: <span x-text="lookupProduct.categoria || '—'"></span></p>
                                 </div>
-                                <button @click="lookupProduct = {}" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+                                <button @click="abortLookup()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
                             </div>
 
                             <!-- Badges de comparación paralelos -->
@@ -459,10 +464,10 @@
                                 </div>
                                 <div class="flex-1">
                                     <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Precio de Venta</label>
-                                    <input type="number" x-model.number="lookupProduct.quickPrecioVenta" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-mono-data font-bold focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100" placeholder="0">
+                                    <input type="number" x-model.number="lookupProduct.quickPrecioVenta" :disabled="lookupProduct._loading" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-mono-data font-bold focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100" placeholder="0">
                                 </div>
-                                <button @click="quickSaveAndAddToCart()" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold uppercase tracking-wider shadow-sm transition flex items-center gap-1.5">
-                                    <i class="fa-solid fa-bolt"></i> Continuar
+                                <button @click="quickSaveAndAddToCart()" :disabled="lookupProduct._loading" :class="lookupProduct._loading ? 'bg-slate-300 cursor-not-allowed text-slate-400' : 'bg-emerald-500 hover:bg-emerald-600 text-white'" class="px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider shadow-sm transition flex items-center gap-1.5">
+                                    <i class="fa-solid" :class="lookupProduct._loading ? 'fa-spinner animate-spin' : 'fa-bolt'"></i> Continuar
                                 </button>
                             </div>
                         </div>
@@ -1724,6 +1729,7 @@
                 posLookupCode: '',
                 selectedPOSCategory: 'all',
                 lookupProduct: {},
+                _lookupToken: 0,
                 lookupNotFound: false,
                 lookupNotFoundBarcode: '',
                 lookupNotFoundNombre: '',
@@ -1929,60 +1935,120 @@
                     }
                 },
 
-                // Lookup Multi-fuente (Punto 3.5)
+                // Lookup Multi-fuente (Punto 3.5) — v2: card inmediato + paralelo + abort
                 async triggerPOSLookup() {
                     if (!this.posLookupCode) return;
                     const barcode = this.posLookupCode;
-                    this.lookupProduct = {};
+                    this.posLookupCode = '';
                     this.lookupNotFound = false;
 
-                    // 1) Primero buscar localmente: si ya existe en el sistema, agregar directo
+                    // 1) Si existe localmente → agregar directo al carrito
                     const prodLocal = this.products.find(p => p.codigo_barras === barcode);
                     if (prodLocal) {
+                        this._lookupToken++; // aborta búsquedas en vuelo
+                        this.lookupProduct = {};
                         await this.addPRODToPOS(prodLocal);
-                        this.posLookupCode = '';
                         this.addToast('success', `${prodLocal.nombre} añadido al carrito.`);
                         this.$nextTick(() => { if (this.$refs.posScanInput) this.$refs.posScanInput.focus(); });
                         return;
                     }
 
-                    // 2) No existe localmente → buscar en fuentes externas
-                    try {
-                        this.addToast('info', 'Buscando código de barras...');
-                        const response = await this.request('POST', '/api/productos/lookup', { barcode, ia_mode: false });
+                    // 2) No existe localmente → mostrar card inmediatamente + búsquedas paralelas
+                    this._lookupToken++;
+                    const token = this._lookupToken;
+                    this.lookupProduct = { 
+                        codigo_barras: barcode, nombre: 'Buscando...', _loading: true, 
+                        quickCantidad: 1, quickPrecioVenta: 0 
+                    };
+                    this.triggerExternalLookup(barcode, token);
+                },
 
-                        if (this.apiMode === 'real') {
-                            const prod = response.data;
-                            if (prod._cached) {
-                                this.addPRODToPOS(prod);
-                                this.posLookupCode = '';
-                                this.addToast('success', `${prod.nombre} añadido al carrito.`);
-                            } else {
-                                prod.quickPrecioVenta = prod.precio_referencia 
-                                    ? Math.ceil(prod.precio_referencia * 1.3 / 50) * 50 
-                                    : 0;
-                                prod.quickCantidad = 1;
-                                this.lookupProduct = prod;
-                                this.posLookupCode = '';
-                                this.triggerParallelSupermarketLookup(prod.codigo_barras);
+                abortLookup() {
+                    this._lookupToken++;
+                    this.lookupProduct = {};
+                    this.lookupNotFound = false;
+                    this.$nextTick(() => { if (this.$refs.posScanInput) this.$refs.posScanInput.focus(); });
+                },
+
+                // Búsqueda paralela en las 4 fuentes (reemplaza la vieja llamada secuencial)
+                async triggerExternalLookup(barcode, token) {
+                    this.lookupBadges = {
+                        carrefour: 'loading', vea: 'loading', masonline: 'loading', supercoco: 'loading',
+                        carrefour_url: '', vea_url: '', masonline_url: '', supercoco_url: ''
+                    };
+
+                    const sources = ['carrefour', 'vea', 'masonline', 'supercoco'];
+                    let foundAny = false;
+                    let completedCount = 0;
+                    
+                    const onSourceComplete = (source, result) => {
+                        if (this._lookupToken !== token) return; // ABORT: descarta resultados viejos
+                        
+                        completedCount++;
+                        if (result && result.precio_referencia) {
+                            this.lookupBadges[source] = result.precio_referencia;
+                            this.lookupBadges[`${source}_url`] = result.url || '';
+                            if (!foundAny) {
+                                foundAny = true;
+                                this.lookupProduct = {
+                                    codigo_barras: barcode,
+                                    nombre: result.nombre || '',
+                                    marca: result.marca || '',
+                                    descripcion: result.descripcion || '',
+                                    precio_referencia: result.precio_referencia || 0,
+                                    imagen_url: result.imagen_url || '',
+                                    sku: result.sku || '',
+                                    propiedades: result.propiedades || {},
+                                    fuente: source,
+                                    categoria: result.categoria || '',
+                                    quickPrecioVenta: result.precio_referencia 
+                                        ? Math.ceil(result.precio_referencia * 1.3 / 50) * 50 
+                                        : 0,
+                                    quickCantidad: 1,
+                                    _loading: false,
+                                };
                             }
                         } else {
-                            this.lookupProduct = {
-                                codigo_barras: barcode, nombre: "Arroz Largo Fino 1kg",
-                                marca: "Molinos Ala", precio_referencia: 1100.0,
-                                quickPrecioVenta: 1500, categoria_id: 2
-                            };
-                            this.triggerParallelSupermarketLookup(barcode);
+                            this.lookupBadges[source] = 'not_found';
                         }
-                    } catch (err) {
-                        // Producto no encontrado → mini form
-                        this.lookupProduct = {};
-                        this.lookupNotFound = true;
-                        this.lookupNotFoundBarcode = barcode;
-                        this.lookupNotFoundNombre = '';
-                        this.lookupNotFoundPrecio = 0;
-                        this.posLookupCode = '';
-                    }
+
+                        // Todas las fuentes completaron sin encontrar nada → mostrar form manual
+                        if (completedCount >= sources.length && !foundAny) {
+                            this.lookupProduct = {};
+                            this.lookupNotFound = true;
+                            this.lookupNotFoundBarcode = barcode;
+                            this.lookupNotFoundNombre = '';
+                            this.lookupNotFoundPrecio = 0;
+                            this.lookupNotFoundCantidad = 1;
+                        }
+                    };
+
+                    sources.forEach(source => {
+                        if (this.apiMode === 'real') {
+                            this.request('POST', '/api/productos/lookup', { barcode, fuente: source, ia_mode: false })
+                                .then(res => onSourceComplete(source, res.data))
+                                .catch(() => onSourceComplete(source, null));
+                        } else {
+                            const delays = { carrefour: 600, vea: 1000, masonline: 1400, supercoco: 800 };
+                            const prices = { carrefour: 1100.0, vea: 1080.0, masonline: null, supercoco: 1050.0 };
+                            const urls = {
+                                carrefour: 'https://www.carrefour.com.ar',
+                                vea: 'https://www.vea.com.ar',
+                                masonline: 'https://www.masonline.com.ar',
+                                supercoco: 'https://supercoco.com.ar'
+                            };
+                            setTimeout(() => {
+                                const price = prices[source];
+                                onSourceComplete(source, price ? {
+                                    nombre: `Producto ${source} - ${barcode}`,
+                                    marca: source,
+                                    precio_referencia: price,
+                                    categoria: 'Almacén',
+                                    url: urls[source]
+                                } : null);
+                            }, delays[source]);
+                        }
+                    });
                 },
 
                 // Quick-save desde lookup: guarda producto con stock inicial y lo agrega al carrito
@@ -2136,39 +2202,6 @@
                 },
 
                 // Punto 3.5 Flujo recomendado de badges paralelos con loaders independientes
-                async triggerParallelSupermarketLookup(barcode) {
-                    this.lookupBadges = { 
-                        carrefour: 'loading', vea: 'loading', masonline: 'loading', supercoco: 'loading',
-                        carrefour_url: '', vea_url: '', masonline_url: '', supercoco_url: '' 
-                    };
-
-                    const superstores = ['carrefour', 'vea', 'masonline', 'supercoco'];
-                    superstores.forEach(async (store) => {
-                        try {
-                            const res = await this.request('POST', '/api/productos/lookup', { barcode: barcode, fuente: store });
-                            if (this.apiMode === 'real') {
-                                this.lookupBadges[store] = res.data.precio_referencia || 'not_found';
-                                this.lookupBadges[`${store}_url`] = res.data.url;
-                            } else {
-                                const delays = { carrefour: 600, vea: 1000, masonline: 1400, supercoco: 800 };
-                                const prices = { carrefour: 1100.0, vea: 1080.0, masonline: 'not_found', supercoco: 1050.0 };
-                                const urls = {
-                                    carrefour: 'https://www.carrefour.com.ar',
-                                    vea: 'https://www.vea.com.ar',
-                                    masonline: 'https://www.masonline.com.ar',
-                                    supercoco: 'https://supercoco.com.ar'
-                                };
-                                setTimeout(() => {
-                                    this.lookupBadges[store] = prices[store];
-                                    this.lookupBadges[`${store}_url`] = urls[store];
-                                }, delays[store]);
-                            }
-                        } catch (e) {
-                            this.lookupBadges[store] = 'not_found';
-                        }
-                    });
-                },
-
                 async saveLookupToLocal(prod) {
                     if (this.apiMode === 'real') {
                         try {
