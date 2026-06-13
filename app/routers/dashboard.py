@@ -287,3 +287,154 @@ def alertas(db: Session = Depends(get_db), user: Usuario = Depends(get_current_u
         alertas.append({"tipo": "etiquetas", "mensaje": f"{pendientes} producto(s) necesitan re-etiquetado", "nivel": "warning"})
 
     return RespuestaData(data={"alertas": alertas, "total": len(alertas)})
+
+
+@router.get("/mensual", response_model=RespuestaData)
+def mensual(db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
+    """Reporte mensual con comparación vs mes anterior."""
+    inicio_actual = _inicio_mes()
+    inicio_anterior = (_inicio_mes() - timedelta(days=1)).replace(day=1)
+
+    def _ventas_mes(desde):
+        hasta = (desde.replace(day=28) + timedelta(days=4)).replace(day=1)
+        return db.query(func.coalesce(func.sum(Venta.total), 0)).filter(
+            Venta.estado == "confirmada", Venta.fecha >= desde, Venta.fecha < hasta
+        ).scalar() or 0
+
+    def _costo_mes(desde):
+        hasta = (desde.replace(day=28) + timedelta(days=4)).replace(day=1)
+        return db.query(func.coalesce(func.sum(VentaItem.cantidad * func.coalesce(VentaItem.precio_costo, 0)), 0)).join(
+            Venta, VentaItem.venta_id == Venta.id
+        ).filter(Venta.estado == "confirmada", Venta.fecha >= desde, Venta.fecha < hasta).scalar() or 0
+
+    def _tickets_mes(desde):
+        hasta = (desde.replace(day=28) + timedelta(days=4)).replace(day=1)
+        return db.query(func.count(Venta.id)).filter(
+            Venta.estado == "confirmada", Venta.fecha >= desde, Venta.fecha < hasta
+        ).scalar() or 0
+
+    ventas_actual = _ventas_mes(inicio_actual)
+    ventas_anterior = _ventas_mes(inicio_anterior)
+    costo_actual = _costo_mes(inicio_actual)
+    costo_anterior = _costo_mes(inicio_anterior)
+    tickets_actual = _tickets_mes(inicio_actual)
+    tickets_anterior = _tickets_mes(inicio_anterior)
+
+    # Ventas por semana del mes actual
+    semanas = []
+    for s in range(5):
+        desde = inicio_actual + timedelta(weeks=s)
+        hasta = desde + timedelta(weeks=1)
+        if desde.month != inicio_actual.month:
+            break
+        total = db.query(func.coalesce(func.sum(Venta.total), 0)).filter(
+            Venta.estado == "confirmada", Venta.fecha >= desde, Venta.fecha < hasta
+        ).scalar() or 0
+        semanas.append({"semana": s + 1, "ventas": float(total), "desde": desde.strftime("%d/%m")})
+
+    # Top 10 productos del mes
+    top = db.query(
+        VentaItem.producto_id, func.sum(VentaItem.cantidad).label("qty"), func.sum(VentaItem.subtotal).label("total")
+    ).join(Venta).filter(
+        Venta.estado == "confirmada", Venta.fecha >= inicio_actual
+    ).group_by(VentaItem.producto_id).order_by(func.sum(VentaItem.cantidad).desc()).limit(10).all()
+    top_lista = [{"id": t.producto_id, "nombre": (db.query(Producto.nombre).filter(Producto.id == t.producto_id).scalar() or "?"),
+                  "cantidad": float(t.qty), "total": float(t.total)} for t in top]
+
+    # Ventas por categoría
+    from app.models.categoria import Categoria
+    cats = db.query(
+        Categoria.nombre, func.coalesce(func.sum(VentaItem.subtotal), 0)
+    ).join(Producto, Producto.categoria_id == Categoria.id).join(
+        VentaItem, VentaItem.producto_id == Producto.id
+    ).join(Venta, VentaItem.venta_id == Venta.id).filter(
+        Venta.estado == "confirmada", Venta.fecha >= inicio_actual
+    ).group_by(Categoria.nombre).order_by(func.sum(VentaItem.subtotal).desc()).all()
+    cats_lista = [{"categoria": c[0], "total": float(c[1])} for c in cats if c[1] > 0]
+
+    def _pct(actual, anterior):
+        return round(((actual - anterior) / max(anterior, 1)) * 100, 1)
+
+    return RespuestaData(data={
+        "ventas_actual": float(ventas_actual), "ventas_anterior": float(ventas_anterior),
+        "costo_actual": float(costo_actual), "costo_anterior": float(costo_anterior),
+        "margen_actual": float(ventas_actual - costo_actual),
+        "margen_anterior": float(ventas_anterior - costo_anterior),
+        "tickets_actual": tickets_actual, "tickets_anterior": tickets_anterior,
+        "ticket_promedio": round(ventas_actual / max(tickets_actual, 1), 2),
+        "diff_ventas_pct": _pct(ventas_actual, ventas_anterior),
+        "diff_margen_pct": _pct(ventas_actual - costo_actual, ventas_anterior - costo_anterior),
+        "semanas": semanas,
+        "top_productos": top_lista,
+        "por_categoria": cats_lista,
+    })
+
+
+@router.get("/trimestral", response_model=RespuestaData)
+def trimestral(db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
+    """Reporte trimestral con comparación vs trimestre anterior."""
+    hoy = HOY()
+    mes_actual = hoy.month
+    trim_actual = ((mes_actual - 1) // 3) * 3 + 1
+    inicio_actual = hoy.replace(month=trim_actual, day=1, hour=0, minute=0, second=0, microsecond=0)
+    inicio_anterior = (inicio_actual - timedelta(days=1)).replace(day=1)
+    inicio_anterior = inicio_anterior.replace(month=((inicio_anterior.month - 1) // 3) * 3 + 1, day=1)
+
+    def _ventas_trim(desde):
+        hasta = (desde.replace(day=28) + timedelta(days=100)).replace(day=1)
+        if hasta.month - desde.month < 3:
+            hasta = (desde + timedelta(days=92)).replace(day=1)
+        return db.query(func.coalesce(func.sum(Venta.total), 0)).filter(
+            Venta.estado == "confirmada", Venta.fecha >= desde, Venta.fecha < hasta
+        ).scalar() or 0
+
+    def _tickets_trim(desde):
+        hasta = (desde.replace(day=28) + timedelta(days=100)).replace(day=1)
+        if hasta.month - desde.month < 3:
+            hasta = (desde + timedelta(days=92)).replace(day=1)
+        return db.query(func.count(Venta.id)).filter(
+            Venta.estado == "confirmada", Venta.fecha >= desde, Venta.fecha < hasta
+        ).scalar() or 0
+
+    ventas_actual = _ventas_trim(inicio_actual)
+    ventas_anterior = _ventas_trim(inicio_anterior)
+    tickets_actual = _tickets_trim(inicio_actual)
+    tickets_anterior = _tickets_trim(inicio_anterior)
+
+    # Ventas por mes del trimestre actual
+    meses_nombres = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+    meses_data = []
+    for m in range(3):
+        desde = inicio_actual.replace(month=inicio_actual.month + m if inicio_actual.month + m <= 12 else inicio_actual.month + m - 12)
+        hasta = (desde.replace(day=28) + timedelta(days=4)).replace(day=1)
+        total = db.query(func.coalesce(func.sum(Venta.total), 0)).filter(
+            Venta.estado == "confirmada", Venta.fecha >= desde, Venta.fecha < hasta
+        ).scalar() or 0
+        costo = db.query(func.coalesce(func.sum(VentaItem.cantidad * func.coalesce(VentaItem.precio_costo, 0)), 0)).join(
+            Venta, VentaItem.venta_id == Venta.id
+        ).filter(Venta.estado == "confirmada", Venta.fecha >= desde, Venta.fecha < hasta).scalar() or 0
+        meses_data.append({
+            "mes": meses_nombres[desde.month - 1], "ventas": float(total),
+            "costo": float(costo), "margen": float(total - costo),
+        })
+
+    # Top 10 productos del trimestre
+    top = db.query(
+        VentaItem.producto_id, func.sum(VentaItem.cantidad).label("qty"), func.sum(VentaItem.subtotal).label("total")
+    ).join(Venta).filter(
+        Venta.estado == "confirmada", Venta.fecha >= inicio_actual
+    ).group_by(VentaItem.producto_id).order_by(func.sum(VentaItem.cantidad).desc()).limit(10).all()
+    top_lista = [{"id": t.producto_id, "nombre": (db.query(Producto.nombre).filter(Producto.id == t.producto_id).scalar() or "?"),
+                  "cantidad": float(t.qty), "total": float(t.total)} for t in top]
+
+    def _pct(actual, anterior):
+        return round(((actual - anterior) / max(anterior, 1)) * 100, 1)
+
+    return RespuestaData(data={
+        "ventas_actual": float(ventas_actual), "ventas_anterior": float(ventas_anterior),
+        "tickets_actual": tickets_actual, "tickets_anterior": tickets_anterior,
+        "diff_ventas_pct": _pct(ventas_actual, ventas_anterior),
+        "diff_tickets_pct": _pct(tickets_actual, tickets_anterior),
+        "meses": meses_data,
+        "top_productos": top_lista,
+    })

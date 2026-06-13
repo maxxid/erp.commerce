@@ -244,6 +244,11 @@
                         <span>Usuarios</span>
                     </button>
 
+                    <button @click="activeTab = 'reportes'; fetchReportes()" x-show="currentUser.rol === 'admin' || currentUser.rol === 'encargado'" :class="activeTab === 'reportes' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150 text-slate-400">
+                        <i class="fa-solid fa-chart-line text-lg w-5 text-center"></i>
+                        <span>Reportes</span>
+                    </button>
+
                     <button @click="activeTab = 'licencias'; fetchLicenciasHistorial()" x-show="currentUser.rol === 'admin'" :class="activeTab === 'licencias' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150 text-slate-400">
                         <i class="fa-solid fa-key text-lg w-5 text-center"></i>
                         <span>Licencias</span>
@@ -512,45 +517,7 @@
                         </div>
                     </div>
 
-                    <!-- Reporte Semanal -->
-                    <div x-show="dashboardSemanal.ventas_actual > 0" class="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm">
-                        <h3 class="font-bold text-slate-900 text-sm mb-4">📊 Reporte Semanal (vs semana anterior)</h3>
-                        <div class="grid grid-cols-3 gap-4 mb-4">
-                            <div class="text-center p-3 bg-slate-50 rounded-xl">
-                                <div class="text-[10px] text-slate-400 uppercase">Ventas</div>
-                                <div class="font-mono-data font-bold text-slate-800" x-text="formatCurrency(dashboardSemanal.ventas_actual)"></div>
-                                <div :class="dashboardSemanal.diff_ventas_pct >= 0 ? 'text-emerald-600' : 'text-rose-600'" class="text-[10px] font-bold" x-text="(dashboardSemanal.diff_ventas_pct >= 0 ? '+' : '') + dashboardSemanal.diff_ventas_pct + '%'"></div>
-                            </div>
-                            <div class="text-center p-3 bg-slate-50 rounded-xl">
-                                <div class="text-[10px] text-slate-400 uppercase">Margen</div>
-                                <div class="font-mono-data font-bold text-slate-800" x-text="formatCurrency(dashboardSemanal.margen_actual)"></div>
-                                <div :class="dashboardSemanal.diff_margen_pct >= 0 ? 'text-emerald-600' : 'text-rose-600'" class="text-[10px] font-bold" x-text="(dashboardSemanal.diff_margen_pct >= 0 ? '+' : '') + dashboardSemanal.diff_margen_pct + '%'"></div>
-                            </div>
-                            <div class="text-center p-3 bg-slate-50 rounded-xl">
-                                <div class="text-[10px] text-slate-400 uppercase">Tickets</div>
-                                <div class="font-mono-data font-bold text-slate-800" x-text="dashboardSemanal.tickets_actual"></div>
-                                <div :class="dashboardSemanal.diff_tickets_pct >= 0 ? 'text-emerald-600' : 'text-rose-600'" class="text-[10px] font-bold" x-text="(dashboardSemanal.diff_tickets_pct >= 0 ? '+' : '') + dashboardSemanal.diff_tickets_pct + '%'"></div>
-                            </div>
-                        </div>
-                        <!-- Top productos semana -->
-                        <div x-show="(dashboardSemanal.top_productos_semana || []).length > 0">
-                            <span class="text-[10px] font-bold text-slate-400 uppercase">Top Semanal</span>
-                            <div class="space-y-1 mt-1">
-                                <template x-for="(p, idx) in (dashboardSemanal.top_productos_semana || []).slice(0,5)" :key="p.id">
-                                    <div class="flex items-center gap-2 text-xs p-1.5 bg-slate-50 rounded-lg">
-                                        <span class="font-bold text-slate-400 w-4" x-text="'#'+(idx+1)"></span>
-                                        <span class="flex-1 truncate font-semibold" x-text="p.nombre"></span>
-                                        <span class="text-slate-500" x-text="p.cantidad + 'u'"></span>
-                                        <span class="font-mono-data font-bold text-emerald-600" x-text="formatCurrency(p.total)"></span>
-                                    </div>
-                                </template>
-                            </div>
-                        </div>
-                    </div>
-                    </div>
-                </div>
-
-                <!-- PESTAÑA: POS DE VENTAS (3 Columnas UX de alta velocidad) -->
+                    PESTAÑA: POS DE VENTAS (3 Columnas UX de alta velocidad) -->
                 <div x-show="activeTab === 'pos'" class="h-[calc(100vh-170px)] flex gap-6 overflow-hidden -m-8 p-8" x-transition>
                     
                     <!-- COLUMNA 1: CATÁLOGO Y LOOKUP MULTI-FUENTE EN TIEMPO REAL -->
@@ -1319,7 +1286,59 @@
                     </div>
                 </div>
 
-                <!-- PESTAÑA: USUARIOS -->
+                <!--                 <!-- PESTAÑA: REPORTES -->
+                <div x-show="activeTab === 'reportes'" class="space-y-6" x-transition>
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-2xl font-bold text-slate-950 font-display">Reportes y Analisis</h2>
+                            <p class="text-sm text-slate-500 mt-1">Semanal, mensual y trimestral con comparativas</p>
+                        </div>
+                        <button @click="fetchReportes()" class="px-3 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl transition">
+                            <i class="fa-solid fa-arrows-rotate"></i>
+                        </button>
+                    </div>
+
+                    <div class="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm">
+                        <h3 class="font-bold text-slate-900 text-sm mb-4">Semanal (vs semana anterior)</h3>
+                        <div class="grid grid-cols-3 gap-4 mb-4">
+                            <div class="text-center p-3 bg-slate-50 rounded-xl"><div class="text-[10px] text-slate-400 uppercase">Ventas</div><div class="font-mono-data font-bold text-slate-800" x-text="formatCurrency(reporteSemanal.ventas_actual || 0)"></div><div :class="(reporteSemanal.diff_ventas_pct || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'" class="text-[10px] font-bold" x-text="((reporteSemanal.diff_ventas_pct || 0) >= 0 ? '+' : '') + (reporteSemanal.diff_ventas_pct || 0) + '%'"></div></div>
+                            <div class="text-center p-3 bg-slate-50 rounded-xl"><div class="text-[10px] text-slate-400 uppercase">Margen</div><div class="font-mono-data font-bold text-slate-800" x-text="formatCurrency(reporteSemanal.margen_actual || 0)"></div><div :class="(reporteSemanal.diff_margen_pct || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'" class="text-[10px] font-bold" x-text="((reporteSemanal.diff_margen_pct || 0) >= 0 ? '+' : '') + (reporteSemanal.diff_margen_pct || 0) + '%'"></div></div>
+                            <div class="text-center p-3 bg-slate-50 rounded-xl"><div class="text-[10px] text-slate-400 uppercase">Tickets</div><div class="font-mono-data font-bold text-slate-800" x-text="reporteSemanal.tickets_actual || 0"></div><div :class="(reporteSemanal.diff_tickets_pct || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'" class="text-[10px] font-bold" x-text="((reporteSemanal.diff_tickets_pct || 0) >= 0 ? '+' : '') + (reporteSemanal.diff_tickets_pct || 0) + '%'"></div></div>
+                        </div>
+                        <div x-show="(reporteSemanal.top_productos_semana || []).length > 0">
+                            <span class="text-[10px] font-bold text-slate-400 uppercase">Top 5 Semanal</span>
+                            <div class="space-y-1 mt-1"><template x-for="(p, idx) in (reporteSemanal.top_productos_semana || []).slice(0,5)" :key="p.id"><div class="flex items-center gap-2 text-xs p-1.5 bg-slate-50 rounded-lg"><span class="font-bold text-slate-400 w-4" x-text="'#'+(idx+1)"></span><span class="flex-1 truncate font-semibold" x-text="p.nombre"></span><span class="text-slate-500" x-text="p.cantidad + 'u'"></span><span class="font-mono-data font-bold text-emerald-600" x-text="formatCurrency(p.total)"></span></div></template></div>
+                        </div>
+                        <p x-show="!(reporteSemanal.ventas_actual > 0)" class="text-xs text-slate-400 text-center py-4">Sin ventas esta semana</p>
+                    </div>
+
+                    <div class="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm">
+                        <h3 class="font-bold text-slate-900 text-sm mb-4">Mensual (vs mes anterior)</h3>
+                        <div class="grid grid-cols-4 gap-4 mb-4">
+                            <div class="text-center p-3 bg-slate-50 rounded-xl"><div class="text-[10px] text-slate-400 uppercase">Ventas</div><div class="font-mono-data font-bold text-slate-800" x-text="formatCurrency(reporteMensual.ventas_actual || 0)"></div><div :class="(reporteMensual.diff_ventas_pct || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'" class="text-[10px] font-bold" x-text="((reporteMensual.diff_ventas_pct || 0) >= 0 ? '+' : '') + (reporteMensual.diff_ventas_pct || 0) + '%'"></div></div>
+                            <div class="text-center p-3 bg-slate-50 rounded-xl"><div class="text-[10px] text-slate-400 uppercase">Margen</div><div class="font-mono-data font-bold text-slate-800" x-text="formatCurrency(reporteMensual.margen_actual || 0)"></div><div :class="(reporteMensual.diff_margen_pct || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'" class="text-[10px] font-bold" x-text="((reporteMensual.diff_margen_pct || 0) >= 0 ? '+' : '') + (reporteMensual.diff_margen_pct || 0) + '%'"></div></div>
+                            <div class="text-center p-3 bg-slate-50 rounded-xl"><div class="text-[10px] text-slate-400 uppercase">Tickets</div><div class="font-mono-data font-bold text-slate-800" x-text="reporteMensual.tickets_actual || 0"></div><div class="text-[10px] text-slate-400">prom $<span x-text="formatCurrency(reporteMensual.ticket_promedio || 0).replace('$','')"></span></div></div>
+                            <div class="text-center p-3 bg-slate-50 rounded-xl"><div class="text-[10px] text-slate-400 uppercase">Costo</div><div class="font-mono-data font-bold text-slate-800" x-text="formatCurrency(reporteMensual.costo_actual || 0)"></div></div>
+                        </div>
+                        <div x-show="(reporteMensual.por_categoria || []).length > 0" class="mb-3"><span class="text-[10px] font-bold text-slate-400 uppercase">Por Categoria</span><div class="flex gap-1.5 mt-1 flex-wrap"><template x-for="c in reporteMensual.por_categoria" :key="c.categoria"><span class="text-[10px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full font-mono-data" x-text="c.categoria + ': $' + formatCurrency(c.total).replace('$','')"></span></template></div></div>
+                        <div x-show="(reporteMensual.top_productos || []).length > 0"><span class="text-[10px] font-bold text-slate-400 uppercase">Top 5 Mensual</span><div class="space-y-1 mt-1"><template x-for="(p, idx) in (reporteMensual.top_productos || []).slice(0,5)" :key="p.id"><div class="flex items-center gap-2 text-xs p-1.5 bg-slate-50 rounded-lg"><span class="font-bold text-slate-400 w-4" x-text="'#'+(idx+1)"></span><span class="flex-1 truncate font-semibold" x-text="p.nombre"></span><span class="text-slate-500" x-text="p.cantidad + 'u'"></span><span class="font-mono-data font-bold text-emerald-600" x-text="formatCurrency(p.total)"></span></div></template></div></div>
+                        <p x-show="!(reporteMensual.ventas_actual > 0)" class="text-xs text-slate-400 text-center py-4">Sin ventas este mes</p>
+                    </div>
+
+                    <div class="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm">
+                        <h3 class="font-bold text-slate-900 text-sm mb-4">Trimestral (vs trimestre anterior)</h3>
+                        <div class="grid grid-cols-3 gap-4 mb-4">
+                            <div class="text-center p-3 bg-slate-50 rounded-xl"><div class="text-[10px] text-slate-400 uppercase">Ventas</div><div class="font-mono-data font-bold text-slate-800" x-text="formatCurrency(reporteTrimestral.ventas_actual || 0)"></div><div :class="(reporteTrimestral.diff_ventas_pct || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'" class="text-[10px] font-bold" x-text="((reporteTrimestral.diff_ventas_pct || 0) >= 0 ? '+' : '') + (reporteTrimestral.diff_ventas_pct || 0) + '%'"></div></div>
+                            <div class="text-center p-3 bg-slate-50 rounded-xl"><div class="text-[10px] text-slate-400 uppercase">Tickets</div><div class="font-mono-data font-bold text-slate-800" x-text="reporteTrimestral.tickets_actual || 0"></div><div :class="(reporteTrimestral.diff_tickets_pct || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'" class="text-[10px] font-bold" x-text="((reporteTrimestral.diff_tickets_pct || 0) >= 0 ? '+' : '') + (reporteTrimestral.diff_tickets_pct || 0) + '%'"></div></div>
+                            <div class="text-center p-3 bg-slate-50 rounded-xl"><div class="text-[10px] text-slate-400 uppercase">Ventas Anterior</div><div class="font-mono-data font-bold text-slate-500" x-text="formatCurrency(reporteTrimestral.ventas_anterior || 0)"></div></div>
+                        </div>
+                        <div x-show="(reporteTrimestral.meses || []).length > 0" class="mb-3"><span class="text-[10px] font-bold text-slate-400 uppercase">Por Mes</span><div class="flex items-end gap-2 h-16 mt-1"><template x-for="m in reporteTrimestral.meses" :key="m.mes"><div class="flex-1 flex flex-col items-center gap-0.5"><span class="text-[8px] font-mono-data text-slate-500" x-text="formatCurrency(m.ventas).replace('$','')"></span><div class="w-full bg-brand-400 rounded-t" :style="'height:' + (m.ventas / Math.max(...reporteTrimestral.meses.map(x=>x.ventas), 1) * 100) + '%'"></div><span class="text-[8px] text-slate-400" x-text="m.mes"></span></div></template></div></div>
+                        <div x-show="(reporteTrimestral.top_productos || []).length > 0"><span class="text-[10px] font-bold text-slate-400 uppercase">Top 5 Trimestral</span><div class="space-y-1 mt-1"><template x-for="(p, idx) in (reporteTrimestral.top_productos || []).slice(0,5)" :key="p.id"><div class="flex items-center gap-2 text-xs p-1.5 bg-slate-50 rounded-lg"><span class="font-bold text-slate-400 w-4" x-text="'#'+(idx+1)"></span><span class="flex-1 truncate font-semibold" x-text="p.nombre"></span><span class="text-slate-500" x-text="p.cantidad + 'u'"></span><span class="font-mono-data font-bold text-emerald-600" x-text="formatCurrency(p.total)"></span></div></template></div></div>
+                        <p x-show="!(reporteTrimestral.ventas_actual > 0)" class="text-xs text-slate-400 text-center py-4">Sin ventas este trimestre</p>
+                    </div>
+                </div>
+
+PESTAÑA: USUARIOS -->
                 <div x-show="activeTab === 'usuarios'" class="space-y-6" x-transition>
                     <div class="flex items-center justify-between">
                         <div>
@@ -2296,6 +2315,9 @@
                 dashboardSimple: false,
                 dashboardAlertas: [],
                 dashboardSemanal: {},
+                reporteSemanal: {},
+                reporteMensual: {},
+                reporteTrimestral: {},
                 currentTime: new Date(),
                 consoleOpen: false,
                 apiLogs: [],
@@ -3972,6 +3994,19 @@
                     try {
                         const resp = await this.request('GET', '/api/productos/pendientes-etiquetar');
                         if (resp && resp.data) this.pendientesEtiquetar = resp.data;
+                    } catch (e) {}
+                },
+
+                async fetchReportes() {
+                    try {
+                        const [semanalResp, mensualResp, trimestralResp] = await Promise.all([
+                            this.request('GET', '/api/dashboard/semanal'),
+                            this.request('GET', '/api/dashboard/mensual'),
+                            this.request('GET', '/api/dashboard/trimestral'),
+                        ]);
+                        if (semanalResp && semanalResp.data) this.reporteSemanal = semanalResp.data;
+                        if (mensualResp && mensualResp.data) this.reporteMensual = mensualResp.data;
+                        if (trimestralResp && trimestralResp.data) this.reporteTrimestral = trimestralResp.data;
                     } catch (e) {}
                 },
 
