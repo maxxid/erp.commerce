@@ -15,6 +15,7 @@ from app.models.compra import Compra, CompraItem
 from app.models.movimiento_stock import MovimientoStock
 from app.models.movimiento_caja import MovimientoCaja
 from app.models.configuracion import Configuracion
+from app.models.auditoria import Auditoria
 
 __all__ = [
     "Categoria",
@@ -30,4 +31,5 @@ __all__ = [
     "MovimientoStock",
     "MovimientoCaja",
     "Configuracion",
+    "Auditoria",
 ]

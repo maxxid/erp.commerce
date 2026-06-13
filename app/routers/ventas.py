@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 from app.database import get_db
 from app.services import venta_service
+from app.services import auditoria_service
 from app.schemas.common import RespuestaData, RespuestaLista
 from app.auth.dependencies import get_current_user, require_role
 from app.models.usuario import Usuario
@@ -110,6 +111,7 @@ def crear(
         sucursal_id=data.sucursal_id,
         notas=data.notas,
     )
+    auditoria_service.registrar(db, user.id, "carrito_creado", venta.id, venta.numero)
     return RespuestaData(data=_venta_to_dict(venta), message=f"Venta {venta.numero} creada")
 
 
@@ -149,8 +151,23 @@ def quitar_item(
     if not venta:
         raise HTTPException(status_code=404, detail="Venta no encontrada")
     try:
+        # Obtener info del item antes de quitarlo para el log
+        item_obj = next((i for i in venta.items if i.id == item_id), None)
+        detalle = None
+        if item_obj:
+            detalle = {
+                "producto": item_obj.producto.nombre if item_obj.producto else "?",
+                "cantidad": item_obj.cantidad,
+                "precio": item_obj.precio_unitario,
+                "subtotal_anterior": item_obj.subtotal,
+                "venta_subtotal_antes": venta.subtotal,
+                "venta_total_antes": venta.total,
+            }
         venta_service.quitar_item(db, venta, item_id)
         db.refresh(venta)
+        if detalle:
+            detalle["venta_subtotal_despues"] = venta.subtotal
+        auditoria_service.registrar(db, user.id, "item_quitado", venta.id, venta.numero, detalle)
         return RespuestaData(data={"venta_subtotal": venta.subtotal}, message="Ítem quitado")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -175,6 +192,8 @@ def confirmar(
         venta = venta_service.confirmar_venta(
             db, venta, data.medio_pago, data.descuento, user.id
         )
+        auditoria_service.registrar(db, user.id, "venta_confirmada", venta.id, venta.numero,
+                                     {"medio_pago": data.medio_pago, "total": venta.total, "items": len(venta.items)})
         return RespuestaData(
             data=_venta_to_dict(venta),
             message=f"Venta {venta.numero} confirmada. Total: ${venta.total:,.2f}",
@@ -195,6 +214,8 @@ def anular(
         raise HTTPException(status_code=404, detail="Venta no encontrada")
     try:
         venta = venta_service.anular_venta(db, venta, user.id)
+        auditoria_service.registrar(db, user.id, "venta_anulada", venta.id, venta.numero,
+                                     {"total_anulado": venta.total, "medio_pago": venta.medio_pago})
         return RespuestaData(data=_venta_to_dict(venta), message=f"Venta {venta.numero} anulada")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

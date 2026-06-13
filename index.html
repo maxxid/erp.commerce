@@ -225,6 +225,11 @@
                         <i class="fa-solid fa-users-gear text-lg w-5 text-center"></i>
                         <span>Usuarios</span>
                     </button>
+
+                    <button @click="activeTab = 'auditoria'; fetchAuditoria()" x-show="currentUser.rol === 'admin'" :class="activeTab === 'auditoria' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150 text-slate-400">
+                        <i class="fa-solid fa-shield-halved text-lg w-5 text-center"></i>
+                        <span>Auditoría</span>
+                    </button>
                 </nav>
             </div>
 
@@ -1224,6 +1229,63 @@
                     </div>
                 </div>
 
+                <!-- PESTAÑA: AUDITORÍA -->
+                <div x-show="activeTab === 'auditoria'" class="space-y-6" x-transition>
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-2xl font-bold text-slate-950 font-display">Auditoría de Ventas</h2>
+                            <p class="text-sm text-slate-500 mt-1">
+                                <span class="text-rose-500 font-bold">●</span> Sospechoso &nbsp;
+                                <span class="text-amber-500 font-bold">●</span> Atención &nbsp;
+                                <span class="text-emerald-500 font-bold">●</span> Normal
+                            </p>
+                        </div>
+                        <button @click="fetchAuditoria()" class="px-3 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl transition">
+                            <i class="fa-solid fa-arrows-rotate"></i>
+                        </button>
+                    </div>
+
+                    <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-50 border-b border-slate-100">
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider w-8"></th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Fecha / Hora</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Usuario</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Acción</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Venta</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Detalle</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100 text-xs">
+                                    <template x-for="e in auditoriaEvents" :key="e.id">
+                                        <tr :class="e.sospechoso ? 'bg-rose-50/50' : 'hover:bg-slate-50/50'" class="transition">
+                                            <td class="p-4 text-center">
+                                                <span x-show="e.tipo === 'carrito_abandonado'" class="text-rose-500" title="Carrito abandonado">⚠️</span>
+                                                <span x-show="e.tipo === 'item_quitado'" class="text-amber-500" title="Ítem quitado">✕</span>
+                                                <span x-show="e.tipo === 'venta_anulada'" class="text-rose-500" title="Venta anulada">⊘</span>
+                                                <span x-show="e.tipo === 'carrito_creado'" class="text-slate-300">•</span>
+                                                <span x-show="e.tipo === 'venta_confirmada'" class="text-emerald-500">✓</span>
+                                            </td>
+                                            <td class="p-4 text-slate-500 font-mono-data" x-text="formatDateTime(e.created_at)"></td>
+                                            <td class="p-4 font-semibold text-slate-700" x-text="e.usuario_nombre"></td>
+                                            <td class="p-4">
+                                                <span :class="e.tipo === 'carrito_abandonado' ? 'text-rose-600 bg-rose-50 border-rose-100' : (e.tipo === 'item_quitado' ? 'text-amber-600 bg-amber-50 border-amber-100' : (e.tipo === 'venta_anulada' ? 'text-rose-600 bg-rose-50 border-rose-100' : 'text-slate-600 bg-slate-50 border-slate-100'))" class="px-2 py-0.5 rounded border text-[10px] font-bold uppercase" x-text="e.tipo.replace(/_/g, ' ')"></span>
+                                            </td>
+                                            <td class="p-4 font-mono-data text-slate-600" x-text="e.venta_numero || '—'"></td>
+                                            <td class="p-4 text-slate-500 max-w-xs truncate" x-text="auditDetail(e)"></td>
+                                        </tr>
+                                    </template>
+                                    <tr x-show="auditoriaEvents.length === 0">
+                                        <td colspan="6" class="p-8 text-center text-slate-400 text-xs">Sin eventos de auditoría</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- PESTAÑA: RESPALDOS -->
                 <div x-show="activeTab === 'backups'" class="space-y-6" x-transition>
                     <div class="flex items-center justify-between">
@@ -2036,6 +2098,7 @@
                 r2Backups: [],
                 usuarios: [],
                 usuarioForm: { id: null, username: '', nombre: '', password: '', rol: 'cajero', activo: true },
+                auditoriaEvents: [],
                 loggingIn: false,
 
                 // Formularios
@@ -3583,6 +3646,39 @@
                         this.addToast('success', 'Usuario reactivado');
                         this.fetchUsuarios();
                     } catch (e) { this.addToast('error', 'Error: ' + (e.message || '')); }
+                },
+
+                // Auditoría
+                async fetchAuditoria() {
+                    try {
+                        const resp = await this.request('GET', '/api/auditoria?page_size=200');
+                        if (resp && resp.data) this.auditoriaEvents = resp.data;
+                    } catch (e) {}
+                },
+
+                auditDetail(e) {
+                    if (!e.detalle) return '';
+                    if (typeof e.detalle === 'string') return e.detalle;
+                    const d = e.detalle;
+                    if (e.tipo === 'item_quitado') {
+                        return `${d.producto || '?'} x${d.cantidad || 1} — Subtotal: bajó de $${(d.venta_subtotal_antes || 0).toLocaleString()} a $${(d.venta_subtotal_despues || 0).toLocaleString()}`;
+                    }
+                    if (e.tipo === 'venta_confirmada') {
+                        return `${d.medio_pago || ''} — ${d.items || 0} ítems — Total: $${(d.total || 0).toLocaleString()}`;
+                    }
+                    if (e.tipo === 'venta_anulada') {
+                        return `Total anulado: $${(d.total_anulado || 0).toLocaleString()} — ${d.medio_pago || ''}`;
+                    }
+                    if (e.tipo === 'carrito_abandonado') {
+                        return `${d.items || 0} ítems — Sin confirmar desde hace +10 min — Subtotal: $${(d.subtotal || 0).toLocaleString()}`;
+                    }
+                    return JSON.stringify(d).substring(0, 80);
+                },
+
+                formatDateTime(iso) {
+                    if (!iso) return '';
+                    const d = new Date(iso);
+                    return d.toLocaleDateString('es-AR') + ' ' + d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
                 },
 
                 // Proveedores
