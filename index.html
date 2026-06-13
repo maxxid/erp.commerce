@@ -2623,11 +2623,11 @@
                                 const saveResp = await this.request('POST', '/api/productos', {
                                     codigo_barras: `*MANUAL*${Date.now()}`,
                                     nombre, precio_venta: precio, fuente: 'manual',
-                                    cantidad_inicial: 1
+                                    cantidad_inicial: 10
                                 });
                                 if (saveResp && saveResp.data) {
                                     const saved = saveResp.data;
-                                    saved.stock_actual = 1;
+                                    saved.stock_actual = 10;
                                     await this.fetchProducts();
                                     this.addPRODToPOS(saved);
                                     this.addToast('success', `${nombre} agregado ($${precio}). Ajusta el stock real en Productos.`);
@@ -2638,7 +2638,7 @@
                         } else {
                             const tempProd = {
                                 id: this.products.length + 1, codigo_barras: `*MANUAL*${Date.now()}`,
-                                nombre, marca: '', precio_venta: precio, stock_actual: 1,
+                                nombre, marca: '', precio_venta: precio, stock_actual: 10,
                                 categoria_id: this.categories[0]?.id || 1
                             };
                             this.products.push(tempProd);
