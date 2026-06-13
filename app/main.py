@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from app.config import settings
 from app.database import engine, Base
 from app.models import *  # noqa: F401, F403 — Registrar todos los modelos
-from app.routers import auth, productos, categorias, dashboard, caja, clientes, ventas, proveedores, compras, calendario, backups
+from app.routers import auth, productos, categorias, dashboard, caja, clientes, ventas, proveedores, compras, calendario, backups, usuarios
 
 
 def crear_app() -> FastAPI:
@@ -44,6 +44,7 @@ def crear_app() -> FastAPI:
     app.include_router(compras.router)
     app.include_router(calendario.router)
     app.include_router(backups.router)
+    app.include_router(usuarios.router)
 
     # Servir el frontend
     @app.get("/app")

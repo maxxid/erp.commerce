@@ -179,7 +179,7 @@
                         <span>Productos</span>
                     </button>
 
-                    <button @click="activeTab = 'caja'; fetchCajaMovimientos(); fetchCajaResumen()" :class="activeTab === 'caja' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150">
+                    <button @click="activeTab = 'caja'; fetchCajaMovimientos(); fetchCajaResumen()" x-show="currentUser.rol === 'admin' || currentUser.rol === 'cajero'" :class="activeTab === 'caja' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150">
                         <i class="fa-solid fa-vault text-lg w-5 text-center"></i>
                         <span>Arqueos y Caja</span>
                     </button>
@@ -194,17 +194,17 @@
                         <span>Calendario</span>
                     </button>
 
-                    <button @click="activeTab = 'compras'; fetchCompras(); fetchProveedores()" :class="activeTab === 'compras' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150">
+                    <button @click="activeTab = 'compras'; fetchCompras(); fetchProveedores()" x-show="currentUser.rol === 'admin' || currentUser.rol === 'encargado' || currentUser.rol === 'repositor'" :class="activeTab === 'compras' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150">
                         <i class="fa-solid fa-truck-ramp-box text-lg w-5 text-center"></i>
                         <span>Compras / Stock</span>
                     </button>
 
-                    <button @click="activeTab = 'proveedores'; fetchProveedores()" :class="activeTab === 'proveedores' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150">
+                    <button @click="activeTab = 'proveedores'; fetchProveedores()" x-show="currentUser.rol === 'admin' || currentUser.rol === 'encargado' || currentUser.rol === 'repositor'" :class="activeTab === 'proveedores' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150">
                         <i class="fa-solid fa-industry text-lg w-5 text-center"></i>
                         <span>Proveedores</span>
                     </button>
 
-                    <button @click="activeTab = 'clientes'; fetchClientes()" :class="activeTab === 'clientes' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150">
+                    <button @click="activeTab = 'clientes'; fetchClientes()" x-show="currentUser.rol === 'admin' || currentUser.rol === 'encargado'" :class="activeTab === 'clientes' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150">
                         <i class="fa-solid fa-address-book text-lg w-5 text-center"></i>
                         <span>Clientes y Ctas. Ctes</span>
                     </button>
@@ -216,9 +216,14 @@
                         <span>Ayuda y Atajos</span>
                     </button>
 
-                    <button @click="activeTab = 'backups'; fetchBackupStatus()" :class="activeTab === 'backups' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150 text-slate-400">
+                    <button @click="activeTab = 'backups'; fetchBackupStatus()" x-show="currentUser.rol === 'admin' || currentUser.rol === 'encargado'" :class="activeTab === 'backups' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150 text-slate-400">
                         <i class="fa-solid fa-cloud-arrow-up text-lg w-5 text-center"></i>
                         <span>Respaldos</span>
+                    </button>
+
+                    <button @click="activeTab = 'usuarios'; fetchUsuarios()" x-show="currentUser.rol === 'admin'" :class="activeTab === 'usuarios' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150 text-slate-400">
+                        <i class="fa-solid fa-users-gear text-lg w-5 text-center"></i>
+                        <span>Usuarios</span>
                     </button>
                 </nav>
             </div>
@@ -1166,6 +1171,59 @@
                     </div>
                 </div>
 
+                <!-- PESTAÑA: USUARIOS -->
+                <div x-show="activeTab === 'usuarios'" class="space-y-6" x-transition>
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-2xl font-bold text-slate-950 font-display">Gestión de Usuarios</h2>
+                            <p class="text-sm text-slate-500 mt-1">Roles: admin, encargado, cajero, repositor</p>
+                        </div>
+                        <button @click="showModal('usuario_create')" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-xl flex items-center gap-1.5 shadow-sm transition">
+                            <i class="fa-solid fa-plus"></i> Nuevo Usuario
+                        </button>
+                    </div>
+
+                    <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-50 border-b border-slate-100">
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Usuario</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Nombre</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Rol</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Estado</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Último Login</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100 text-xs">
+                                    <template x-for="u in usuarios" :key="u.id">
+                                        <tr class="hover:bg-slate-50/50 transition">
+                                            <td class="p-4 font-mono-data font-bold text-slate-900" x-text="u.username"></td>
+                                            <td class="p-4 font-semibold text-slate-700" x-text="u.nombre"></td>
+                                            <td class="p-4">
+                                                <span :class="u.rol === 'admin' ? 'bg-purple-50 text-purple-600 border-purple-100' : (u.rol === 'encargado' ? 'bg-blue-50 text-blue-600 border-blue-100' : (u.rol === 'cajero' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-50 text-slate-600 border-slate-100'))" class="px-2 py-0.5 rounded border text-[10px] font-bold uppercase" x-text="u.rol"></span>
+                                            </td>
+                                            <td class="p-4">
+                                                <span :class="u.activo ? 'bg-emerald-50 text-accent-success border-emerald-100' : 'bg-rose-50 text-accent-danger border-rose-100'" class="px-2 py-0.5 rounded border text-[10px] font-bold uppercase" x-text="u.activo ? 'Activo' : 'Inactivo'"></span>
+                                            </td>
+                                            <td class="p-4 text-slate-500" x-text="u.ultimo_login ? formatDateShort(u.ultimo_login) : '—'"></td>
+                                            <td class="p-4 flex gap-2">
+                                                <button @click="editUsuario(u)" class="text-brand-600 hover:text-brand-900 font-bold hover:underline">Editar <i class="fa-solid fa-pen-to-square"></i></button>
+                                                <button x-show="u.activo" @click="deleteUsuario(u.id)" class="text-rose-500 hover:text-rose-900 font-bold hover:underline">Desactivar <i class="fa-solid fa-ban"></i></button>
+                                                <button x-show="!u.activo" @click="reactivateUsuario(u.id)" class="text-emerald-600 hover:text-emerald-900 font-bold hover:underline">Activar <i class="fa-solid fa-check"></i></button>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                    <tr x-show="usuarios.length === 0">
+                                        <td colspan="6" class="p-8 text-center text-slate-400 text-xs">No se encontraron usuarios</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- PESTAÑA: RESPALDOS -->
                 <div x-show="activeTab === 'backups'" class="space-y-6" x-transition>
                     <div class="flex items-center justify-between">
@@ -1813,6 +1871,39 @@
                 </div>
             </div>
 
+            <!-- MODAL: CREAR/EDITAR USUARIO -->
+            <div x-show="currentModalType === 'usuario_create' || currentModalType === 'usuario_edit'" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Username</label>
+                    <input type="text" x-model="usuarioForm.username" :disabled="currentModalType === 'usuario_edit'" class="w-full border rounded-xl p-2.5 text-xs font-mono">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Nombre Completo</label>
+                    <input type="text" x-model="usuarioForm.nombre" class="w-full border rounded-xl p-2.5 text-xs" placeholder="Juan Pérez">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Contraseña <span x-show="currentModalType === 'usuario_edit'" class="text-slate-400 font-normal">(dejar vacío para no cambiar)</span></label>
+                    <input type="password" x-model="usuarioForm.password" class="w-full border rounded-xl p-2.5 text-xs" placeholder="••••••">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Rol</label>
+                    <select x-model="usuarioForm.rol" class="w-full border rounded-xl p-2.5 text-xs bg-white">
+                        <option value="admin">Administrador</option>
+                        <option value="encargado">Encargado</option>
+                        <option value="cajero">Cajero</option>
+                        <option value="repositor">Repositor</option>
+                    </select>
+                </div>
+                <div x-show="currentModalType === 'usuario_edit'" class="flex items-center gap-2">
+                    <input type="checkbox" id="usuarioActivo" x-model="usuarioForm.activo" class="w-4 h-4 accent-brand-600">
+                    <label for="usuarioActivo" class="text-xs font-bold text-slate-500">Usuario activo</label>
+                </div>
+                <div class="flex justify-end gap-2 border-t pt-4">
+                    <button @click="modalActive = false" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold">Cancelar</button>
+                    <button @click="submitUsuarioForm()" class="px-4 py-2 bg-brand-600 text-white rounded-xl text-xs font-bold">Guardar</button>
+                </div>
+            </div>
+
             <!-- MODAL: CREAR/EDITAR PROVEEDOR -->
             <div x-show="currentModalType === 'prov_create' || currentModalType === 'prov_edit'" class="space-y-4">
                 <div>
@@ -1943,6 +2034,8 @@
                 r2TestOk: false,
                 localBackups: [],
                 r2Backups: [],
+                usuarios: [],
+                usuarioForm: { id: null, username: '', nombre: '', password: '', rol: 'cajero', activo: true },
                 loggingIn: false,
 
                 // Formularios
@@ -3034,6 +3127,11 @@
                         this.modalTitle = "Guía Rápida y Atajos de Teclado";
                     } else if (type === 'settings') {
                         this.modalTitle = "Ajustes de Búsqueda";
+                    } else if (type === 'usuario_create') {
+                        this.modalTitle = "Nuevo Usuario";
+                        this.usuarioForm = { id: null, username: '', nombre: '', password: '', rol: 'cajero', activo: true };
+                    } else if (type === 'usuario_edit') {
+                        this.modalTitle = "Editar Usuario";
                     } else if (type === 'prov_create') {
                         this.modalTitle = "Nuevo Proveedor";
                         this.provForm = { id: null, nombre: '', cuit: '', telefono: '', email: '', direccion: '', nombre_contacto: '' };
@@ -3434,6 +3532,57 @@
                         }
                         this.fetchCompras();
                     } catch (e) {}
+                },
+
+                // Usuarios
+                async fetchUsuarios() {
+                    try {
+                        const resp = await this.request('GET', '/api/usuarios?page_size=200&solo_activos=false');
+                        if (resp && resp.data) this.usuarios = resp.data;
+                    } catch (e) {}
+                },
+
+                editUsuario(u) {
+                    this.usuarioForm = { id: u.id, username: u.username, nombre: u.nombre, password: '', rol: u.rol, activo: u.activo };
+                    this.showModal('usuario_edit');
+                    this.modalTitle = `Editar Usuario: ${u.username}`;
+                },
+
+                async submitUsuarioForm() {
+                    const u = this.usuarioForm;
+                    try {
+                        if (u.id) {
+                            const body = { nombre: u.nombre, rol: u.rol, activo: u.activo };
+                            if (u.password) body.password = u.password;
+                            await this.request('PUT', `/api/usuarios/${u.id}`, body);
+                            this.addToast('success', 'Usuario actualizado');
+                        } else {
+                            await this.request('POST', '/api/usuarios', {
+                                username: u.username, nombre: u.nombre,
+                                password: u.password || 'changeme', rol: u.rol
+                            });
+                            this.addToast('success', `Usuario ${u.username} creado`);
+                        }
+                        this.modalActive = false;
+                        this.fetchUsuarios();
+                    } catch (e) { this.addToast('error', 'Error: ' + (e.message || '')); }
+                },
+
+                async deleteUsuario(id) {
+                    if (!confirm('¿Desactivar este usuario?')) return;
+                    try {
+                        await this.request('DELETE', `/api/usuarios/${id}`);
+                        this.addToast('success', 'Usuario desactivado');
+                        this.fetchUsuarios();
+                    } catch (e) { this.addToast('error', 'Error: ' + (e.message || '')); }
+                },
+
+                async reactivateUsuario(id) {
+                    try {
+                        await this.request('PUT', `/api/usuarios/${id}`, { activo: true });
+                        this.addToast('success', 'Usuario reactivado');
+                        this.fetchUsuarios();
+                    } catch (e) { this.addToast('error', 'Error: ' + (e.message || '')); }
                 },
 
                 // Proveedores
