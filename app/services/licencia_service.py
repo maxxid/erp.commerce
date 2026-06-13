@@ -21,19 +21,29 @@ def _hmac_sign(message: str) -> str:
 
 
 def obtener_machine_id() -> str:
-    """Genera un ID único para esta máquina basado en hardware (hostname + disco)."""
+    """Genera un ID único para esta máquina basado en hardware."""
     hostname = platform.node() or "unknown"
-
-    # Obtener serial del disco C: (Windows) o volumen raíz (Linux)
     disco = ""
+
+    # Intentar obtener serial del disco
     try:
         if platform.system() == "Windows":
+            # Probar con PowerShell (más fiable que wmic, no deprecado)
             result = subprocess.run(
-                ["wmic", "diskdrive", "get", "serialnumber"],
-                capture_output=True, text=True, timeout=5
+                ["powershell", "-NoProfile", "-Command",
+                 "Get-WmiObject Win32_DiskDrive | Select-Object -ExpandProperty SerialNumber | Select-Object -First 1"],
+                capture_output=True, text=True, timeout=10
             )
-            lines = [l.strip() for l in result.stdout.splitlines() if l.strip() and "SerialNumber" not in l]
-            disco = lines[0] if lines else ""
+            if result.returncode == 0 and result.stdout.strip():
+                disco = result.stdout.strip()
+            else:
+                # Fallback: wmic
+                result = subprocess.run(
+                    ["wmic", "diskdrive", "get", "serialnumber"],
+                    capture_output=True, text=True, timeout=5
+                )
+                lines = [l.strip() for l in result.stdout.splitlines() if l.strip() and "SerialNumber" not in l]
+                disco = lines[0] if lines else ""
         else:
             result = subprocess.run(
                 ["lsblk", "-o", "UUID", "-n", "-d"],
@@ -43,15 +53,14 @@ def obtener_machine_id() -> str:
     except Exception:
         pass
 
+    # Fallback final: usar MAC address
     if not disco:
-        # Fallback: usar MAC address
         try:
             mac = uuid.getnode()
             disco = format(mac, "x")
         except Exception:
             disco = "fallback"
 
-    # Generar hash corto del hardware
     raw = f"{hostname}|{disco}"
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
@@ -124,19 +133,23 @@ def licencia_valida(db: Session) -> bool:
     lic = obtener_licencia_activa(db)
     if not lic:
         return False
-    # Verificar también contra la fecha de la última venta (anti-tampering de reloj)
-    from app.models.venta import Venta
-    ultima_venta = db.query(Venta).order_by(Venta.fecha.desc()).first()
-    now = datetime.now(timezone.utc)
-    if ultima_venta and ultima_venta.fecha:
-        uv = ultima_venta.fecha
-        if uv.tzinfo is None:
-            uv = uv.replace(tzinfo=timezone.utc)
-        if uv > now:
-            return False
-    if lic.fecha_expiracion.tzinfo is None:
-        lic.fecha_expiracion = lic.fecha_expiracion.replace(tzinfo=timezone.utc)
-    return lic.fecha_expiracion > now
+    # Verificar anti-tampering de reloj
+    try:
+        from app.models.venta import Venta
+        ultima_venta = db.query(Venta).order_by(Venta.fecha.desc()).first()
+        now = datetime.now(timezone.utc)
+        if ultima_venta and ultima_venta.fecha:
+            uv = ultima_venta.fecha
+            if uv.tzinfo is None:
+                uv = uv.replace(tzinfo=timezone.utc)
+            if uv > now:
+                return False
+    except Exception:
+        pass  # Si no hay ventas todavía, ignorar
+    exp = lic.fecha_expiracion
+    if exp and exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    return exp > datetime.now(timezone.utc) if exp else False
 
 
 def historial_licencias(db: Session) -> list:

@@ -101,35 +101,37 @@ def _seed_database():
             db.commit()
 
         if not db.query(Licencia).first():
-            from app.services.licencia_service import generar_clave, obtener_machine_id
-            mid = obtener_machine_id()
-            exp_demo = datetime.now(timezone.utc) + timedelta(days=30)
-            db.add(Licencia(
-                clave=generar_clave("DEMO", mid, exp_demo),
-                cliente="DEMO - Licencia de prueba",
-                machine_id=mid,
-                fecha_expiracion=exp_demo,
-                activa=True,
-            ))
-            db.commit()
-        else:
-            # Verificar si hay licencia válida para esta máquina
-            from app.services.licencia_service import licencia_valida, obtener_machine_id
-            if not licencia_valida(db):
-                # Si expiró o cambió de máquina, generar trial fresco
+            try:
+                from app.services.licencia_service import generar_clave, obtener_machine_id
                 mid = obtener_machine_id()
                 exp_demo = datetime.now(timezone.utc) + timedelta(days=30)
-                from app.services.licencia_service import generar_clave
-                nueva = Licencia(
-                    clave=generar_clave("DEMO-TRIAL", mid, exp_demo),
-                    cliente="DEMO-TRIAL - 30 días de prueba",
+                db.add(Licencia(
+                    clave=generar_clave("DEMO", mid, exp_demo),
+                    cliente="DEMO - Licencia de prueba",
                     machine_id=mid,
                     fecha_expiracion=exp_demo,
                     activa=True,
-                )
-                db.add(nueva)
+                ))
                 db.commit()
-                print(f"[Licencia] Nueva licencia trial generada: {nueva.clave}")
+            except Exception as e:
+                print(f"[Licencia] Error al crear licencia demo: {e}")
+        else:
+            try:
+                from app.services.licencia_service import licencia_valida, obtener_machine_id, generar_clave
+                if not licencia_valida(db):
+                    mid = obtener_machine_id()
+                    exp_demo = datetime.now(timezone.utc) + timedelta(days=30)
+                    nueva = Licencia(
+                        clave=generar_clave("DEMO-TRIAL", mid, exp_demo),
+                        cliente="DEMO-TRIAL - 30 dias de prueba",
+                        machine_id=mid,
+                        fecha_expiracion=exp_demo,
+                        activa=True,
+                    )
+                    db.add(nueva)
+                    db.commit()
+            except Exception as e:
+                print(f"[Licencia] Error al renovar licencia demo: {e}")
 
     finally:
         db.close()
