@@ -40,5 +40,16 @@ class Settings:
     DEFAULT_ROUNDING: float = 50.0       # Redondeo de precio por defecto
     LOW_STOCK_THRESHOLD: float = 5.0     # Umbral para alerta de stock bajo
 
+    # Cloudflare R2 — Backup remoto
+    R2_ENDPOINT: str = os.getenv("R2_ENDPOINT", "")
+    R2_ACCESS_KEY: str = os.getenv("R2_ACCESS_KEY", "")
+    R2_SECRET_KEY: str = os.getenv("R2_SECRET_KEY", "")
+    R2_BUCKET: str = os.getenv("R2_BUCKET", "erp-backups")
+    R2_ENABLED: bool = bool(os.getenv("R2_ACCESS_KEY", ""))  # solo si hay credenciales
+
+    # Backup automático (minutos, 0 = deshabilitado)
+    BACKUP_INTERVAL_MIN: int = int(os.getenv("BACKUP_INTERVAL_MIN", "0"))
+    BACKUP_KEEP_LOCAL: int = int(os.getenv("BACKUP_KEEP_LOCAL", "5"))  # backups locales a conservar
+
 
 settings = Settings()

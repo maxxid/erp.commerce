@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from app.config import settings
 from app.database import engine, Base
 from app.models import *  # noqa: F401, F403 — Registrar todos los modelos
-from app.routers import auth, productos, categorias, dashboard, caja, clientes, ventas, proveedores, compras, calendario
+from app.routers import auth, productos, categorias, dashboard, caja, clientes, ventas, proveedores, compras, calendario, backups
 
 
 def crear_app() -> FastAPI:
@@ -43,6 +43,7 @@ def crear_app() -> FastAPI:
     app.include_router(proveedores.router)
     app.include_router(compras.router)
     app.include_router(calendario.router)
+    app.include_router(backups.router)
 
     # Servir el frontend
     @app.get("/app")
@@ -57,6 +58,7 @@ def crear_app() -> FastAPI:
         Base.metadata.create_all(bind=engine)
         _migrate_new_columns()
         _seed_database()
+        _start_backup_scheduler()
 
     return app
 
@@ -111,6 +113,25 @@ def _migrate_new_columns():
             conn.commit()
     finally:
         conn.close()
+
+
+def _start_backup_scheduler():
+    """Inicia el scheduler de backups automáticos si está configurado."""
+    from app.config import settings
+    interval = settings.BACKUP_INTERVAL_MIN
+    if interval <= 0:
+        return
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        from app.services.backup_service import backup_automatico
+        scheduler = BackgroundScheduler()
+        scheduler.add_job(backup_automatico, "interval", minutes=interval, id="backup_auto")
+        scheduler.start()
+        print(f"[Backup] Scheduler iniciado: cada {interval} minuto(s)")
+    except ImportError:
+        print("[Backup] APScheduler no disponible. Instalá: pip install apscheduler")
+    except Exception as e:
+        print(f"[Backup] Error al iniciar scheduler: {e}")
 
 
 if __name__ == "__main__":

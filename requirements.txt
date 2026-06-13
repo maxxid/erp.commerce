@@ -7,3 +7,5 @@ passlib[bcrypt]==1.7.4
 requests==2.32.4
 beautifulsoup4==4.13.5
 python-multipart==0.0.18
+boto3==1.36.0
+apscheduler==3.10.4

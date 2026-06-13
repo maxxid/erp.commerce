@@ -215,6 +215,11 @@
                         <i class="fa-solid fa-circle-question text-lg w-5 text-center"></i>
                         <span>Ayuda y Atajos</span>
                     </button>
+
+                    <button @click="activeTab = 'backups'; fetchBackupStatus()" :class="activeTab === 'backups' ? 'bg-brand-600 text-white font-semibold' : 'hover:bg-slate-800 hover:text-white'" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150 text-slate-400">
+                        <i class="fa-solid fa-cloud-arrow-up text-lg w-5 text-center"></i>
+                        <span>Respaldos</span>
+                    </button>
                 </nav>
             </div>
 
@@ -1161,6 +1166,100 @@
                     </div>
                 </div>
 
+                <!-- PESTAÑA: RESPALDOS -->
+                <div x-show="activeTab === 'backups'" class="space-y-6" x-transition>
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-2xl font-bold text-slate-950 font-display">Respaldos y Sincronización</h2>
+                            <p class="text-sm text-slate-500 mt-1">
+                                <span x-show="backupStatus.r2_habilitado"><i class="fa-solid fa-circle-check text-emerald-500 mr-1"></i> Cloudflare R2 conectado</span>
+                                <span x-show="!backupStatus.r2_habilitado"><i class="fa-solid fa-circle-exclamation text-amber-500 mr-1"></i> R2 no configurado — solo backups locales</span>
+                                <span x-show="backupStatus.backup_automatico_min > 0" class="ml-3"><i class="fa-solid fa-clock text-blue-500 mr-1"></i> Auto: cada <span x-text="backupStatus.backup_automatico_min"></span> min</span>
+                            </p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button @click="createBackup()" :disabled="processingBackup" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-xl flex items-center gap-1.5 shadow-sm transition">
+                                <i class="fa-solid" :class="processingBackup ? 'fa-spinner animate-spin' : 'fa-floppy-disk'"></i> Crear Backup
+                            </button>
+                            <button @click="fetchBackupStatus()" class="px-3 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl transition">
+                                <i class="fa-solid fa-arrows-rotate"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Backups Locales -->
+                    <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                        <div class="p-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+                            <h3 class="font-bold text-slate-800 text-sm"><i class="fa-solid fa-hard-drive mr-2 text-slate-400"></i> Backups Locales</h3>
+                            <span class="text-[10px] text-slate-400 font-mono" x-text="localBackups.length + ' archivo(s)'"></span>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-50 border-b border-slate-100">
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Archivo</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Tamaño</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Fecha</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100 text-xs">
+                                    <template x-for="b in localBackups" :key="b.nombre">
+                                        <tr class="hover:bg-slate-50/50 transition">
+                                            <td class="p-4 font-mono-data text-slate-700" x-text="b.nombre"></td>
+                                            <td class="p-4 text-slate-500" x-text="formatFileSize(b.size)"></td>
+                                            <td class="p-4 text-slate-500" x-text="formatDateShort(b.fecha)"></td>
+                                            <td class="p-4 flex gap-2">
+                                                <a :href="backupDownloadUrl(b.nombre)" class="text-brand-600 hover:text-brand-900 font-bold hover:underline text-xs">Descargar <i class="fa-solid fa-download"></i></a>
+                                                <button x-show="backupStatus.r2_habilitado" @click="uploadBackup(b.nombre)" class="text-emerald-600 hover:text-emerald-900 font-bold hover:underline text-xs">Subir <i class="fa-solid fa-cloud-arrow-up"></i></button>
+                                                <button @click="deleteBackup(b.nombre)" class="text-rose-400 hover:text-rose-700 font-bold hover:underline text-xs"><i class="fa-solid fa-trash"></i></button>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                    <tr x-show="localBackups.length === 0">
+                                        <td colspan="4" class="p-8 text-center text-slate-400 text-xs">No hay backups locales. Creá uno con el botón "Crear Backup".</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Backups en R2 -->
+                    <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden" x-show="backupStatus.r2_habilitado">
+                        <div class="p-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+                            <h3 class="font-bold text-slate-800 text-sm"><i class="fa-solid fa-cloud mr-2 text-sky-400"></i> Cloudflare R2</h3>
+                            <button @click="fetchR2Backups()" class="text-[10px] text-brand-600 hover:underline font-bold"><i class="fa-solid fa-arrows-rotate mr-1"></i> Refrescar</button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-50 border-b border-slate-100">
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Archivo</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Tamaño</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Fecha</th>
+                                        <th class="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100 text-xs">
+                                    <template x-for="b in r2Backups" :key="b.nombre">
+                                        <tr class="hover:bg-slate-50/50 transition">
+                                            <td class="p-4 font-mono-data text-slate-700" x-text="b.nombre"></td>
+                                            <td class="p-4 text-slate-500" x-text="formatFileSize(b.size)"></td>
+                                            <td class="p-4 text-slate-500" x-text="formatDateShort(b.fecha)"></td>
+                                            <td class="p-4">
+                                                <button @click="downloadFromR2(b.nombre)" class="text-brand-600 hover:text-brand-900 font-bold hover:underline text-xs">Descargar <i class="fa-solid fa-cloud-arrow-down"></i></button>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                    <tr x-show="r2Backups.length === 0">
+                                        <td colspan="4" class="p-8 text-center text-slate-400 text-xs">No hay backups en R2 o R2 no está configurado.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
             </div>
 
             <!-- INSPECTOR DE RED API DE DEEPSEEK (CONSOLA DE DESARROLLO) -->
@@ -1797,6 +1896,10 @@
                 apiLogs: [],
                 toasts: [],
                 processingSale: false,
+                processingBackup: false,
+                backupStatus: { r2_habilitado: false, backup_automatico_min: 0, backups_locales: 0, ultimo_backup: null },
+                localBackups: [],
+                r2Backups: [],
                 loggingIn: false,
 
                 // Formularios
@@ -3322,6 +3425,84 @@
                 getCategoryName(id) {
                     const cat = this.categories.find(c => c.id === id);
                     return cat ? cat.nombre : 'General';
+                },
+
+                async fetchBackupStatus() {
+                    try {
+                        const resp = await this.request('GET', '/api/backups/estado');
+                        if (resp && resp.data) this.backupStatus = resp.data;
+                        await this.fetchLocalBackups();
+                        if (this.backupStatus.r2_habilitado) await this.fetchR2Backups();
+                    } catch (e) {}
+                },
+
+                async fetchLocalBackups() {
+                    try {
+                        const resp = await this.request('GET', '/api/backups/local');
+                        if (resp && resp.data) this.localBackups = resp.data;
+                    } catch (e) {}
+                },
+
+                async fetchR2Backups() {
+                    try {
+                        const resp = await this.request('GET', '/api/backups/r2');
+                        if (resp && resp.data) this.r2Backups = resp.data;
+                    } catch (e) {}
+                },
+
+                async createBackup() {
+                    this.processingBackup = true;
+                    try {
+                        const resp = await this.request('POST', '/api/backups/crear');
+                        if (resp && resp.data) {
+                            this.addToast('success', resp.message || 'Backup creado');
+                            await this.fetchBackupStatus();
+                        }
+                    } catch (e) { this.addToast('error', 'Error al crear backup'); }
+                    this.processingBackup = false;
+                },
+
+                async uploadBackup(filename) {
+                    try {
+                        const resp = await this.request('POST', `/api/backups/subir?filename=${encodeURIComponent(filename)}`);
+                        if (resp && resp.data) {
+                            this.addToast('success', 'Subido a R2');
+                            await this.fetchR2Backups();
+                        }
+                    } catch (e) { this.addToast('error', 'Error al subir a R2'); }
+                },
+
+                async downloadFromR2(filename) {
+                    try {
+                        const resp = await this.request('POST', `/api/backups/descargar?filename=${encodeURIComponent(filename)}`);
+                        if (resp && resp.data) {
+                            this.addToast('success', 'Descargado de R2');
+                            await this.fetchLocalBackups();
+                        }
+                    } catch (e) { this.addToast('error', 'Error al descargar de R2'); }
+                },
+
+                async deleteBackup(filename) {
+                    if (!confirm(`Eliminar backup ${filename}?`)) return;
+                    try {
+                        await this.request('DELETE', `/api/backups/local/${encodeURIComponent(filename)}`);
+                        this.addToast('success', 'Backup eliminado');
+                        await this.fetchLocalBackups();
+                    } catch (e) { this.addToast('error', 'Error al eliminar'); }
+                },
+
+                backupDownloadUrl(filename) {
+                    const token = localStorage.getItem('apex_token') || '';
+                    return `${this.apiBaseUrl}/api/backups/descargar/${encodeURIComponent(filename)}?token=${encodeURIComponent(token)}`;
+                },
+
+                formatFileSize(bytes) {
+                    if (!bytes) return '0 B';
+                    const u = ['B', 'KB', 'MB', 'GB'];
+                    let i = 0;
+                    let s = bytes;
+                    while (s >= 1024 && i < u.length - 1) { s /= 1024; i++; }
+                    return s.toFixed(i > 0 ? 1 : 0) + ' ' + u[i];
                 },
 
                 get filteredPOSProducts() {
