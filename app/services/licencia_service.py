@@ -25,35 +25,20 @@ def obtener_machine_id() -> str:
     hostname = platform.node() or "unknown"
     disco = ""
 
-    # Intentar obtener serial del disco
+    # Intentar obtener serial del disco (timeout corto, no bloquear el startup)
     try:
         if platform.system() == "Windows":
-            # Probar con PowerShell (más fiable que wmic, no deprecado)
             result = subprocess.run(
                 ["powershell", "-NoProfile", "-Command",
-                 "Get-WmiObject Win32_DiskDrive | Select-Object -ExpandProperty SerialNumber | Select-Object -First 1"],
-                capture_output=True, text=True, timeout=10
+                 "Get-WmiObject Win32_DiskDrive | Select-Object -ExpandProperty SerialNumber -First 1"],
+                capture_output=True, text=True, timeout=3
             )
             if result.returncode == 0 and result.stdout.strip():
                 disco = result.stdout.strip()
-            else:
-                # Fallback: wmic
-                result = subprocess.run(
-                    ["wmic", "diskdrive", "get", "serialnumber"],
-                    capture_output=True, text=True, timeout=5
-                )
-                lines = [l.strip() for l in result.stdout.splitlines() if l.strip() and "SerialNumber" not in l]
-                disco = lines[0] if lines else ""
-        else:
-            result = subprocess.run(
-                ["lsblk", "-o", "UUID", "-n", "-d"],
-                capture_output=True, text=True, timeout=5
-            )
-            disco = result.stdout.strip().split("\n")[0] if result.stdout.strip() else ""
     except Exception:
         pass
 
-    # Fallback final: usar MAC address
+    # Fallback: usar MAC address (instantáneo, no requiere subprocess)
     if not disco:
         try:
             mac = uuid.getnode()
