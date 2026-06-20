@@ -1,6 +1,6 @@
 """Router de Respaldos: backup local, subir/bajar de R2, listar, configurar R2."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -130,3 +130,39 @@ def configurar_r2(data: R2ConfigRequest, db: Session = Depends(get_db), user: Us
     }
     backup_service._guardar_r2_config(db, claves)
     return RespuestaBase(message="Configuración R2 guardada")
+
+
+@router.post("/upload-db", response_model=RespuestaData)
+async def subir_db(
+    file: UploadFile = File(...),
+    user: Usuario = Depends(require_role("admin", "encargado")),
+):
+    """Sube un archivo .db o .db.gz desde la PC local a la carpeta de backups."""
+    filename = file.filename or "uploaded.db"
+    if not (filename.endswith(".db") or filename.endswith(".db.gz") or filename.endswith(".gz")):
+        raise HTTPException(status_code=400, detail="Solo se aceptan archivos .db o .db.gz")
+
+    save_path = os.path.join(backup_service.BACKUP_DIR, filename)
+    os.makedirs(backup_service.BACKUP_DIR, exist_ok=True)
+
+    content = await file.read()
+    with open(save_path, "wb") as f:
+        f.write(content)
+
+    instrucciones = (
+        "Para restaurar en Oracle, ejecutá en la terminal del servidor:\n"
+        f"  sudo systemctl stop erp-comercio\n"
+        f"  cp '{save_path}' /data/erp/erp_comercio.db\n"
+        f"  sudo chown erp:erp /data/erp/erp_comercio.db\n"
+        f"  sudo systemctl start erp-comercio"
+    )
+
+    return RespuestaData(
+        data={
+            "filename": filename,
+            "size": len(content),
+            "path": save_path,
+            "instrucciones": instrucciones,
+        },
+        message=f"Archivo subido: {filename} ({len(content)} bytes)",
+    )
