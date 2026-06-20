@@ -89,7 +89,7 @@
                 </div>
 
     <!-- PANTALLA DE LOGIN / ACTIVACIÓN DE LICENCIA -->
-    <div x-show="!authenticated" x-transition class="fixed inset-0 bg-brand-900 z-50 flex items-center justify-center p-4">
+    <div x-show="!authenticated" class="fixed inset-0 bg-brand-900 z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl border border-slate-100 flex flex-col space-y-6">
             <div class="text-center">
                 <div class="w-16 h-16 rounded-2xl bg-brand-600 text-white flex items-center justify-center text-3xl mx-auto shadow-lg shadow-brand-600/30">
@@ -316,7 +316,7 @@
             <div class="flex-1 overflow-y-auto p-8">
 
                 <!-- PESTAÑA: DASHBOARD -->
-                <div x-show="activeTab === 'dashboard'" x-transition class="space-y-6">
+                <div x-show="activeTab === 'dashboard'" class="space-y-6">
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-2xl font-bold text-slate-950 font-display">Resumen del Comercio</h2>
@@ -518,7 +518,7 @@
                     </div>
 
                     PESTAÑA: POS DE VENTAS (3 Columnas UX de alta velocidad) -->
-                <div x-show="activeTab === 'pos'" x-transition class="h-[calc(100vh-170px)] flex gap-6 overflow-hidden -m-8 p-8">
+                <div x-show="activeTab === 'pos'" class="h-[calc(100vh-170px)] flex gap-6 overflow-hidden -m-8 p-8">
                     
                     <!-- COLUMNA 1: CATÁLOGO Y LOOKUP MULTI-FUENTE EN TIEMPO REAL -->
                     <div class="flex-1 bg-white border border-slate-200 rounded-2xl flex flex-col overflow-hidden shadow-sm">
@@ -548,7 +548,7 @@
                         </div>
 
                         <!-- Tarjeta de lookup (producto encontrado / buscando) con precio venta y Continuar -->
-                        <div x-show="lookupProduct.codigo_barras" x-transition class="p-4 bg-indigo-50/80 border-b border-indigo-100 space-y-3 shrink-0">
+                        <div x-show="lookupProduct.codigo_barras" class="p-4 bg-indigo-50/80 border-b border-indigo-100 space-y-3 shrink-0">
                             <div class="flex justify-between items-start">
                                 <div>
                                     <span x-show="!lookupProduct._loading" class="text-[9px] font-bold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full border border-indigo-200 uppercase tracking-widest">Nuevo Producto</span>
@@ -613,7 +613,7 @@
                         </div>
 
                         <!-- Producto NO encontrado: mini form rápido -->
-                        <div x-show="lookupNotFound" x-transition class="p-4 bg-amber-50/80 border-b border-amber-100 space-y-3 shrink-0">
+                        <div x-show="lookupNotFound" class="p-4 bg-amber-50/80 border-b border-amber-100 space-y-3 shrink-0">
                             <div class="flex justify-between items-start">
                                 <div>
                                     <span class="text-[9px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-200 uppercase tracking-widest">No Encontrado</span>
@@ -761,7 +761,7 @@
                 </div>
 
                 <!-- PESTAÑA: PRODUCTOS (Módulo de administración del inventario y creación) -->
-                <div x-show="activeTab === 'products'" x-transition class="space-y-6">
+                <div x-show="activeTab === 'products'" class="space-y-6">
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-2xl font-bold text-slate-950 font-display">Administración de Productos</h2>
@@ -839,7 +839,7 @@
                 </div>
 
                 <!-- PESTAÑA: CAJA (Arqueos, movimientos de caja) -->
-                <div x-show="activeTab === 'caja'" x-transition class="space-y-6">
+                <div x-show="activeTab === 'caja'" class="space-y-6">
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-2xl font-bold text-slate-950 font-display">Gestión de Cajas y Arqueos</h2>
@@ -937,7 +937,7 @@
                 </div>
 
                 <!-- PESTAÑA: VENTAS -->
-                <div x-show="activeTab === 'ventas'" x-transition class="space-y-6">
+                <div x-show="activeTab === 'ventas'" class="space-y-6">
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-2xl font-bold text-slate-950 font-display">Historial de Ventas</h2>
@@ -997,7 +997,7 @@
                 </div>
 
                 <!-- PESTAÑA: CALENDARIO -->
-                <div x-show="activeTab === 'calendario'" x-transition class="space-y-6">
+                <div x-show="activeTab === 'calendario'" class="space-y-6">
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-2xl font-bold text-slate-950 font-display">Calendario de Actividad</h2>
@@ -1146,7 +1146,7 @@
                 </div>
 
                 <!-- PESTAÑA: COMPRAS -->
-                <div x-show="activeTab === 'compras'" x-transition class="space-y-6">
+                <div x-show="activeTab === 'compras'" class="space-y-6">
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-2xl font-bold text-slate-950 font-display">Ordenes de Compra y Recepción</h2>
@@ -1195,7 +1195,7 @@
                 </div>
 
                 <!-- PESTAÑA: PROVEEDORES -->
-                <div x-show="activeTab === 'proveedores'" x-transition class="space-y-6">
+                <div x-show="activeTab === 'proveedores'" class="space-y-6">
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-2xl font-bold text-slate-950 font-display">Gestión de Proveedores</h2>
@@ -1241,7 +1241,7 @@
                 </div>
 
                 <!-- PESTAÑA: CLIENTES -->
-                <div x-show="activeTab === 'clientes'" x-transition class="space-y-6">
+                <div x-show="activeTab === 'clientes'" class="space-y-6">
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-2xl font-bold text-slate-950 font-display">Clientes y Crédito Corporativo</h2>
@@ -1287,7 +1287,7 @@
                 </div>
 
                 <!--                 <!-- PESTAÑA: REPORTES -->
-                <div x-show="activeTab === 'reportes'" x-transition class="space-y-6">
+                <div x-show="activeTab === 'reportes'" class="space-y-6">
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-2xl font-bold text-slate-950 font-display">Reportes y Analisis</h2>
@@ -1339,7 +1339,7 @@
                 </div>
 
 PESTAÑA: USUARIOS -->
-                <div x-show="activeTab === 'usuarios'" x-transition class="space-y-6">
+                <div x-show="activeTab === 'usuarios'" class="space-y-6">
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-2xl font-bold text-slate-950 font-display">Gestión de Usuarios</h2>
@@ -1392,7 +1392,7 @@ PESTAÑA: USUARIOS -->
                 </div>
 
                 <!-- PESTAÑA: LICENCIAS -->
-                <div x-show="activeTab === 'licencias'" x-transition class="space-y-6">
+                <div x-show="activeTab === 'licencias'" class="space-y-6">
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-2xl font-bold text-slate-950 font-display">Gestión de Licencias</h2>
@@ -1434,7 +1434,7 @@ PESTAÑA: USUARIOS -->
                 </div>
 
                 <!-- PESTAÑA: AUDITORÍA -->
-                <div x-show="activeTab === 'auditoria'" x-transition class="space-y-6">
+                <div x-show="activeTab === 'auditoria'" class="space-y-6">
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-2xl font-bold text-slate-950 font-display">Auditoría de Ventas</h2>
@@ -1491,7 +1491,7 @@ PESTAÑA: USUARIOS -->
                 </div>
 
                 <!-- PESTAÑA: RESPALDOS -->
-                <div x-show="activeTab === 'backups'" x-transition class="space-y-6">
+                <div x-show="activeTab === 'backups'" class="space-y-6">
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-2xl font-bold text-slate-950 font-display">Respaldos y Sincronización</h2>
@@ -1532,7 +1532,7 @@ PESTAÑA: USUARIOS -->
                             <h3 class="font-bold text-slate-800 text-sm"><i class="fa-solid fa-cloud mr-2 text-sky-400"></i> Cloudflare R2 — Configuración</h3>
                             <i class="fa-solid text-slate-400 text-xs" :class="showR2Config ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
                         </div>
-                        <div x-show="showR2Config" x-transition class="p-4 space-y-3">
+                        <div x-show="showR2Config" class="p-4 space-y-3">
                             <p class="text-[10px] text-slate-400">Creá un bucket R2 en Cloudflare y obtené las credenciales S3 desde el panel de R2.</p>
                             <div class="grid grid-cols-2 gap-3">
                                 <div>
