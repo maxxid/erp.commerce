@@ -107,6 +107,53 @@ def _seed_database():
                 db.add(Categoria(nombre=nombre))
             db.commit()
 
+        # Datos DEMO: productos, proveedor, compra (solo si no hay productos)
+        from app.models.producto import Producto
+        if not db.query(Producto).first():
+            from app.models.proveedor import Proveedor
+            from app.models.compra import Compra, CompraItem
+            from app.services.compra_service import generar_numero_compra
+
+            demo_productos = [
+                {"codigo_barras": "7790895000997", "nombre": "Coca Cola 2.25L", "marca": "Coca Cola", "precio_venta": 2500, "precio_costo": 1800, "categoria_id": 2, "stock": 24},
+                {"codigo_barras": "7791234567890", "nombre": "Yerba Mate Playadito 1kg", "marca": "Playadito", "precio_venta": 3200, "precio_costo": 2400, "categoria_id": 1, "stock": 12},
+                {"codigo_barras": "7795555444333", "nombre": "Aceite de Girasol Natura 1.5L", "marca": "Natura", "precio_venta": 3800, "precio_costo": 2900, "categoria_id": 1, "stock": 8},
+                {"codigo_barras": "7794001234567", "nombre": "Arroz Gallo Oro 1kg", "marca": "Gallo Oro", "precio_venta": 1800, "precio_costo": 1200, "categoria_id": 1, "stock": 30},
+            ]
+            for p in demo_productos:
+                db.add(Producto(
+                    codigo_barras=p["codigo_barras"], nombre=p["nombre"], marca=p["marca"],
+                    precio_venta=p["precio_venta"], precio_costo=p["precio_costo"],
+                    categoria_id=p["categoria_id"], stock_actual=p["stock"],
+                    fuente="demo", sku=p["codigo_barras"][:8],
+                ))
+            db.commit()
+
+            # Proveedor demo
+            prov = Proveedor(nombre="Distribuidora Demo SA", cuit="30-99999999-9", telefono="1144445555")
+            db.add(prov)
+            db.flush()
+
+            # Compra demo (para que los costos tengan fuente)
+            compra = Compra(
+                numero=generar_numero_compra(db), proveedor_id=prov.id,
+                usuario_id=1, sucursal_id=1, estado="recibida",
+                subtotal=0, total=0,
+            )
+            db.add(compra)
+            db.flush()
+            for prod in db.query(Producto).all():
+                total = prod.precio_costo * prod.stock_actual
+                db.add(CompraItem(compra_id=compra.id, producto_id=prod.id, cantidad=prod.stock_actual, precio_unitario=prod.precio_costo, subtotal=total))
+                compra.subtotal += total
+            compra.total = compra.subtotal
+            db.commit()
+
+            # Marcar demo como etiquetados
+            for prod in db.query(Producto).all():
+                prod.precio_etiqueta = prod.precio_venta
+            db.commit()
+
         if not db.query(Licencia).first():
             try:
                 from app.services.licencia_service import generar_clave, obtener_machine_id
