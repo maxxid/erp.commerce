@@ -3367,10 +3367,12 @@ PESTAÑA: USUARIOS -->
                     try {
                         const searchParam = this.productSearch ? `&search=${encodeURIComponent(this.productSearch)}` : '';
                         const response = await this.request('GET', `/api/productos?page_size=200${searchParam}`);
+                        console.log('fetchProducts response:', response);
                         if (this.apiMode === 'real') {
                             this.products = response.data || [];
+                            console.log('products set to:', this.products.length, 'items');
                         }
-                    } catch (e) {}
+                    } catch (e) { console.error('fetchProducts error:', e); }
                 },
 
                 async fetchCategories() {
