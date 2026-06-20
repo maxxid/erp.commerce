@@ -340,7 +340,6 @@
 
             <!-- CONTENEDOR PRINCIPAL DE PESTAÑAS (Scrollable) -->
             <div class="flex-1 overflow-y-auto p-8">
-                <div class="bg-green-500 text-white p-2 text-center text-xs font-bold mb-4">DEPLOY OK - Index cargado</div>
 
                 <!-- PESTAÑA: DASHBOARD -->
                 <div x-show="activeTab === 'dashboard'" class="space-y-6">
@@ -788,8 +787,7 @@
                 </div>
 
                 <!-- PESTAÑA: PRODUCTOS (Módulo de administración del inventario y creación) -->
-                <div x-show="activeTab === 'products'" class="space-y-6">
-                    <div class="bg-green-500 text-white p-2 text-center text-xs font-bold">TAB PRODUCTOS CARGADO v2</div>
+                <div x-show="activeTab === 'products'" class="space-y-6" x-transition>
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-2xl font-bold text-slate-950 font-display">Administración de Productos</h2>
