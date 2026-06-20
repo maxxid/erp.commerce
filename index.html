@@ -4088,9 +4088,8 @@ PESTAÑA: USUARIOS -->
                         const resp = await this.request('POST', '/api/catalogo/descargar?filename=catalogo_completo.json');
                         if (resp && resp.data) {
                             await this.importarCatalogoLocal();
-                            this.addToast('success', 'Catálogo central descargado e importado');
                         }
-                    } catch (e) { this.addToast('error', 'Error: ' + (e.message || '')); }
+                    } catch (e) { /* R2 no configurado, ignorar */ }
                 },
 
                 async importarCatalogoLocal() {
