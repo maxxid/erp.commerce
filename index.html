@@ -309,9 +309,7 @@
             <!-- HEADER GLOBAL SUPERIOR -->
             <header class="bg-white border-b border-slate-200 h-16 shrink-0 flex items-center justify-between px-8 z-10">
                 <div class="flex items-center gap-3">
-                    <span class="text-slate-400 text-sm">p=<span class="font-bold text-red-500" x-text="products.length"></span></span>
-                    <span class="text-slate-300">|</span>
-                    <span class="text-slate-400 text-sm">m=<span class="font-bold text-blue-500" x-text="apiMode"></span></span>
+                    <span class="text-slate-400 text-sm">ERP Fase 4 Frontend</span>
                     <i class="fa-solid fa-chevron-right text-xs text-slate-300"></i>
                     <span class="text-brand-600 font-semibold text-sm uppercase tracking-wider font-display" x-text="activeTab"></span>
                 </div>
@@ -2625,6 +2623,7 @@ PESTAÑA: USUARIOS -->
                         this.activeTab = 'dashboard';
                         this.verifyCajaState();
                         this.fetchDashboardData();
+                        this.fetchProducts();
                         this.fetchPendientesEtiquetar();
                         this.fetchCategories();
                         this.fetchClientes();
@@ -2651,6 +2650,7 @@ PESTAÑA: USUARIOS -->
                                 this.addToast('success', 'Autenticado correctamente con backend');
                                 this.verifyCajaState();
                                 this.fetchDashboardData();
+                                this.fetchProducts();
                                 this.fetchCategories();
                                 this.fetchClientes();
                                 this.fetchProveedores();
@@ -2670,6 +2670,7 @@ PESTAÑA: USUARIOS -->
                                 this.addToast('success', 'Sesión iniciada (Modo Simulador)');
                                 this.verifyCajaState();
                                 this.fetchDashboardData();
+                                this.fetchProducts();
                                 if (this.lookupSettings.autoDownloadCatalogo) {
                                     this.descargarCatalogoCentral();
                                 }
@@ -3395,12 +3396,10 @@ PESTAÑA: USUARIOS -->
                     try {
                         const searchParam = this.productSearch ? `&search=${encodeURIComponent(this.productSearch)}` : '';
                         const response = await this.request('GET', `/api/productos?page_size=200${searchParam}`);
-                        console.log('fetchProducts REAL:', this.apiMode, 'response.data length:', response.data?.length, 'total:', response.total);
                         if (this.apiMode === 'real') {
                             this.products = response.data || [];
-                            console.log('this.products now:', this.products.length);
                         }
-                    } catch (e) { console.error('fetchProducts ERROR:', e); }
+                    } catch (e) {}
                 },
 
                 async fetchCategories() {
