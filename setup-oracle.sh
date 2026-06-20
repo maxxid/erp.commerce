@@ -40,7 +40,7 @@ if [ -d "$APP_DIR/.git" ]; then
     echo "  Repositorio ya existe en $APP_DIR"
 elif [ -d "$(pwd)/.git" ] && [ "$(pwd)" != "$APP_DIR" ]; then
     echo "  Copiando proyecto actual a $APP_DIR..."
-    cp -r "$(pwd)" "$APP_DIR"
+    rsync -a "$(pwd)/" "$APP_DIR/" --exclude venv
 elif [ ! -d "$APP_DIR/.git" ]; then
     echo "  Clonando desde GitHub..."
     read -p "  URL del repo GitHub (o Enter para saltar): " REPO_URL
