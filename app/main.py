@@ -76,9 +76,8 @@ def crear_app() -> FastAPI:
 
     @app.get("/movil")
     async def serve_movil():
-        import os
-        path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "movil.html")
-        return FileResponse(path)
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url="/app")
 
     # Crear tablas en SQLite (desarrollo). En prod usar Alembic.
     @app.on_event("startup")

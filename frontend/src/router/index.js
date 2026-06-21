@@ -18,7 +18,6 @@ const routes = [
   { path: '/licencias', name: 'licencias', component: () => import('@/views/LicenciasView.vue'), meta: { roles: ['admin'] } },
   { path: '/auditoria', name: 'auditoria', component: () => import('@/views/AuditoriaView.vue'), meta: { roles: ['admin'] } },
   { path: '/backups', name: 'backups', component: () => import('@/views/BackupsView.vue'), meta: { roles: ['admin', 'encargado'] } },
-  { path: '/movil', name: 'movil', component: () => import('@/views/MovilView.vue') },
 ]
 
 const router = createRouter({

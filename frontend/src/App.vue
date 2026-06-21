@@ -38,7 +38,7 @@ const auth = useAuthStore()
 const toast = useToastStore()
 const router = useRouter()
 
-const apiMode = ref('mock')
+const apiMode = ref('real')
 const apiBaseUrl = ref('')
 const apiLogs = ref([])
 const currentTime = ref('')
