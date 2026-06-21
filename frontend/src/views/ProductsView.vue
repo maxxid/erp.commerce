@@ -154,12 +154,20 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="text-[10px] font-bold text-slate-400 uppercase block mb-1">Código de Barras</label>
-                <input
-                  v-model="form.codigo_barras"
-                  required
-                  placeholder="779..."
-                  class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-mono-data focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600 transition"
-                />
+                <div class="flex gap-2">
+                  <input
+                    v-model="form.codigo_barras"
+                    required
+                    placeholder="779..."
+                    @keydown.enter="lookupBarcode"
+                    class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-mono-data focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600 transition"
+                  />
+                  <button @click="lookupBarcode" :disabled="lookingUp" type="button"
+                          class="px-3 py-2 bg-brand-600 hover:bg-brand-700 disabled:bg-slate-300 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1">
+                    <i :class="lookingUp ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-magnifying-glass'"></i>
+                    {{ lookingUp ? '' : 'Buscar' }}
+                  </button>
+                </div>
               </div>
               <div>
                 <label class="text-[10px] font-bold text-slate-400 uppercase block mb-1">Marca</label>
@@ -307,6 +315,7 @@ const filterCategory = ref(null)
 const syncing = ref(false)
 const saving = ref(false)
 const deleting = ref(false)
+const lookingUp = ref(false)
 
 const showModal = ref(false)
 const editingProduct = ref(null)
@@ -410,6 +419,27 @@ function closeModal() {
   showModal.value = false
   editingProduct.value = null
   formError.value = ''
+}
+
+async function lookupBarcode() {
+  const code = form.codigo_barras?.trim()
+  if (!code || code.length < 8) return
+  lookingUp.value = true
+  try {
+    const resp = await api.post('/api/productos/lookup', { barcode: code })
+    if (resp) {
+      form.nombre = resp.nombre || form.nombre
+      form.marca = resp.marca || form.marca
+      form.precio_costo = resp.precio_referencia || form.precio_costo
+      form.categoria_id = categories.value.find(c => c.nombre === resp.categoria)?.id || form.categoria_id
+      toast.add('success', `Encontrado en ${resp.fuente || 'fuente externa'}`)
+    } else {
+      toast.add('info', 'Producto no encontrado en fuentes externas')
+    }
+  } catch {
+    toast.add('info', 'Búsqueda sin resultados')
+  }
+  lookingUp.value = false
 }
 
 async function saveProduct() {

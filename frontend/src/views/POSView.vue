@@ -494,25 +494,24 @@ async function triggerPOSLookup() {
   lookupProduct.id = null
 
   try {
-    const resp = await api.get(`/api/productos/barcode/${encodeURIComponent(code)}`).catch(() => null)
-    if (resp && resp.id) {
+    const resp = await api.post('/api/productos/lookup', { barcode: code }).catch(() => null)
+    if (resp) {
       selectProductForLookup(resp)
+      if (resp.comparacion) {
+        lookupBadges.value = resp.comparacion.map(c => `${c.fuente}: ${fc(c.precio)}`)
+      }
     } else {
       const local = products.value.find(p => p.codigo_barras === code)
-      if (local) {
-        selectProductForLookup(local)
-      }
+      if (local) selectProductForLookup(local)
     }
   } catch {
     const local = products.value.find(p => p.codigo_barras === code)
-    if (local) {
-      selectProductForLookup(local)
-    }
+    if (local) selectProductForLookup(local)
   }
 
   lookupProduct._loading = false
 
-  if (lookupProduct.id && !lookupBadges.value.includes(code)) {
+  if (lookupProduct.id && !lookupBadges.value.some(b => b.includes(code))) {
     lookupBadges.value.unshift(code)
     if (lookupBadges.value.length > 10) lookupBadges.value.pop()
   }
