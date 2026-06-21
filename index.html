@@ -344,7 +344,7 @@
             <div class="flex-1 overflow-y-auto p-8">
 
                 <!-- PESTAÑA: DASHBOARD -->
-                <div x-show="activeTab === 'dashboard'" class="space-y-6">
+                <template x-if="activeTab === 'dashboard'"><div class="space-y-6">
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-2xl font-bold text-slate-950 font-display">Resumen del Comercio</h2>
@@ -547,9 +547,10 @@
 
                     </div>
                 </div>
+            </template>
 
                 <!-- PESTAÑA: POS DE VENTAS (3 Columnas UX de alta velocidad) -->
-                <div x-show="activeTab === 'pos'" class="h-[calc(100vh-170px)] flex gap-6 overflow-hidden -m-8 p-8">
+                <template x-if="activeTab === 'pos'"><div class="h-[calc(100vh-170px)] flex gap-6 overflow-hidden -m-8 p-8">
                     
                     <!-- COLUMNA 1: CATÁLOGO Y LOOKUP MULTI-FUENTE EN TIEMPO REAL -->
                     <div class="flex-1 bg-white border border-slate-200 rounded-2xl flex flex-col overflow-hidden shadow-sm">
@@ -790,9 +791,10 @@
                         </div>
                     </div>
                 </div>
+            </template>
 
                 <!-- PESTAÑA: PRODUCTOS (Módulo de administración del inventario y creación) -->
-                <div x-show="activeTab === 'products'" class="space-y-6">
+                <template x-if="activeTab === 'products'"><div class="space-y-6">
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-2xl font-bold text-slate-950 font-display">Administración de Productos</h2>
@@ -868,9 +870,10 @@
                         </div>
                     </div>
                 </div>
+            </template>
 
                 <!-- PESTAÑA: CAJA (Arqueos, movimientos de caja) -->
-                <div x-show="activeTab === 'caja'" class="space-y-6">
+                <template x-if="activeTab === 'caja'"><div class="space-y-6">
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-2xl font-bold text-slate-950 font-display">Gestión de Cajas y Arqueos</h2>
@@ -966,9 +969,10 @@
                         </div>
                     </div>
                 </div>
+            </template>
 
                 <!-- PESTAÑA: VENTAS -->
-                <div x-show="activeTab === 'ventas'" class="space-y-6">
+                <template x-if="activeTab === 'ventas'"><div class="space-y-6">
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-2xl font-bold text-slate-950 font-display">Historial de Ventas</h2>
@@ -1026,9 +1030,10 @@
                         </div>
                     </div>
                 </div>
+            </template>
 
                 <!-- PESTAÑA: CALENDARIO -->
-                <div x-show="activeTab === 'calendario'" class="space-y-6">
+                <template x-if="activeTab === 'calendario'"><div class="space-y-6">
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-2xl font-bold text-slate-950 font-display">Calendario de Actividad</h2>
@@ -1175,9 +1180,10 @@
                         </template>
                     </div>
                 </div>
+            </template>
 
                 <!-- PESTAÑA: COMPRAS -->
-                <div x-show="activeTab === 'compras'" class="space-y-6">
+                <template x-if="activeTab === 'compras'"><div class="space-y-6">
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-2xl font-bold text-slate-950 font-display">Ordenes de Compra y Recepción</h2>
@@ -1224,9 +1230,10 @@
                         </div>
                     </div>
                 </div>
+            </template>
 
                 <!-- PESTAÑA: PROVEEDORES -->
-                <div x-show="activeTab === 'proveedores'" class="space-y-6">
+                <template x-if="activeTab === 'proveedores'"><div class="space-y-6">
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-2xl font-bold text-slate-950 font-display">Gestión de Proveedores</h2>
@@ -1270,9 +1277,10 @@
                         </div>
                     </div>
                 </div>
+            </template>
 
                 <!-- PESTAÑA: CLIENTES -->
-                <div x-show="activeTab === 'clientes'" class="space-y-6">
+                <template x-if="activeTab === 'clientes'"><div class="space-y-6">
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-2xl font-bold text-slate-950 font-display">Clientes y Crédito Corporativo</h2>
@@ -1316,9 +1324,10 @@
                         </div>
                     </div>
                 </div>
+            </template>
 
                 <!-- PESTAÑA: REPORTES -->
-                <div x-show="activeTab === 'reportes'" class="space-y-6">
+                <template x-if="activeTab === 'reportes'"><div class="space-y-6">
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-2xl font-bold text-slate-950 font-display">Reportes y Analisis</h2>
@@ -1368,9 +1377,10 @@
                         <p x-show="!(reporteTrimestral.ventas_actual > 0)" class="text-xs text-slate-400 text-center py-4">Sin ventas este trimestre</p>
                     </div>
                 </div>
+            </template>
 
                 <!-- PESTAÑA: USUARIOS -->
-                <div x-show="activeTab === 'usuarios'" class="space-y-6">
+                <template x-if="activeTab === 'usuarios'"><div class="space-y-6">
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-2xl font-bold text-slate-950 font-display">Gestión de Usuarios</h2>
@@ -1421,9 +1431,10 @@
                         </div>
                     </div>
                 </div>
+            </template>
 
                 <!-- PESTAÑA: LICENCIAS -->
-                <div x-show="activeTab === 'licencias'" class="space-y-6">
+                <template x-if="activeTab === 'licencias'"><div class="space-y-6">
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-2xl font-bold text-slate-950 font-display">Gestión de Licencias</h2>
@@ -1463,9 +1474,10 @@
                         </div>
                     </div>
                 </div>
+            </template>
 
                 <!-- PESTAÑA: AUDITORÍA -->
-                <div x-show="activeTab === 'auditoria'" class="space-y-6">
+                <template x-if="activeTab === 'auditoria'"><div class="space-y-6">
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-2xl font-bold text-slate-950 font-display">Auditoría de Ventas</h2>
@@ -1520,9 +1532,10 @@
                         </div>
                     </div>
                 </div>
+            </template>
 
                 <!-- PESTAÑA: RESPALDOS -->
-                <div x-show="activeTab === 'backups'" class="space-y-6">
+                <template x-if="activeTab === 'backups'"><div class="space-y-6">
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-2xl font-bold text-slate-950 font-display">Respaldos y Sincronización</h2>
@@ -1652,6 +1665,7 @@
                         </div>
                     </div>
                 </div>
+            </template>
 
             </div>
 
