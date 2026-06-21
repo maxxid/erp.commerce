@@ -79,16 +79,16 @@
                 </div>
                 <button @click="removeToast(toast.id)" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
             </div>
-                    </template>
-                    <!-- Cta Corriente: informativo, no se cierra -->
-                    <div x-show="cajaResumen.cta_corriente > 0" class="p-3 bg-amber-50 border border-amber-200 rounded-xl flex justify-between items-center">
-                        <div>
-                            <span class="font-bold text-amber-700 capitalize text-xs">Cta. Corriente</span>
-                            <p class="text-[9px] text-amber-500">No ingresa en caja física</p>
-                        </div>
-                        <span class="font-mono-data text-sm font-bold text-amber-600" x-text="formatCurrency(cajaResumen.cta_corriente)"></span>
-                    </div>
-                </div>
+        </template>
+    </div>
+    <!-- Cta Corriente: informativo, no se cierra -->
+    <div x-show="cajaResumen.cta_corriente > 0" class="p-3 bg-amber-50 border border-amber-200 rounded-xl flex justify-between items-center fixed top-4 right-4 z-50 max-w-sm w-full">
+        <div>
+            <span class="font-bold text-amber-700 capitalize text-xs">Cta. Corriente</span>
+            <p class="text-[9px] text-amber-500">No ingresa en caja física</p>
+        </div>
+        <span class="font-mono-data text-sm font-bold text-amber-600" x-text="formatCurrency(cajaResumen.cta_corriente)"></span>
+    </div>
 
     <!-- PANTALLA DE LOGIN / ACTIVACIÓN DE LICENCIA -->
     <div x-show="!authenticated" class="fixed inset-0 bg-brand-900 z-50 flex items-center justify-center p-4">
