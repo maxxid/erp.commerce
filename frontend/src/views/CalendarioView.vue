@@ -266,7 +266,7 @@ const tabs = [
 
 onMounted(async () => {
   try {
-    const data = await api.get(`/api/calendario?fecha=${selectedDate.value}`)
+    const data = await api.get(`/api/calendario/dia?fecha=${selectedDate.value}`)
     if (data) {
       if (data.dailySales) dailySales.value = data.dailySales
       if (data.cashMovements) cashMovements.value = data.cashMovements
@@ -281,7 +281,7 @@ onMounted(async () => {
 async function syncCalendario() {
   syncing.value = true
   try {
-    const data = await api.get(`/api/calendario?fecha=${selectedDate.value}`)
+    const data = await api.get(`/api/calendario/dia?fecha=${selectedDate.value}`)
     if (data) {
       if (data.dailySales) dailySales.value = data.dailySales
       if (data.cashMovements) cashMovements.value = data.cashMovements

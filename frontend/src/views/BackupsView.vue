@@ -314,7 +314,7 @@ onMounted(async () => {
   try {
     const [estado, locales, r2] = await Promise.all([
       api.get('/api/backups/estado'),
-      api.get('/api/backups/locales'),
+      api.get('/api/backups/local'),
       api.get('/api/backups/r2'),
     ])
     if (locales && locales.length) localBackups.value = locales

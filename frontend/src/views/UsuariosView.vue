@@ -34,12 +34,12 @@
               <td class="px-5 py-4">
                 <div class="flex items-center gap-3">
                   <div class="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-semibold text-slate-500">
-                    {{ user.name.charAt(0).toUpperCase() }}
+                    {{ (user.nombre || user.username || '??').charAt(0).toUpperCase() }}
                   </div>
                   <span class="font-medium text-slate-900">{{ user.username }}</span>
                 </div>
               </td>
-              <td class="px-5 py-4 text-slate-700">{{ user.name }}</td>
+              <td class="px-5 py-4 text-slate-700">{{ user.nombre || user.username }}</td>
               <td class="px-5 py-4">
                 <span
                   class="inline-flex px-2.5 py-1 rounded-full text-xs font-medium"
@@ -108,7 +108,7 @@
             </div>
             <div>
               <label class="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Nombre completo</label>
-              <input v-model="form.name" type="text" required class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all" placeholder="Nombre y apellido" />
+              <input v-model="form.nombre" type="text" required class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all" placeholder="Nombre y apellido" />
             </div>
             <div>
               <label class="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Contraseña</label>
@@ -154,13 +154,13 @@ import api from '@/services/api'
 import { formatCurrency } from '@/composables/useUtils'
 
 const users = ref([
-  { id: 1, username: 'admin.sistema', name: 'Administrador Sistema', role: 'admin', active: true, lastAccess: '2026-06-20 18:45' },
-  { id: 2, username: 'maria.gomez', name: 'María Gómez', role: 'encargado', active: true, lastAccess: '2026-06-20 16:30' },
-  { id: 3, username: 'carlos.lopez', name: 'Carlos López', role: 'cajero', active: true, lastAccess: '2026-06-20 14:15' },
-  { id: 4, username: 'laura.diaz', name: 'Laura Díaz', role: 'cajero', active: true, lastAccess: '2026-06-20 12:00' },
-  { id: 5, username: 'pedro.sanchez', name: 'Pedro Sánchez', role: 'repositor', active: false, lastAccess: '2026-06-10 09:20' },
-  { id: 6, username: 'ana.ruiz', name: 'Ana Ruiz', role: 'encargado', active: true, lastAccess: '2026-06-19 20:30' },
-  { id: 7, username: 'jorge.fernandez', name: 'Jorge Fernández', role: 'repositor', active: true, lastAccess: '2026-06-20 08:00' },
+   { id: 1, username: 'admin.sistema', nombre: 'Administrador Sistema', role: 'admin', active: true, lastAccess: '2026-06-20 18:45' },
+   { id: 2, username: 'maria.gomez', nombre: 'María Gómez', role: 'encargado', active: true, lastAccess: '2026-06-20 16:30' },
+   { id: 3, username: 'carlos.lopez', nombre: 'Carlos López', role: 'cajero', active: true, lastAccess: '2026-06-20 14:15' },
+   { id: 4, username: 'laura.diaz', nombre: 'Laura Díaz', role: 'cajero', active: true, lastAccess: '2026-06-20 12:00' },
+   { id: 5, username: 'pedro.sanchez', nombre: 'Pedro Sánchez', role: 'repositor', active: false, lastAccess: '2026-06-10 09:20' },
+   { id: 6, username: 'ana.ruiz', nombre: 'Ana Ruiz', role: 'encargado', active: true, lastAccess: '2026-06-19 20:30' },
+   { id: 7, username: 'jorge.fernandez', nombre: 'Jorge Fernández', role: 'repositor', active: true, lastAccess: '2026-06-20 08:00' },
 ])
 
 const showModal = ref(false)
@@ -170,7 +170,7 @@ const toggling = ref({})
 
 const form = reactive({
   username: '',
-  name: '',
+  nombre: '',
   password: '',
   role: '',
 })
@@ -188,7 +188,7 @@ function roleIcon(role) {
 function openCreateModal() {
   editingUser.value = null
   form.username = ''
-  form.name = ''
+  form.nombre = ''
   form.password = ''
   form.role = ''
   showModal.value = true
@@ -197,7 +197,7 @@ function openCreateModal() {
 function openEditModal(user) {
   editingUser.value = user
   form.username = user.username
-  form.name = user.name
+  form.nombre = user.nombre
   form.password = ''
   form.role = user.role
   showModal.value = true
@@ -209,14 +209,14 @@ async function saveUser() {
     if (editingUser.value) {
       await api.put(`/api/usuarios/${editingUser.value.id}`, form)
       editingUser.value.username = form.username
-      editingUser.value.name = form.name
+      editingUser.value.nombre = form.nombre
       editingUser.value.role = form.role
     } else {
       await api.post('/api/usuarios', form)
       users.value.push({
         id: users.value.length + 1,
         username: form.username,
-        name: form.name,
+        nombre: form.nombre,
         role: form.role,
         active: true,
         lastAccess: '—',
@@ -225,13 +225,13 @@ async function saveUser() {
   } catch {
     if (editingUser.value) {
       editingUser.value.username = form.username
-      editingUser.value.name = form.name
+      editingUser.value.nombre = form.nombre
       editingUser.value.role = form.role
     } else {
       users.value.push({
         id: users.value.length + 1,
         username: form.username,
-        name: form.name,
+        nombre: form.nombre,
         role: form.role,
         active: true,
         lastAccess: '—',
