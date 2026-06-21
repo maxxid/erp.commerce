@@ -54,7 +54,7 @@
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-800 antialiased h-screen overflow-hidden flex flex-col" x-data="erpApp()">
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col" x-data="erpApp()">
 
     <!-- Banner de notificaciones (Reemplazo estético de alert()) -->
     <div class="fixed top-4 right-4 z-50 space-y-2 pointer-events-none max-w-sm w-full">
@@ -187,7 +187,7 @@
     </div>
 
     <!-- CONTENEDOR PRINCIPAL DEL ERP -->
-    <div class="flex-1 flex overflow-hidden w-full">
+    <div class="flex-1 flex w-full" style="min-height:calc(100vh-40px)">
         
         <!-- SIDEBAR DE NAVEGACIÓN PERSISTENTE -->
         <aside class="w-64 bg-slate-900 text-slate-300 flex flex-col justify-between border-r border-slate-800 shrink-0 z-20">
