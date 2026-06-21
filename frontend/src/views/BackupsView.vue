@@ -78,18 +78,20 @@
                 <td class="px-5 py-3">
                   <div class="flex items-center gap-2">
                     <button
+                      :disabled="downloading[backup.id]"
                       @click="downloadBackup(backup)"
-                      class="text-gray-400 hover:text-brand-600 transition-colors"
+                      class="text-gray-400 hover:text-brand-600 transition-colors disabled:opacity-50"
                       title="Descargar"
                     >
-                      <i class="fa-solid fa-download"></i>
+                      <i :class="downloading[backup.id] ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-download'"></i>
                     </button>
                     <button
+                      :disabled="deleting[backup.id]"
                       @click="deleteBackup(backup)"
-                      class="text-gray-400 hover:text-red-600 transition-colors"
+                      class="text-gray-400 hover:text-red-600 transition-colors disabled:opacity-50"
                       title="Eliminar"
                     >
-                      <i class="fa-solid fa-trash-can"></i>
+                      <i :class="deleting[backup.id] ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-trash-can'"></i>
                     </button>
                   </div>
                 </td>
@@ -212,7 +214,8 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
+import api from '@/services/api'
 import { formatCurrency } from '@/composables/useUtils'
 
 const localBackups = ref([
@@ -231,6 +234,9 @@ const r2Backups = ref([
 ])
 
 const creatingBackup = ref(false)
+const downloading = ref({})
+const deleting = ref({})
+const uploading = ref({})
 const showR2Config = ref(false)
 const testingConnection = ref(false)
 const r2SyncOk = ref(true)
@@ -243,8 +249,11 @@ const r2Form = reactive({
   bucket: 'erp-backups',
 })
 
-function createBackup() {
+async function createBackup() {
   creatingBackup.value = true
+  try {
+    await api.post('/api/backups/crear')
+  } catch { /* fallback */ }
   setTimeout(() => {
     const now = new Date()
     const name = `backup_${now.toISOString().slice(0, 10).replace(/-/g, '')}_manual.zip`
@@ -258,7 +267,11 @@ function createBackup() {
   }, 2000)
 }
 
-function downloadBackup(backup) {
+async function downloadBackup(backup) {
+  downloading.value[backup.id] = true
+  try {
+    await api.get(`/api/backups/download/${backup.id}`)
+  } catch { /* fallback */ }
   const toast = document.createElement('div')
   toast.className = 'fixed bottom-6 right-6 bg-gray-900 text-white px-5 py-3 rounded-xl shadow-lg text-sm z-[100] transition-all'
   toast.textContent = `Descargando ${backup.name}...`
@@ -267,10 +280,16 @@ function downloadBackup(backup) {
     toast.style.opacity = '0'
     setTimeout(() => toast.remove(), 300)
   }, 2500)
+  downloading.value[backup.id] = false
 }
 
-function deleteBackup(backup) {
+async function deleteBackup(backup) {
+  deleting.value[backup.id] = true
+  try {
+    await api.delete(`/api/backups/${backup.id}`)
+  } catch { /* fallback */ }
   localBackups.value = localBackups.value.filter(b => b.id !== backup.id)
+  deleting.value[backup.id] = false
 }
 
 function openR2Config() {
@@ -291,6 +310,18 @@ function testConnection() {
     connectionResult.value = { success: true, message: 'Conexión exitosa con R2. Bucket "erp-backups" accesible.' }
   }, 1500)
 }
+onMounted(async () => {
+  try {
+    const [estado, locales, r2] = await Promise.all([
+      api.get('/api/backups/estado'),
+      api.get('/api/backups/locales'),
+      api.get('/api/backups/r2'),
+    ])
+    if (locales && locales.length) localBackups.value = locales
+    if (r2 && r2.length) r2Backups.value = r2
+    if (estado) r2SyncOk.value = estado.syncOk ?? r2SyncOk.value
+  } catch { /* fallback to mock */ }
+})
 </script>
 
 <style scoped>

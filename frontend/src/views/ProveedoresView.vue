@@ -5,13 +5,24 @@
         <h1 class="text-2xl font-bold text-gray-900">Proveedores</h1>
         <p class="text-sm text-gray-500 mt-1">Gestión de proveedores de mercadería</p>
       </div>
-      <button
-        @click="openCreateModal"
-        class="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-2xl shadow-sm font-medium transition-colors flex items-center gap-2"
-      >
-        <i class="fa-solid fa-plus text-sm"></i>
-        Nuevo proveedor
-      </button>
+      <div class="flex items-center gap-2">
+        <button
+          :disabled="syncing"
+          @click="syncProveedores"
+          class="bg-white border border-gray-300 rounded-2xl px-4 py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors flex items-center gap-2 shadow-sm disabled:opacity-60"
+          title="Sincronizar proveedores"
+        >
+          <i :class="syncing ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-sync'"></i>
+          {{ syncing ? 'Sincronizando...' : 'Sincronizar' }}
+        </button>
+        <button
+          @click="openCreateModal"
+          class="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-2xl shadow-sm font-medium transition-colors flex items-center gap-2"
+        >
+          <i class="fa-solid fa-plus text-sm"></i>
+          Nuevo proveedor
+        </button>
+      </div>
     </div>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -76,11 +87,13 @@
                   </button>
                   <button
                     @click="toggleActive(supplier)"
-                    class="transition-colors"
+                    :disabled="togglingId === supplier.id"
+                    class="transition-colors disabled:opacity-60"
                     :class="supplier.active ? 'text-gray-400 hover:text-red-600' : 'text-gray-400 hover:text-green-600'"
                     title="Cambiar estado"
                   >
-                    <i :class="supplier.active ? 'fa-solid fa-circle-xmark' : 'fa-solid fa-circle-check'"></i>
+                    <i v-if="togglingId === supplier.id" class="fa-solid fa-circle-notch animate-spin"></i>
+                    <i v-else :class="supplier.active ? 'fa-solid fa-circle-xmark' : 'fa-solid fa-circle-check'"></i>
                   </button>
                 </div>
               </td>
@@ -131,9 +144,11 @@
               </button>
               <button
                 type="submit"
-                class="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-xl shadow-sm font-medium transition-colors text-sm"
+                :disabled="saving"
+                class="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-xl shadow-sm font-medium transition-colors text-sm disabled:opacity-60"
               >
-                {{ editingSupplier ? 'Guardar cambios' : 'Crear proveedor' }}
+                <i :class="saving ? 'fa-solid fa-circle-notch animate-spin' : editingSupplier ? 'fa-solid fa-check' : 'fa-solid fa-plus'"></i>
+                {{ saving ? 'Guardando...' : editingSupplier ? 'Guardar cambios' : 'Crear proveedor' }}
               </button>
             </div>
           </form>
@@ -144,8 +159,16 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { formatCurrency } from '@/composables/useUtils'
+import api from '@/services/api'
+import { useToastStore } from '@/stores/toasts'
+
+const toast = useToastStore()
+
+const syncing = ref(false)
+const saving = ref(false)
+const togglingId = ref(null)
 
 const suppliers = ref([
   { id: 1, name: 'Frigorífico Las Pampas SA', cuit: '30-51234567-8', phone: '+54 11 4321-9876', email: 'ventas@frigopampas.com.ar', contact: 'Carlos Méndez', active: true },
@@ -165,6 +188,22 @@ const form = reactive({
   email: '',
   contact: '',
 })
+
+onMounted(async () => {
+  try {
+    const data = await api.get('/api/proveedores')
+    if (data && data.length) suppliers.value = data
+  } catch { /* fallback to mock */ }
+})
+
+async function syncProveedores() {
+  syncing.value = true
+  try {
+    const data = await api.get('/api/proveedores')
+    if (data && data.length) suppliers.value = data
+  } catch { /* fallback to mock */ }
+  syncing.value = false
+}
 
 function openCreateModal() {
   editingSupplier.value = null
@@ -186,7 +225,8 @@ function openEditModal(supplier) {
   showModal.value = true
 }
 
-function saveSupplier() {
+async function saveSupplier() {
+  saving.value = true
   if (editingSupplier.value) {
     Object.assign(editingSupplier.value, { ...form })
   } else {
@@ -197,9 +237,12 @@ function saveSupplier() {
     })
   }
   showModal.value = false
+  saving.value = false
 }
 
-function toggleActive(supplier) {
+async function toggleActive(supplier) {
+  togglingId.value = supplier.id
   supplier.active = !supplier.active
+  togglingId.value = null
 }
 </script>

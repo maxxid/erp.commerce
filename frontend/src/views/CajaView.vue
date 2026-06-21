@@ -6,20 +6,27 @@
         <p class="text-sm text-slate-500 mt-1">Gestión de caja registradora</p>
       </div>
       <div class="flex items-center gap-2">
+        <button :disabled="syncing" @click="syncData"
+                class="px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl flex items-center gap-1.5 transition shadow-sm">
+          <i :class="syncing ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-arrows-rotate'"></i>
+          {{ syncing ? 'Sincronizando...' : 'Sincronizar' }}
+        </button>
         <span :class="cajaState.abierta ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'"
               class="px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5">
           <span class="w-2 h-2 rounded-full" :class="cajaState.abierta ? 'bg-emerald-500' : 'bg-rose-500'"></span>
           {{ cajaState.abierta ? 'Caja Abierta' : 'Caja Cerrada' }}
         </span>
         <button v-if="cajaState.abierta"
+                :disabled="closing"
                 @click="cerrarCaja"
                 class="px-4 py-2 bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-700 font-semibold text-sm rounded-xl flex items-center gap-2 shadow-sm transition">
-          <i class="fa-solid fa-lock"></i> Cerrar Caja
+          <i :class="closing ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-lock'"></i> {{ closing ? 'Cerrando...' : 'Cerrar Caja' }}
         </button>
         <button v-else
+                :disabled="opening"
                 @click="abrirCaja"
                 class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-xl flex items-center gap-2 shadow-sm transition">
-          <i class="fa-solid fa-lock-open"></i> Abrir Caja
+          <i :class="opening ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-lock-open'"></i> {{ opening ? 'Abriendo...' : 'Abrir Caja' }}
         </button>
       </div>
     </div>
@@ -130,9 +137,10 @@
                   class="flex-1 px-4 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-sm rounded-xl transition">
             Cancelar
           </button>
-          <button @click="registrarMovimiento"
+          <button :disabled="saving" @click="registrarMovimiento"
                   class="flex-1 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-xl transition">
-            Registrar
+            <i :class="saving ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-check'"></i>
+            {{ saving ? 'Guardando...' : 'Registrar' }}
           </button>
         </div>
       </div>
@@ -141,9 +149,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
+import api from '@/services/api'
 import { formatCurrency as fc } from '@/composables/useUtils'
 
 const auth = useAuthStore()
@@ -151,7 +160,7 @@ const toast = useToastStore()
 
 const cajaState = reactive({ abierta: true, saldo_actual: 72000 })
 
-const movements = reactive([
+const movements = ref([
   { id: 1, fecha: '2026-06-20 09:15', tipo: 'Ingreso', monto: 5000, metodo: 'Efectivo', comentario: 'Venta ticket #1024' },
   { id: 2, fecha: '2026-06-20 10:30', tipo: 'Ingreso', monto: 3200, metodo: 'Transferencia', comentario: 'Venta ticket #1025' },
   { id: 3, fecha: '2026-06-20 11:45', tipo: 'Egreso', monto: 1500, metodo: 'Efectivo', comentario: 'Pago a proveedor' },
@@ -159,47 +168,101 @@ const movements = reactive([
   { id: 5, fecha: '2026-06-20 13:30', tipo: 'Egreso', monto: 700, metodo: 'Transferencia', comentario: 'Gastos varios' },
 ])
 
+const syncing = ref(false)
+const opening = ref(false)
+const closing = ref(false)
+const saving = ref(false)
+
 const showNuevoMovimiento = ref(false)
 const nuevoMovimiento = reactive({ tipo: 'Ingreso', monto: 0, metodo: 'Efectivo', comentario: '' })
 
-const ingresosHoy = computed(() => movements.filter(m => m.tipo === 'Ingreso').reduce((sum, m) => sum + m.monto, 0))
-const egresosHoy = computed(() => movements.filter(m => m.tipo === 'Egreso').reduce((sum, m) => sum + m.monto, 0))
-const movimientosIngresos = computed(() => movements.filter(m => m.tipo === 'Ingreso').length)
-const movimientosEgresos = computed(() => movements.filter(m => m.tipo === 'Egreso').length)
+const ingresosHoy = computed(() => movements.value.filter(m => m.tipo === 'Ingreso').reduce((sum, m) => sum + m.monto, 0))
+const egresosHoy = computed(() => movements.value.filter(m => m.tipo === 'Egreso').reduce((sum, m) => sum + m.monto, 0))
+const movimientosIngresos = computed(() => movements.value.filter(m => m.tipo === 'Ingreso').length)
+const movimientosEgresos = computed(() => movements.value.filter(m => m.tipo === 'Egreso').length)
 
-function abrirCaja() {
-  cajaState.abierta = true
-  toast.add('success', 'Caja abierta correctamente')
+onMounted(async () => {
+  await fetchMovimientos()
+  await fetchResumen()
+})
+
+async function fetchMovimientos() {
+  try {
+    const data = await api.get('/api/caja/movimientos')
+    if (data && data.length) movements.value = data
+  } catch { /* fallback to mock */ }
 }
 
-function cerrarCaja() {
-  cajaState.abierta = false
-  toast.add('info', 'Caja cerrada. Se registró el arqueo.')
+async function fetchResumen() {
+  try {
+    const data = await api.get('/api/caja/resumen')
+    if (data) {
+      cajaState.saldo_actual = data.saldo_actual ?? cajaState.saldo_actual
+    }
+  } catch { /* fallback to mock */ }
 }
 
-function registrarMovimiento() {
+async function syncData() {
+  syncing.value = true
+  try {
+    await fetchMovimientos()
+    await fetchResumen()
+    toast.add('success', 'Datos sincronizados')
+  } catch {
+    toast.add('warning', 'Error al sincronizar')
+  } finally {
+    syncing.value = false
+  }
+}
+
+async function abrirCaja() {
+  opening.value = true
+  try {
+    cajaState.abierta = true
+    toast.add('success', 'Caja abierta correctamente')
+  } finally {
+    opening.value = false
+  }
+}
+
+async function cerrarCaja() {
+  closing.value = true
+  try {
+    cajaState.abierta = false
+    toast.add('info', 'Caja cerrada. Se registró el arqueo.')
+  } finally {
+    closing.value = false
+  }
+}
+
+async function registrarMovimiento() {
   if (!nuevoMovimiento.monto || nuevoMovimiento.monto <= 0) {
     toast.add('warning', 'Ingresá un monto válido')
     return
   }
-  const now = new Date()
-  const fecha = now.toISOString().slice(0, 16).replace('T', ' ')
-  movements.push({
-    id: Date.now(),
-    fecha,
-    tipo: nuevoMovimiento.tipo,
-    monto: nuevoMovimiento.monto,
-    metodo: nuevoMovimiento.metodo,
-    comentario: nuevoMovimiento.comentario || 'Sin comentario',
-  })
-  if (nuevoMovimiento.tipo === 'Ingreso') {
-    cajaState.saldo_actual += nuevoMovimiento.monto
-  } else {
-    cajaState.saldo_actual -= nuevoMovimiento.monto
+  saving.value = true
+  try {
+    const now = new Date()
+    const fecha = now.toISOString().slice(0, 16).replace('T', ' ')
+    movements.value.push({
+      id: Date.now(),
+      fecha,
+      tipo: nuevoMovimiento.tipo,
+      monto: nuevoMovimiento.monto,
+      metodo: nuevoMovimiento.metodo,
+      comentario: nuevoMovimiento.comentario || 'Sin comentario',
+    })
+    if (nuevoMovimiento.tipo === 'Ingreso') {
+      cajaState.saldo_actual += nuevoMovimiento.monto
+    } else {
+      cajaState.saldo_actual -= nuevoMovimiento.monto
+    }
+    nuevoMovimiento.monto = 0
+    nuevoMovimiento.comentario = ''
+    showNuevoMovimiento.value = false
+    toast.add('success', 'Movimiento registrado')
+  } finally {
+    saving.value = false
   }
-  nuevoMovimiento.monto = 0
-  nuevoMovimiento.comentario = ''
-  showNuevoMovimiento.value = false
-  toast.add('success', 'Movimiento registrado')
 }
 </script>

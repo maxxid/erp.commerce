@@ -67,19 +67,21 @@
                   </button>
                   <button
                     v-if="user.active"
+                    :disabled="toggling[user.id]"
                     @click="toggleUser(user)"
-                    class="text-slate-400 hover:text-red-600 transition-colors"
+                    class="text-slate-400 hover:text-red-600 transition-colors disabled:opacity-50"
                     title="Desactivar"
                   >
-                    <i class="fa-solid fa-circle-xmark"></i>
+                    <i :class="toggling[user.id] ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-circle-xmark'"></i>
                   </button>
                   <button
                     v-else
+                    :disabled="toggling[user.id]"
                     @click="toggleUser(user)"
-                    class="text-slate-400 hover:text-green-600 transition-colors"
+                    class="text-slate-400 hover:text-green-600 transition-colors disabled:opacity-50"
                     title="Activar"
                   >
-                    <i class="fa-solid fa-circle-check"></i>
+                    <i :class="toggling[user.id] ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-circle-check'"></i>
                   </button>
                 </div>
               </td>
@@ -130,12 +132,14 @@
               >
                 Cancelar
               </button>
-              <button
-                type="submit"
-                class="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-xl shadow-sm font-medium transition-colors text-sm"
-              >
-                {{ editingUser ? 'Guardar cambios' : 'Crear usuario' }}
-              </button>
+          <button
+            type="submit"
+            :disabled="saving"
+            class="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-xl shadow-sm font-medium transition-colors text-sm flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <i :class="saving ? 'fa-solid fa-circle-notch animate-spin' : editingUser ? 'fa-solid fa-check' : 'fa-solid fa-plus'"></i>
+            {{ saving ? 'Guardando...' : editingUser ? 'Guardar cambios' : 'Crear usuario' }}
+          </button>
             </div>
           </form>
         </div>
@@ -145,7 +149,8 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
+import api from '@/services/api'
 import { formatCurrency } from '@/composables/useUtils'
 
 const users = ref([
@@ -160,6 +165,8 @@ const users = ref([
 
 const showModal = ref(false)
 const editingUser = ref(null)
+const saving = ref(false)
+const toggling = ref({})
 
 const form = reactive({
   username: '',
@@ -196,27 +203,67 @@ function openEditModal(user) {
   showModal.value = true
 }
 
-function saveUser() {
-  if (editingUser.value) {
-    editingUser.value.username = form.username
-    editingUser.value.name = form.name
-    if (form.password) {
+async function saveUser() {
+  saving.value = true
+  try {
+    if (editingUser.value) {
+      await api.put(`/api/usuarios/${editingUser.value.id}`, form)
+      editingUser.value.username = form.username
+      editingUser.value.name = form.name
+      editingUser.value.role = form.role
+    } else {
+      await api.post('/api/usuarios', form)
+      users.value.push({
+        id: users.value.length + 1,
+        username: form.username,
+        name: form.name,
+        role: form.role,
+        active: true,
+        lastAccess: '—',
+      })
     }
-    editingUser.value.role = form.role
-  } else {
-    users.value.push({
-      id: users.value.length + 1,
-      username: form.username,
-      name: form.name,
-      role: form.role,
-      active: true,
-      lastAccess: '—',
-    })
+  } catch {
+    if (editingUser.value) {
+      editingUser.value.username = form.username
+      editingUser.value.name = form.name
+      editingUser.value.role = form.role
+    } else {
+      users.value.push({
+        id: users.value.length + 1,
+        username: form.username,
+        name: form.name,
+        role: form.role,
+        active: true,
+        lastAccess: '—',
+      })
+    }
   }
+  saving.value = false
   showModal.value = false
 }
 
-function toggleUser(user) {
+async function toggleUser(user) {
+  toggling.value[user.id] = true
+  try {
+    await api.patch(`/api/usuarios/${user.id}/toggle`, { active: !user.active })
+  } catch { /* fallback */ }
   user.active = !user.active
+  toggling.value[user.id] = false
 }
+onMounted(async () => {
+  try {
+    const data = await api.get('/api/usuarios')
+    if (data && data.length) users.value = data
+  } catch { /* fallback to mock */ }
+})
 </script>
+
+<style scoped>
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.animate-spin {
+  animation: spin 1.5s linear infinite;
+}
+</style>

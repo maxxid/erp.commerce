@@ -5,13 +5,24 @@
         <h1 class="text-2xl font-bold text-gray-900">Clientes</h1>
         <p class="text-sm text-gray-500 mt-1">Gestión de clientes y cuentas corrientes</p>
       </div>
-      <button
-        @click="openCreateModal"
-        class="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-2xl shadow-sm font-medium transition-colors flex items-center gap-2"
-      >
-        <i class="fa-solid fa-plus text-sm"></i>
-        Nuevo cliente
-      </button>
+      <div class="flex items-center gap-2">
+        <button
+          :disabled="syncing"
+          @click="syncClients"
+          class="bg-white border border-gray-300 rounded-2xl px-4 py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors flex items-center gap-2 shadow-sm disabled:opacity-60"
+          title="Sincronizar clientes"
+        >
+          <i :class="syncing ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-sync'"></i>
+          {{ syncing ? 'Sincronizando...' : 'Sincronizar' }}
+        </button>
+        <button
+          @click="openCreateModal"
+          class="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-2xl shadow-sm font-medium transition-colors flex items-center gap-2"
+        >
+          <i class="fa-solid fa-plus text-sm"></i>
+          Nuevo cliente
+        </button>
+      </div>
     </div>
 
     <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
@@ -112,9 +123,11 @@
               </button>
               <button
                 type="submit"
-                class="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-xl shadow-sm font-medium transition-colors text-sm"
+                :disabled="saving"
+                class="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-xl shadow-sm font-medium transition-colors text-sm disabled:opacity-60"
               >
-                {{ editingClient ? 'Guardar cambios' : 'Crear cliente' }}
+                <i :class="saving ? 'fa-solid fa-circle-notch animate-spin' : editingClient ? 'fa-solid fa-check' : 'fa-solid fa-plus'"></i>
+                {{ saving ? 'Guardando...' : editingClient ? 'Guardar cambios' : 'Crear cliente' }}
               </button>
             </div>
           </form>
@@ -163,8 +176,15 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { formatCurrency } from '@/composables/useUtils'
+import api from '@/services/api'
+import { useToastStore } from '@/stores/toasts'
+
+const toast = useToastStore()
+
+const syncing = ref(false)
+const saving = ref(false)
 
 const clients = ref([
   { id: 1, name: 'Carnicería Don Pedro', docType: 'CUIT', docNumber: '20-30123456-7', phone: '+54 11 4123-7890', creditLimit: 500000, balance: 234500 },
@@ -195,6 +215,22 @@ const form = reactive({
   creditLimit: 0,
 })
 
+onMounted(async () => {
+  try {
+    const data = await api.get('/api/clientes')
+    if (data && data.length) clients.value = data
+  } catch { /* fallback to mock */ }
+})
+
+async function syncClients() {
+  syncing.value = true
+  try {
+    const data = await api.get('/api/clientes')
+    if (data && data.length) clients.value = data
+  } catch { /* fallback to mock */ }
+  syncing.value = false
+}
+
 function openCreateModal() {
   editingClient.value = null
   form.name = ''
@@ -220,7 +256,8 @@ function openTicketsModal(client) {
   showTicketsModal.value = true
 }
 
-function saveClient() {
+async function saveClient() {
+  saving.value = true
   if (editingClient.value) {
     Object.assign(editingClient.value, { ...form })
   } else {
@@ -231,5 +268,6 @@ function saveClient() {
     })
   }
   showModal.value = false
+  saving.value = false
 }
 </script>

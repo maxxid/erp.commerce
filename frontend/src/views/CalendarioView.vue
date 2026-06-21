@@ -6,6 +6,15 @@
         <p class="text-sm text-gray-500 mt-1">Resumen diario de actividad del comercio</p>
       </div>
       <div class="flex items-center gap-3">
+        <button
+          :disabled="syncing"
+          @click="syncCalendario"
+          class="bg-white border border-gray-300 rounded-xl px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors flex items-center gap-2 shadow-sm disabled:opacity-60"
+          title="Actualizar datos"
+        >
+          <i :class="syncing ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-sync'"></i>
+          {{ syncing ? 'Actualizando...' : 'Actualizar' }}
+        </button>
         <button class="bg-white border border-gray-300 rounded-xl px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors flex items-center gap-2 shadow-sm">
           <i class="fa-solid fa-download text-gray-500"></i>
           Exportar
@@ -235,9 +244,14 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { formatCurrency } from '@/composables/useUtils'
+import api from '@/services/api'
+import { useToastStore } from '@/stores/toasts'
 
+const toast = useToastStore()
+
+const syncing = ref(false)
 const selectedDate = ref('2026-06-20')
 const activeTab = ref('todo')
 
@@ -249,6 +263,36 @@ const tabs = [
   { key: 'productos', label: 'Productos' },
   { key: 'clientes', label: 'Clientes' },
 ]
+
+onMounted(async () => {
+  try {
+    const data = await api.get(`/api/calendario?fecha=${selectedDate.value}`)
+    if (data) {
+      if (data.dailySales) dailySales.value = data.dailySales
+      if (data.cashMovements) cashMovements.value = data.cashMovements
+      if (data.purchases) purchases.value = data.purchases
+      if (data.newProducts) newProducts.value = data.newProducts
+      if (data.modifiedProducts) modifiedProducts.value = data.modifiedProducts
+      if (data.newClients) newClients.value = data.newClients
+    }
+  } catch { /* fallback to mock */ }
+})
+
+async function syncCalendario() {
+  syncing.value = true
+  try {
+    const data = await api.get(`/api/calendario?fecha=${selectedDate.value}`)
+    if (data) {
+      if (data.dailySales) dailySales.value = data.dailySales
+      if (data.cashMovements) cashMovements.value = data.cashMovements
+      if (data.purchases) purchases.value = data.purchases
+      if (data.newProducts) newProducts.value = data.newProducts
+      if (data.modifiedProducts) modifiedProducts.value = data.modifiedProducts
+      if (data.newClients) newClients.value = data.newClients
+    }
+  } catch { /* fallback to mock */ }
+  syncing.value = false
+}
 
 const dailySales = ref([
   { id: 1102, time: '08:15', paymentMethod: 'Efectivo', total: 12500 },

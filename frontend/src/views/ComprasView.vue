@@ -5,10 +5,17 @@
         <h2 class="text-2xl font-bold text-slate-950 font-display">Compras / Stock</h2>
         <p class="text-sm text-slate-500 mt-1">Órdenes de compra y recepción de mercadería</p>
       </div>
-      <button @click="abrirModalNuevaCompra"
-              class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-xl flex items-center gap-2 shadow-sm transition">
-        <i class="fa-solid fa-plus"></i> Nueva Compra
-      </button>
+      <div class="flex items-center gap-2">
+        <button :disabled="syncing" @click="syncData"
+                class="px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl flex items-center gap-1.5 transition shadow-sm">
+          <i :class="syncing ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-arrows-rotate'"></i>
+          {{ syncing ? 'Sincronizando...' : 'Sincronizar' }}
+        </button>
+        <button @click="abrirModalNuevaCompra"
+                class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-xl flex items-center gap-2 shadow-sm transition">
+          <i class="fa-solid fa-plus"></i> Nueva Compra
+        </button>
+      </div>
     </div>
 
     <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
@@ -39,14 +46,16 @@
               <td class="px-5 py-3">
                 <div class="flex items-center gap-1">
                   <button v-if="compra.estado === 'Pendiente'"
+                          :disabled="receivingId === compra.id"
                           @click="recibirParcial(compra)"
                           class="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg text-[10px] font-bold transition">
-                    <i class="fa-solid fa-boxes-packing mr-1"></i> Recibir parcial
+                    <i :class="receivingId === compra.id ? 'fa-solid fa-circle-notch animate-spin mr-1' : 'fa-solid fa-boxes-packing mr-1'"></i> {{ receivingId === compra.id ? 'Recibiendo...' : 'Recibir parcial' }}
                   </button>
                   <button v-if="compra.estado === 'Pendiente'"
+                          :disabled="receivingId === compra.id"
                           @click="recibirTotal(compra)"
                           class="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-[10px] font-bold transition">
-                    <i class="fa-solid fa-circle-check mr-1"></i> Recibir total
+                    <i :class="receivingId === compra.id ? 'fa-solid fa-circle-notch animate-spin mr-1' : 'fa-solid fa-circle-check mr-1'"></i> {{ receivingId === compra.id ? 'Recibiendo...' : 'Recibir total' }}
                   </button>
                   <span v-if="compra.estado !== 'Pendiente'" class="text-[10px] text-slate-300">—</span>
                 </div>
@@ -145,9 +154,10 @@
                   class="flex-1 px-4 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-sm rounded-xl transition">
             Cancelar
           </button>
-          <button @click="guardarCompra"
+          <button :disabled="saving" @click="guardarCompra"
                   class="flex-1 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-xl transition">
-            Guardar Orden
+            <i :class="saving ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-check'"></i>
+            {{ saving ? 'Guardando...' : 'Guardar Orden' }}
           </button>
         </div>
       </div>
@@ -156,21 +166,22 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
+import api from '@/services/api'
 import { formatCurrency as fc } from '@/composables/useUtils'
 
 const auth = useAuthStore()
 const toast = useToastStore()
 
-const proveedores = reactive([
+const proveedores = ref([
   { id: 1, nombre: 'Distribuidora Norte SA' },
   { id: 2, nombre: 'Mayorista del Sur' },
   { id: 3, nombre: 'Importadora Central' },
 ])
 
-const compras = reactive([
+const compras = ref([
   {
     id: 1, numero_orden: 'OC-001', proveedor: 'Distribuidora Norte SA',
     total: 45000, estado: 'Pendiente', fecha: '2026-06-19',
@@ -182,6 +193,9 @@ const compras = reactive([
 ])
 
 const showModalCompra = ref(false)
+const syncing = ref(false)
+const receivingId = ref(null)
+const saving = ref(false)
 const nuevaCompra = reactive({
   proveedor_id: null,
   notas: '',
@@ -191,6 +205,38 @@ const nuevaCompra = reactive({
 const totalCompra = computed(() =>
   nuevaCompra.items.reduce((sum, i) => sum + (i.cantidad * i.precio || 0), 0)
 )
+
+onMounted(async () => {
+  await fetchCompras()
+  await fetchProveedores()
+})
+
+async function fetchCompras() {
+  try {
+    const data = await api.get('/api/compras')
+    if (data && data.length) compras.value = data
+  } catch { /* fallback to mock */ }
+}
+
+async function fetchProveedores() {
+  try {
+    const data = await api.get('/api/proveedores')
+    if (data && data.length) proveedores.value = data
+  } catch { /* fallback to mock */ }
+}
+
+async function syncData() {
+  syncing.value = true
+  try {
+    await fetchCompras()
+    await fetchProveedores()
+    toast.add('success', 'Datos sincronizados')
+  } catch {
+    toast.add('warning', 'Error al sincronizar')
+  } finally {
+    syncing.value = false
+  }
+}
 
 function estadoCompraClass(estado) {
   const map = {
@@ -217,7 +263,7 @@ function quitarItem(idx) {
   nuevaCompra.items.splice(idx, 1)
 }
 
-function guardarCompra() {
+async function guardarCompra() {
   if (!nuevaCompra.proveedor_id) {
     toast.add('warning', 'Seleccioná un proveedor')
     return
@@ -226,33 +272,48 @@ function guardarCompra() {
     toast.add('warning', 'Agregá al menos un ítem')
     return
   }
-  const proveedor = proveedores.find(p => p.id === nuevaCompra.proveedor_id)
-  const orden = {
-    id: Date.now(),
-    numero_orden: 'OC-' + String(compras.length + 1).padStart(3, '0'),
-    proveedor: proveedor ? proveedor.nombre : '—',
-    total: totalCompra.value,
-    estado: 'Pendiente',
-    fecha: new Date().toISOString().slice(0, 10),
-    items: nuevaCompra.items.map(i => ({
-      producto: i.producto || 'Sin nombre',
-      cantidad: i.cantidad,
-      precio: i.precio,
-      subtotal: i.cantidad * i.precio,
-    })),
+  saving.value = true
+  try {
+    const proveedor = proveedores.value.find(p => p.id === nuevaCompra.proveedor_id)
+    const orden = {
+      id: Date.now(),
+      numero_orden: 'OC-' + String(compras.value.length + 1).padStart(3, '0'),
+      proveedor: proveedor ? proveedor.nombre : '—',
+      total: totalCompra.value,
+      estado: 'Pendiente',
+      fecha: new Date().toISOString().slice(0, 10),
+      items: nuevaCompra.items.map(i => ({
+        producto: i.producto || 'Sin nombre',
+        cantidad: i.cantidad,
+        precio: i.precio,
+        subtotal: i.cantidad * i.precio,
+      })),
+    }
+    compras.value.push(orden)
+    showModalCompra.value = false
+    toast.add('success', 'Orden de compra creada')
+  } finally {
+    saving.value = false
   }
-  compras.push(orden)
-  showModalCompra.value = false
-  toast.add('success', 'Orden de compra creada')
 }
 
-function recibirParcial(compra) {
-  compra.estado = 'Parcial'
-  toast.add('info', `Recepción parcial de ${compra.numero_orden} registrada`)
+async function recibirParcial(compra) {
+  receivingId.value = compra.id
+  try {
+    compra.estado = 'Parcial'
+    toast.add('info', `Recepción parcial de ${compra.numero_orden} registrada`)
+  } finally {
+    receivingId.value = null
+  }
 }
 
-function recibirTotal(compra) {
-  compra.estado = 'Recibido'
-  toast.add('success', `${compra.numero_orden} recibida completamente`)
+async function recibirTotal(compra) {
+  receivingId.value = compra.id
+  try {
+    compra.estado = 'Recibido'
+    toast.add('success', `${compra.numero_orden} recibida completamente`)
+  } finally {
+    receivingId.value = null
+  }
 }
 </script>

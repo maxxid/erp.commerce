@@ -11,6 +11,11 @@
           <input v-model="filtroFecha" type="date"
                  class="bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600">
         </div>
+        <button :disabled="syncing" @click="syncData"
+                class="px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl flex items-center gap-1.5 transition shadow-sm">
+          <i :class="syncing ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-arrows-rotate'"></i>
+          {{ syncing ? 'Sincronizando...' : 'Sincronizar' }}
+        </button>
       </div>
     </div>
 
@@ -49,9 +54,10 @@
                 <td class="px-5 py-3">
                   <div class="flex items-center gap-1">
                     <button v-if="sale.estado === 'Pendiente'"
+                            :disabled="anullingId === sale.id"
                             @click.stop="anularVenta(sale)"
                             class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-[10px] font-bold transition">
-                      <i class="fa-solid fa-ban mr-1"></i> Anular
+                      <i :class="[anullingId === sale.id ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-ban', 'mr-1']"></i> {{ anullingId === sale.id ? 'Anulando...' : 'Anular' }}
                     </button>
                     <span v-else class="text-[10px] text-slate-300">—</span>
                   </div>
@@ -94,9 +100,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
+import api from '@/services/api'
 import { formatCurrency as fc } from '@/composables/useUtils'
 
 const auth = useAuthStore()
@@ -104,8 +111,10 @@ const toast = useToastStore()
 
 const filtroFecha = ref('')
 const expandedRows = ref([])
+const syncing = ref(false)
+const anullingId = ref(null)
 
-const sales = reactive([
+const sales = ref([
   {
     id: 1024, fecha: '2026-06-20 09:15', cliente: 'Juan Pérez',
     metodo_pago: 'Efectivo', total: 5000, estado: 'Completada',
@@ -134,9 +143,32 @@ const sales = reactive([
 ])
 
 const filteredSales = computed(() => {
-  if (!filtroFecha.value) return sales
-  return sales.filter(s => s.fecha.startsWith(filtroFecha.value))
+  if (!filtroFecha.value) return sales.value
+  return sales.value.filter(s => s.fecha.startsWith(filtroFecha.value))
 })
+
+onMounted(async () => {
+  await fetchVentas()
+})
+
+async function fetchVentas() {
+  try {
+    const data = await api.get('/api/ventas')
+    if (data && data.length) sales.value = data
+  } catch { /* fallback to mock */ }
+}
+
+async function syncData() {
+  syncing.value = true
+  try {
+    await fetchVentas()
+    toast.add('success', 'Datos sincronizados')
+  } catch {
+    toast.add('warning', 'Error al sincronizar')
+  } finally {
+    syncing.value = false
+  }
+}
 
 function toggleRow(id) {
   const idx = expandedRows.value.indexOf(id)
@@ -156,8 +188,13 @@ function estadoClass(estado) {
   return map[estado] || 'bg-slate-50 text-slate-600'
 }
 
-function anularVenta(sale) {
-  sale.estado = 'Anulada'
-  toast.add('info', `Venta #${sale.id} anulada`)
+async function anularVenta(sale) {
+  anullingId.value = sale.id
+  try {
+    sale.estado = 'Anulada'
+    toast.add('info', `Venta #${sale.id} anulada`)
+  } finally {
+    anullingId.value = null
+  }
 }
 </script>

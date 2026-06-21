@@ -16,10 +16,11 @@
         </button>
         <button
           @click="refreshLogs"
-          class="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-2xl shadow-sm font-medium transition-colors flex items-center gap-2"
+          :disabled="syncing"
+          class="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-2xl shadow-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          <i class="fa-solid fa-arrows-rotate text-sm"></i>
-          Refrescar
+          <i :class="syncing ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-arrows-rotate'"></i>
+          {{ syncing ? 'Sincronizando...' : 'Refrescar' }}
         </button>
       </div>
     </div>
@@ -102,7 +103,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onUnmounted, watch } from 'vue'
+import { ref, computed, onUnmounted, onMounted, watch } from 'vue'
+import api from '@/services/api'
 import { formatCurrency } from '@/composables/useUtils'
 
 const logs = ref([
@@ -124,6 +126,7 @@ const logs = ref([
 
 const activeFilter = ref('todo')
 const autoRefresh = ref(false)
+const syncing = ref(false)
 const lastRefresh = ref(new Date().toLocaleTimeString())
 let refreshInterval = null
 
@@ -155,8 +158,14 @@ function typeClass(type) {
   return map[type] || 'bg-gray-50 text-gray-600'
 }
 
-function refreshLogs() {
+async function refreshLogs() {
+  syncing.value = true
+  try {
+    const data = await api.get('/api/auditoria')
+    if (data && data.length) logs.value = data
+  } catch { /* fallback to mock */ }
   lastRefresh.value = new Date().toLocaleTimeString()
+  syncing.value = false
 }
 
 function toggleAutoRefresh() {
@@ -167,6 +176,8 @@ function toggleAutoRefresh() {
     clearInterval(refreshInterval)
   }
 }
+
+onMounted(() => { refreshLogs() })
 
 onUnmounted(() => {
   if (refreshInterval) clearInterval(refreshInterval)

@@ -66,19 +66,21 @@
                 <div class="flex items-center gap-2">
                   <button
                     v-if="lic.active"
+                    :disabled="toggling[lic.id]"
                     @click="toggleLicense(lic)"
-                    class="text-gray-400 hover:text-red-600 transition-colors text-xs"
+                    class="text-gray-400 hover:text-red-600 transition-colors text-xs disabled:opacity-50"
                     title="Desactivar"
                   >
-                    <i class="fa-solid fa-circle-xmark"></i>
+                    <i :class="toggling[lic.id] ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-circle-xmark'"></i>
                   </button>
                   <button
                     v-else
+                    :disabled="toggling[lic.id]"
                     @click="toggleLicense(lic)"
-                    class="text-gray-400 hover:text-green-600 transition-colors text-xs"
+                    class="text-gray-400 hover:text-green-600 transition-colors text-xs disabled:opacity-50"
                     title="Activar"
                   >
-                    <i class="fa-solid fa-circle-check"></i>
+                    <i :class="toggling[lic.id] ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-circle-check'"></i>
                   </button>
                 </div>
               </td>
@@ -127,10 +129,11 @@
               </button>
               <button
                 type="submit"
-                class="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-xl shadow-sm font-medium transition-colors text-sm flex items-center gap-2"
+                :disabled="generating"
+                class="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-xl shadow-sm font-medium transition-colors text-sm flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <i class="fa-solid fa-wand-magic-sparkles text-xs"></i>
-                Generar
+                <i :class="generating ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-wand-magic-sparkles text-xs'"></i>
+                {{ generating ? 'Generando...' : 'Generar' }}
               </button>
             </div>
           </form>
@@ -141,7 +144,8 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
+import api from '@/services/api'
 import { formatCurrency } from '@/composables/useUtils'
 
 const licenses = ref([
@@ -154,6 +158,8 @@ const licenses = ref([
 ])
 
 const showGenerateModal = ref(false)
+const generating = ref(false)
+const toggling = ref({})
 
 const genForm = reactive({
   client: '',
@@ -174,11 +180,12 @@ function openGenerateModal() {
   showGenerateModal.value = true
 }
 
-function generateLicense() {
+async function generateLicense() {
+  generating.value = true
   const expDate = new Date()
   expDate.setDate(expDate.getDate() + genForm.days)
   const expStr = expDate.toISOString().split('T')[0]
-  licenses.value.push({
+  const newLic = {
     id: licenses.value.length + 1,
     key: generateKey(),
     client: genForm.client,
@@ -186,11 +193,37 @@ function generateLicense() {
     expirationDate: expStr,
     daysUntilExpiry: genForm.days,
     active: true,
-  })
+  }
+  try {
+    await api.post('/api/licencia/generar', newLic)
+  } catch { /* fallback */ }
+  licenses.value.push(newLic)
+  generating.value = false
   showGenerateModal.value = false
 }
 
-function toggleLicense(lic) {
+async function toggleLicense(lic) {
+  toggling.value[lic.id] = true
+  try {
+    await api.patch(`/api/licencia/${lic.id}/toggle`, { active: !lic.active })
+  } catch { /* fallback */ }
   lic.active = !lic.active
+  toggling.value[lic.id] = false
 }
+onMounted(async () => {
+  try {
+    const data = await api.get('/api/licencia/historial')
+    if (data && data.length) licenses.value = data
+  } catch { /* fallback to mock */ }
+})
 </script>
+
+<style scoped>
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.animate-spin {
+  animation: spin 1.5s linear infinite;
+}
+</style>

@@ -2,9 +2,16 @@
   <div class="min-h-screen flex flex-col">
     <ToastContainer />
 
+    <!-- Loading bar global -->
+    <div v-if="pageLoading" class="fixed top-0 left-0 right-0 z-[100] h-0.5 bg-brand-100">
+      <div class="h-full bg-brand-600 animate-loading-bar"></div>
+    </div>
+
     <!-- Login / License Screen -->
     <div v-if="!auth.authenticated" class="fixed inset-0 bg-brand-900 z-50 flex items-center justify-center p-4">
-      <router-view />
+      <router-view v-slot="{ Component }">
+        <component :is="Component" />
+      </router-view>
     </div>
 
     <!-- Main ERP Layout -->
@@ -13,8 +20,20 @@
         <TheSidebar :cajaAbierta="cajaState.abierta" @navigate="handleNavigate" />
         <main class="flex-1 flex flex-col min-w-0 overflow-hidden">
           <TheHeader :apiMode="apiMode" :time="currentTime" @toggleApiMode="toggleApiMode" />
-          <div class="flex-1 overflow-y-auto p-8">
-            <router-view />
+          <div class="flex-1 overflow-y-auto p-8 relative">
+            <!-- Vista activa con transición fade -->
+            <router-view v-slot="{ Component }">
+              <transition name="fade" mode="out-in">
+                <component :is="Component" />
+              </transition>
+            </router-view>
+            <!-- Spinner overlay durante carga de vista -->
+            <div v-if="pageLoading" class="absolute inset-0 bg-white/60 flex items-center justify-center z-10">
+              <div class="flex flex-col items-center gap-3">
+                <i class="fa-solid fa-circle-notch animate-spin text-brand-600 text-3xl"></i>
+                <span class="text-sm text-slate-500 font-semibold">Cargando...</span>
+              </div>
+            </div>
           </div>
           <TheFooter :apiMode="apiMode" :apiBaseUrl="apiBaseUrl" :logs="apiLogs" />
         </main>
@@ -43,7 +62,9 @@ const apiBaseUrl = ref('')
 const apiLogs = ref([])
 const currentTime = ref('')
 const cajaState = ref({ abierta: false, saldo_actual: 0 })
+const pageLoading = ref(false)
 let clockInterval = null
+let loadTimer = null
 
 function toggleApiMode(mode) {
   apiMode.value = mode
@@ -57,11 +78,21 @@ async function fetchCajaState() {
   try {
     const state = await api.get('/api/caja/estado')
     if (state) cajaState.value = state
-  } catch { /* fallback: sin backend */ }
+  } catch { /* fallback */ }
 }
 
 watch(() => auth.authenticated, (val) => {
   if (val) fetchCajaState()
+})
+
+router.beforeEach((to, from) => {
+  if (from.name && to.name !== from.name) {
+    pageLoading.value = true
+  }
+})
+router.afterEach(() => {
+  clearTimeout(loadTimer)
+  loadTimer = setTimeout(() => { pageLoading.value = false }, 300)
 })
 
 onMounted(async () => {
@@ -73,5 +104,19 @@ onMounted(async () => {
 })
 onUnmounted(() => {
   if (clockInterval) clearInterval(clockInterval)
+  if (loadTimer) clearTimeout(loadTimer)
 })
 </script>
+
+<style scoped>
+.fade-enter-active, .fade-leave-active { transition: opacity 0.15s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+.animate-loading-bar {
+  animation: loadingBar 1.5s ease-in-out infinite;
+  width: 30%;
+}
+@keyframes loadingBar {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+</style>
