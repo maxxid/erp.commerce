@@ -2,16 +2,16 @@
   <div class="p-6 space-y-6">
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900">Auditoría</h1>
-        <p class="text-sm text-gray-500 mt-1">Registro de actividad y cambios en el sistema</p>
+        <h1 class="text-2xl font-bold text-slate-900">Auditoría</h1>
+        <p class="text-sm text-slate-500 mt-1">Registro de actividad y cambios en el sistema</p>
       </div>
       <div class="flex items-center gap-2">
         <button
           @click="toggleAutoRefresh"
           class="px-4 py-2.5 rounded-xl shadow-sm text-sm font-medium transition-colors flex items-center gap-2"
-          :class="autoRefresh ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
+          :class="autoRefresh ? 'bg-green-100 text-emerald-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
         >
-          <i :class="autoRefresh ? 'fa-solid fa-rotate text-green-600 animate-spin' : 'fa-solid fa-rotate text-gray-400'"></i>
+          <i :class="autoRefresh ? 'fa-solid fa-rotate text-emerald-600 animate-spin' : 'fa-solid fa-rotate text-slate-400'"></i>
           Auto-refrescar
         </button>
         <button
@@ -27,19 +27,19 @@
 
     <div class="bg-white rounded-2xl shadow-sm p-5">
       <div class="flex items-center gap-3 flex-wrap">
-        <span class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Filtrar por tipo</span>
+        <span class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Filtrar por tipo</span>
         <button
           v-for="filter in filters"
           :key="filter.key"
           @click="activeFilter = filter.key"
           class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors"
-          :class="activeFilter === filter.key ? 'bg-brand-600 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-100'"
+          :class="activeFilter === filter.key ? 'bg-brand-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'"
         >
           {{ filter.label }}
         </button>
         <div class="ml-auto flex items-center gap-2">
-          <span class="w-2 h-2 rounded-full bg-red-500"></span>
-          <span class="text-xs text-gray-500">Actividad sospechosa: {{ suspiciousCount }}</span>
+          <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+          <span class="text-xs text-slate-500">Actividad sospechosa: {{ suspiciousCount }}</span>
         </div>
       </div>
     </div>
@@ -47,30 +47,30 @@
     <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full text-left text-sm">
-          <thead class="bg-gray-50 border-b border-gray-200">
+          <thead class="bg-slate-50 border-b border-slate-200">
             <tr>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Timestamp</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Usuario</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Tipo</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Acción</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Descripción</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Alerta</th>
+              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Timestamp</th>
+              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Usuario</th>
+              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Tipo</th>
+              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Acción</th>
+              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Descripción</th>
+              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Alerta</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
             <tr
               v-for="log in filteredLogs"
               :key="log.id"
-              class="hover:bg-gray-50 transition-colors"
-              :class="log.suspicious ? 'bg-red-50/40' : ''"
+              class="hover:bg-slate-50 transition-colors"
+              :class="log.suspicious ? 'bg-rose-50/40' : ''"
             >
-              <td class="px-5 py-3 font-mono-data text-xs text-gray-600">{{ log.timestamp }}</td>
+              <td class="px-5 py-3 font-mono-data text-xs text-slate-600">{{ log.timestamp }}</td>
               <td class="px-5 py-3">
                 <div class="flex items-center gap-2">
-                  <div class="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-semibold text-gray-500">
+                  <div class="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-semibold text-slate-500">
                     {{ log.user.charAt(0) }}
                   </div>
-                  <span class="text-gray-700">{{ log.user }}</span>
+                  <span class="text-slate-700">{{ log.user }}</span>
                 </div>
               </td>
               <td class="px-5 py-3">
@@ -81,22 +81,22 @@
                   {{ log.type }}
                 </span>
               </td>
-              <td class="px-5 py-3 text-gray-700 font-medium">{{ log.action }}</td>
-              <td class="px-5 py-3 text-gray-600 text-xs max-w-xs truncate" :title="log.description">{{ log.description }}</td>
+              <td class="px-5 py-3 text-slate-700 font-medium">{{ log.action }}</td>
+              <td class="px-5 py-3 text-slate-600 text-xs max-w-xs truncate" :title="log.description">{{ log.description }}</td>
               <td class="px-5 py-3">
-                <span v-if="log.suspicious" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-red-100 text-red-700">
+                <span v-if="log.suspicious" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-red-100 text-rose-700">
                   <i class="fa-solid fa-triangle-exclamation text-[10px]"></i>
                   Sospechoso
                 </span>
-                <span v-else class="text-gray-300 text-xs">—</span>
+                <span v-else class="text-slate-300 text-xs">—</span>
               </td>
             </tr>
           </tbody>
         </table>
       </div>
-      <div class="px-5 py-3 border-t border-gray-100 text-sm text-gray-500 flex items-center justify-between">
+      <div class="px-5 py-3 border-t border-slate-100 text-sm text-slate-500 flex items-center justify-between">
         <span>{{ filteredLogs.length }} registros</span>
-        <span class="text-xs text-gray-400">Última actualización: {{ lastRefresh }}</span>
+        <span class="text-xs text-slate-400">Última actualización: {{ lastRefresh }}</span>
       </div>
     </div>
   </div>
@@ -153,9 +153,9 @@ function typeClass(type) {
     Compras: 'bg-blue-50 text-blue-700',
     Productos: 'bg-purple-50 text-purple-700',
     Clientes: 'bg-cyan-50 text-cyan-700',
-    Sistema: 'bg-gray-100 text-gray-700',
+    Sistema: 'bg-slate-100 text-slate-700',
   }
-  return map[type] || 'bg-gray-50 text-gray-600'
+  return map[type] || 'bg-slate-50 text-slate-600'
 }
 
 async function refreshLogs() {

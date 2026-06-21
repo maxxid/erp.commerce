@@ -2,15 +2,15 @@
   <div class="p-6 space-y-6">
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900">Backups</h1>
-        <p class="text-sm text-gray-500 mt-1">Gestión de respaldos locales y en la nube (R2)</p>
+        <h1 class="text-2xl font-bold text-slate-900">Backups</h1>
+        <p class="text-sm text-slate-500 mt-1">Gestión de respaldos locales y en la nube (R2)</p>
       </div>
       <div class="flex items-center gap-2">
         <button
           @click="openR2Config"
-          class="px-4 py-2.5 rounded-xl shadow-sm text-sm font-medium text-gray-600 bg-white border border-gray-300 hover:bg-gray-50 transition-colors flex items-center gap-2"
+          class="px-4 py-2.5 rounded-xl shadow-sm text-sm font-medium text-slate-600 bg-white border border-slate-300 hover:bg-slate-50 transition-colors flex items-center gap-2"
         >
-          <i class="fa-solid fa-cloud text-gray-500"></i>
+          <i class="fa-solid fa-cloud text-slate-500"></i>
           Configurar R2
         </button>
         <button
@@ -26,61 +26,61 @@
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       <div class="bg-white rounded-2xl shadow-sm p-5">
-        <p class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Último backup local</p>
-        <p class="text-sm font-medium text-gray-900 mt-1">{{ localBackups.length > 0 ? localBackups[0].date : '—' }}</p>
+        <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Último backup local</p>
+        <p class="text-sm font-medium text-slate-900 mt-1">{{ localBackups.length > 0 ? localBackups[0].date : '—' }}</p>
       </div>
       <div class="bg-white rounded-2xl shadow-sm p-5">
-        <p class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Tamaño último backup</p>
-        <p class="font-mono-data font-bold text-gray-900 mt-1">{{ localBackups.length > 0 ? localBackups[0].size : '—' }}</p>
+        <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Tamaño último backup</p>
+        <p class="font-mono-data font-bold text-slate-900 mt-1">{{ localBackups.length > 0 ? localBackups[0].size : '—' }}</p>
       </div>
       <div class="bg-white rounded-2xl shadow-sm p-5">
-        <p class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Sincronización R2</p>
-        <p class="text-sm mt-1 flex items-center gap-1.5" :class="r2SyncOk ? 'text-green-600' : 'text-red-500'">
-          <span class="w-1.5 h-1.5 rounded-full" :class="r2SyncOk ? 'bg-green-500' : 'bg-red-500'"></span>
+        <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Sincronización R2</p>
+        <p class="text-sm mt-1 flex items-center gap-1.5" :class="r2SyncOk ? 'text-emerald-600' : 'text-red-500'">
+          <span class="w-1.5 h-1.5 rounded-full" :class="r2SyncOk ? 'bg-emerald-500' : 'bg-rose-500'"></span>
           {{ r2SyncOk ? 'Sincronizado' : 'No sincronizado' }}
         </p>
       </div>
       <div class="bg-white rounded-2xl shadow-sm p-5">
-        <p class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Próximo backup automático</p>
-        <p class="text-sm font-medium text-gray-900 mt-1">2026-06-21 03:00</p>
+        <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Próximo backup automático</p>
+        <p class="text-sm font-medium text-slate-900 mt-1">2026-06-21 03:00</p>
       </div>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div class="bg-white rounded-2xl shadow-sm">
-        <div class="px-5 py-4 border-b border-gray-100 flex items-center gap-2.5">
-          <div class="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center">
-            <i class="fa-solid fa-hard-drive text-gray-600"></i>
+        <div class="px-5 py-4 border-b border-slate-100 flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center">
+            <i class="fa-solid fa-hard-drive text-slate-600"></i>
           </div>
-          <h2 class="font-semibold text-gray-900">Backups locales</h2>
-          <span class="ml-auto text-xs text-gray-400">{{ localBackups.length }} archivos</span>
+          <h2 class="font-semibold text-slate-900">Backups locales</h2>
+          <span class="ml-auto text-xs text-slate-400">{{ localBackups.length }} archivos</span>
         </div>
         <div class="overflow-x-auto">
           <table class="w-full text-left text-sm">
-            <thead class="bg-gray-50 border-b border-gray-200">
+            <thead class="bg-slate-50 border-b border-slate-200">
               <tr>
-                <th class="px-5 py-2.5 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Nombre</th>
-                <th class="px-5 py-2.5 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Tamaño</th>
-                <th class="px-5 py-2.5 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Fecha</th>
-                <th class="px-5 py-2.5 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Acciones</th>
+                <th class="px-5 py-2.5 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Nombre</th>
+                <th class="px-5 py-2.5 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Tamaño</th>
+                <th class="px-5 py-2.5 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Fecha</th>
+                <th class="px-5 py-2.5 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Acciones</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
               <tr v-for="backup in localBackups" :key="backup.id">
                 <td class="px-5 py-3">
                   <div class="flex items-center gap-2">
-                    <i class="fa-solid fa-file-zipper text-gray-400"></i>
-                    <span class="font-mono-data text-xs text-gray-700">{{ backup.name }}</span>
+                    <i class="fa-solid fa-file-zipper text-slate-400"></i>
+                    <span class="font-mono-data text-xs text-slate-700">{{ backup.name }}</span>
                   </div>
                 </td>
-                <td class="px-5 py-3 text-gray-600 font-mono-data text-xs">{{ backup.size }}</td>
-                <td class="px-5 py-3 text-gray-500 text-xs">{{ backup.date }}</td>
+                <td class="px-5 py-3 text-slate-600 font-mono-data text-xs">{{ backup.size }}</td>
+                <td class="px-5 py-3 text-slate-500 text-xs">{{ backup.date }}</td>
                 <td class="px-5 py-3">
                   <div class="flex items-center gap-2">
                     <button
                       :disabled="downloading[backup.id]"
                       @click="downloadBackup(backup)"
-                      class="text-gray-400 hover:text-brand-600 transition-colors disabled:opacity-50"
+                      class="text-slate-400 hover:text-brand-600 transition-colors disabled:opacity-50"
                       title="Descargar"
                     >
                       <i :class="downloading[backup.id] ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-download'"></i>
@@ -88,7 +88,7 @@
                     <button
                       :disabled="deleting[backup.id]"
                       @click="deleteBackup(backup)"
-                      class="text-gray-400 hover:text-red-600 transition-colors disabled:opacity-50"
+                      class="text-slate-400 hover:text-red-600 transition-colors disabled:opacity-50"
                       title="Eliminar"
                     >
                       <i :class="deleting[backup.id] ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-trash-can'"></i>
@@ -99,28 +99,28 @@
             </tbody>
           </table>
         </div>
-        <div v-if="localBackups.length === 0" class="text-center py-8 text-gray-400 text-sm">
+        <div v-if="localBackups.length === 0" class="text-center py-8 text-slate-400 text-sm">
           <i class="fa-solid fa-database text-2xl mb-2 block"></i>
           No hay backups locales
         </div>
       </div>
 
       <div class="bg-white rounded-2xl shadow-sm">
-        <div class="px-5 py-4 border-b border-gray-100 flex items-center gap-2.5">
+        <div class="px-5 py-4 border-b border-slate-100 flex items-center gap-2.5">
           <div class="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center">
             <i class="fa-solid fa-cloud text-orange-500"></i>
           </div>
-          <h2 class="font-semibold text-gray-900">Backups en R2 Cloud</h2>
-          <span class="ml-auto text-xs text-gray-400">{{ r2Backups.length }} archivos</span>
+          <h2 class="font-semibold text-slate-900">Backups en R2 Cloud</h2>
+          <span class="ml-auto text-xs text-slate-400">{{ r2Backups.length }} archivos</span>
         </div>
         <div class="overflow-x-auto">
           <table class="w-full text-left text-sm">
-            <thead class="bg-gray-50 border-b border-gray-200">
+            <thead class="bg-slate-50 border-b border-slate-200">
               <tr>
-                <th class="px-5 py-2.5 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Nombre</th>
-                <th class="px-5 py-2.5 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Tamaño</th>
-                <th class="px-5 py-2.5 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Fecha</th>
-                <th class="px-5 py-2.5 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Sinc</th>
+                <th class="px-5 py-2.5 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Nombre</th>
+                <th class="px-5 py-2.5 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Tamaño</th>
+                <th class="px-5 py-2.5 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Fecha</th>
+                <th class="px-5 py-2.5 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Sinc</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
@@ -128,13 +128,13 @@
                 <td class="px-5 py-3">
                   <div class="flex items-center gap-2">
                     <i class="fa-solid fa-cloud-arrow-up text-orange-400"></i>
-                    <span class="font-mono-data text-xs text-gray-700">{{ backup.name }}</span>
+                    <span class="font-mono-data text-xs text-slate-700">{{ backup.name }}</span>
                   </div>
                 </td>
-                <td class="px-5 py-3 text-gray-600 font-mono-data text-xs">{{ backup.size }}</td>
-                <td class="px-5 py-3 text-gray-500 text-xs">{{ backup.date }}</td>
+                <td class="px-5 py-3 text-slate-600 font-mono-data text-xs">{{ backup.size }}</td>
+                <td class="px-5 py-3 text-slate-500 text-xs">{{ backup.date }}</td>
                 <td class="px-5 py-3">
-                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium" :class="backup.synced ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'">
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium" :class="backup.synced ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'">
                     <i :class="backup.synced ? 'fa-solid fa-circle-check text-[10px]' : 'fa-solid fa-clock text-[10px]'"></i>
                     {{ backup.synced ? 'Sinc' : 'Pend' }}
                   </span>
@@ -143,7 +143,7 @@
             </tbody>
           </table>
         </div>
-        <div v-if="r2Backups.length === 0" class="text-center py-8 text-gray-400 text-sm">
+        <div v-if="r2Backups.length === 0" class="text-center py-8 text-slate-400 text-sm">
           <i class="fa-solid fa-cloud text-2xl mb-2 block"></i>
           No hay backups en la nube
         </div>
@@ -154,35 +154,35 @@
       <div v-if="showR2Config" class="fixed inset-0 z-50 flex items-center justify-center">
         <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="showR2Config = false"></div>
         <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4">
-          <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-            <h2 class="text-lg font-semibold text-gray-900">Configuración R2 Cloud</h2>
-            <button @click="showR2Config = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+            <h2 class="text-lg font-semibold text-slate-900">Configuración R2 Cloud</h2>
+            <button @click="showR2Config = false" class="text-slate-400 hover:text-slate-600 transition-colors">
               <i class="fa-solid fa-xmark text-lg"></i>
             </button>
           </div>
           <form @submit.prevent="saveR2Config" class="px-6 py-5 space-y-4">
             <div>
-              <label class="block text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">Endpoint</label>
-              <input v-model="r2Form.endpoint" type="url" required class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all font-mono-data" placeholder="https://<account>.r2.cloudflarestorage.com" />
+              <label class="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Endpoint</label>
+              <input v-model="r2Form.endpoint" type="url" required class="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all font-mono-data" placeholder="https://<account>.r2.cloudflarestorage.com" />
             </div>
             <div>
-              <label class="block text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">Access Key</label>
-              <input v-model="r2Form.accessKey" type="text" required class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all font-mono-data" placeholder="xxxxxxxxxxxxxxxx" />
+              <label class="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Access Key</label>
+              <input v-model="r2Form.accessKey" type="text" required class="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all font-mono-data" placeholder="xxxxxxxxxxxxxxxx" />
             </div>
             <div>
-              <label class="block text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">Secret Key</label>
-              <input v-model="r2Form.secretKey" type="password" required class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all font-mono-data" placeholder="••••••••••••••••" />
+              <label class="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Secret Key</label>
+              <input v-model="r2Form.secretKey" type="password" required class="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all font-mono-data" placeholder="••••••••••••••••" />
             </div>
             <div>
-              <label class="block text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">Bucket</label>
-              <input v-model="r2Form.bucket" type="text" required class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all" placeholder="erp-backups" />
+              <label class="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Bucket</label>
+              <input v-model="r2Form.bucket" type="text" required class="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all" placeholder="erp-backups" />
             </div>
             <div class="flex items-center justify-between pt-2">
               <button
                 type="button"
                 @click="testConnection"
                 :disabled="testingConnection"
-                class="px-4 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors disabled:opacity-60 flex items-center gap-2"
+                class="px-4 py-2.5 text-sm font-medium text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors disabled:opacity-60 flex items-center gap-2"
               >
                 <i :class="testingConnection ? 'fa-solid fa-spinner animate-spin' : 'fa-solid fa-plug'"></i>
                 {{ testingConnection ? 'Probando...' : 'Probar conexión' }}
@@ -191,7 +191,7 @@
                 <button
                   type="button"
                   @click="showR2Config = false"
-                  class="px-5 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+                  class="px-5 py-2.5 text-sm font-medium text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors"
                 >
                   Cancelar
                 </button>
@@ -203,7 +203,7 @@
                 </button>
               </div>
             </div>
-            <div v-if="connectionResult" class="text-sm rounded-xl p-3" :class="connectionResult.success ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'">
+            <div v-if="connectionResult" class="text-sm rounded-xl p-3" :class="connectionResult.success ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'">
               {{ connectionResult.message }}
             </div>
           </form>
@@ -273,7 +273,7 @@ async function downloadBackup(backup) {
     await api.get(`/api/backups/download/${backup.id}`)
   } catch { /* fallback */ }
   const toast = document.createElement('div')
-  toast.className = 'fixed bottom-6 right-6 bg-gray-900 text-white px-5 py-3 rounded-xl shadow-lg text-sm z-[100] transition-all'
+  toast.className = 'fixed bottom-6 right-6 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-lg text-sm z-[100] transition-all'
   toast.textContent = `Descargando ${backup.name}...`
   document.body.appendChild(toast)
   setTimeout(() => {

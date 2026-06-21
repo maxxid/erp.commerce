@@ -2,14 +2,14 @@
   <div class="p-6 space-y-6">
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900">Proveedores</h1>
-        <p class="text-sm text-gray-500 mt-1">Gestión de proveedores de mercadería</p>
+        <h1 class="text-2xl font-bold text-slate-900">Proveedores</h1>
+        <p class="text-sm text-slate-500 mt-1">Gestión de proveedores de mercadería</p>
       </div>
       <div class="flex items-center gap-2">
         <button
           :disabled="syncing"
           @click="syncProveedores"
-          class="bg-white border border-gray-300 rounded-2xl px-4 py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors flex items-center gap-2 shadow-sm disabled:opacity-60"
+          class="bg-white border border-slate-300 rounded-2xl px-4 py-2.5 text-sm font-medium hover:bg-slate-50 transition-colors flex items-center gap-2 shadow-sm disabled:opacity-60"
           title="Sincronizar proveedores"
         >
           <i :class="syncing ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-sync'"></i>
@@ -27,52 +27,52 @@
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       <div class="bg-white rounded-2xl shadow-sm p-5">
-        <p class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Total proveedores</p>
-        <p class="text-2xl font-mono-data font-bold text-gray-900 mt-1">{{ suppliers.length }}</p>
+        <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Total proveedores</p>
+        <p class="text-2xl font-mono-data font-bold text-slate-900 mt-1">{{ suppliers.length }}</p>
       </div>
       <div class="bg-white rounded-2xl shadow-sm p-5">
-        <p class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Activos</p>
-        <p class="text-2xl font-mono-data font-bold text-green-600 mt-1">{{ suppliers.filter(s => s.active).length }}</p>
+        <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Activos</p>
+        <p class="text-2xl font-mono-data font-bold text-emerald-600 mt-1">{{ suppliers.filter(s => s.active).length }}</p>
       </div>
       <div class="bg-white rounded-2xl shadow-sm p-5">
-        <p class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Inactivos</p>
+        <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Inactivos</p>
         <p class="text-2xl font-mono-data font-bold text-red-500 mt-1">{{ suppliers.filter(s => !s.active).length }}</p>
       </div>
       <div class="bg-white rounded-2xl shadow-sm p-5">
-        <p class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Último agregado</p>
-        <p class="text-sm font-medium text-gray-900 mt-1 truncate">{{ suppliers[suppliers.length - 1]?.name || '—' }}</p>
+        <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Último agregado</p>
+        <p class="text-sm font-medium text-slate-900 mt-1 truncate">{{ suppliers[suppliers.length - 1]?.name || '—' }}</p>
       </div>
     </div>
 
     <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full text-left text-sm">
-          <thead class="bg-gray-50 border-b border-gray-200">
+          <thead class="bg-slate-50 border-b border-slate-200">
             <tr>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Nombre</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">CUIT</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Teléfono</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Email</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Contacto</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Estado</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Acciones</th>
+              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Nombre</th>
+              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">CUIT</th>
+              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Teléfono</th>
+              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Email</th>
+              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Contacto</th>
+              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Estado</th>
+              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Acciones</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
-            <tr v-for="supplier in suppliers" :key="supplier.id" class="hover:bg-gray-50 transition-colors">
-              <td class="px-5 py-4 font-medium text-gray-900">{{ supplier.name }}</td>
-              <td class="px-5 py-4 font-mono-data text-gray-700">{{ supplier.cuit }}</td>
-              <td class="px-5 py-4 text-gray-600">{{ supplier.phone }}</td>
-              <td class="px-5 py-4 text-gray-600">
+            <tr v-for="supplier in suppliers" :key="supplier.id" class="hover:bg-slate-50 transition-colors">
+              <td class="px-5 py-4 font-medium text-slate-900">{{ supplier.name }}</td>
+              <td class="px-5 py-4 font-mono-data text-slate-700">{{ supplier.cuit }}</td>
+              <td class="px-5 py-4 text-slate-600">{{ supplier.phone }}</td>
+              <td class="px-5 py-4 text-slate-600">
                 <a :href="'mailto:' + supplier.email" class="text-brand-600 hover:underline">{{ supplier.email }}</a>
               </td>
-              <td class="px-5 py-4 text-gray-600">{{ supplier.contact }}</td>
+              <td class="px-5 py-4 text-slate-600">{{ supplier.contact }}</td>
               <td class="px-5 py-4">
                 <span
                   class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
-                  :class="supplier.active ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'"
+                  :class="supplier.active ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'"
                 >
-                  <span class="w-1.5 h-1.5 rounded-full" :class="supplier.active ? 'bg-green-500' : 'bg-red-500'"></span>
+                  <span class="w-1.5 h-1.5 rounded-full" :class="supplier.active ? 'bg-emerald-500' : 'bg-rose-500'"></span>
                   {{ supplier.active ? 'Activo' : 'Inactivo' }}
                 </span>
               </td>
@@ -80,7 +80,7 @@
                 <div class="flex items-center gap-2">
                   <button
                     @click="openEditModal(supplier)"
-                    class="text-gray-400 hover:text-brand-600 transition-colors"
+                    class="text-slate-400 hover:text-brand-600 transition-colors"
                     title="Editar"
                   >
                     <i class="fa-solid fa-pen-to-square"></i>
@@ -89,7 +89,7 @@
                     @click="toggleActive(supplier)"
                     :disabled="togglingId === supplier.id"
                     class="transition-colors disabled:opacity-60"
-                    :class="supplier.active ? 'text-gray-400 hover:text-red-600' : 'text-gray-400 hover:text-green-600'"
+                    :class="supplier.active ? 'text-slate-400 hover:text-red-600' : 'text-slate-400 hover:text-emerald-600'"
                     title="Cambiar estado"
                   >
                     <i v-if="togglingId === supplier.id" class="fa-solid fa-circle-notch animate-spin"></i>
@@ -107,38 +107,38 @@
       <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center">
         <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="showModal = false"></div>
         <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
-          <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-            <h2 class="text-lg font-semibold text-gray-900">{{ editingSupplier ? 'Editar proveedor' : 'Nuevo proveedor' }}</h2>
-            <button @click="showModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+            <h2 class="text-lg font-semibold text-slate-900">{{ editingSupplier ? 'Editar proveedor' : 'Nuevo proveedor' }}</h2>
+            <button @click="showModal = false" class="text-slate-400 hover:text-slate-600 transition-colors">
               <i class="fa-solid fa-xmark text-lg"></i>
             </button>
           </div>
           <form @submit.prevent="saveSupplier" class="px-6 py-5 space-y-4">
             <div>
-              <label class="block text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">Nombre / Razón social</label>
-              <input v-model="form.name" type="text" required class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all" placeholder="Nombre del proveedor" />
+              <label class="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Nombre / Razón social</label>
+              <input v-model="form.name" type="text" required class="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all" placeholder="Nombre del proveedor" />
             </div>
             <div>
-              <label class="block text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">CUIT</label>
-              <input v-model="form.cuit" type="text" required class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all font-mono-data" placeholder="XX-XXXXXXXX-X" />
+              <label class="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">CUIT</label>
+              <input v-model="form.cuit" type="text" required class="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all font-mono-data" placeholder="XX-XXXXXXXX-X" />
             </div>
             <div>
-              <label class="block text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">Teléfono</label>
-              <input v-model="form.phone" type="text" required class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all" placeholder="+54 11 1234-5678" />
+              <label class="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Teléfono</label>
+              <input v-model="form.phone" type="text" required class="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all" placeholder="+54 11 1234-5678" />
             </div>
             <div>
-              <label class="block text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">Email</label>
-              <input v-model="form.email" type="email" required class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all" placeholder="email@proveedor.com" />
+              <label class="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Email</label>
+              <input v-model="form.email" type="email" required class="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all" placeholder="email@proveedor.com" />
             </div>
             <div>
-              <label class="block text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">Persona de contacto</label>
-              <input v-model="form.contact" type="text" required class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all" placeholder="Nombre del contacto" />
+              <label class="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Persona de contacto</label>
+              <input v-model="form.contact" type="text" required class="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all" placeholder="Nombre del contacto" />
             </div>
             <div class="flex justify-end gap-3 pt-2">
               <button
                 type="button"
                 @click="showModal = false"
-                class="px-5 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+                class="px-5 py-2.5 text-sm font-medium text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors"
               >
                 Cancelar
               </button>

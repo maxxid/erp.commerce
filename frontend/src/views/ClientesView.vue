@@ -2,14 +2,14 @@
   <div class="p-6 space-y-6">
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900">Clientes</h1>
-        <p class="text-sm text-gray-500 mt-1">Gestión de clientes y cuentas corrientes</p>
+        <h1 class="text-2xl font-bold text-slate-900">Clientes</h1>
+        <p class="text-sm text-slate-500 mt-1">Gestión de clientes y cuentas corrientes</p>
       </div>
       <div class="flex items-center gap-2">
         <button
           :disabled="syncing"
           @click="syncClients"
-          class="bg-white border border-gray-300 rounded-2xl px-4 py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors flex items-center gap-2 shadow-sm disabled:opacity-60"
+          class="bg-white border border-slate-300 rounded-2xl px-4 py-2.5 text-sm font-medium hover:bg-slate-50 transition-colors flex items-center gap-2 shadow-sm disabled:opacity-60"
           title="Sincronizar clientes"
         >
           <i :class="syncing ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-sync'"></i>
@@ -28,37 +28,37 @@
     <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full text-left text-sm">
-          <thead class="bg-gray-50 border-b border-gray-200">
+          <thead class="bg-slate-50 border-b border-slate-200">
             <tr>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Nombre</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Doc. Tipo</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Doc. Número</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Teléfono</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Límite crédito</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Saldo</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Acciones</th>
+              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Nombre</th>
+              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Doc. Tipo</th>
+              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Doc. Número</th>
+              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Teléfono</th>
+              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Límite crédito</th>
+              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Saldo</th>
+              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Acciones</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
-            <tr v-for="client in clients" :key="client.id" class="hover:bg-gray-50 transition-colors">
-              <td class="px-5 py-4 font-medium text-gray-900">{{ client.name }}</td>
-              <td class="px-5 py-4 text-gray-600">{{ client.docType }}</td>
-              <td class="px-5 py-4 font-mono-data text-gray-700">{{ client.docNumber }}</td>
-              <td class="px-5 py-4 text-gray-600">{{ client.phone }}</td>
-              <td class="px-5 py-4 font-mono-data text-gray-700">{{ formatCurrency(client.creditLimit) }}</td>
-              <td class="px-5 py-4 font-mono-data" :class="client.balance > client.creditLimit * 0.8 ? 'text-red-600' : 'text-gray-700'">{{ formatCurrency(client.balance) }}</td>
+            <tr v-for="client in clients" :key="client.id" class="hover:bg-slate-50 transition-colors">
+              <td class="px-5 py-4 font-medium text-slate-900">{{ client.name }}</td>
+              <td class="px-5 py-4 text-slate-600">{{ client.docType }}</td>
+              <td class="px-5 py-4 font-mono-data text-slate-700">{{ client.docNumber }}</td>
+              <td class="px-5 py-4 text-slate-600">{{ client.phone }}</td>
+              <td class="px-5 py-4 font-mono-data text-slate-700">{{ formatCurrency(client.creditLimit) }}</td>
+              <td class="px-5 py-4 font-mono-data" :class="client.balance > client.creditLimit * 0.8 ? 'text-red-600' : 'text-slate-700'">{{ formatCurrency(client.balance) }}</td>
               <td class="px-5 py-4">
                 <div class="flex items-center gap-2">
                   <button
                     @click="openEditModal(client)"
-                    class="text-gray-400 hover:text-brand-600 transition-colors"
+                    class="text-slate-400 hover:text-brand-600 transition-colors"
                     title="Editar"
                   >
                     <i class="fa-solid fa-pen-to-square"></i>
                   </button>
                   <button
                     @click="openTicketsModal(client)"
-                    class="text-gray-400 hover:text-blue-600 transition-colors"
+                    class="text-slate-400 hover:text-blue-600 transition-colors"
                     title="Ver tickets"
                   >
                     <i class="fa-solid fa-ticket"></i>
@@ -69,7 +69,7 @@
           </tbody>
         </table>
       </div>
-      <div class="px-5 py-3 border-t border-gray-100 text-sm text-gray-500">
+      <div class="px-5 py-3 border-t border-slate-100 text-sm text-slate-500">
         Mostrando {{ clients.length }} clientes
       </div>
     </div>
@@ -78,21 +78,21 @@
       <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center">
         <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="showModal = false"></div>
         <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
-          <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-            <h2 class="text-lg font-semibold text-gray-900">{{ editingClient ? 'Editar cliente' : 'Nuevo cliente' }}</h2>
-            <button @click="showModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+            <h2 class="text-lg font-semibold text-slate-900">{{ editingClient ? 'Editar cliente' : 'Nuevo cliente' }}</h2>
+            <button @click="showModal = false" class="text-slate-400 hover:text-slate-600 transition-colors">
               <i class="fa-solid fa-xmark text-lg"></i>
             </button>
           </div>
           <form @submit.prevent="saveClient" class="px-6 py-5 space-y-4">
             <div>
-              <label class="block text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">Nombre</label>
-              <input v-model="form.name" type="text" required class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all" placeholder="Nombre o razón social" />
+              <label class="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Nombre</label>
+              <input v-model="form.name" type="text" required class="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all" placeholder="Nombre o razón social" />
             </div>
             <div class="grid grid-cols-2 gap-4">
               <div>
-                <label class="block text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">Tipo documento</label>
-                <select v-model="form.docType" required class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all">
+                <label class="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Tipo documento</label>
+                <select v-model="form.docType" required class="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all">
                   <option value="">Seleccionar</option>
                   <option value="DNI">DNI</option>
                   <option value="CUIT">CUIT</option>
@@ -101,23 +101,23 @@
                 </select>
               </div>
               <div>
-                <label class="block text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">Número documento</label>
-                <input v-model="form.docNumber" type="text" required class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all font-mono-data" placeholder="Número" />
+                <label class="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Número documento</label>
+                <input v-model="form.docNumber" type="text" required class="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all font-mono-data" placeholder="Número" />
               </div>
             </div>
             <div>
-              <label class="block text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">Teléfono</label>
-              <input v-model="form.phone" type="text" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all" placeholder="+54 11 1234-5678" />
+              <label class="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Teléfono</label>
+              <input v-model="form.phone" type="text" class="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all" placeholder="+54 11 1234-5678" />
             </div>
             <div>
-              <label class="block text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">Límite de crédito</label>
-              <input v-model.number="form.creditLimit" type="number" step="0.01" min="0" required class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all font-mono-data" placeholder="0.00" />
+              <label class="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Límite de crédito</label>
+              <input v-model.number="form.creditLimit" type="number" step="0.01" min="0" required class="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all font-mono-data" placeholder="0.00" />
             </div>
             <div class="flex justify-end gap-3 pt-2">
               <button
                 type="button"
                 @click="showModal = false"
-                class="px-5 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+                class="px-5 py-2.5 text-sm font-medium text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors"
               >
                 Cancelar
               </button>
@@ -139,32 +139,32 @@
       <div v-if="showTicketsModal" class="fixed inset-0 z-50 flex items-center justify-center">
         <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="showTicketsModal = false"></div>
         <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl mx-4 max-h-[85vh] overflow-y-auto">
-          <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-            <h2 class="text-lg font-semibold text-gray-900">Tickets de {{ selectedClient?.name }}</h2>
-            <button @click="showTicketsModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+            <h2 class="text-lg font-semibold text-slate-900">Tickets de {{ selectedClient?.name }}</h2>
+            <button @click="showTicketsModal = false" class="text-slate-400 hover:text-slate-600 transition-colors">
               <i class="fa-solid fa-xmark text-lg"></i>
             </button>
           </div>
           <div class="px-6 py-5">
             <table class="w-full text-left text-sm">
-              <thead class="bg-gray-50 border-b border-gray-200">
+              <thead class="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  <th class="px-4 py-2.5 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Ticket #</th>
-                  <th class="px-4 py-2.5 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Fecha</th>
-                  <th class="px-4 py-2.5 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Productos</th>
-                  <th class="px-4 py-2.5 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Total</th>
+                  <th class="px-4 py-2.5 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Ticket #</th>
+                  <th class="px-4 py-2.5 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Fecha</th>
+                  <th class="px-4 py-2.5 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Productos</th>
+                  <th class="px-4 py-2.5 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Total</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-100">
-                <tr v-for="ticket in tickets" :key="ticket.id" class="hover:bg-gray-50">
-                  <td class="px-4 py-3 font-mono-data text-gray-700">#{{ String(ticket.id).padStart(6, '0') }}</td>
-                  <td class="px-4 py-3 text-gray-600">{{ ticket.date }}</td>
-                  <td class="px-4 py-3 text-gray-600">{{ ticket.itemCount }} items</td>
-                  <td class="px-4 py-3 font-mono-data font-medium text-gray-900">{{ formatCurrency(ticket.total) }}</td>
+                <tr v-for="ticket in tickets" :key="ticket.id" class="hover:bg-slate-50">
+                  <td class="px-4 py-3 font-mono-data text-slate-700">#{{ String(ticket.id).padStart(6, '0') }}</td>
+                  <td class="px-4 py-3 text-slate-600">{{ ticket.date }}</td>
+                  <td class="px-4 py-3 text-slate-600">{{ ticket.itemCount }} items</td>
+                  <td class="px-4 py-3 font-mono-data font-medium text-slate-900">{{ formatCurrency(ticket.total) }}</td>
                 </tr>
               </tbody>
             </table>
-            <div v-if="tickets.length === 0" class="text-center py-8 text-gray-400">
+            <div v-if="tickets.length === 0" class="text-center py-8 text-slate-400">
               <i class="fa-solid fa-ticket text-3xl mb-2 block"></i>
               Sin tickets registrados
             </div>

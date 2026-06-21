@@ -2,8 +2,8 @@
   <div class="p-6 space-y-6">
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900">Licencias</h1>
-        <p class="text-sm text-gray-500 mt-1">Gestión de licencias del sistema</p>
+        <h1 class="text-2xl font-bold text-slate-900">Licencias</h1>
+        <p class="text-sm text-slate-500 mt-1">Gestión de licencias del sistema</p>
       </div>
       <button
         @click="openGenerateModal"
@@ -16,15 +16,15 @@
 
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
       <div class="bg-white rounded-2xl shadow-sm p-5">
-        <p class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Licencias totales</p>
-        <p class="text-2xl font-mono-data font-bold text-gray-900 mt-1">{{ licenses.length }}</p>
+        <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Licencias totales</p>
+        <p class="text-2xl font-mono-data font-bold text-slate-900 mt-1">{{ licenses.length }}</p>
       </div>
       <div class="bg-white rounded-2xl shadow-sm p-5">
-        <p class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Licencias activas</p>
-        <p class="text-2xl font-mono-data font-bold text-green-600 mt-1">{{ licenses.filter(l => l.active).length }}</p>
+        <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Licencias activas</p>
+        <p class="text-2xl font-mono-data font-bold text-emerald-600 mt-1">{{ licenses.filter(l => l.active).length }}</p>
       </div>
       <div class="bg-white rounded-2xl shadow-sm p-5">
-        <p class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Próximas a vencer (30d)</p>
+        <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Próximas a vencer (30d)</p>
         <p class="text-2xl font-mono-data font-bold text-amber-600 mt-1">{{ licenses.filter(l => l.daysUntilExpiry <= 30 && l.active).length }}</p>
       </div>
     </div>
@@ -32,33 +32,33 @@
     <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full text-left text-sm">
-          <thead class="bg-gray-50 border-b border-gray-200">
+          <thead class="bg-slate-50 border-b border-slate-200">
             <tr>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Clave</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Cliente</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">ID Máquina</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Vencimiento</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Días restantes</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Estado</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Acciones</th>
+              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Clave</th>
+              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Cliente</th>
+              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">ID Máquina</th>
+              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Vencimiento</th>
+              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Días restantes</th>
+              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Estado</th>
+              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Acciones</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
-            <tr v-for="lic in licenses" :key="lic.id" class="hover:bg-gray-50 transition-colors" :class="lic.daysUntilExpiry <= 7 && lic.active ? 'bg-red-50/30' : ''">
+            <tr v-for="lic in licenses" :key="lic.id" class="hover:bg-slate-50 transition-colors" :class="lic.daysUntilExpiry <= 7 && lic.active ? 'bg-rose-50/30' : ''">
               <td class="px-5 py-4">
-                <code class="font-mono-data text-xs bg-gray-100 px-2 py-1 rounded-md text-gray-700">{{ lic.key }}</code>
+                <code class="font-mono-data text-xs bg-slate-100 px-2 py-1 rounded-md text-slate-700">{{ lic.key }}</code>
               </td>
-              <td class="px-5 py-4 font-medium text-gray-900">{{ lic.client }}</td>
-              <td class="px-5 py-4 font-mono-data text-gray-600 text-xs">{{ lic.machineId }}</td>
-              <td class="px-5 py-4 text-gray-600">{{ lic.expirationDate }}</td>
+              <td class="px-5 py-4 font-medium text-slate-900">{{ lic.client }}</td>
+              <td class="px-5 py-4 font-mono-data text-slate-600 text-xs">{{ lic.machineId }}</td>
+              <td class="px-5 py-4 text-slate-600">{{ lic.expirationDate }}</td>
               <td class="px-5 py-4">
-                <span class="font-mono-data text-sm font-semibold" :class="lic.daysUntilExpiry <= 7 ? 'text-red-600' : lic.daysUntilExpiry <= 30 ? 'text-amber-600' : 'text-gray-700'">
+                <span class="font-mono-data text-sm font-semibold" :class="lic.daysUntilExpiry <= 7 ? 'text-red-600' : lic.daysUntilExpiry <= 30 ? 'text-amber-600' : 'text-slate-700'">
                   {{ lic.daysUntilExpiry }} días
                 </span>
               </td>
               <td class="px-5 py-4">
-                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium" :class="lic.active ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'">
-                  <span class="w-1.5 h-1.5 rounded-full" :class="lic.active ? 'bg-green-500' : 'bg-red-500'"></span>
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium" :class="lic.active ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'">
+                  <span class="w-1.5 h-1.5 rounded-full" :class="lic.active ? 'bg-emerald-500' : 'bg-rose-500'"></span>
                   {{ lic.active ? 'Activa' : 'Inactiva' }}
                 </span>
               </td>
@@ -68,7 +68,7 @@
                     v-if="lic.active"
                     :disabled="toggling[lic.id]"
                     @click="toggleLicense(lic)"
-                    class="text-gray-400 hover:text-red-600 transition-colors text-xs disabled:opacity-50"
+                    class="text-slate-400 hover:text-red-600 transition-colors text-xs disabled:opacity-50"
                     title="Desactivar"
                   >
                     <i :class="toggling[lic.id] ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-circle-xmark'"></i>
@@ -77,7 +77,7 @@
                     v-else
                     :disabled="toggling[lic.id]"
                     @click="toggleLicense(lic)"
-                    class="text-gray-400 hover:text-green-600 transition-colors text-xs disabled:opacity-50"
+                    class="text-slate-400 hover:text-emerald-600 transition-colors text-xs disabled:opacity-50"
                     title="Activar"
                   >
                     <i :class="toggling[lic.id] ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-circle-check'"></i>
@@ -94,24 +94,24 @@
       <div v-if="showGenerateModal" class="fixed inset-0 z-50 flex items-center justify-center">
         <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="showGenerateModal = false"></div>
         <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4">
-          <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-            <h2 class="text-lg font-semibold text-gray-900">Generar nueva licencia</h2>
-            <button @click="showGenerateModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+            <h2 class="text-lg font-semibold text-slate-900">Generar nueva licencia</h2>
+            <button @click="showGenerateModal = false" class="text-slate-400 hover:text-slate-600 transition-colors">
               <i class="fa-solid fa-xmark text-lg"></i>
             </button>
           </div>
           <form @submit.prevent="generateLicense" class="px-6 py-5 space-y-4">
             <div>
-              <label class="block text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">Nombre del cliente</label>
-              <input v-model="genForm.client" type="text" required class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all" placeholder="Nombre del cliente" />
+              <label class="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Nombre del cliente</label>
+              <input v-model="genForm.client" type="text" required class="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all" placeholder="Nombre del cliente" />
             </div>
             <div>
-              <label class="block text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">ID de máquina</label>
-              <input v-model="genForm.machineId" type="text" required class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all font-mono-data" placeholder="MACHINE-XXXX-XXXX" />
+              <label class="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">ID de máquina</label>
+              <input v-model="genForm.machineId" type="text" required class="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all font-mono-data" placeholder="MACHINE-XXXX-XXXX" />
             </div>
             <div>
-              <label class="block text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">Duración (días)</label>
-              <select v-model.number="genForm.days" required class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all">
+              <label class="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Duración (días)</label>
+              <select v-model.number="genForm.days" required class="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all">
                 <option value="30">30 días</option>
                 <option value="90">90 días</option>
                 <option value="180">180 días</option>
@@ -123,7 +123,7 @@
               <button
                 type="button"
                 @click="showGenerateModal = false"
-                class="px-5 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+                class="px-5 py-2.5 text-sm font-medium text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors"
               >
                 Cancelar
               </button>

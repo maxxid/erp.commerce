@@ -2,15 +2,15 @@
   <div class="p-6 space-y-6">
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900">Reportes</h1>
-        <p class="text-sm text-gray-500 mt-1">Análisis de ventas y rendimiento por período</p>
+        <h1 class="text-2xl font-bold text-slate-900">Reportes</h1>
+        <p class="text-sm text-slate-500 mt-1">Análisis de ventas y rendimiento por período</p>
       </div>
       <div class="flex items-center gap-2">
         <button
           @click="syncData"
           :disabled="syncing"
           class="px-4 py-2.5 rounded-xl shadow-sm text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-60"
-          :class="syncing ? 'bg-gray-100 text-gray-400' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'"
+          :class="syncing ? 'bg-slate-100 text-slate-400' : 'bg-white border border-slate-300 text-slate-600 hover:bg-slate-50'"
         >
           <i :class="syncing ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-arrows-rotate'"></i>
           {{ syncing ? 'Sincronizando...' : 'Sincronizar' }}
@@ -28,27 +28,27 @@
           <div class="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center">
             <i class="fa-solid fa-calendar-week text-indigo-600 text-sm"></i>
           </div>
-          <h2 class="font-semibold text-gray-900">Semanal</h2>
+          <h2 class="font-semibold text-slate-900">Semanal</h2>
         </div>
 
         <div class="space-y-3">
           <div>
-            <p class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Ventas totales</p>
-            <p class="text-2xl font-mono-data font-bold text-gray-900">{{ formatCurrency(weekly.total) }}</p>
+            <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Ventas totales</p>
+            <p class="text-2xl font-mono-data font-bold text-slate-900">{{ formatCurrency(weekly.total) }}</p>
           </div>
           <div class="flex items-center gap-3">
             <div>
-              <p class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Tickets</p>
-              <p class="text-lg font-mono-data font-semibold text-gray-700">{{ weekly.tickets }}</p>
+              <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Tickets</p>
+              <p class="text-lg font-mono-data font-semibold text-slate-700">{{ weekly.tickets }}</p>
             </div>
             <div>
-              <p class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Promedio ticket</p>
-              <p class="text-lg font-mono-data font-semibold text-gray-700">{{ formatCurrency(weekly.averageTicket) }}</p>
+              <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Promedio ticket</p>
+              <p class="text-lg font-mono-data font-semibold text-slate-700">{{ formatCurrency(weekly.averageTicket) }}</p>
             </div>
           </div>
           <div class="flex items-center gap-2">
-            <span class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">vs semana anterior</span>
-            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold" :class="weekly.change >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'">
+            <span class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">vs semana anterior</span>
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold" :class="weekly.change >= 0 ? 'bg-green-100 text-emerald-700' : 'bg-red-100 text-rose-700'">
               <i :class="weekly.change >= 0 ? 'fa-solid fa-arrow-trend-up' : 'fa-solid fa-arrow-trend-down'"></i>
               {{ Math.abs(weekly.change) }}%
             </span>
@@ -57,20 +57,20 @@
 
         <div class="space-y-1.5">
           <div v-for="(bar, idx) in weeklyBars" :key="idx" class="flex items-center gap-2">
-            <span class="w-12 text-[10px] text-gray-500 text-right">{{ bar.day }}</span>
-            <div class="flex-1 h-5 bg-gray-100 rounded-full overflow-hidden">
+            <span class="w-12 text-[10px] text-slate-500 text-right">{{ bar.day }}</span>
+            <div class="flex-1 h-5 bg-slate-100 rounded-full overflow-hidden">
               <div class="h-full bg-indigo-400 rounded-full transition-all" :style="{ width: bar.percent + '%' }"></div>
             </div>
-            <span class="w-16 text-right font-mono-data text-xs text-gray-600">{{ formatCurrency(bar.value) }}</span>
+            <span class="w-16 text-right font-mono-data text-xs text-slate-600">{{ formatCurrency(bar.value) }}</span>
           </div>
         </div>
 
         <div>
-          <p class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-2">Top 5 productos</p>
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-2">Top 5 productos</p>
           <div class="space-y-1.5">
             <div v-for="(prod, idx) in weekly.topProducts" :key="idx" class="flex items-center justify-between text-sm">
-              <span class="text-gray-700 truncate mr-2">{{ prod.name }}</span>
-              <span class="font-mono-data text-gray-500 text-xs">{{ prod.sold }} u.</span>
+              <span class="text-slate-700 truncate mr-2">{{ prod.name }}</span>
+              <span class="font-mono-data text-slate-500 text-xs">{{ prod.sold }} u.</span>
             </div>
           </div>
         </div>
@@ -81,27 +81,27 @@
           <div class="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
             <i class="fa-solid fa-calendar-check text-emerald-600 text-sm"></i>
           </div>
-          <h2 class="font-semibold text-gray-900">Mensual</h2>
+          <h2 class="font-semibold text-slate-900">Mensual</h2>
         </div>
 
         <div class="space-y-3">
           <div>
-            <p class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Ventas totales</p>
-            <p class="text-2xl font-mono-data font-bold text-gray-900">{{ formatCurrency(monthly.total) }}</p>
+            <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Ventas totales</p>
+            <p class="text-2xl font-mono-data font-bold text-slate-900">{{ formatCurrency(monthly.total) }}</p>
           </div>
           <div class="flex items-center gap-3">
             <div>
-              <p class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Tickets</p>
-              <p class="text-lg font-mono-data font-semibold text-gray-700">{{ monthly.tickets }}</p>
+              <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Tickets</p>
+              <p class="text-lg font-mono-data font-semibold text-slate-700">{{ monthly.tickets }}</p>
             </div>
             <div>
-              <p class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Promedio ticket</p>
-              <p class="text-lg font-mono-data font-semibold text-gray-700">{{ formatCurrency(monthly.averageTicket) }}</p>
+              <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Promedio ticket</p>
+              <p class="text-lg font-mono-data font-semibold text-slate-700">{{ formatCurrency(monthly.averageTicket) }}</p>
             </div>
           </div>
           <div class="flex items-center gap-2">
-            <span class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">vs mes anterior</span>
-            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold" :class="monthly.change >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'">
+            <span class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">vs mes anterior</span>
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold" :class="monthly.change >= 0 ? 'bg-green-100 text-emerald-700' : 'bg-red-100 text-rose-700'">
               <i :class="monthly.change >= 0 ? 'fa-solid fa-arrow-trend-up' : 'fa-solid fa-arrow-trend-down'"></i>
               {{ Math.abs(monthly.change) }}%
             </span>
@@ -110,20 +110,20 @@
 
         <div class="space-y-1.5">
           <div v-for="(bar, idx) in monthlyBars" :key="idx" class="flex items-center gap-2">
-            <span class="w-12 text-[10px] text-gray-500 text-right">{{ bar.week }}</span>
-            <div class="flex-1 h-5 bg-gray-100 rounded-full overflow-hidden">
+            <span class="w-12 text-[10px] text-slate-500 text-right">{{ bar.week }}</span>
+            <div class="flex-1 h-5 bg-slate-100 rounded-full overflow-hidden">
               <div class="h-full bg-emerald-400 rounded-full transition-all" :style="{ width: bar.percent + '%' }"></div>
             </div>
-            <span class="w-16 text-right font-mono-data text-xs text-gray-600">{{ formatCurrency(bar.value) }}</span>
+            <span class="w-16 text-right font-mono-data text-xs text-slate-600">{{ formatCurrency(bar.value) }}</span>
           </div>
         </div>
 
         <div>
-          <p class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-2">Top 5 productos</p>
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-2">Top 5 productos</p>
           <div class="space-y-1.5">
             <div v-for="(prod, idx) in monthly.topProducts" :key="idx" class="flex items-center justify-between text-sm">
-              <span class="text-gray-700 truncate mr-2">{{ prod.name }}</span>
-              <span class="font-mono-data text-gray-500 text-xs">{{ prod.sold }} u.</span>
+              <span class="text-slate-700 truncate mr-2">{{ prod.name }}</span>
+              <span class="font-mono-data text-slate-500 text-xs">{{ prod.sold }} u.</span>
             </div>
           </div>
         </div>
@@ -134,27 +134,27 @@
           <div class="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
             <i class="fa-solid fa-calendar-alt text-amber-600 text-sm"></i>
           </div>
-          <h2 class="font-semibold text-gray-900">Trimestral</h2>
+          <h2 class="font-semibold text-slate-900">Trimestral</h2>
         </div>
 
         <div class="space-y-3">
           <div>
-            <p class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Ventas totales</p>
-            <p class="text-2xl font-mono-data font-bold text-gray-900">{{ formatCurrency(quarterly.total) }}</p>
+            <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Ventas totales</p>
+            <p class="text-2xl font-mono-data font-bold text-slate-900">{{ formatCurrency(quarterly.total) }}</p>
           </div>
           <div class="flex items-center gap-3">
             <div>
-              <p class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Tickets</p>
-              <p class="text-lg font-mono-data font-semibold text-gray-700">{{ quarterly.tickets }}</p>
+              <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Tickets</p>
+              <p class="text-lg font-mono-data font-semibold text-slate-700">{{ quarterly.tickets }}</p>
             </div>
             <div>
-              <p class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Promedio ticket</p>
-              <p class="text-lg font-mono-data font-semibold text-gray-700">{{ formatCurrency(quarterly.averageTicket) }}</p>
+              <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Promedio ticket</p>
+              <p class="text-lg font-mono-data font-semibold text-slate-700">{{ formatCurrency(quarterly.averageTicket) }}</p>
             </div>
           </div>
           <div class="flex items-center gap-2">
-            <span class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">vs trim. anterior</span>
-            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold" :class="quarterly.change >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'">
+            <span class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">vs trim. anterior</span>
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold" :class="quarterly.change >= 0 ? 'bg-green-100 text-emerald-700' : 'bg-red-100 text-rose-700'">
               <i :class="quarterly.change >= 0 ? 'fa-solid fa-arrow-trend-up' : 'fa-solid fa-arrow-trend-down'"></i>
               {{ Math.abs(quarterly.change) }}%
             </span>
@@ -163,20 +163,20 @@
 
         <div class="space-y-1.5">
           <div v-for="(bar, idx) in quarterlyBars" :key="idx" class="flex items-center gap-2">
-            <span class="w-12 text-[10px] text-gray-500 text-right">{{ bar.month }}</span>
-            <div class="flex-1 h-5 bg-gray-100 rounded-full overflow-hidden">
+            <span class="w-12 text-[10px] text-slate-500 text-right">{{ bar.month }}</span>
+            <div class="flex-1 h-5 bg-slate-100 rounded-full overflow-hidden">
               <div class="h-full bg-amber-400 rounded-full transition-all" :style="{ width: bar.percent + '%' }"></div>
             </div>
-            <span class="w-16 text-right font-mono-data text-xs text-gray-600">{{ formatCurrency(bar.value) }}</span>
+            <span class="w-16 text-right font-mono-data text-xs text-slate-600">{{ formatCurrency(bar.value) }}</span>
           </div>
         </div>
 
         <div>
-          <p class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-2">Top 5 productos</p>
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-2">Top 5 productos</p>
           <div class="space-y-1.5">
             <div v-for="(prod, idx) in quarterly.topProducts" :key="idx" class="flex items-center justify-between text-sm">
-              <span class="text-gray-700 truncate mr-2">{{ prod.name }}</span>
-              <span class="font-mono-data text-gray-500 text-xs">{{ prod.sold }} u.</span>
+              <span class="text-slate-700 truncate mr-2">{{ prod.name }}</span>
+              <span class="font-mono-data text-slate-500 text-xs">{{ prod.sold }} u.</span>
             </div>
           </div>
         </div>
