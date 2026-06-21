@@ -22,11 +22,7 @@
           <TheHeader :apiMode="apiMode" :time="currentTime" @toggleApiMode="toggleApiMode" />
           <div class="flex-1 overflow-y-auto p-8 relative">
             <!-- Vista activa con transición fade -->
-            <router-view v-slot="{ Component }">
-              <transition name="fade" mode="out-in">
-                <component :is="Component" />
-              </transition>
-            </router-view>
+            <router-view />
             <!-- Spinner overlay durante carga de vista -->
             <div v-if="pageLoading" class="absolute inset-0 bg-white/60 flex items-center justify-center z-10">
               <div class="flex flex-col items-center gap-3">
@@ -93,16 +89,3 @@ onUnmounted(() => {
   if (clockInterval) clearInterval(clockInterval)
 })
 </script>
-
-<style scoped>
-.fade-enter-active, .fade-leave-active { transition: opacity 0.15s ease; }
-.fade-enter-from, .fade-leave-to { opacity: 0; }
-.animate-loading-bar {
-  animation: loadingBar 1.5s ease-in-out infinite;
-  width: 30%;
-}
-@keyframes loadingBar {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(400%); }
-}
-</style>

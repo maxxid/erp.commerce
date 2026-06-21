@@ -67,7 +67,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
@@ -75,6 +75,12 @@ import { useToastStore } from '@/stores/toasts'
 const auth = useAuthStore()
 const toast = useToastStore()
 const router = useRouter()
+
+onMounted(() => {
+  if (auth.authenticated) {
+    router.replace('/dashboard')
+  }
+})
 
 const title = computed(() => {
   if (!auth.licenseChecked) return 'Cargando...'
