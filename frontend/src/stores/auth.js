@@ -66,10 +66,16 @@ export const useAuthStore = defineStore('auth', () => {
     loginError.value = ''
     try {
       const response = await api.post('/api/auth/login', loginForm.value)
-      if (response.access_token) {
-        api.setToken(response.access_token)
+      const loginData = response.data || response
+      if (loginData.access_token) {
+        api.setToken(loginData.access_token)
         authenticated.value = true
-        currentUser.value = response.user || { id: 1, username: loginForm.value.username, nombre: loginForm.value.username, rol: 'cajero' }
+        currentUser.value = {
+          id: 1,
+          username: loginData.username || loginForm.value.username,
+          nombre: loginData.nombre || loginForm.value.username,
+          rol: loginData.rol || 'cajero'
+        }
         return true
       }
       loginError.value = 'Respuesta inválida del servidor'
