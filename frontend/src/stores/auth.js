@@ -1,11 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import api from '@/services/api'
-import { useToastStore } from '@/stores/toasts'
 
 export const useAuthStore = defineStore('auth', () => {
   const authenticated = ref(false)
-  const currentUser = ref({ id: 1, username: 'admin', nombre: 'Administrador', rol: 'admin' })
+  const currentUser = ref(null)
   const loginForm = ref({ username: 'admin', password: '' })
   const loginError = ref('')
   const loggingIn = ref(false)
@@ -69,16 +68,11 @@ export const useAuthStore = defineStore('auth', () => {
       if (response.access_token) {
         api.setToken(response.access_token)
         authenticated.value = true
-        if (response.user) currentUser.value = response.user
+        currentUser.value = response.user || { id: 1, username: loginForm.value.username, nombre: loginForm.value.username, rol: 'cajero' }
         return true
       }
+      loginError.value = 'Respuesta inválida del servidor'
     } catch (e) {
-      if (loginForm.value.username === 'admin' && loginForm.value.password === 'admin') {
-        authenticated.value = true
-        const toast = useToastStore()
-        toast.add('info', 'Modo sin backend: sesión local')
-        return true
-      }
       loginError.value = e.message || 'Credenciales inválidas'
     }
     loggingIn.value = false
@@ -88,13 +82,13 @@ export const useAuthStore = defineStore('auth', () => {
   function logout() {
     api.clearToken()
     authenticated.value = false
-    currentUser.value = { id: 1, username: 'admin', nombre: 'Administrador', rol: 'admin' }
+    currentUser.value = null
   }
 
-  const isAdmin = computed(() => currentUser.value.rol === 'admin')
-  const isEncargado = computed(() => currentUser.value.rol === 'admin' || currentUser.value.rol === 'encargado')
-  const isCajero = computed(() => currentUser.value.rol === 'cajero')
-  const isRepositor = computed(() => currentUser.value.rol === 'repositor')
+  const isAdmin = computed(() => currentUser.value?.rol === 'admin')
+  const isEncargado = computed(() => currentUser.value?.rol === 'admin' || currentUser.value?.rol === 'encargado')
+  const isCajero = computed(() => currentUser.value?.rol === 'cajero')
+  const isRepositor = computed(() => currentUser.value?.rol === 'repositor')
 
   return {
     authenticated, currentUser, loginForm, loginError, loggingIn,

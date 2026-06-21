@@ -46,7 +46,7 @@
           <h4 class="text-xs font-semibold text-white truncate">{{ auth.currentUser.nombre || 'Administrador' }}</h4>
           <p class="text-[9px] text-slate-500 uppercase tracking-wider truncate font-semibold">{{ auth.currentUser.rol || 'admin' }}</p>
         </div>
-        <button @click="auth.logout(); $router.push('/login')" title="Cerrar Sesión" class="text-slate-500 hover:text-rose-400 transition ml-2">
+        <button @click="doLogout" title="Cerrar Sesión" class="text-slate-500 hover:text-rose-400 transition ml-2">
           <i class="fa-solid fa-power-off"></i>
         </button>
       </div>
@@ -55,10 +55,17 @@
 </template>
 
 <script setup>
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import SidebarLink from './SidebarLink.vue'
 
 const auth = useAuthStore()
+const router = useRouter()
 const emit = defineEmits(['navigate'])
 defineProps({ cajaAbierta: { type: Boolean, default: false } })
+
+function doLogout() {
+  auth.logout()
+  router.push('/login')
+}
 </script>

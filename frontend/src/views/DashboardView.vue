@@ -95,6 +95,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { formatCurrency as fc } from '@/composables/useUtils'
+import api from '@/services/api'
 import StatCard from '@/components/ui/StatCard.vue'
 import ChartCard from '@/components/ui/ChartCard.vue'
 
@@ -102,15 +103,34 @@ const auth = useAuthStore()
 const simple = ref(false)
 const alertas = ref([])
 const resumen = reactive({ desglose: {} })
-const data = reactive({})
+const data = ref({})
+
+const mockData = {
+  total_productos: 3, valor_stock: 450000, stock_bajo: 1,
+  ventas_hoy: 22000, cant_ventas_hoy: 5,
+  ventas_mes: 22000, cant_ventas_mes: 5,
+  ticket_promedio: 4400, medio_favorito: 'efectivo',
+  tendencia: 12, margen_bruto_hoy: 8000, margen_bruto_mes: 8000,
+  margen_pct_hoy: 36, margen_pct_mes: 36,
+  ventas_7_dias: { valores: [5000, 8000, 3000, 12000, 6000, 9000, 7000], labels: ['Lun','Mar','Mie','Jue','Vie','Sab','Dom'] },
+  ventas_por_hora: { valores: [0,0,0,2,1,0,3,5,8,6,4,2,0,0,1,3,5,4,2,1,0,0,0,0], labels: Array.from({ length: 24 }, (_, i) => i + 'h') },
+  top_productos_mes: [
+    { id: 1, nombre: 'Coca Cola 2.25L', cantidad_vendida: 24, total_vendido: 60000 },
+    { id: 2, nombre: 'Yerba Mate Playadito 1kg', cantidad_vendida: 15, total_vendido: 48000 },
+  ],
+  stock_critico: [{ id: 3, nombre: 'Aceite de Girasol Natura 1.5L', stock_actual: 2, stock_minimo: 8 }],
+  sin_stock: []
+}
 
 onMounted(() => load())
 
 async function load() {
   try {
-    const resp = await fetch('/api/dashboard').then(r => r.json())
-    Object.assign(data, resp)
-  } catch { /* mock data */ }
-  if (!data.total_productos) Object.assign(data, mockData)
+    const resp = await api.get('/api/dashboard')
+    if (resp && resp.total_productos) data.value = resp
+    else Object.assign(data.value, mockData)
+  } catch {
+    Object.assign(data.value, mockData)
+  }
 }
 </script>
