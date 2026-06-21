@@ -126,7 +126,7 @@ onMounted(() => load())
 
 async function load() {
   try {
-    const resp = await api.get('/api/dashboard')
+    const resp = await api.get('/api/dashboard/resumen')
     if (resp && resp.total_productos) data.value = resp
     else Object.assign(data.value, mockData)
   } catch {
