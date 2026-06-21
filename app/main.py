@@ -49,12 +49,30 @@ def crear_app() -> FastAPI:
     app.include_router(licencia.router)
     app.include_router(catalogo.router)
 
-    # Servir el frontend
+    # Servir el frontend Vue 3 (producción)
     @app.get("/app")
     async def serve_frontend():
         import os
-        frontend_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "index.html")
-        return FileResponse(frontend_path)
+        frontend_dist = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "dist")
+        index_path = os.path.join(frontend_dist, "index.html")
+        if os.path.exists(index_path):
+            return FileResponse(index_path)
+        # Fallback al viejo index.html
+        fallback = os.path.join(os.path.dirname(os.path.dirname(__file__)), "index.html")
+        return FileResponse(fallback)
+
+    # SPA fallback: todas las rutas bajo /app/ sirven el index.html de Vue
+    @app.get("/app/{full_path:path}")
+    async def serve_vue_spa(full_path: str):
+        import os
+        frontend_dist = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "dist")
+        file_path = os.path.join(frontend_dist, full_path)
+        if os.path.exists(file_path) and os.path.isfile(file_path):
+            return FileResponse(file_path)
+        index_path = os.path.join(frontend_dist, "index.html")
+        if os.path.exists(index_path):
+            return FileResponse(index_path)
+        return FileResponse(os.path.join(os.path.dirname(os.path.dirname(__file__)), "index.html"))
 
     @app.get("/movil")
     async def serve_movil():

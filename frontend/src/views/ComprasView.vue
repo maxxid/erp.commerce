@@ -1,0 +1,258 @@
+<template>
+  <div class="space-y-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <h2 class="text-2xl font-bold text-slate-950 font-display">Compras / Stock</h2>
+        <p class="text-sm text-slate-500 mt-1">Órdenes de compra y recepción de mercadería</p>
+      </div>
+      <button @click="abrirModalNuevaCompra"
+              class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-xl flex items-center gap-2 shadow-sm transition">
+        <i class="fa-solid fa-plus"></i> Nueva Compra
+      </button>
+    </div>
+
+    <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="bg-slate-50 text-left">
+              <th class="px-5 py-3 text-[10px] font-bold text-slate-400 uppercase">N° Orden</th>
+              <th class="px-5 py-3 text-[10px] font-bold text-slate-400 uppercase">Proveedor</th>
+              <th class="px-5 py-3 text-[10px] font-bold text-slate-400 uppercase">Total</th>
+              <th class="px-5 py-3 text-[10px] font-bold text-slate-400 uppercase">Estado</th>
+              <th class="px-5 py-3 text-[10px] font-bold text-slate-400 uppercase">Fecha</th>
+              <th class="px-5 py-3 text-[10px] font-bold text-slate-400 uppercase">Acciones</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-50">
+            <tr v-for="compra in compras" :key="compra.id" class="hover:bg-slate-50 transition">
+              <td class="px-5 py-3 text-xs font-bold text-slate-700">{{ compra.numero_orden }}</td>
+              <td class="px-5 py-3 text-xs text-slate-600">{{ compra.proveedor }}</td>
+              <td class="px-5 py-3 text-xs font-mono-data font-bold text-slate-800">{{ fc(compra.total) }}</td>
+              <td class="px-5 py-3">
+                <span :class="estadoCompraClass(compra.estado)"
+                      class="px-2 py-0.5 rounded-lg text-[10px] font-bold">
+                  {{ compra.estado }}
+                </span>
+              </td>
+              <td class="px-5 py-3 text-xs text-slate-600">{{ compra.fecha }}</td>
+              <td class="px-5 py-3">
+                <div class="flex items-center gap-1">
+                  <button v-if="compra.estado === 'Pendiente'"
+                          @click="recibirParcial(compra)"
+                          class="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg text-[10px] font-bold transition">
+                    <i class="fa-solid fa-boxes-packing mr-1"></i> Recibir parcial
+                  </button>
+                  <button v-if="compra.estado === 'Pendiente'"
+                          @click="recibirTotal(compra)"
+                          class="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-[10px] font-bold transition">
+                    <i class="fa-solid fa-circle-check mr-1"></i> Recibir total
+                  </button>
+                  <span v-if="compra.estado !== 'Pendiente'" class="text-[10px] text-slate-300">—</span>
+                </div>
+              </td>
+            </tr>
+            <tr v-if="!compras.length">
+              <td colspan="6" class="px-5 py-8 text-xs text-slate-400 text-center">Sin órdenes de compra</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Modal Nueva Compra -->
+    <div v-if="showModalCompra" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" @click="showModalCompra = false"></div>
+      <div class="relative bg-white rounded-2xl shadow-2xl p-6 w-full max-w-2xl border border-slate-200 space-y-5 max-h-[85vh] overflow-y-auto">
+        <div class="flex items-center justify-between">
+          <h3 class="font-bold text-slate-900 text-lg">Nueva Orden de Compra</h3>
+          <button @click="showModalCompra = false" class="text-slate-400 hover:text-slate-600">
+            <i class="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Proveedor</label>
+            <select v-model="nuevaCompra.proveedor_id"
+                    class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600">
+              <option :value="null" disabled>Seleccionar proveedor</option>
+              <option v-for="p in proveedores" :key="p.id" :value="p.id">{{ p.nombre }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Notas</label>
+            <input v-model="nuevaCompra.notas" placeholder="Notas u observaciones"
+                   class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600">
+          </div>
+        </div>
+
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <p class="text-[10px] font-bold text-slate-400 uppercase">Ítems</p>
+            <button @click="agregarItem"
+                    class="px-3 py-1 bg-brand-50 hover:bg-brand-100 text-brand-600 font-semibold text-xs rounded-lg flex items-center gap-1 transition">
+              <i class="fa-solid fa-plus"></i> Agregar ítem
+            </button>
+          </div>
+          <div class="overflow-x-auto border border-slate-200 rounded-xl">
+            <table class="w-full text-xs">
+              <thead>
+                <tr class="bg-slate-50 text-left">
+                  <th class="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase">Producto</th>
+                  <th class="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase text-center w-20">Cantidad</th>
+                  <th class="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase text-right w-28">Precio</th>
+                  <th class="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase text-right w-28">Subtotal</th>
+                  <th class="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase w-8"></th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-50">
+                <tr v-for="(item, idx) in nuevaCompra.items" :key="idx">
+                  <td class="px-4 py-2">
+                    <input v-model="item.producto" placeholder="Nombre del producto"
+                           class="w-full bg-transparent text-slate-700 text-xs focus:outline-none">
+                  </td>
+                  <td class="px-4 py-2">
+                    <input v-model.number="item.cantidad" type="number" min="1" placeholder="0"
+                           class="w-full bg-transparent text-slate-700 text-xs text-center focus:outline-none font-mono-data">
+                  </td>
+                  <td class="px-4 py-2">
+                    <input v-model.number="item.precio" type="number" min="0" placeholder="0.00"
+                           class="w-full bg-transparent text-slate-700 text-xs text-right focus:outline-none font-mono-data">
+                  </td>
+                  <td class="px-4 py-2 text-xs font-mono-data font-bold text-slate-800 text-right">{{ fc(item.cantidad * item.precio || 0) }}</td>
+                  <td class="px-4 py-2 text-center">
+                    <button @click="quitarItem(idx)" class="text-slate-300 hover:text-rose-500 transition">
+                      <i class="fa-solid fa-xmark"></i>
+                    </button>
+                  </td>
+                </tr>
+                <tr v-if="!nuevaCompra.items.length">
+                  <td colspan="5" class="px-4 py-4 text-xs text-slate-400 text-center">Sin ítems. Agregá productos a la orden.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-if="nuevaCompra.items.length" class="flex justify-end">
+            <span class="text-sm font-mono-data font-bold text-slate-800">
+              Total: {{ fc(totalCompra) }}
+            </span>
+          </div>
+        </div>
+
+        <div class="flex gap-2 pt-2">
+          <button @click="showModalCompra = false"
+                  class="flex-1 px-4 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-sm rounded-xl transition">
+            Cancelar
+          </button>
+          <button @click="guardarCompra"
+                  class="flex-1 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-xl transition">
+            Guardar Orden
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, reactive, computed } from 'vue'
+import { useAuthStore } from '@/stores/auth'
+import { useToastStore } from '@/stores/toasts'
+import { formatCurrency as fc } from '@/composables/useUtils'
+
+const auth = useAuthStore()
+const toast = useToastStore()
+
+const proveedores = reactive([
+  { id: 1, nombre: 'Distribuidora Norte SA' },
+  { id: 2, nombre: 'Mayorista del Sur' },
+  { id: 3, nombre: 'Importadora Central' },
+])
+
+const compras = reactive([
+  {
+    id: 1, numero_orden: 'OC-001', proveedor: 'Distribuidora Norte SA',
+    total: 45000, estado: 'Pendiente', fecha: '2026-06-19',
+    items: [
+      { producto: 'Coca-Cola 500ml', cantidad: 50, precio: 800, subtotal: 40000 },
+      { producto: 'Papas Fritas', cantidad: 10, precio: 500, subtotal: 5000 },
+    ]
+  },
+])
+
+const showModalCompra = ref(false)
+const nuevaCompra = reactive({
+  proveedor_id: null,
+  notas: '',
+  items: [],
+})
+
+const totalCompra = computed(() =>
+  nuevaCompra.items.reduce((sum, i) => sum + (i.cantidad * i.precio || 0), 0)
+)
+
+function estadoCompraClass(estado) {
+  const map = {
+    'Pendiente': 'bg-amber-50 text-amber-700',
+    'Recibido': 'bg-emerald-50 text-emerald-700',
+    'Parcial': 'bg-blue-50 text-blue-700',
+    'Cancelado': 'bg-rose-50 text-rose-700',
+  }
+  return map[estado] || 'bg-slate-50 text-slate-600'
+}
+
+function abrirModalNuevaCompra() {
+  nuevaCompra.proveedor_id = null
+  nuevaCompra.notas = ''
+  nuevaCompra.items = []
+  showModalCompra.value = true
+}
+
+function agregarItem() {
+  nuevaCompra.items.push({ producto: '', cantidad: 1, precio: 0 })
+}
+
+function quitarItem(idx) {
+  nuevaCompra.items.splice(idx, 1)
+}
+
+function guardarCompra() {
+  if (!nuevaCompra.proveedor_id) {
+    toast.add('warning', 'Seleccioná un proveedor')
+    return
+  }
+  if (!nuevaCompra.items.length) {
+    toast.add('warning', 'Agregá al menos un ítem')
+    return
+  }
+  const proveedor = proveedores.find(p => p.id === nuevaCompra.proveedor_id)
+  const orden = {
+    id: Date.now(),
+    numero_orden: 'OC-' + String(compras.length + 1).padStart(3, '0'),
+    proveedor: proveedor ? proveedor.nombre : '—',
+    total: totalCompra.value,
+    estado: 'Pendiente',
+    fecha: new Date().toISOString().slice(0, 10),
+    items: nuevaCompra.items.map(i => ({
+      producto: i.producto || 'Sin nombre',
+      cantidad: i.cantidad,
+      precio: i.precio,
+      subtotal: i.cantidad * i.precio,
+    })),
+  }
+  compras.push(orden)
+  showModalCompra.value = false
+  toast.add('success', 'Orden de compra creada')
+}
+
+function recibirParcial(compra) {
+  compra.estado = 'Parcial'
+  toast.add('info', `Recepción parcial de ${compra.numero_orden} registrada`)
+}
+
+function recibirTotal(compra) {
+  compra.estado = 'Recibido'
+  toast.add('success', `${compra.numero_orden} recibida completamente`)
+}
+</script>

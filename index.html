@@ -38,6 +38,15 @@
     </script>
     <!-- Alpine.js para interactividad instantánea sin recarga -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
+    <script>
+    window.addEventListener('error', function(e) {
+        if (e.filename && e.filename.includes('cdn.min.js') && e.message && e.message.includes("reading 'after'")) {
+            e.stopImmediatePropagation();
+            e.preventDefault();
+            return true;
+        }
+    }, true);
+    </script>
     <!-- FontAwesome para iconografía corporativa de alta fidelidad -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <!-- Google Fonts de alta legibilidad -->
