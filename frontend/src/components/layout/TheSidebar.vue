@@ -40,7 +40,7 @@
     <div class="p-4 border-t border-slate-800">
       <div class="flex items-center gap-3 p-2.5 bg-slate-950/40 rounded-2xl border border-slate-800">
         <div class="w-8 h-8 rounded-xl bg-brand-500 flex items-center justify-center font-bold text-xs text-white uppercase">
-          {{ auth.currentUser.username?.slice(0, 2) || 'AD' }}
+          {{ auth.currentUser?.username?.slice(0, 2) || 'AD' }}
         </div>
         <div class="overflow-hidden flex-1">
           <h4 class="text-xs font-semibold text-white truncate">{{ auth.currentUser.nombre || 'Administrador' }}</h4>

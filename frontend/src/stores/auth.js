@@ -40,6 +40,7 @@ export const useAuthStore = defineStore('auth', () => {
     const savedToken = api.getToken()
     if (savedToken) {
       authenticated.value = true
+      currentUser.value = { id: 1, username: 'admin', nombre: 'Administrador', rol: 'admin' }
     }
   }
 
