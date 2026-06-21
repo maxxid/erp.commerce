@@ -48,6 +48,7 @@ router.beforeEach((to, from) => {
   if (from.name && to.name !== from.name) {
     pageLoading.value = true
   }
+  return
 })
 
 router.afterEach(() => {
