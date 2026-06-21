@@ -24,7 +24,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
@@ -42,7 +42,7 @@ const apiMode = ref('mock')
 const apiBaseUrl = ref('')
 const apiLogs = ref([])
 const currentTime = ref('')
-const cajaState = ref({ abierta: true, saldo_actual: 72000 })
+const cajaState = ref({ abierta: false, saldo_actual: 0 })
 let clockInterval = null
 
 function toggleApiMode(mode) {
@@ -50,16 +50,26 @@ function toggleApiMode(mode) {
   toast.add('info', `Modo: ${mode === 'real' ? 'API FastAPI Real' : 'Simulador Offline'}`)
 }
 
-function handleNavigate() {
-  // Child can emit this
+function handleNavigate() {}
+
+async function fetchCajaState() {
+  if (!auth.authenticated) return
+  try {
+    const state = await api.get('/api/caja/estado')
+    if (state) cajaState.value = state
+  } catch { /* fallback: sin backend */ }
 }
+
+watch(() => auth.authenticated, (val) => {
+  if (val) fetchCajaState()
+})
 
 onMounted(async () => {
   clockInterval = setInterval(() => {
     currentTime.value = new Date().toLocaleTimeString()
   }, 1000)
-
   await auth.checkLicense()
+  if (auth.authenticated) fetchCajaState()
 })
 onUnmounted(() => {
   if (clockInterval) clearInterval(clockInterval)

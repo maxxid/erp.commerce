@@ -297,6 +297,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
 import { formatCurrency as fc } from '@/composables/useUtils'
+import api from '@/services/api'
 
 const auth = useAuthStore()
 const toast = useToastStore()
@@ -359,8 +360,8 @@ function categoryName(catId) {
 onMounted(async () => {
   try {
     const [prods, cats] = await Promise.all([
-      fetch('/api/productos').then(r => r.json()).catch(() => null),
-      fetch('/api/categorias').then(r => r.json()).catch(() => null)
+      api.get('/api/productos').catch(() => null),
+      api.get('/api/categorias').catch(() => null)
     ])
     if (prods && prods.length) products.value = prods
     if (cats && cats.length) categories.value = cats
@@ -371,8 +372,8 @@ async function syncProducts() {
   syncing.value = true
   try {
     const [prods, cats] = await Promise.all([
-      fetch('/api/productos').then(r => r.json()).catch(() => null),
-      fetch('/api/categorias').then(r => r.json()).catch(() => null)
+      api.get('/api/productos').catch(() => null),
+      api.get('/api/categorias').catch(() => null)
     ])
     if (prods && prods.length) products.value = prods
     if (cats && cats.length) categories.value = cats
@@ -422,11 +423,7 @@ async function saveProduct() {
   try {
     if (editingProduct.value) {
       try {
-        await fetch(`/api/productos/${editingProduct.value.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(form)
-        })
+        await api.put(`/api/productos/${editingProduct.value.id}`, form)
       } catch { /* local fallback */ }
 
       const idx = products.value.findIndex(p => p.id === editingProduct.value.id)
@@ -437,11 +434,7 @@ async function saveProduct() {
     } else {
       let newId = 1
       try {
-        const resp = await fetch('/api/productos', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(form)
-        }).then(r => r.json())
+        const resp = await api.post('/api/productos', form)
         if (resp && resp.id) newId = resp.id
       } catch {
         newId = Math.max(...products.value.map(p => p.id), 0) + 1
@@ -467,7 +460,7 @@ async function executeDelete() {
   deleting.value = true
   try {
     try {
-      await fetch(`/api/productos/${deleteTarget.value.id}`, { method: 'DELETE' })
+      await api.delete(`/api/productos/${deleteTarget.value.id}`)
     } catch { /* local fallback */ }
 
     products.value = products.value.filter(p => p.id !== deleteTarget.value.id)

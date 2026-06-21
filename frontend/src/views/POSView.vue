@@ -330,6 +330,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
 import { formatCurrency as fc } from '@/composables/useUtils'
+import api from '@/services/api'
 
 const auth = useAuthStore()
 const toast = useToastStore()
@@ -417,9 +418,9 @@ const filteredPOSProducts = computed(() => {
 onMounted(async () => {
   try {
     const [prods, cats, clis] = await Promise.all([
-      fetch('/api/productos').then(r => r.json()).catch(() => null),
-      fetch('/api/categorias').then(r => r.json()).catch(() => null),
-      fetch('/api/clientes').then(r => r.json()).catch(() => null)
+      api.get('/api/productos').catch(() => null),
+      api.get('/api/categorias').catch(() => null),
+      api.get('/api/clientes').catch(() => null)
     ])
     if (prods && prods.length) products.value = prods
     if (cats && cats.length) categories.value = cats
@@ -427,12 +428,12 @@ onMounted(async () => {
   } catch { /* fallback to mock */ }
 
   try {
-    const statsRes = await fetch('/api/pos/stats').then(r => r.json()).catch(() => null)
+    const statsRes = await api.get('/api/pos/stats').catch(() => null)
     if (statsRes) Object.assign(stats, statsRes)
   } catch { /* fallback to mock */ }
 
   try {
-    const txRes = await fetch('/api/pos/transacciones').then(r => r.json()).catch(() => null)
+    const txRes = await api.get('/api/pos/transacciones').catch(() => null)
     if (txRes && txRes.length) recentTransactions.value = txRes
   } catch { /* fallback to mock */ }
 })
@@ -463,7 +464,7 @@ async function triggerPOSLookup() {
   lookupProduct.id = null
 
   try {
-    const resp = await fetch(`/api/productos/barcode/${encodeURIComponent(code)}`).then(r => r.json())
+    const resp = await api.get(`/api/productos/barcode/${encodeURIComponent(code)}`).catch(() => null)
     if (resp && resp.id) {
       selectProductForLookup(resp)
     } else {
@@ -560,11 +561,7 @@ async function confirmarVenta() {
     }
 
     try {
-      const resp = await fetch('/api/ventas', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      }).then(r => r.json())
+      const resp = await api.post('/api/ventas', payload)
       if (resp && resp.id) {
         toast.add('success', `Venta #${resp.id} registrada`)
       } else {
