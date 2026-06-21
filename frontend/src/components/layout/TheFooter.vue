@@ -15,7 +15,7 @@
         </button>
       </div>
     </div>
-    <div v-show="consoleOpen" class="h-54 overflow-y-auto p-4 space-y-2 font-mono text-[11px] leading-relaxed">
+    <div v-show="consoleOpen && isDev" class="h-54 overflow-y-auto p-4 space-y-2 font-mono text-[11px] leading-relaxed">
       <div v-if="logs.length === 0" class="text-center text-slate-500 py-8">Sin peticiones registradas.</div>
       <div v-for="log in logs" :key="log.timestamp" class="border-b border-slate-800 pb-2 space-y-1">
         <div class="flex items-center justify-between">
@@ -39,4 +39,5 @@ defineProps({ apiMode: String, logs: Array })
 
 const consoleOpen = ref(false)
 const apiBaseUrl = ref('')
+const isDev = import.meta.env.DEV
 </script>

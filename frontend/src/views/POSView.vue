@@ -426,16 +426,6 @@ onMounted(async () => {
     if (cats && cats.length) categories.value = cats
     if (clis && clis.length) clientes.value = clis
   } catch { /* fallback to mock */ }
-
-  try {
-    const statsRes = await api.get('/api/pos/stats').catch(() => null)
-    if (statsRes) Object.assign(stats, statsRes)
-  } catch { /* fallback to mock */ }
-
-  try {
-    const txRes = await api.get('/api/pos/transacciones').catch(() => null)
-    if (txRes && txRes.length) recentTransactions.value = txRes
-  } catch { /* fallback to mock */ }
 })
 
 function selectProductForLookup(product) {

@@ -32,8 +32,8 @@
     <div v-if="simple" class="space-y-6">
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard label="Ventas Hoy" :value="fc(data.ventas_hoy)" color="emerald" :sub="(data.cant_ventas_hoy || 0) + ' tickets'" />
-        <StatCard label="Efectivo Hoy" :value="fc(resumen.desglose?.efectivo || 0)" color="emerald" />
-        <StatCard label="Transferencia" :value="fc(resumen.desglose?.transferencia || 0)" color="blue" />
+        <StatCard label="Efectivo Hoy" :value="fc(data.efectivo_hoy)" color="emerald" />
+        <StatCard label="Transferencia" :value="fc(data.transferencia_hoy)" color="blue" />
         <StatCard label="Stock Crítico" :value="data.stock_bajo" color="rose" sub="bajo mínimo" />
       </div>
     </div>
@@ -92,7 +92,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { formatCurrency as fc } from '@/composables/useUtils'
 import api from '@/services/api'
@@ -102,7 +102,6 @@ import ChartCard from '@/components/ui/ChartCard.vue'
 const auth = useAuthStore()
 const simple = ref(false)
 const alertas = ref([])
-const resumen = reactive({ desglose: {} })
 const data = ref({})
 
 const mockData = {
@@ -119,7 +118,8 @@ const mockData = {
     { id: 2, nombre: 'Yerba Mate Playadito 1kg', cantidad_vendida: 15, total_vendido: 48000 },
   ],
   stock_critico: [{ id: 3, nombre: 'Aceite de Girasol Natura 1.5L', stock_actual: 2, stock_minimo: 8 }],
-  sin_stock: []
+  sin_stock: [],
+  efectivo_hoy: 12000, transferencia_hoy: 5500
 }
 
 onMounted(() => load())
