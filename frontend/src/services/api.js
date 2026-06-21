@@ -28,12 +28,15 @@ async function request(method, path, body = null) {
   try { data = JSON.parse(text) } catch { data = { detail: text } }
 
   if (!response.ok) {
-    const error = new Error(data.detail || `Error ${response.status}`)
+    const error = new Error(data.detail || data.error || `Error ${response.status}`)
     error.status = response.status
     error.data = data
     throw error
   }
 
+  if (data && typeof data === 'object' && data.ok !== false && 'data' in data) {
+    return data.data
+  }
   return data
 }
 

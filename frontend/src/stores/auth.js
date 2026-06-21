@@ -20,12 +20,12 @@ export const useAuthStore = defineStore('auth', () => {
   async function checkLicense() {
     try {
       const resp = await api.get('/api/licencia/estado')
-      if (resp && resp.data) {
-        hasLicense.value = resp.data.tiene_licencia
-        licenseValid.value = resp.data.valida
+      if (resp) {
+        hasLicense.value = resp.tiene_licencia || false
+        licenseValid.value = resp.valida || false
       }
       const mid = await api.get('/api/licencia/machine-id')
-      if (mid && mid.data) machineId.value = mid.data.machine_id
+      if (mid) machineId.value = mid.machine_id || ''
     } catch {
       hasLicense.value = false
       licenseValid.value = false
@@ -65,9 +65,8 @@ export const useAuthStore = defineStore('auth', () => {
     loggingIn.value = true
     loginError.value = ''
     try {
-      const response = await api.post('/api/auth/login', loginForm.value)
-      const loginData = response.data || response
-      if (loginData.access_token) {
+      const loginData = await api.post('/api/auth/login', loginForm.value)
+      if (loginData && loginData.access_token) {
         api.setToken(loginData.access_token)
         authenticated.value = true
         currentUser.value = {
