@@ -426,7 +426,47 @@ onMounted(async () => {
     if (cats && cats.length) categories.value = cats
     if (clis && clis.length) clientes.value = clis
   } catch { /* fallback to mock */ }
+
+  fetchPOSStats()
+  fetchRecentTransactions()
 })
+
+async function fetchPOSStats() {
+  try {
+    const [dash, cajaRes, cajaEst] = await Promise.all([
+      api.get('/api/dashboard/resumen').catch(() => null),
+      api.get('/api/caja/resumen').catch(() => null),
+      api.get('/api/caja/estado').catch(() => null)
+    ])
+    if (dash) {
+      stats.ventas_hoy = dash.ventas_hoy || 0
+      stats.tickets_hoy = dash.cant_ventas_hoy || 0
+      stats.ticket_promedio = dash.ticket_promedio || 0
+    }
+    if (cajaRes && cajaRes.desglose) {
+      stats.efectivo = cajaRes.desglose.efectivo || 0
+    }
+    if (cajaEst) {
+      stats.saldo_caja = cajaEst.saldo_actual || 0
+    }
+  } catch { /* fallback to mock */ }
+}
+
+async function fetchRecentTransactions() {
+  try {
+    const ventas = await api.get('/api/ventas?page_size=5').catch(() => null)
+    if (ventas && ventas.length) {
+      recentTransactions.value = ventas.map(v => ({
+        id: v.id,
+        cliente: v.cliente_nombre || null,
+        total: v.total,
+        items: v.items ? v.items.length : 0,
+        medio_pago: v.medio_pago,
+        hora: v.fecha ? new Date(v.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : ''
+      }))
+    }
+  } catch { /* fallback to mock */ }
+}
 
 function selectProductForLookup(product) {
   Object.assign(lookupProduct, {
