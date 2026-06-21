@@ -36,7 +36,7 @@
         }
     </script>
     <!-- Alpine.js para interactividad instantánea sin recarga -->
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
     <!-- FontAwesome para iconografía corporativa de alta fidelidad -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <!-- Google Fonts de alta legibilidad -->
@@ -543,7 +543,10 @@
                         </div>
                     </div>
 
-                    PESTAÑA: POS DE VENTAS (3 Columnas UX de alta velocidad) -->
+                    </div>
+                </div>
+
+                <!-- PESTAÑA: POS DE VENTAS (3 Columnas UX de alta velocidad) -->
                 <div x-show="activeTab === 'pos'" class="h-[calc(100vh-170px)] flex gap-6 overflow-hidden -m-8 p-8">
                     
                     <!-- COLUMNA 1: CATÁLOGO Y LOOKUP MULTI-FUENTE EN TIEMPO REAL -->
@@ -1312,7 +1315,7 @@
                     </div>
                 </div>
 
-                <!--                 <!-- PESTAÑA: REPORTES -->
+                <!-- PESTAÑA: REPORTES -->
                 <div x-show="activeTab === 'reportes'" class="space-y-6">
                     <div class="flex items-center justify-between">
                         <div>
@@ -1364,7 +1367,7 @@
                     </div>
                 </div>
 
-PESTAÑA: USUARIOS -->
+                <!-- PESTAÑA: USUARIOS -->
                 <div x-show="activeTab === 'usuarios'" class="space-y-6">
                     <div class="flex items-center justify-between">
                         <div>
