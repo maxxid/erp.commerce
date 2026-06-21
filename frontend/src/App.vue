@@ -44,9 +44,9 @@
 
 <script setup>
 import { ref, watch, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
+import { pageLoading } from '@/router'
 import TheSidebar from '@/components/layout/TheSidebar.vue'
 import TheHeader from '@/components/layout/TheHeader.vue'
 import TheFooter from '@/components/layout/TheFooter.vue'
@@ -55,16 +55,13 @@ import api from '@/services/api'
 
 const auth = useAuthStore()
 const toast = useToastStore()
-const router = useRouter()
 
 const apiMode = ref('real')
 const apiBaseUrl = ref('')
 const apiLogs = ref([])
 const currentTime = ref('')
 const cajaState = ref({ abierta: false, saldo_actual: 0 })
-const pageLoading = ref(false)
 let clockInterval = null
-let loadTimer = null
 
 function toggleApiMode(mode) {
   apiMode.value = mode
@@ -85,16 +82,6 @@ watch(() => auth.authenticated, (val) => {
   if (val) fetchCajaState()
 })
 
-router.beforeEach((to, from) => {
-  if (from.name && to.name !== from.name) {
-    pageLoading.value = true
-  }
-})
-router.afterEach(() => {
-  clearTimeout(loadTimer)
-  loadTimer = setTimeout(() => { pageLoading.value = false }, 300)
-})
-
 onMounted(async () => {
   clockInterval = setInterval(() => {
     currentTime.value = new Date().toLocaleTimeString()
@@ -104,7 +91,6 @@ onMounted(async () => {
 })
 onUnmounted(() => {
   if (clockInterval) clearInterval(clockInterval)
-  if (loadTimer) clearTimeout(loadTimer)
 })
 </script>
 

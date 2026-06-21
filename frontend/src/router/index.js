@@ -1,5 +1,9 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+
+export const pageLoading = ref(false)
+let loadTimer = null
 
 const routes = [
   { path: '/', redirect: '/dashboard' },
@@ -25,22 +29,30 @@ const router = createRouter({
   routes
 })
 
-router.beforeEach((to, from, next) => {
+router.beforeEach((to, from) => {
   const auth = useAuthStore()
 
   if (!auth.authenticated && !to.meta.guest) {
-    return next('/login')
+    return '/login'
   }
   if (auth.authenticated && to.meta.guest) {
-    return next('/dashboard')
+    return '/dashboard'
   }
   if (to.meta.roles && auth.currentUser) {
     const userRole = auth.currentUser.rol
     if (!to.meta.roles.includes(userRole)) {
-      return next('/dashboard')
+      return '/dashboard'
     }
   }
-  next()
+
+  if (from.name && to.name !== from.name) {
+    pageLoading.value = true
+  }
+})
+
+router.afterEach(() => {
+  clearTimeout(loadTimer)
+  loadTimer = setTimeout(() => { pageLoading.value = false }, 300)
 })
 
 export default router
