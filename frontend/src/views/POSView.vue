@@ -184,6 +184,13 @@
           </div>
         </div>
 
+        <!-- Caja cerrada -->
+        <div v-if="!cajaState.abierta" class="mx-4 p-4 bg-rose-50 border border-rose-200 rounded-xl text-center">
+          <i class="fa-solid fa-lock text-rose-500 text-2xl mb-2 block"></i>
+          <p class="text-sm font-bold text-rose-700">CAJA CERRADA</p>
+          <p class="text-xs text-rose-500 mt-1">Abrí la caja en Arqueos y Caja para poder vender</p>
+        </div>
+
         <!-- Cart summary -->
         <div class="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
           <div class="flex justify-between text-sm">
@@ -348,6 +355,7 @@ const selectedPOSCategory = ref(null)
 const confirmando = ref(false)
 const _processingLookup = ref(false)
 const showTicket = ref(false)
+const cajaState = ref({ abierta: false, saldo_actual: 0 })
 const ticketData = reactive({ items: [], numero: '', fecha: '', total: 0, descuento: 0, medio_pago: '', cliente: '', sucursal: '' })
 
 const lookupProduct = reactive({
@@ -439,6 +447,10 @@ onMounted(async () => {
 
   fetchPOSStats()
   fetchRecentTransactions()
+  try {
+    const state = await api.get('/api/caja/estado').catch(() => null)
+    if (state) cajaState.value = state
+  } catch { /* fallback */ }
 })
 
 async function fetchPOSStats() {
@@ -649,6 +661,10 @@ function removeFromCart(idx) {
 async function confirmarVenta() {
   if (!cart.items.length || cart.total <= 0) {
     if (!cart.items.length) toast.add('warning', 'El carrito está vacío')
+    return
+  }
+  if (!cajaState.value.abierta) {
+    toast.add('error', 'La caja está cerrada. Andá a Arqueos y Caja para abrirla.')
     return
   }
 
