@@ -628,10 +628,6 @@ function updateCartQty(idx, qty) {
   cart.items[idx].cantidad = qty
   recalcCart()
 }
-  }
-  cart.items[idx].cantidad = qty
-  recalcCart()
-}
 
 function removeFromCart(idx) {
   cart.items.splice(idx, 1)
