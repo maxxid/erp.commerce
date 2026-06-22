@@ -346,6 +346,7 @@ const posLookupCode = ref('')
 const posTextSearch = ref('')
 const selectedPOSCategory = ref(null)
 const confirmando = ref(false)
+const _processingLookup = ref(false)
 const showTicket = ref(false)
 const ticketData = reactive({ items: [], numero: '', fecha: '', total: 0, descuento: 0, medio_pago: '', cliente: '', sucursal: '' })
 
@@ -496,26 +497,29 @@ function selectProductForLookup(product) {
 
 async function triggerPOSLookup() {
   const raw = posLookupCode.value.trim()
-  if (!raw) return
+  if (!raw || _processingLookup) return
+  _processingLookup = true
 
   // 1) Carga manual rápida: *Nombre*Precio
   if (raw.startsWith('*')) {
+    posLookupCode.value = ''
     const parts = raw.split('*')
     const nombre = (parts[1] || '').trim()
     const precio = parseFloat(parts[2] || '0')
     if (!nombre || precio <= 0) {
       toast.add('warning', 'Formato: *Nombre*Precio. Ej: *COCA 1.5L*1500')
+      _processingLookup = false
       return
     }
     try {
       const resp = await api.post('/api/productos', {
         codigo_barras: `*MANUAL*${Date.now()}`,
         nombre, precio_venta: precio, precio_costo: 0,
-        fuente: 'manual', cantidad_inicial: 0, categoria_id: categories.value[0]?.id || 1
+        fuente: 'manual', cantidad_inicial: 1, categoria_id: categories.value[0]?.id || 1
       }).catch(() => null)
       if (resp && resp.id) {
-        toast.add('warning', `${nombre} creado SIN stock. Andá a Productos > Editar para cargar stock y costo reales.`)
-        const p = { ...resp, nombre, precio_venta: precio, stock_actual: 0 }
+        toast.add('warning', `${nombre} creado. Stock=1. Luego de la venta quedará en 0. Ajustá stock y costo reales en Productos > Editar.`)
+        const p = { ...resp, nombre, precio_venta: precio, stock_actual: 1 }
         products.value.push(p)
         addToCart(p, 1, precio)
       }
@@ -523,14 +527,14 @@ async function triggerPOSLookup() {
       const tempProd = {
         id: Math.max(...products.value.map(p => p.id), 0) + 1,
         codigo_barras: `*MANUAL*${Date.now()}`, nombre, marca: '',
-        precio_venta: precio, precio_costo: 0, stock_actual: 0,
+        precio_venta: precio, precio_costo: 0, stock_actual: 1,
         categoria_id: categories.value[0]?.id || 1
       }
       products.value.push(tempProd)
       addToCart(tempProd, 1, precio)
-      toast.add('warning', `${nombre} creado SIN stock. Andá a Productos > Editar para cargar stock y costo reales.`)
+      toast.add('warning', `${nombre} creado. Stock=1. Luego de la venta quedará en 0. Ajustá stock y costo reales en Productos > Editar.`)
     }
-    posLookupCode.value = ''
+    _processingLookup = false
     return
   }
 
@@ -560,6 +564,7 @@ async function triggerPOSLookup() {
     lookupBadges.value.unshift(raw)
     if (lookupBadges.value.length > 10) lookupBadges.value.pop()
   }
+  _processingLookup = false
 }
 
 function handlePOSInput() {
