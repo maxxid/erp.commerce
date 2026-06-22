@@ -185,7 +185,7 @@
         </div>
 
         <!-- Caja cerrada -->
-        <div v-if="!cajaState.abierta" class="mx-4 p-4 bg-rose-50 border border-rose-200 rounded-xl text-center">
+        <div v-if="!cajaStore.abierta" class="mx-4 p-4 bg-rose-50 border border-rose-200 rounded-xl text-center">
           <i class="fa-solid fa-lock text-rose-500 text-2xl mb-2 block"></i>
           <p class="text-sm font-bold text-rose-700">CAJA CERRADA</p>
           <p class="text-xs text-rose-500 mt-1">Abrí la caja en Arqueos y Caja para poder vender</p>
@@ -345,10 +345,12 @@ import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
 import { formatCurrency as fc } from '@/composables/useUtils'
 import api from '@/services/api'
+import { useCajaStore } from '@/stores/caja'
 import TicketModal from '@/components/layout/TicketModal.vue'
 
 const auth = useAuthStore()
 const toast = useToastStore()
+const cajaStore = useCajaStore()
 const route = useRoute()
 
 const posLookupCode = ref('')
@@ -357,7 +359,6 @@ const selectedPOSCategory = ref(null)
 const confirmando = ref(false)
 const _processingLookup = ref(false)
 const showTicket = ref(false)
-const cajaState = ref({ abierta: false, saldo_actual: 0 })
 const ticketData = reactive({ items: [], numero: '', fecha: '', total: 0, descuento: 0, medio_pago: '', cliente: '', sucursal: '' })
 
 const lookupProduct = reactive({
@@ -449,18 +450,7 @@ onMounted(async () => {
 
   fetchPOSStats()
   fetchRecentTransactions()
-  fetchCajaState()
-})
-
-async function fetchCajaState() {
-  try {
-    const state = await api.get('/api/caja/estado').catch(() => null)
-    if (state && state.abierta !== undefined) Object.assign(cajaState.value, state)
-  } catch { /* fallback */ }
-}
-
-watch(() => route.path, (path) => {
-  if (path === '/pos') fetchCajaState()
+  cajaStore.fetchEstado()
 })
 
 async function fetchPOSStats() {
@@ -673,7 +663,7 @@ async function confirmarVenta() {
     if (!cart.items.length) toast.add('warning', 'El carrito está vacío')
     return
   }
-  if (!cajaState.value.abierta) {
+  if (!cajaStore.abierta) {
     toast.add('error', 'La caja está cerrada. Andá a Arqueos y Caja para abrirla.')
     return
   }

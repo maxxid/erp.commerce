@@ -14,9 +14,9 @@
       <nav class="p-4 space-y-1">
         <SidebarLink to="/dashboard" icon="fa-chart-pie" label="Dashboard" @navigate="emit('navigate')" />
         <SidebarLink to="/pos" icon="fa-cash-register" label="POS de Ventas">
-          <span :class="cajaAbierta ? 'bg-emerald-500/20 text-accent-success border-emerald-500/30' : 'bg-rose-500/20 text-accent-danger border-rose-500/30'"
+          <span :class="cajaStore.abierta ? 'bg-emerald-500/20 text-accent-success border-emerald-500/30' : 'bg-rose-500/20 text-accent-danger border-rose-500/30'"
                 class="text-[9px] font-bold px-2 py-0.5 rounded-full border">
-            {{ cajaAbierta ? 'ABIERTA' : 'CERRADA' }}
+            {{ cajaStore.abierta ? 'ABIERTA' : 'CERRADA' }}
           </span>
         </SidebarLink>
         <SidebarLink to="/products" icon="fa-boxes-stacked" label="Productos" @navigate="emit('navigate')">
@@ -69,15 +69,16 @@
 import { ref, watch, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useCajaStore } from '@/stores/caja'
 import api from '@/services/api'
 import SidebarLink from './SidebarLink.vue'
 import HelpModal from './HelpModal.vue'
 
 const auth = useAuthStore()
+const cajaStore = useCajaStore()
 const router = useRouter()
 const route = useRoute()
 const emit = defineEmits(['navigate'])
-defineProps({ cajaAbierta: { type: Boolean, default: false } })
 const showHelp = ref(false)
 const pendientesCount = ref(0)
 const defasadosCount = ref(0)
