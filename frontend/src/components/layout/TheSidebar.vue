@@ -20,6 +20,7 @@
           </span>
         </SidebarLink>
         <SidebarLink to="/products" icon="fa-boxes-stacked" label="Productos" @navigate="emit('navigate')">
+          <span v-if="defasadosCount > 0" class="bg-amber-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-full">{{ defasadosCount }}</span>
           <span v-if="pendientesCount > 0" class="bg-rose-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-full">{{ pendientesCount }}</span>
         </SidebarLink>
         <SidebarLink v-if="auth.isAdmin || auth.isCajero" to="/caja" icon="fa-vault" label="Arqueos y Caja" @navigate="emit('navigate')" />
@@ -78,6 +79,7 @@ const emit = defineEmits(['navigate'])
 defineProps({ cajaAbierta: { type: Boolean, default: false } })
 const showHelp = ref(false)
 const pendientesCount = ref(0)
+const defasadosCount = ref(0)
 
 onMounted(async () => {
   try {
@@ -87,6 +89,10 @@ onMounted(async () => {
         (p.codigo_barras && p.codigo_barras.startsWith('*MANUAL*')) ||
         (p.fuente === 'manual' && p.stock_actual === 0 && !p.precio_costo)
       ).length
+      defasadosCount.value = prods.filter(p =>
+        p.precio_venta > 0 && p.precio_costo > 0 && p.precio_venta <= p.precio_costo
+      ).length
+    }
     }
   } catch { /* silencioso */ }
 })

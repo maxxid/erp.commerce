@@ -42,6 +42,20 @@
       </select>
     </div>
 
+    <!-- Quick filter toggles -->
+    <div class="flex gap-2">
+      <button @click="filterStockBajo = !filterStockBajo; filterPrecioDefasado = false"
+              :class="filterStockBajo ? 'bg-rose-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'"
+              class="px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 shadow-sm">
+        <i class="fa-solid fa-triangle-exclamation"></i> Bajo stock
+      </button>
+      <button @click="filterPrecioDefasado = !filterPrecioDefasado; filterStockBajo = false"
+              :class="filterPrecioDefasado ? 'bg-amber-500 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'"
+              class="px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 shadow-sm">
+        <i class="fa-solid fa-dollar-sign"></i> Precio ≤ costo
+      </button>
+    </div>
+
     <!-- Products table -->
     <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
       <div class="overflow-x-auto">
@@ -312,6 +326,8 @@ const toast = useToastStore()
 
 const searchQuery = ref('')
 const filterCategory = ref(null)
+const filterStockBajo = ref(false)
+const filterPrecioDefasado = ref(false)
 const syncing = ref(false)
 const saving = ref(false)
 const deleting = ref(false)
@@ -350,6 +366,12 @@ const filteredProducts = computed(() => {
   let list = products.value
   if (filterCategory.value) {
     list = list.filter(p => p.categoria_id === filterCategory.value)
+  }
+  if (filterStockBajo.value) {
+    list = list.filter(p => p.stock_actual <= (p.stock_minimo || 5) && p.stock_actual >= 0)
+  }
+  if (filterPrecioDefasado.value) {
+    list = list.filter(p => p.precio_venta > 0 && p.precio_costo > 0 && p.precio_venta <= p.precio_costo)
   }
   if (searchQuery.value.trim()) {
     const q = searchQuery.value.toLowerCase()
