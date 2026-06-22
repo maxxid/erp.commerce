@@ -748,9 +748,7 @@ async function confirmarVenta() {
   ticketData.cliente = clientes.value.find(c => c.id === cart.cliente_id)?.nombre || ''
   showTicket.value = true
 
-    vaciarCarrito()
-  } finally {
-    confirmando.value = false
-  }
+  vaciarCarrito()
+  confirmando.value = false
 }
 </script>
