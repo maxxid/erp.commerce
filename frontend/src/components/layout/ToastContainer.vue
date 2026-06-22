@@ -1,5 +1,5 @@
 <template>
-  <div class="fixed top-4 right-4 z-50 space-y-2 pointer-events-none max-w-sm w-full">
+  <div class="fixed top-4 right-4 z-[100] space-y-2 pointer-events-none max-w-sm w-full">
     <div v-for="toast in toasts" :key="toast.id"
          class="p-4 rounded-xl shadow-lg border text-xs font-semibold flex items-center justify-between gap-3 pointer-events-auto transition-all"
          :class="{

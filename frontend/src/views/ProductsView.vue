@@ -182,6 +182,9 @@
                     {{ lookingUp ? '' : 'Buscar' }}
                   </button>
                 </div>
+                <p v-if="showBarcodeHint" class="text-[10px] text-brand-600 font-semibold mt-1.5 flex items-center gap-1">
+                  <i class="fa-solid fa-circle-info"></i> Código genérico. Si el producto tiene código real, reemplazalo acá.
+                </p>
               </div>
               <div>
                 <label class="text-[10px] font-bold text-slate-400 uppercase block mb-1">Marca</label>
@@ -338,6 +341,7 @@ const editingProduct = ref(null)
 const deleteTarget = ref(null)
 const formError = ref('')
 const highlightedIds = ref(new Set())
+const showBarcodeHint = ref(false)
 
 const products = ref([
   { id: 1, codigo_barras: '7791234567890', nombre: 'Coca-Cola 2.25L', marca: 'Coca-Cola', precio_venta: 2800, precio_costo: 2100, categoria_id: 1, stock_actual: 45 },
@@ -435,11 +439,13 @@ function openCreateModal() {
 function openEditModal(product) {
   editingProduct.value = product
   formError.value = ''
+  showBarcodeHint.value = false
   let barcode = product.codigo_barras
   if (barcode && (barcode.startsWith('*MANUAL*') || barcode.startsWith('GEN-'))) {
     const seq = products.value.filter(p => p.codigo_barras && (p.codigo_barras.startsWith('*MANUAL*') || p.codigo_barras.startsWith('GEN-'))).length + 1
     barcode = `GEN-${String(seq).padStart(8, '0')}`
-    toast.add('info', 'Código de barras genérico si el producto no tiene', 4000)
+    showBarcodeHint.value = true
+    setTimeout(() => { showBarcodeHint.value = false }, 5000)
   }
   Object.assign(form, {
     codigo_barras: barcode,
@@ -457,6 +463,7 @@ function closeModal() {
   showModal.value = false
   editingProduct.value = null
   formError.value = ''
+  showBarcodeHint.value = false
 }
 
 async function lookupBarcode() {
