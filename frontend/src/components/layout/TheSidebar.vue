@@ -66,8 +66,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, watch, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import api from '@/services/api'
 import SidebarLink from './SidebarLink.vue'
@@ -75,13 +75,14 @@ import HelpModal from './HelpModal.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
+const route = useRoute()
 const emit = defineEmits(['navigate'])
 defineProps({ cajaAbierta: { type: Boolean, default: false } })
 const showHelp = ref(false)
 const pendientesCount = ref(0)
 const defasadosCount = ref(0)
 
-onMounted(async () => {
+async function fetchBadgeCounts() {
   try {
     const prods = await api.get('/api/productos?page_size=200')
     if (prods && Array.isArray(prods)) {
@@ -94,7 +95,10 @@ onMounted(async () => {
       ).length
     }
   } catch { /* silencioso */ }
-})
+}
+
+onMounted(() => fetchBadgeCounts())
+watch(() => route.path, () => fetchBadgeCounts())
 
 function doLogout() {
   auth.logout()
