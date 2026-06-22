@@ -653,8 +653,10 @@ async function confirmarVenta() {
   }
 
   confirmando.value = true
+  let ventaNumero = ''
+  let ventaTotal = cart.total
   try {
-    // Crear productos pendientes (*Nombre*Precio) con stock exacto = cantidad vendida
+    // Paso 0: Crear productos pendientes (*Nombre*Precio) con stock exacto = cantidad vendida
     for (const item of cart.items) {
       const prod = products.value.find(p => p.id === item.producto_id)
       if (prod && prod._pending) {
@@ -675,72 +677,76 @@ async function confirmarVenta() {
             toast.add('info', `${prod.nombre} creado con stock=${item.cantidad}. Tras la venta quedará en 0.`)
           }
         } catch {
-          // Si falla el backend, usamos ID local (modo mock)
           prod._pending = false
           prod.stock_actual = item.cantidad
         }
       }
     }
 
-    const payload = {
-      items: cart.items.map(i => ({
-        producto_id: i.producto_id,
-        cantidad: i.cantidad,
-        precio_unitario: i.precio_unitario
-      })),
-      descuento: cart.descuento,
+    // Paso 1: Crear venta vacía
+    const ventaResp = await api.post('/api/ventas', { cliente_id: cart.cliente_id || undefined })
+    if (!ventaResp || !ventaResp.id) throw new Error('No se pudo crear la venta')
+    const ventaId = ventaResp.id
+    ventaNumero = ventaResp.numero || `#${ventaId}`
+
+    // Paso 2: Agregar ítems uno por uno
+    for (const item of cart.items) {
+      await api.post(`/api/ventas/${ventaId}/items`, {
+        producto_id: item.producto_id,
+        cantidad: item.cantidad,
+        precio_unitario: item.precio_unitario
+      })
+    }
+
+    // Paso 3: Confirmar venta (descuenta stock, registra caja)
+    const confirmResp = await api.put(`/api/ventas/${ventaId}/confirmar`, {
       medio_pago: cart.medio_pago,
-      cliente_id: cart.cliente_id
+      descuento: cart.descuento || 0,
+      cliente_id: cart.cliente_id || undefined
+    })
+    if (confirmResp && confirmResp.total) {
+      ventaTotal = confirmResp.total
     }
+    toast.add('success', `Venta ${ventaNumero} confirmada. Total: ${fc(ventaTotal)}`)
 
-    let ventaResp = null
-    try {
-      ventaResp = await api.post('/api/ventas', payload)
-      if (ventaResp && ventaResp.id) {
-        toast.add('success', `Venta #${ventaResp.id} registrada`)
-      } else {
-        toast.add('success', 'Venta registrada (modo local)')
-      }
-    } catch {
-      toast.add('success', 'Venta registrada (modo local)')
-    }
-
-    // Decrementar stock localmente (modo mock o feedback inmediato)
+  } catch (e) {
+    // Modo local / sin backend
+    toast.add('success', 'Venta registrada (modo local)')
     for (const item of cart.items) {
       const prod = products.value.find(p => p.id === item.producto_id)
       if (prod && !prod._pending) {
         prod.stock_actual = Math.max(0, prod.stock_actual - item.cantidad)
       }
     }
+  }
 
-    const ventaTotal = cart.total
-    stats.ventas_hoy += ventaTotal
-    stats.tickets_hoy += 1
-    stats.ticket_promedio = Math.round(stats.ventas_hoy / stats.tickets_hoy)
-    if (cart.medio_pago === 'efectivo') {
-      stats.efectivo += ventaTotal
-    }
-    stats.saldo_caja += ventaTotal
+  stats.ventas_hoy += ventaTotal
+  stats.tickets_hoy += 1
+  stats.ticket_promedio = Math.round(stats.ventas_hoy / stats.tickets_hoy)
+  if (cart.medio_pago === 'efectivo') {
+    stats.efectivo += ventaTotal
+  }
+  stats.saldo_caja += ventaTotal
 
-    recentTransactions.value.unshift({
-      id: Date.now(),
-      cliente: clientes.value.find(c => c.id === cart.cliente_id)?.nombre || null,
-      total: ventaTotal,
-      items: cart.items.reduce((s, i) => s + i.cantidad, 0),
-      medio_pago: cart.medio_pago,
-      hora: new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
-    })
-    if (recentTransactions.value.length > 20) recentTransactions.value.pop()
+  recentTransactions.value.unshift({
+    id: Date.now(),
+    cliente: clientes.value.find(c => c.id === cart.cliente_id)?.nombre || null,
+    total: ventaTotal,
+    items: cart.items.reduce((s, i) => s + i.cantidad, 0),
+    medio_pago: cart.medio_pago,
+    hora: new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+  })
+  if (recentTransactions.value.length > 20) recentTransactions.value.pop()
 
-    // Ticket para impresión
-    ticketData.numero = ventaResp?.id ? `#${ventaResp.id}` : `#${Date.now().toString().slice(-6)}`
-    ticketData.fecha = new Date().toLocaleString('es-AR')
-    ticketData.items = cart.items.map(i => ({ ...i }))
-    ticketData.total = cart.total
-    ticketData.descuento = cart.descuento
-    ticketData.medio_pago = cart.medio_pago
-    ticketData.cliente = clientes.value.find(c => c.id === cart.cliente_id)?.nombre || ''
-    showTicket.value = true
+  // Ticket para impresión
+  ticketData.numero = ventaNumero || `#${Date.now().toString().slice(-6)}`
+  ticketData.fecha = new Date().toLocaleString('es-AR')
+  ticketData.items = cart.items.map(i => ({ ...i }))
+  ticketData.total = ventaTotal
+  ticketData.descuento = cart.descuento
+  ticketData.medio_pago = cart.medio_pago
+  ticketData.cliente = clientes.value.find(c => c.id === cart.cliente_id)?.nombre || ''
+  showTicket.value = true
 
     vaciarCarrito()
   } finally {
