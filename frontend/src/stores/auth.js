@@ -50,8 +50,8 @@ export const useAuthStore = defineStore('auth', () => {
     if (!licenseKey.value) return
     try {
       const resp = await api.post('/api/licencia/activar', { clave: licenseKey.value })
-      if (resp && resp.data) {
-        licenseOk.value = resp.message
+      if (resp) {
+        licenseOk.value = resp.message || 'Licencia activada'
         hasLicense.value = true
         licenseValid.value = true
         licenseKey.value = ''

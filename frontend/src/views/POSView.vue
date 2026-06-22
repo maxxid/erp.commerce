@@ -681,8 +681,7 @@ async function confirmarVenta() {
   confirmando.value = true
   let ventaNumero = ''
   let ventaTotal = cart.total
-  try {
-    // Paso 0: Crear productos pendientes (*Nombre*Precio) con stock exacto = cantidad vendida
+  // Paso 0: Crear productos pendientes (*Nombre*Precio) con stock exacto = cantidad vendida
     for (const item of cart.items) {
       const prod = products.value.find(p => p.id === item.producto_id)
       if (prod && prod._pending) {
@@ -710,41 +709,49 @@ async function confirmarVenta() {
     }
 
     // Paso 1: Crear venta vacía
-    const ventaResp = await api.post('/api/ventas', { cliente_id: cart.cliente_id || undefined })
-    if (!ventaResp || !ventaResp.id) throw new Error('No se pudo crear la venta')
-    const ventaId = ventaResp.id
-    ventaNumero = ventaResp.numero || `#${ventaId}`
+    let ventaId = null
+    try {
+      const ventaResp = await api.post('/api/ventas', { cliente_id: cart.cliente_id || undefined })
+      if (ventaResp && ventaResp.id) {
+        ventaId = ventaResp.id
+        ventaNumero = ventaResp.numero || `#${ventaId}`
 
-    // Paso 2: Agregar ítems uno por uno
-    for (const item of cart.items) {
-      await api.post(`/api/ventas/${ventaId}/items`, {
-        producto_id: item.producto_id,
-        cantidad: item.cantidad,
-        precio_unitario: item.precio_unitario
-      })
-    }
+        // Paso 2: Agregar ítems uno por uno
+        for (const item of cart.items) {
+          await api.post(`/api/ventas/${ventaId}/items`, {
+            producto_id: item.producto_id,
+            cantidad: item.cantidad,
+            precio_unitario: item.precio_unitario
+          })
+        }
 
-    // Paso 3: Confirmar venta (descuenta stock, registra caja)
-    const confirmResp = await api.put(`/api/ventas/${ventaId}/confirmar`, {
-      medio_pago: cart.medio_pago,
-      descuento: cart.descuento || 0,
-      cliente_id: cart.cliente_id || undefined
-    })
-    if (confirmResp && confirmResp.total) {
-      ventaTotal = confirmResp.total
-    }
-    toast.add('success', `Venta ${ventaNumero} confirmada. Total: ${fc(ventaTotal)}`)
-
-  } catch (e) {
-    // Modo local / sin backend
-    toast.add('success', 'Venta registrada (modo local)')
-    for (const item of cart.items) {
-      const prod = products.value.find(p => p.id === item.producto_id)
-      if (prod && !prod._pending) {
-        prod.stock_actual = Math.max(0, prod.stock_actual - item.cantidad)
+        // Paso 3: Confirmar venta (descuenta stock, registra caja)
+        const confirmResp = await api.put(`/api/ventas/${ventaId}/confirmar`, {
+          medio_pago: cart.medio_pago,
+          descuento: cart.descuento || 0,
+          cliente_id: cart.cliente_id || undefined
+        })
+        if (confirmResp && confirmResp.total) {
+          ventaTotal = confirmResp.total
+        }
+        toast.add('success', `Venta ${ventaNumero} confirmada. Total: ${fc(ventaTotal)}`)
+      } else {
+        throw new Error('No se pudo crear la venta')
+      }
+    } catch (e) {
+      // Paso 1 falló → modo local. Pasos 2 o 3 fallaron → la venta queda pendiente, usamos modo local.
+      if (!ventaId) {
+        toast.add('success', 'Venta registrada (modo local)')
+        for (const item of cart.items) {
+          const prod = products.value.find(p => p.id === item.producto_id)
+          if (prod && !prod._pending) {
+            prod.stock_actual = Math.max(0, prod.stock_actual - item.cantidad)
+          }
+        }
+      } else {
+        toast.add('warning', 'Venta creada pero no confirmada en backend. Revisá en Ventas.')
       }
     }
-  }
 
   stats.ventas_hoy += ventaTotal
   stats.tickets_hoy += 1
