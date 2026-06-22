@@ -45,19 +45,13 @@
               <td class="px-5 py-3 text-xs text-slate-600">{{ compra.fecha }}</td>
               <td class="px-5 py-3">
                 <div class="flex items-center gap-1">
-                  <button v-if="compra.estado === 'Pendiente'"
-                          :disabled="receivingId === compra.id"
-                          @click="recibirParcial(compra)"
+                  <button v-if="compra.estado === 'Pendiente' || compra.estado === 'Parcial'"
+                          :disabled="receiving"
+                          @click="openReceiveModal(compra)"
                           class="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg text-[10px] font-bold transition">
-                    <i :class="receivingId === compra.id ? 'fa-solid fa-circle-notch animate-spin mr-1' : 'fa-solid fa-boxes-packing mr-1'"></i> {{ receivingId === compra.id ? 'Recibiendo...' : 'Recibir parcial' }}
+                    <i class="fa-solid fa-boxes-packing mr-1"></i> Recibir
                   </button>
-                  <button v-if="compra.estado === 'Pendiente'"
-                          :disabled="receivingId === compra.id"
-                          @click="recibirTotal(compra)"
-                          class="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-[10px] font-bold transition">
-                    <i :class="receivingId === compra.id ? 'fa-solid fa-circle-notch animate-spin mr-1' : 'fa-solid fa-circle-check mr-1'"></i> {{ receivingId === compra.id ? 'Recibiendo...' : 'Recibir total' }}
-                  </button>
-                  <span v-if="compra.estado !== 'Pendiente'" class="text-[10px] text-slate-300">—</span>
+                  <span v-if="compra.estado !== 'Pendiente' && compra.estado !== 'Parcial'" class="text-[10px] text-slate-300">—</span>
                 </div>
               </td>
             </tr>
@@ -162,6 +156,62 @@
         </div>
       </div>
     </div>
+
+    <!-- Modal Recibir Mercadería -->
+    <Teleport to="body">
+      <div v-if="showReceiveModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" @click="showReceiveModal = false"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl p-6 w-full max-w-2xl border border-slate-200 space-y-5 max-h-[85vh] overflow-y-auto">
+          <div class="flex items-center justify-between">
+            <h3 class="font-bold text-slate-900 text-lg">Recibir Mercadería — {{ receiveTarget?.numero_orden }}</h3>
+            <button @click="showReceiveModal = false" class="text-slate-400 hover:text-slate-600">
+              <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+          </div>
+
+          <div class="overflow-x-auto border border-slate-200 rounded-xl">
+            <table class="w-full text-xs">
+              <thead>
+                <tr class="bg-slate-50 text-left">
+                  <th class="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase">Producto</th>
+                  <th class="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase text-center w-20">Pedido</th>
+                  <th class="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase text-center w-20">Recibido</th>
+                  <th class="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase text-center w-20">Pendiente</th>
+                  <th class="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase text-center w-28">Recibir ahora</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-50">
+                <tr v-for="item in receiveTarget?.items" :key="item.id">
+                  <td class="px-4 py-2.5 text-xs text-slate-700 font-medium">{{ item.producto }}</td>
+                  <td class="px-4 py-2.5 text-xs font-mono-data text-slate-700 text-center">{{ item.cantidad }}</td>
+                  <td class="px-4 py-2.5 text-xs font-mono-data text-slate-700 text-center">{{ item.cantidad_recibida || 0 }}</td>
+                  <td class="px-4 py-2.5 text-xs font-mono-data font-bold text-slate-700 text-center">{{ item.cantidad - (item.cantidad_recibida || 0) }}</td>
+                  <td class="px-4 py-2.5 text-center">
+                    <input v-model.number="receiveCantidades[item.id]"
+                           type="number"
+                           :min="0"
+                           :max="item.cantidad - (item.cantidad_recibida || 0)"
+                           class="w-20 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600 font-mono-data">
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="flex gap-2 pt-2">
+            <button @click="showReceiveModal = false"
+                    class="flex-1 px-4 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-sm rounded-xl transition">
+              Cancelar
+            </button>
+            <button :disabled="receiving" @click="confirmarRecepcion"
+                    class="flex-1 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-xl transition">
+              <i :class="receiving ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-check'"></i>
+              {{ receiving ? 'Confirmando...' : 'Confirmar Recepción' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -186,16 +236,20 @@ const compras = ref([
     id: 1, numero_orden: 'OC-001', proveedor: 'Distribuidora Norte SA',
     total: 45000, estado: 'Pendiente', fecha: '2026-06-19',
     items: [
-      { producto: 'Coca-Cola 500ml', cantidad: 50, precio: 800, subtotal: 40000 },
-      { producto: 'Papas Fritas', cantidad: 10, precio: 500, subtotal: 5000 },
+      { id: 101, producto: 'Coca-Cola 500ml', cantidad: 50, precio: 800, subtotal: 40000, cantidad_recibida: 0 },
+      { id: 102, producto: 'Papas Fritas', cantidad: 10, precio: 500, subtotal: 5000, cantidad_recibida: 0 },
     ]
   },
 ])
 
 const showModalCompra = ref(false)
+const showReceiveModal = ref(false)
 const syncing = ref(false)
-const receivingId = ref(null)
+const receiving = ref(false)
 const saving = ref(false)
+const receiveTarget = ref(null)
+const receiveCantidades = reactive({})
+
 const nuevaCompra = reactive({
   proveedor_id: null,
   notas: '',
@@ -256,7 +310,7 @@ function abrirModalNuevaCompra() {
 }
 
 function agregarItem() {
-  nuevaCompra.items.push({ producto: '', cantidad: 1, precio: 0 })
+  nuevaCompra.items.push({ producto: '', cantidad: 1, precio: 0, id: Date.now() + Math.random() })
 }
 
 function quitarItem(idx) {
@@ -283,10 +337,12 @@ async function guardarCompra() {
       estado: 'Pendiente',
       fecha: new Date().toISOString().slice(0, 10),
       items: nuevaCompra.items.map(i => ({
+        id: i.id || Date.now() + Math.random(),
         producto: i.producto || 'Sin nombre',
         cantidad: i.cantidad,
         precio: i.precio,
         subtotal: i.cantidad * i.precio,
+        cantidad_recibida: 0,
       })),
     }
     compras.value.push(orden)
@@ -297,23 +353,52 @@ async function guardarCompra() {
   }
 }
 
-async function recibirParcial(compra) {
-  receivingId.value = compra.id
-  try {
-    compra.estado = 'Parcial'
-    toast.add('info', `Recepción parcial de ${compra.numero_orden} registrada`)
-  } finally {
-    receivingId.value = null
-  }
+function openReceiveModal(compra) {
+  receiveTarget.value = compra
+  Object.keys(receiveCantidades).forEach(k => delete receiveCantidades[k])
+  compra.items.forEach(item => {
+    receiveCantidades[item.id] = item.cantidad - (item.cantidad_recibida || 0)
+  })
+  showReceiveModal.value = true
 }
 
-async function recibirTotal(compra) {
-  receivingId.value = compra.id
+async function confirmarRecepcion() {
+  if (!receiveTarget.value) return
+  const tieneCantidad = Object.values(receiveCantidades).some(v => v > 0)
+  if (!tieneCantidad) {
+    toast.add('warning', 'Ingresá al menos una cantidad a recibir')
+    return
+  }
+  receiving.value = true
   try {
-    compra.estado = 'Recibido'
-    toast.add('success', `${compra.numero_orden} recibida completamente`)
+    const payload = { cantidades: { ...receiveCantidades } }
+    await api.put(`/api/compras/${receiveTarget.value.id}/recibir`, payload)
+
+    const totalRecibido = Object.values(payload.cantidades).reduce((sum, v) => sum + (Number(v) || 0), 0)
+    const totalPedido = receiveTarget.value.items.reduce((sum, i) => sum + i.cantidad, 0)
+    let totalPrevio = 0
+    receiveTarget.value.items.forEach(item => {
+      const recibidoAhora = Number(receiveCantidades[item.id]) || 0
+      const recibidoPrevio = item.cantidad_recibida || 0
+      totalPrevio += recibidoPrevio
+      item.cantidad_recibida = (recibidoPrevio + recibidoAhora)
+    })
+    const totalAcumulado = totalPrevio + totalRecibido
+
+    if (totalAcumulado >= totalPedido) {
+      receiveTarget.value.estado = 'Recibido'
+      toast.add('success', `${receiveTarget.value.numero_orden} recibida completamente`)
+    } else {
+      receiveTarget.value.estado = 'Parcial'
+      toast.add('success', `Recepción parcial de ${receiveTarget.value.numero_orden} registrada`)
+    }
+
+    showReceiveModal.value = false
+    await fetchCompras()
+  } catch {
+    toast.add('error', 'Error al confirmar recepción')
   } finally {
-    receivingId.value = null
+    receiving.value = false
   }
 }
 </script>

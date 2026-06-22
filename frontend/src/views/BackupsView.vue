@@ -86,6 +86,14 @@
                       <i :class="downloading[backup.id] ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-download'"></i>
                     </button>
                     <button
+                      :disabled="uploadingBackup[backup.id]"
+                      @click="uploadBackup(backup)"
+                      class="text-slate-400 hover:text-orange-500 transition-colors disabled:opacity-50"
+                      title="Subir a R2"
+                    >
+                      <i :class="uploadingBackup[backup.id] ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-cloud-arrow-up'"></i>
+                    </button>
+                    <button
                       :disabled="deleting[backup.id]"
                       @click="deleteBackup(backup)"
                       class="text-slate-400 hover:text-red-600 transition-colors disabled:opacity-50"
@@ -121,6 +129,7 @@
                 <th class="px-5 py-2.5 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Tamaño</th>
                 <th class="px-5 py-2.5 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Fecha</th>
                 <th class="px-5 py-2.5 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Sinc</th>
+                <th class="px-5 py-2.5 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Acciones</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
@@ -139,6 +148,16 @@
                     {{ backup.synced ? 'Sinc' : 'Pend' }}
                   </span>
                 </td>
+                <td class="px-5 py-3">
+                  <button
+                    :disabled="downloadingBackup[backup.id]"
+                    @click="downloadFromR2(backup)"
+                    class="text-slate-400 hover:text-brand-600 transition-colors disabled:opacity-50"
+                    title="Descargar de R2"
+                  >
+                    <i :class="downloadingBackup[backup.id] ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-download'"></i>
+                  </button>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -146,6 +165,61 @@
         <div v-if="r2Backups.length === 0" class="text-center py-8 text-slate-400 text-sm">
           <i class="fa-solid fa-cloud text-2xl mb-2 block"></i>
           No hay backups en la nube
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-sm">
+      <div class="px-5 py-4 border-b border-slate-100 flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center">
+          <i class="fa-solid fa-tags text-violet-500"></i>
+        </div>
+        <h2 class="font-semibold text-slate-900">Catálogo</h2>
+        <span class="ml-auto text-xs text-slate-400">Exportación a R2</span>
+      </div>
+      <div class="p-5 space-y-5">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="bg-slate-50 rounded-xl p-4">
+            <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Productos exportables</p>
+            <p class="font-mono-data font-bold text-slate-900 mt-1 text-lg">{{ catalogoStatus.exportables }}</p>
+          </div>
+          <div class="bg-slate-50 rounded-xl p-4">
+            <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Última exportación</p>
+            <p class="text-sm font-medium text-slate-900 mt-1">{{ catalogoStatus.lastExport || '—' }}</p>
+          </div>
+          <div class="bg-slate-50 rounded-xl p-4">
+            <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Catálogo cargado</p>
+            <p class="text-sm mt-1 flex items-center gap-1.5" :class="catalogoStatus.loaded ? 'text-emerald-600' : 'text-amber-600'">
+              <span class="w-1.5 h-1.5 rounded-full" :class="catalogoStatus.loaded ? 'bg-emerald-500' : 'bg-amber-500'"></span>
+              {{ catalogoStatus.loaded ? 'Cargado' : 'No cargado' }}
+            </p>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+          <button
+            @click="exportarCatalogo"
+            :disabled="exportingCatalogo"
+            class="bg-violet-600 hover:bg-violet-700 text-white px-5 py-2.5 rounded-2xl shadow-sm font-medium transition-colors text-sm flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <i :class="exportingCatalogo ? 'fa-solid fa-spinner animate-spin' : 'fa-solid fa-file-export'"></i>
+            {{ exportingCatalogo ? 'Exportando...' : 'Exportar y Subir Catálogo' }}
+          </button>
+          <button
+            @click="descargarCatalogoCentral"
+            :disabled="downloadingCatalogoCentral"
+            class="px-5 py-2.5 rounded-2xl shadow-sm text-sm font-medium text-slate-600 bg-white border border-slate-300 hover:bg-slate-50 transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <i :class="downloadingCatalogoCentral ? 'fa-solid fa-spinner animate-spin' : 'fa-solid fa-cloud-download-alt'"></i>
+            {{ downloadingCatalogoCentral ? 'Descargando...' : 'Descargar Catálogo Central' }}
+          </button>
+          <button
+            @click="recargarCatalogo"
+            :disabled="reloadingCatalogo"
+            class="px-5 py-2.5 rounded-2xl shadow-sm text-sm font-medium text-slate-600 bg-white border border-slate-300 hover:bg-slate-50 transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <i :class="reloadingCatalogo ? 'fa-solid fa-spinner animate-spin' : 'fa-solid fa-rotate'"></i>
+            {{ reloadingCatalogo ? 'Recargando...' : 'Recargar Catálogo' }}
+          </button>
         </div>
       </div>
     </div>
@@ -216,7 +290,10 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import api from '@/services/api'
+import { useToastStore } from '@/stores/toasts'
 import { formatCurrency } from '@/composables/useUtils'
+
+const toast = useToastStore()
 
 const localBackups = ref([
   { id: 1, name: 'backup_20260620_0300.zip', size: '134 MB', date: '2026-06-20 03:00' },
@@ -236,11 +313,21 @@ const r2Backups = ref([
 const creatingBackup = ref(false)
 const downloading = ref({})
 const deleting = ref({})
-const uploading = ref({})
+const uploadingBackup = ref({})
+const downloadingBackup = ref({})
 const showR2Config = ref(false)
 const testingConnection = ref(false)
 const r2SyncOk = ref(true)
 const connectionResult = ref(null)
+const exportingCatalogo = ref(false)
+const downloadingCatalogoCentral = ref(false)
+const reloadingCatalogo = ref(false)
+
+const catalogoStatus = reactive({
+  exportables: 0,
+  lastExport: null,
+  loaded: false,
+})
 
 const r2Form = reactive({
   endpoint: 'https://abc123.r2.cloudflarestorage.com',
@@ -283,6 +370,28 @@ async function downloadBackup(backup) {
   downloading.value[backup.id] = false
 }
 
+async function uploadBackup(backup) {
+  uploadingBackup.value[backup.id] = true
+  try {
+    await api.post(`/api/backups/subir?filename=${encodeURIComponent(backup.name)}`)
+    toast.add('success', `${backup.name} subido a R2`)
+  } catch {
+    toast.add('error', `Error al subir ${backup.name}`)
+  }
+  uploadingBackup.value[backup.id] = false
+}
+
+async function downloadFromR2(backup) {
+  downloadingBackup.value[backup.id] = true
+  try {
+    await api.post(`/api/backups/descargar?filename=${encodeURIComponent(backup.name)}`)
+    toast.add('success', `${backup.name} descargado de R2`)
+  } catch {
+    toast.add('error', `Error al descargar ${backup.name}`)
+  }
+  downloadingBackup.value[backup.id] = false
+}
+
 async function deleteBackup(backup) {
   deleting.value[backup.id] = true
   try {
@@ -290,6 +399,49 @@ async function deleteBackup(backup) {
   } catch { /* fallback */ }
   localBackups.value = localBackups.value.filter(b => b.id !== backup.id)
   deleting.value[backup.id] = false
+}
+
+async function fetchCatalogoStatus() {
+  try {
+    const data = await api.get('/api/catalogo/estado')
+    if (data) Object.assign(catalogoStatus, data)
+  } catch { /* fallback */ }
+}
+
+async function exportarCatalogo() {
+  exportingCatalogo.value = true
+  try {
+    await api.post('/api/catalogo/exportar')
+    toast.add('success', 'Catálogo exportado a R2')
+    await fetchCatalogoStatus()
+  } catch {
+    toast.add('error', 'Error al exportar catálogo')
+  }
+  exportingCatalogo.value = false
+}
+
+async function descargarCatalogoCentral() {
+  downloadingCatalogoCentral.value = true
+  try {
+    await api.post('/api/catalogo/descargar')
+    toast.add('success', 'Catálogo central descargado')
+    await fetchCatalogoStatus()
+  } catch {
+    toast.add('error', 'Error al descargar catálogo central')
+  }
+  downloadingCatalogoCentral.value = false
+}
+
+async function recargarCatalogo() {
+  reloadingCatalogo.value = true
+  try {
+    await api.post('/api/catalogo/recargar')
+    toast.add('success', 'Catálogo recargado')
+    await fetchCatalogoStatus()
+  } catch {
+    toast.add('error', 'Error al recargar catálogo')
+  }
+  reloadingCatalogo.value = false
 }
 
 function openR2Config() {
@@ -310,6 +462,7 @@ function testConnection() {
     connectionResult.value = { success: true, message: 'Conexión exitosa con R2. Bucket "erp-backups" accesible.' }
   }, 1500)
 }
+
 onMounted(async () => {
   try {
     const [estado, locales, r2] = await Promise.all([
@@ -321,6 +474,7 @@ onMounted(async () => {
     if (r2 && r2.length) r2Backups.value = r2
     if (estado) r2SyncOk.value = estado.syncOk ?? r2SyncOk.value
   } catch { /* fallback to mock */ }
+  fetchCatalogoStatus()
 })
 </script>
 

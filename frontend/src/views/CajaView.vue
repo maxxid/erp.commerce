@@ -49,6 +49,59 @@
       </div>
     </div>
 
+    <!-- Cierre Parcial por Método -->
+    <div v-if="cajaState.abierta" class="bg-white border border-slate-200 rounded-2xl shadow-sm p-5 space-y-4">
+      <h3 class="font-bold text-slate-900 text-sm">Cerrar por Método</h3>
+      <div class="flex flex-wrap gap-2">
+        <button v-for="metodo in metodosPago" :key="metodo.valor"
+                :disabled="cerrandoMetodo || cajaResumen.metodos_cerrados?.includes(metodo.valor)"
+                @click="cierreParcial.activo = true; cierreParcial.metodo = metodo.valor; cierreParcial.monto_real = 0; cierreParcial.comentario = ''"
+                :class="[
+                  'px-4 py-2 text-sm font-semibold rounded-xl transition flex items-center gap-1.5',
+                  cierreParcial.activo && cierreParcial.metodo === metodo.valor
+                    ? 'bg-brand-600 text-white shadow-sm'
+                    : cajaResumen.metodos_cerrados?.includes(metodo.valor)
+                      ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                      : 'bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700'
+                ]">
+          <i v-if="cajaResumen.metodos_cerrados?.includes(metodo.valor)" class="fa-solid fa-check text-xs"></i>
+          {{ metodo.label }}
+        </button>
+      </div>
+
+      <div v-if="cierreParcial.activo" class="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold text-slate-600">
+            Cerrando: <span class="text-brand-600">{{ cierreParcial.metodo }}</span>
+          </span>
+          <button @click="cancelarCierre" class="text-slate-400 hover:text-slate-600">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+        <div>
+          <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Monto Real</label>
+          <input v-model.number="cierreParcial.monto_real" type="number" placeholder="0.00"
+                 class="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600 font-mono-data">
+        </div>
+        <div>
+          <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Comentario (opcional)</label>
+          <input v-model="cierreParcial.comentario" placeholder="Nota del cierre"
+                 class="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600">
+        </div>
+        <div class="flex gap-2 pt-1">
+          <button @click="cancelarCierre"
+                  class="flex-1 px-4 py-2.5 border border-slate-200 hover:bg-white text-slate-700 font-semibold text-sm rounded-xl transition">
+            Cancelar
+          </button>
+          <button :disabled="cerrandoMetodo" @click="cerrarMetodo"
+                  class="flex-1 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-xl transition">
+            <i :class="cerrandoMetodo ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-lock'"></i>
+            {{ cerrandoMetodo ? 'Cerrando...' : 'Cerrar Método' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div v-if="!cajaState.abierta" class="bg-amber-50 border border-amber-200 p-4 rounded-2xl text-sm text-amber-700 font-semibold flex items-center gap-2">
       <i class="fa-solid fa-triangle-exclamation"></i>
       La caja está cerrada. Abrila para registrar operaciones.
@@ -159,6 +212,8 @@ const auth = useAuthStore()
 const toast = useToastStore()
 
 const cajaState = reactive({ abierta: true, saldo_actual: 72000 })
+const cajaResumen = reactive({ metodos_cerrados: [] })
+const cierreParcial = reactive({ activo: false, metodo: '', monto_real: 0, comentario: '' })
 
 const movements = ref([
   { id: 1, fecha: '2026-06-20 09:15', tipo: 'Ingreso', monto: 5000, metodo: 'Efectivo', comentario: 'Venta ticket #1024' },
@@ -172,6 +227,7 @@ const syncing = ref(false)
 const opening = ref(false)
 const closing = ref(false)
 const saving = ref(false)
+const cerrandoMetodo = ref(false)
 
 const showNuevoMovimiento = ref(false)
 const nuevoMovimiento = reactive({ tipo: 'Ingreso', monto: 0, metodo: 'Efectivo', comentario: '' })
@@ -180,6 +236,13 @@ const ingresosHoy = computed(() => movements.value.filter(m => m.tipo === 'Ingre
 const egresosHoy = computed(() => movements.value.filter(m => m.tipo === 'Egreso').reduce((sum, m) => sum + m.monto, 0))
 const movimientosIngresos = computed(() => movements.value.filter(m => m.tipo === 'Ingreso').length)
 const movimientosEgresos = computed(() => movements.value.filter(m => m.tipo === 'Egreso').length)
+
+const metodosPago = [
+  { label: 'Efectivo', valor: 'efectivo' },
+  { label: 'Débito', valor: 'debito' },
+  { label: 'Crédito', valor: 'credito' },
+  { label: 'Transferencia', valor: 'transferencia' },
+]
 
 onMounted(async () => {
   await fetchMovimientos()
@@ -198,6 +261,7 @@ async function fetchResumen() {
     const data = await api.get('/api/caja/resumen')
     if (data) {
       cajaState.saldo_actual = data.saldo_actual ?? cajaState.saldo_actual
+      cajaResumen.metodos_cerrados = data.metodos_cerrados || []
     }
   } catch { /* fallback to mock */ }
 }
@@ -263,6 +327,39 @@ async function registrarMovimiento() {
     toast.add('success', 'Movimiento registrado')
   } finally {
     saving.value = false
+  }
+}
+
+function cancelarCierre() {
+  cierreParcial.activo = false
+  cierreParcial.metodo = ''
+  cierreParcial.monto_real = 0
+  cierreParcial.comentario = ''
+}
+
+async function cerrarMetodo() {
+  if (!cierreParcial.monto_real || cierreParcial.monto_real <= 0) {
+    toast.add('warning', 'Ingresá un monto real válido')
+    return
+  }
+  cerrandoMetodo.value = true
+  try {
+    await api.post('/api/caja/cierre-metodo', {
+      medio_pago: cierreParcial.metodo,
+      monto_real: cierreParcial.monto_real,
+      comentario: cierreParcial.comentario || '',
+    })
+    toast.add('success', `Método ${cierreParcial.metodo} cerrado correctamente`)
+    cierreParcial.activo = false
+    cierreParcial.metodo = ''
+    cierreParcial.monto_real = 0
+    cierreParcial.comentario = ''
+    await fetchMovimientos()
+    await fetchResumen()
+  } catch {
+    toast.add('error', 'Error al cerrar el método')
+  } finally {
+    cerrandoMetodo.value = false
   }
 }
 </script>
