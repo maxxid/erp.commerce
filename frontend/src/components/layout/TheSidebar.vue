@@ -93,7 +93,6 @@ onMounted(async () => {
         p.precio_venta > 0 && p.precio_costo > 0 && p.precio_venta <= p.precio_costo
       ).length
     }
-    }
   } catch { /* silencioso */ }
 })
 
