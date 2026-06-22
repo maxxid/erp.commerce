@@ -339,7 +339,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
 import { formatCurrency as fc } from '@/composables/useUtils'
@@ -348,6 +349,7 @@ import TicketModal from '@/components/layout/TicketModal.vue'
 
 const auth = useAuthStore()
 const toast = useToastStore()
+const route = useRoute()
 
 const posLookupCode = ref('')
 const posTextSearch = ref('')
@@ -447,10 +449,18 @@ onMounted(async () => {
 
   fetchPOSStats()
   fetchRecentTransactions()
+  fetchCajaState()
+})
+
+async function fetchCajaState() {
   try {
     const state = await api.get('/api/caja/estado').catch(() => null)
     if (state) cajaState.value = state
   } catch { /* fallback */ }
+}
+
+watch(() => route.path, (path) => {
+  if (path === '/pos') fetchCajaState()
 })
 
 async function fetchPOSStats() {
