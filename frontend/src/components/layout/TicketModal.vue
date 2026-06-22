@@ -17,7 +17,7 @@
 
         <!-- Ticket contenido (formato 80/58mm) -->
         <div id="thermal-ticket" class="p-4 font-mono text-[11px] leading-snug text-slate-900"
-             :style="{ width: '100%', maxWidth: ticketWidth + 'mm', margin: '0 auto', fontFamily: \"'Courier New',monospace\" }">
+             :style="ticketStyle">
           <!-- Encabezado -->
           <div class="text-center border-b-2 border-slate-900 pb-2 mb-2">
             <p class="font-bold text-sm">ApexERP</p>
@@ -92,6 +92,13 @@ const ticketWidth = computed(() => {
     return saved?.ticketWidth || 80
   } catch { return 80 }
 })
+
+const ticketStyle = computed(() => ({
+  width: '100%',
+  maxWidth: ticketWidth.value + 'mm',
+  margin: '0 auto',
+  fontFamily: "'Courier New', monospace"
+}))
 
 function fcShort(v) {
   if (v == null) return '$0'
