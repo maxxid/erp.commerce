@@ -229,6 +229,7 @@
               <option value="transferencia">Transferencia</option>
               <option value="debito">Débito</option>
               <option value="credito">Crédito</option>
+              <option value="cta_corriente">Cta. Corriente</option>
             </select>
           </div>
 
@@ -327,6 +328,7 @@
       </div>
     </div>
   </div>
+  <TicketModal :show="showTicket" :ticket="ticketData" @close="showTicket = false" />
 </template>
 
 <script setup>
@@ -335,6 +337,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
 import { formatCurrency as fc } from '@/composables/useUtils'
 import api from '@/services/api'
+import TicketModal from '@/components/layout/TicketModal.vue'
 
 const auth = useAuthStore()
 const toast = useToastStore()
@@ -343,6 +346,8 @@ const posLookupCode = ref('')
 const posTextSearch = ref('')
 const selectedPOSCategory = ref(null)
 const confirmando = ref(false)
+const showTicket = ref(false)
+const ticketData = reactive({ items: [], numero: '', fecha: '', total: 0, descuento: 0, medio_pago: '', cliente: '', sucursal: '' })
 
 const lookupProduct = reactive({
   id: null,
@@ -507,11 +512,11 @@ async function triggerPOSLookup() {
       const resp = await api.post('/api/productos', {
         codigo_barras: `*MANUAL*${Date.now()}`,
         nombre, precio_venta: precio, precio_costo: 0,
-        fuente: 'manual', cantidad_inicial: 10, categoria_id: categories.value[0]?.id || 1
+        fuente: 'manual', cantidad_inicial: 0, categoria_id: categories.value[0]?.id || 1
       }).catch(() => null)
       if (resp && resp.id) {
-        toast.add('success', `${nombre} creado. Stock=10. Ajustá en Productos > Editar.`)
-        const p = { ...resp, nombre, precio_venta: precio, stock_actual: 10 }
+        toast.add('warning', `${nombre} creado SIN stock. Andá a Productos > Editar para cargar stock y costo reales.`)
+        const p = { ...resp, nombre, precio_venta: precio, stock_actual: 0 }
         products.value.push(p)
         addToCart(p, 1, precio)
       }
@@ -519,12 +524,12 @@ async function triggerPOSLookup() {
       const tempProd = {
         id: Math.max(...products.value.map(p => p.id), 0) + 1,
         codigo_barras: `*MANUAL*${Date.now()}`, nombre, marca: '',
-        precio_venta: precio, precio_costo: 0, stock_actual: 10,
+        precio_venta: precio, precio_costo: 0, stock_actual: 0,
         categoria_id: categories.value[0]?.id || 1
       }
       products.value.push(tempProd)
       addToCart(tempProd, 1, precio)
-      toast.add('success', `${nombre} agregado. Stock=10. Ajustá en Productos.`)
+      toast.add('warning', `${nombre} creado SIN stock. Andá a Productos > Editar para cargar stock y costo reales.`)
     }
     posLookupCode.value = ''
     return
@@ -589,9 +594,9 @@ function addToCart(product, qty = 1, price = null) {
 }
 
 function handlePagoKeydown(event) {
-  const pagos = ['efectivo', 'debito', 'credito', 'transferencia']
+  const pagos = ['efectivo', 'debito', 'credito', 'transferencia', 'cta_corriente']
   const key = event.key
-  if (key >= '1' && key <= '4') {
+  if (key >= '1' && key <= '5') {
     event.preventDefault()
     cart.medio_pago = pagos[parseInt(key) - 1]
   } else if (key === 'ArrowLeft') {
@@ -674,6 +679,16 @@ async function confirmarVenta() {
       hora: new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
     })
     if (recentTransactions.value.length > 20) recentTransactions.value.pop()
+
+    // Ticket para impresión
+    ticketData.numero = resp?.id ? `#${resp.id}` : `#${Date.now().toString().slice(-6)}`
+    ticketData.fecha = new Date().toLocaleString('es-AR')
+    ticketData.items = cart.items.map(i => ({ ...i }))
+    ticketData.total = cart.total
+    ticketData.descuento = cart.descuento
+    ticketData.medio_pago = cart.medio_pago
+    ticketData.cliente = clientes.value.find(c => c.id === cart.cliente_id)?.nombre || ''
+    showTicket.value = true
 
     vaciarCarrito()
   } finally {

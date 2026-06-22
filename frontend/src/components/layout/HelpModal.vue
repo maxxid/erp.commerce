@@ -29,6 +29,7 @@
               <div class="flex justify-between"><span>Débito</span><kbd class="bg-slate-200 px-1.5 py-0.5 rounded font-mono text-[10px]">2</kbd></div>
               <div class="flex justify-between"><span>Crédito</span><kbd class="bg-slate-200 px-1.5 py-0.5 rounded font-mono text-[10px]">3</kbd></div>
               <div class="flex justify-between"><span>Transferencia</span><kbd class="bg-slate-200 px-1.5 py-0.5 rounded font-mono text-[10px]">4</kbd></div>
+              <div class="flex justify-between"><span>Cta. Corriente</span><kbd class="bg-slate-200 px-1.5 py-0.5 rounded font-mono text-[10px]">5</kbd></div>
               <div class="flex justify-between"><span>Navegar medios de pago</span><kbd class="bg-slate-200 px-1.5 py-0.5 rounded font-mono text-[10px]">← →</kbd></div>
               <div class="flex justify-between"><span>Confirmar venta</span><kbd class="bg-slate-200 px-1.5 py-0.5 rounded font-mono text-[10px]">Enter</kbd> (en pagos)</div>
             </div>
