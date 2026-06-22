@@ -500,7 +500,7 @@ async function triggerPOSLookup() {
   if (!raw || _processingLookup) return
   _processingLookup = true
 
-  // 1) Carga manual rápida: *Nombre*Precio
+  // 1) Carga manual rápida: *Nombre*Precio → producto se crea al confirmar venta
   if (raw.startsWith('*')) {
     posLookupCode.value = ''
     const parts = raw.split('*')
@@ -511,29 +511,17 @@ async function triggerPOSLookup() {
       _processingLookup = false
       return
     }
-    try {
-      const resp = await api.post('/api/productos', {
-        codigo_barras: `*MANUAL*${Date.now()}`,
-        nombre, precio_venta: precio, precio_costo: 0,
-        fuente: 'manual', cantidad_inicial: 999, categoria_id: categories.value[0]?.id || 1
-      }).catch(() => null)
-      if (resp && resp.id) {
-        toast.add('warning', `${nombre} creado. Stock pendiente de carga real en Productos > Editar.`)
-        const p = { ...resp, nombre, precio_venta: precio, stock_actual: 999, _manual: true }
-        products.value.push(p)
-        addToCart(p, 1, precio)
-      }
-    } catch {
-      const tempProd = {
-        id: Math.max(...products.value.map(p => p.id), 0) + 1,
-        codigo_barras: `*MANUAL*${Date.now()}`, nombre, marca: '',
-        precio_venta: precio, precio_costo: 0, stock_actual: 999,
-        categoria_id: categories.value[0]?.id || 1, _manual: true
-      }
-      products.value.push(tempProd)
-      addToCart(tempProd, 1, precio)
-      toast.add('warning', `${nombre} creado. Stock pendiente de carga real en Productos > Editar.`)
+    const tempId = Date.now() + Math.random()
+    const tempProd = {
+      id: tempId,
+      codigo_barras: `*MANUAL*${tempId}`,
+      nombre, marca: '', precio_venta: precio, precio_costo: 0,
+      stock_actual: 0, categoria_id: categories.value[0]?.id || 1,
+      _pending: true, _nombre: nombre, _precio: precio
     }
+    products.value.push(tempProd)
+    addToCart(tempProd, 1, precio)
+    toast.add('info', `${nombre} se creará al confirmar la venta con el stock justo.`)
     _processingLookup = false
     return
   }
@@ -643,6 +631,34 @@ async function confirmarVenta() {
 
   confirmando.value = true
   try {
+    // Crear productos pendientes (*Nombre*Precio) con stock exacto = cantidad vendida
+    for (const item of cart.items) {
+      const prod = products.value.find(p => p.id === item.producto_id)
+      if (prod && prod._pending) {
+        try {
+          const resp = await api.post('/api/productos', {
+            codigo_barras: prod.codigo_barras,
+            nombre: prod._nombre || prod.nombre,
+            precio_venta: prod._precio || prod.precio_venta,
+            precio_costo: 0, fuente: 'manual',
+            cantidad_inicial: item.cantidad,
+            categoria_id: prod.categoria_id || 1
+          })
+          if (resp && resp.id) {
+            item.producto_id = resp.id
+            prod.id = resp.id
+            prod.stock_actual = item.cantidad
+            prod._pending = false
+            toast.add('info', `${prod.nombre} creado con stock=${item.cantidad}. Tras la venta quedará en 0.`)
+          }
+        } catch {
+          // Si falla el backend, usamos ID local (modo mock)
+          prod._pending = false
+          prod.stock_actual = item.cantidad
+        }
+      }
+    }
+
     const payload = {
       items: cart.items.map(i => ({
         producto_id: i.producto_id,
