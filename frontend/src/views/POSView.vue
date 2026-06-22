@@ -692,15 +692,24 @@ async function confirmarVenta() {
       cliente_id: cart.cliente_id
     }
 
+    let ventaResp = null
     try {
-      const resp = await api.post('/api/ventas', payload)
-      if (resp && resp.id) {
-        toast.add('success', `Venta #${resp.id} registrada`)
+      ventaResp = await api.post('/api/ventas', payload)
+      if (ventaResp && ventaResp.id) {
+        toast.add('success', `Venta #${ventaResp.id} registrada`)
       } else {
         toast.add('success', 'Venta registrada (modo local)')
       }
     } catch {
       toast.add('success', 'Venta registrada (modo local)')
+    }
+
+    // Decrementar stock localmente (modo mock o feedback inmediato)
+    for (const item of cart.items) {
+      const prod = products.value.find(p => p.id === item.producto_id)
+      if (prod && !prod._pending) {
+        prod.stock_actual = Math.max(0, prod.stock_actual - item.cantidad)
+      }
     }
 
     const ventaTotal = cart.total
@@ -723,7 +732,7 @@ async function confirmarVenta() {
     if (recentTransactions.value.length > 20) recentTransactions.value.pop()
 
     // Ticket para impresión
-    ticketData.numero = resp?.id ? `#${resp.id}` : `#${Date.now().toString().slice(-6)}`
+    ticketData.numero = ventaResp?.id ? `#${ventaResp.id}` : `#${Date.now().toString().slice(-6)}`
     ticketData.fecha = new Date().toLocaleString('es-AR')
     ticketData.items = cart.items.map(i => ({ ...i }))
     ticketData.total = cart.total
