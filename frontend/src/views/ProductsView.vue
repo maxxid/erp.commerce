@@ -63,7 +63,7 @@
             <tr
               v-for="p in filteredProducts"
               :key="p.id"
-              class="hover:bg-slate-50 transition"
+              :class="['hover:bg-slate-50 transition', highlightedIds.has(p.id) ? 'flash-highlight' : '']"
             >
               <td class="px-4 py-3">
                 <div class="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400">
@@ -321,6 +321,7 @@ const showModal = ref(false)
 const editingProduct = ref(null)
 const deleteTarget = ref(null)
 const formError = ref('')
+const highlightedIds = ref(new Set())
 
 const products = ref([
   { id: 1, codigo_barras: '7791234567890', nombre: 'Coca-Cola 2.25L', marca: 'Coca-Cola', precio_venta: 2800, precio_costo: 2100, categoria_id: 1, stock_actual: 45 },
@@ -369,11 +370,20 @@ function categoryName(catId) {
 onMounted(async () => {
   try {
     const [prods, cats] = await Promise.all([
-      api.get('/api/productos').catch(() => null),
+      api.get('/api/productos?page_size=200').catch(() => null),
       api.get('/api/categorias').catch(() => null)
     ])
     if (prods && prods.length) products.value = prods
     if (cats && cats.length) categories.value = cats
+
+    const pendientes = prods?.filter(p =>
+      (p.codigo_barras && p.codigo_barras.startsWith('*MANUAL*')) ||
+      (p.fuente === 'manual' && p.stock_actual === 0 && !p.precio_costo)
+    ) || []
+    if (pendientes.length) {
+      highlightedIds.value = new Set(pendientes.map(p => p.id))
+      setTimeout(() => { highlightedIds.value = new Set() }, 3000)
+    }
   } catch { /* fallback to mock */ }
 })
 
@@ -502,3 +512,14 @@ async function executeDelete() {
   deleting.value = false
 }
 </script>
+
+<style scoped>
+.flash-highlight {
+  animation: flashPulse 2s ease-in-out 3;
+  background: #fef3c7 !important;
+}
+@keyframes flashPulse {
+  0%, 100% { background: #fef3c7; }
+  50% { background: #fde68a; }
+}
+</style>

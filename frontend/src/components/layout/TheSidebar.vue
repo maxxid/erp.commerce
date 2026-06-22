@@ -19,7 +19,9 @@
             {{ cajaAbierta ? 'ABIERTA' : 'CERRADA' }}
           </span>
         </SidebarLink>
-        <SidebarLink to="/products" icon="fa-boxes-stacked" label="Productos" @navigate="emit('navigate')" />
+        <SidebarLink to="/products" icon="fa-boxes-stacked" label="Productos" @navigate="emit('navigate')">
+          <span v-if="pendientesCount > 0" class="bg-rose-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-full">{{ pendientesCount }}</span>
+        </SidebarLink>
         <SidebarLink v-if="auth.isAdmin || auth.isCajero" to="/caja" icon="fa-vault" label="Arqueos y Caja" @navigate="emit('navigate')" />
         <SidebarLink to="/ventas" icon="fa-receipt" label="Ventas" @navigate="emit('navigate')" />
         <SidebarLink to="/calendario" icon="fa-calendar" label="Calendario" @navigate="emit('navigate')" />
@@ -63,9 +65,10 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import api from '@/services/api'
 import SidebarLink from './SidebarLink.vue'
 import HelpModal from './HelpModal.vue'
 
@@ -74,6 +77,19 @@ const router = useRouter()
 const emit = defineEmits(['navigate'])
 defineProps({ cajaAbierta: { type: Boolean, default: false } })
 const showHelp = ref(false)
+const pendientesCount = ref(0)
+
+onMounted(async () => {
+  try {
+    const prods = await api.get('/api/productos?page_size=200')
+    if (prods && Array.isArray(prods)) {
+      pendientesCount.value = prods.filter(p =>
+        (p.codigo_barras && p.codigo_barras.startsWith('*MANUAL*')) ||
+        (p.fuente === 'manual' && p.stock_actual === 0 && !p.precio_costo)
+      ).length
+    }
+  } catch { /* silencioso */ }
+})
 
 function doLogout() {
   auth.logout()
