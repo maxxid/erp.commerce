@@ -629,13 +629,6 @@ function removeFromCart(idx) {
   recalcCart()
 }
 
-function vaciarCarrito() {
-  cart.items.splice(0, cart.items.length)
-  recalcCart()
-  cart.descuento = 0
-  cart.cliente_id = null
-}
-
 async function confirmarVenta() {
   if (!cart.items.length) return
 
