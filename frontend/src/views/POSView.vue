@@ -608,11 +608,6 @@ function handlePagoKeydown(event) {
   }
 }
 
-function recalcCart() {
-  cart.subtotal = cart.items.reduce((sum, i) => sum + i.precio_unitario * i.cantidad, 0)
-  cart.total = Math.max(0, cart.subtotal - (cart.descuento || 0))
-}
-
 function vaciarCarrito() {
   cart.items.splice(0, cart.items.length)
   recalcCart()
@@ -632,11 +627,6 @@ function updateCartQty(idx, qty) {
 function removeFromCart(idx) {
   cart.items.splice(idx, 1)
   recalcCart()
-}
-
-function recalcCart() {
-  cart.subtotal = cart.items.reduce((sum, i) => sum + i.precio_unitario * i.cantidad, 0)
-  cart.total = Math.max(0, cart.subtotal - (cart.descuento || 0))
 }
 
 function vaciarCarrito() {
