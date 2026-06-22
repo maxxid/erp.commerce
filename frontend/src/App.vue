@@ -21,8 +21,8 @@
         <main class="flex-1 flex flex-col min-w-0 overflow-hidden">
           <TheHeader :apiMode="apiMode" :time="currentTime" @toggleApiMode="toggleApiMode" />
           <div class="flex-1 overflow-y-auto p-8 relative">
-            <!-- Vista activa con transición fade -->
-            <router-view />
+            <!-- Vista activa — :key fuerza remount y refresh de datos en cada tab -->
+            <router-view :key="$route.fullPath" />
             <!-- Spinner overlay durante carga de vista -->
             <div v-if="pageLoading" class="absolute inset-0 bg-white/60 flex items-center justify-center z-10">
               <div class="flex flex-col items-center gap-3">
