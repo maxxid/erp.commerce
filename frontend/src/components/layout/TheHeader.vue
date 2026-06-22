@@ -59,6 +59,20 @@
             </div>
             <div>
               <label class="flex items-center justify-between py-2 px-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer transition">
+                <div>
+                  <span class="text-sm font-semibold text-slate-800">Ancho de ticket</span>
+                  <span class="text-[10px] text-slate-400 ml-2">{{ settings.ticketWidth }}mm</span>
+                </div>
+                <button @click="settings.ticketWidth = settings.ticketWidth === 80 ? 58 : 80"
+                        :class="settings.ticketWidth === 80 ? 'bg-brand-600' : 'bg-amber-500'"
+                        class="relative w-9 h-5 rounded-full transition-colors duration-200 flex-shrink-0">
+                  <span :class="settings.ticketWidth === 80 ? 'translate-x-[18px]' : 'translate-x-[2px]'"
+                        class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200"></span>
+                </button>
+              </label>
+            </div>
+            <div>
+              <label class="flex items-center justify-between py-2 px-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer transition">
                 <span class="text-sm font-semibold text-slate-800">Auto-descargar catálogo</span>
                 <button @click="settings.autoDownloadCatalogo = !settings.autoDownloadCatalogo"
                         :class="settings.autoDownloadCatalogo ? 'bg-brand-600' : 'bg-slate-300'"
@@ -95,7 +109,8 @@ const sources = [
 const settings = reactive({
   sources: { carrefour: true, vea: true, masonline: true, supercoco: true },
   timeout: 15,
-  autoDownloadCatalogo: false
+  autoDownloadCatalogo: false,
+  ticketWidth: 80
 })
 
 onMounted(() => {
@@ -113,7 +128,8 @@ function saveSettings() {
   localStorage.setItem('apex_lookup_settings', JSON.stringify({
     sources: { ...settings.sources },
     timeout: settings.timeout,
-    autoDownloadCatalogo: settings.autoDownloadCatalogo
+    autoDownloadCatalogo: settings.autoDownloadCatalogo,
+    ticketWidth: settings.ticketWidth
   }))
 }
 </script>

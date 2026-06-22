@@ -15,9 +15,9 @@
           </div>
         </div>
 
-        <!-- Ticket contenido (formato 80mm) -->
+        <!-- Ticket contenido (formato 80/58mm) -->
         <div id="thermal-ticket" class="p-4 font-mono text-[11px] leading-snug text-slate-900"
-             style="width:100%;max-width:80mm;margin:0 auto;font-family:'Courier New',monospace">
+             :style="{ width: '100%', maxWidth: ticketWidth + 'mm', margin: '0 auto', fontFamily: \"'Courier New',monospace\" }">
           <!-- Encabezado -->
           <div class="text-center border-b-2 border-slate-900 pb-2 mb-2">
             <p class="font-bold text-sm">ApexERP</p>
@@ -78,11 +78,20 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
+
 defineProps({
   show: Boolean,
   ticket: { type: Object, default: () => ({ items: [] }) }
 })
 defineEmits(['close'])
+
+const ticketWidth = computed(() => {
+  try {
+    const saved = JSON.parse(localStorage.getItem('apex_lookup_settings'))
+    return saved?.ticketWidth || 80
+  } catch { return 80 }
+})
 
 function fcShort(v) {
   if (v == null) return '$0'
@@ -97,9 +106,9 @@ function printTicket() {
     <!DOCTYPE html><html><head><meta charset="UTF-8"><title>Ticket</title>
     <style>
       * { margin:0; padding:0; box-sizing:border-box; }
-      body { font-family:'Courier New',monospace; font-size:11px; width:80mm; margin:0 auto; padding:4mm; }
-      @page { size:80mm auto; margin:0; }
-      @media print { body { width:80mm; } }
+      body { font-family:'Courier New',monospace; font-size:11px; width:${ticketWidth.value}mm; margin:0 auto; padding:4mm; }
+      @page { size:${ticketWidth.value}mm auto; margin:0; }
+      @media print { body { width:${ticketWidth.value}mm; } }
     </style></head><body>${el.innerHTML}</body></html>
   `)
   win.document.close()
