@@ -497,8 +497,8 @@ function selectProductForLookup(product) {
 
 async function triggerPOSLookup() {
   const raw = posLookupCode.value.trim()
-  if (!raw || _processingLookup) return
-  _processingLookup = true
+  if (!raw || _processingLookup.value) return
+  _processingLookup.value = true
 
   // 1) Carga manual rápida: *Nombre*Precio → producto se crea al confirmar venta
   if (raw.startsWith('*')) {
@@ -508,7 +508,7 @@ async function triggerPOSLookup() {
     const precio = parseFloat(parts[2] || '0')
     if (!nombre || precio <= 0) {
       toast.add('warning', 'Formato: *Nombre*Precio. Ej: *COCA 1.5L*1500')
-      _processingLookup = false
+      _processingLookup.value = false
       return
     }
     const tempId = Date.now() + Math.random()
@@ -522,7 +522,7 @@ async function triggerPOSLookup() {
     products.value.push(tempProd)
     addToCart(tempProd, 1, precio)
     toast.add('info', `${nombre} se creará al confirmar la venta con el stock justo.`)
-    _processingLookup = false
+    _processingLookup.value = false
     return
   }
 
@@ -552,7 +552,7 @@ async function triggerPOSLookup() {
     lookupBadges.value.unshift(raw)
     if (lookupBadges.value.length > 10) lookupBadges.value.pop()
   }
-  _processingLookup = false
+  _processingLookup.value = false
 }
 
 function handlePOSInput() {
