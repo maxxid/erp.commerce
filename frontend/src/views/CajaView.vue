@@ -11,12 +11,12 @@
           <i :class="syncing ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-arrows-rotate'"></i>
           {{ syncing ? 'Sincronizando...' : 'Sincronizar' }}
         </button>
-        <span :class="cajaState.abierta ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'"
+        <span :class="cajaStore.abierta ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'"
               class="px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5">
-          <span class="w-2 h-2 rounded-full" :class="cajaState.abierta ? 'bg-emerald-500' : 'bg-rose-500'"></span>
-          {{ cajaState.abierta ? 'Caja Abierta' : 'Caja Cerrada' }}
+          <span class="w-2 h-2 rounded-full" :class="cajaStore.abierta ? 'bg-emerald-500' : 'bg-rose-500'"></span>
+          {{ cajaStore.abierta ? 'Caja Abierta' : 'Caja Cerrada' }}
         </span>
-        <button v-if="cajaState.abierta"
+        <button v-if="cajaStore.abierta"
                 :disabled="closing"
                 @click="cerrarCaja"
                 class="px-4 py-2 bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-700 font-semibold text-sm rounded-xl flex items-center gap-2 shadow-sm transition">
@@ -34,7 +34,7 @@
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
       <div class="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm text-center">
         <div class="text-[10px] font-bold text-slate-400 uppercase">Saldo Actual</div>
-        <div class="text-xl font-bold font-mono-data text-brand-600 mt-1">{{ fc(cajaState.saldo_actual) }}</div>
+        <div class="text-xl font-bold font-mono-data text-brand-600 mt-1">{{ fc(cajaStore.saldo_actual) }}</div>
         <div class="text-[10px] text-slate-400 mt-0.5">en caja</div>
       </div>
       <div class="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm text-center">
@@ -50,7 +50,7 @@
     </div>
 
     <!-- Cierre Parcial por Método -->
-    <div v-if="cajaState.abierta" class="bg-white border border-slate-200 rounded-2xl shadow-sm p-5 space-y-4">
+    <div v-if="cajaStore.abierta" class="bg-white border border-slate-200 rounded-2xl shadow-sm p-5 space-y-4">
       <h3 class="font-bold text-slate-900 text-sm">Cerrar por Método</h3>
       <div class="flex flex-wrap gap-2">
         <button v-for="metodo in metodosPago" :key="metodo.valor"
@@ -102,7 +102,7 @@
       </div>
     </div>
 
-    <div v-if="!cajaState.abierta" class="bg-amber-50 border border-amber-200 p-4 rounded-2xl text-sm text-amber-700 font-semibold flex items-center gap-2">
+    <div v-if="!cajaStore.abierta" class="bg-amber-50 border border-amber-200 p-4 rounded-2xl text-sm text-amber-700 font-semibold flex items-center gap-2">
       <i class="fa-solid fa-triangle-exclamation"></i>
       La caja está cerrada. Abrila para registrar operaciones.
     </div>
@@ -110,7 +110,7 @@
     <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
       <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
         <h3 class="font-bold text-slate-900 text-sm">Movimientos del Día</h3>
-        <button v-if="cajaState.abierta"
+        <button v-if="cajaStore.abierta"
                 @click="showNuevoMovimiento = true"
                 class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs rounded-lg flex items-center gap-1.5 transition">
           <i class="fa-solid fa-plus"></i> Nuevo Movimiento
@@ -205,13 +205,13 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
+import { useCajaStore } from '@/stores/caja'
 import api from '@/services/api'
 import { formatCurrency as fc } from '@/composables/useUtils'
 
 const auth = useAuthStore()
 const toast = useToastStore()
-
-const cajaState = reactive({ abierta: true, saldo_actual: 72000 })
+const cajaStore = useCajaStore()
 const cajaResumen = reactive({ metodos_cerrados: [] })
 const cierreParcial = reactive({ activo: false, metodo: '', monto_real: 0, comentario: '' })
 
@@ -260,7 +260,7 @@ async function fetchResumen() {
   try {
     const data = await api.get('/api/caja/resumen')
     if (data) {
-      cajaState.saldo_actual = data.saldo_actual ?? cajaState.saldo_actual
+      cajaStore.saldo_actual = data.saldo_actual ?? cajaStore.saldo_actual
       cajaResumen.metodos_cerrados = data.metodos_cerrados || []
     }
   } catch { /* fallback to mock */ }
@@ -280,20 +280,31 @@ async function syncData() {
 }
 
 async function abrirCaja() {
+  const monto = parseFloat(prompt('Monto inicial de caja:', '50000') || '0')
+  if (!monto || monto <= 0) return
   opening.value = true
   try {
-    cajaState.abierta = true
-    toast.add('success', 'Caja abierta correctamente')
+    await api.post('/api/caja/apertura', { monto_inicial: monto })
+    await cajaStore.fetchEstado()
+    await fetchMovimientos()
+    toast.add('success', `Caja abierta con $${monto.toLocaleString()}`)
+  } catch (e) {
+    toast.add('error', 'Error al abrir caja: ' + (e.message || ''))
   } finally {
     opening.value = false
   }
 }
 
 async function cerrarCaja() {
+  if (!confirm('¿Cerrar la caja y finalizar la jornada?')) return
   closing.value = true
   try {
-    cajaState.abierta = false
-    toast.add('info', 'Caja cerrada. Se registró el arqueo.')
+    await api.post('/api/caja/cierre-total', { comentario: '' })
+    await cajaStore.fetchEstado()
+    await fetchMovimientos()
+    toast.add('success', 'Jornada finalizada. Caja cerrada.')
+  } catch (e) {
+    toast.add('error', 'Error al cerrar caja: ' + (e.message || ''))
   } finally {
     closing.value = false
   }
@@ -317,9 +328,9 @@ async function registrarMovimiento() {
       comentario: nuevoMovimiento.comentario || 'Sin comentario',
     })
     if (nuevoMovimiento.tipo === 'Ingreso') {
-      cajaState.saldo_actual += nuevoMovimiento.monto
+      cajaStore.saldo_actual += nuevoMovimiento.monto
     } else {
-      cajaState.saldo_actual -= nuevoMovimiento.monto
+      cajaStore.saldo_actual -= nuevoMovimiento.monto
     }
     nuevoMovimiento.monto = 0
     nuevoMovimiento.comentario = ''
