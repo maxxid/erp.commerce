@@ -318,7 +318,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
 import { formatCurrency as fc } from '@/composables/useUtils'
@@ -326,6 +327,7 @@ import api from '@/services/api'
 
 const auth = useAuthStore()
 const toast = useToastStore()
+const route = useRoute()
 
 const searchQuery = ref('')
 const filterCategory = ref(null)
@@ -393,7 +395,7 @@ function categoryName(catId) {
   return cat ? cat.nombre : '\u2014'
 }
 
-onMounted(async () => {
+async function fetchProductsData(checkPendientes = false) {
   try {
     const [prods, cats] = await Promise.all([
       api.get('/api/productos?page_size=200').catch(() => null),
@@ -402,15 +404,22 @@ onMounted(async () => {
     if (prods && prods.length) products.value = prods
     if (cats && cats.length) categories.value = cats
 
-    const pendientes = prods?.filter(p =>
-      (p.codigo_barras && p.codigo_barras.startsWith('*MANUAL*') || p.codigo_barras.startsWith('GEN-')) ||
-      (p.fuente === 'manual' && p.stock_actual === 0 && !p.precio_costo)
-    ) || []
-    if (pendientes.length) {
-      highlightedIds.value = new Set(pendientes.map(p => p.id))
-      setTimeout(() => { highlightedIds.value = new Set() }, 3000)
+    if (checkPendientes) {
+      const pendientes = prods?.filter(p =>
+        (p.codigo_barras && (p.codigo_barras.startsWith('*MANUAL*') || p.codigo_barras.startsWith('GEN-'))) ||
+        (p.fuente === 'manual' && p.stock_actual === 0 && !p.precio_costo)
+      ) || []
+      if (pendientes.length) {
+        highlightedIds.value = new Set(pendientes.map(p => p.id))
+        setTimeout(() => { highlightedIds.value = new Set() }, 3000)
+      }
     }
   } catch { /* fallback to mock */ }
+}
+
+onMounted(() => fetchProductsData(true))
+watch(() => route.path, (path) => {
+  if (path === '/products') fetchProductsData()
 })
 
 async function syncProducts() {
