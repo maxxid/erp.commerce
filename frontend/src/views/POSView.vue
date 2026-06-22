@@ -567,6 +567,13 @@ function addToCart(product, qty = 1, price = null) {
   const unitPrice = price || product.precio_venta
   const existing = cart.items.find(i => i.producto_id === product.id && i.precio_unitario === unitPrice)
 
+  const newQty = (existing ? existing.cantidad : 0) + qty
+  const isManual = product._pending || (product.codigo_barras && product.codigo_barras.startsWith('*MANUAL*'))
+  if (!isManual && product.stock_actual !== undefined && newQty > product.stock_actual) {
+    toast.add('error', `Stock insuficiente: ${product.stock_actual} disponibles`)
+    return
+  }
+
   if (existing) {
     existing.cantidad += qty
   } else {
@@ -605,6 +612,11 @@ function handlePagoKeydown(event) {
   }
 }
 
+function recalcCart() {
+  cart.subtotal = cart.items.reduce((sum, i) => sum + (i.precio_unitario || 0) * (i.cantidad || 0), 0)
+  cart.total = Math.max(0, cart.subtotal - (cart.descuento || 0))
+}
+
 function vaciarCarrito() {
   cart.items.splice(0, cart.items.length)
   recalcCart()
@@ -617,7 +629,14 @@ function updateCartQty(idx, qty) {
     removeFromCart(idx)
     return
   }
-  cart.items[idx].cantidad = qty
+  const item = cart.items[idx]
+  const prod = products.value.find(p => p.id === item.producto_id)
+  const isManual = prod?._pending || (prod?.codigo_barras && prod.codigo_barras.startsWith('*MANUAL*'))
+  if (!isManual && prod && prod.stock_actual !== undefined && qty > prod.stock_actual) {
+    toast.add('error', `Stock insuficiente: ${prod.stock_actual} disponibles`)
+    return
+  }
+  item.cantidad = qty
   recalcCart()
 }
 
@@ -627,7 +646,10 @@ function removeFromCart(idx) {
 }
 
 async function confirmarVenta() {
-  if (!cart.items.length) return
+  if (!cart.items.length || cart.total <= 0) {
+    if (!cart.items.length) toast.add('warning', 'El carrito está vacío')
+    return
+  }
 
   confirmando.value = true
   try {
