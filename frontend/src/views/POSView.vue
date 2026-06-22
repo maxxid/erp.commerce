@@ -505,7 +505,6 @@ async function triggerPOSLookup() {
     const precio = parseFloat(parts[2] || '0')
     if (!nombre || precio <= 0) {
       toast.add('warning', 'Formato: *Nombre*Precio. Ej: *COCA 1.5L*1500')
-      posLookupCode.value = ''
       return
     }
     try {
@@ -564,7 +563,7 @@ async function triggerPOSLookup() {
 }
 
 function handlePOSInput() {
-  if (posLookupCode.value.length >= 13) {
+  if (posLookupCode.value.length >= 13 && !posLookupCode.value.startsWith('*')) {
     triggerPOSLookup()
   }
   lookupProduct._searched = false
