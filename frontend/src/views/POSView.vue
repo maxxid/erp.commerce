@@ -511,17 +511,18 @@ async function triggerPOSLookup() {
       _processingLookup.value = false
       return
     }
-    const tempId = Date.now() + Math.random()
+    const seq = products.value.filter(p => p.codigo_barras && (p.codigo_barras.startsWith('GEN-') || p.codigo_barras.startsWith('*MANUAL*'))).length + 1
+    const cleanCode = `GEN-${String(seq).padStart(8, '0')}`
     const tempProd = {
-      id: tempId,
-      codigo_barras: `*MANUAL*${tempId}`,
+      id: Date.now() + Math.random(),
+      codigo_barras: cleanCode,
       nombre, marca: '', precio_venta: precio, precio_costo: 0,
       stock_actual: 0, categoria_id: categories.value[0]?.id || 1,
       _pending: true, _nombre: nombre, _precio: precio
     }
     products.value.push(tempProd)
     addToCart(tempProd, 1, precio)
-    toast.add('info', `${nombre} se creará al confirmar la venta con el stock justo.`)
+    toast.add('info', `${nombre} → ${cleanCode}. Se creará al confirmar la venta.`)
     _processingLookup.value = false
     return
   }
@@ -568,7 +569,7 @@ function addToCart(product, qty = 1, price = null) {
   const existing = cart.items.find(i => i.producto_id === product.id && i.precio_unitario === unitPrice)
 
   const newQty = (existing ? existing.cantidad : 0) + qty
-  const isManual = product._pending || (product.codigo_barras && product.codigo_barras.startsWith('*MANUAL*'))
+  const isManual = product._pending || (product.codigo_barras && (product.codigo_barras.startsWith('*MANUAL*') || product.codigo_barras.startsWith('GEN-')))
   if (!isManual && product.stock_actual !== undefined && newQty > product.stock_actual) {
     toast.add('error', `Stock insuficiente: ${product.stock_actual} disponibles`)
     return
@@ -631,7 +632,7 @@ function updateCartQty(idx, qty) {
   }
   const item = cart.items[idx]
   const prod = products.value.find(p => p.id === item.producto_id)
-  const isManual = prod?._pending || (prod?.codigo_barras && prod.codigo_barras.startsWith('*MANUAL*'))
+  const isManual = prod?._pending || (prod?.codigo_barras && (prod.codigo_barras.startsWith('*MANUAL*') || prod.codigo_barras.startsWith('GEN-')))
   if (!isManual && prod && prod.stock_actual !== undefined && qty > prod.stock_actual) {
     toast.add('error', `Stock insuficiente: ${prod.stock_actual} disponibles`)
     return

@@ -87,7 +87,7 @@ async function fetchBadgeCounts() {
     const prods = await api.get('/api/productos?page_size=200')
     if (prods && Array.isArray(prods)) {
       pendientesCount.value = prods.filter(p =>
-        (p.codigo_barras && p.codigo_barras.startsWith('*MANUAL*')) ||
+        (p.codigo_barras && p.codigo_barras.startsWith('*MANUAL*') || p.codigo_barras.startsWith('GEN-')) ||
         (p.fuente === 'manual' && p.stock_actual === 0 && !p.precio_costo)
       ).length
       defasadosCount.value = prods.filter(p =>

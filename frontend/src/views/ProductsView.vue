@@ -399,7 +399,7 @@ onMounted(async () => {
     if (cats && cats.length) categories.value = cats
 
     const pendientes = prods?.filter(p =>
-      (p.codigo_barras && p.codigo_barras.startsWith('*MANUAL*')) ||
+      (p.codigo_barras && p.codigo_barras.startsWith('*MANUAL*') || p.codigo_barras.startsWith('GEN-')) ||
       (p.fuente === 'manual' && p.stock_actual === 0 && !p.precio_costo)
     ) || []
     if (pendientes.length) {
@@ -435,8 +435,14 @@ function openCreateModal() {
 function openEditModal(product) {
   editingProduct.value = product
   formError.value = ''
+  let barcode = product.codigo_barras
+  if (barcode && (barcode.startsWith('*MANUAL*') || barcode.startsWith('GEN-'))) {
+    const seq = products.value.filter(p => p.codigo_barras && (p.codigo_barras.startsWith('*MANUAL*') || p.codigo_barras.startsWith('GEN-'))).length + 1
+    barcode = `GEN-${String(seq).padStart(8, '0')}`
+    toast.add('info', 'Código de barras genérico si el producto no tiene', 4000)
+  }
   Object.assign(form, {
-    codigo_barras: product.codigo_barras,
+    codigo_barras: barcode,
     nombre: product.nombre,
     marca: product.marca,
     precio_venta: product.precio_venta,
