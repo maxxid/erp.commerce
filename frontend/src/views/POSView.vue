@@ -518,7 +518,7 @@ async function triggerPOSLookup() {
         fuente: 'manual', cantidad_inicial: 999, categoria_id: categories.value[0]?.id || 1
       }).catch(() => null)
       if (resp && resp.id) {
-        toast.add('warning', `${nombre} creado. Stock temporal. Luego de la venta se ajusta. Completá datos reales en Productos > Editar.`)
+        toast.add('warning', `${nombre} creado. Stock pendiente de carga real en Productos > Editar.`)
         const p = { ...resp, nombre, precio_venta: precio, stock_actual: 999, _manual: true }
         products.value.push(p)
         addToCart(p, 1, precio)
@@ -532,7 +532,7 @@ async function triggerPOSLookup() {
       }
       products.value.push(tempProd)
       addToCart(tempProd, 1, precio)
-      toast.add('warning', `${nombre} creado. Stock temporal. Luego de la venta se ajusta. Completá datos reales en Productos > Editar.`)
+      toast.add('warning', `${nombre} creado. Stock pendiente de carga real en Productos > Editar.`)
     }
     _processingLookup = false
     return
@@ -693,14 +693,6 @@ async function confirmarVenta() {
     ticketData.medio_pago = cart.medio_pago
     ticketData.cliente = clientes.value.find(c => c.id === cart.cliente_id)?.nombre || ''
     showTicket.value = true
-
-    // Productos manuales: resetear stock a 0 tras la venta
-    for (const item of cart.items) {
-      const prod = products.value.find(p => p.producto_id === item.producto_id)
-      if (prod && prod._manual) {
-        prod.stock_actual = 0
-      }
-    }
 
     vaciarCarrito()
   } finally {
