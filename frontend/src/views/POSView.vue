@@ -109,7 +109,7 @@
           <div
             v-for="p in filteredPOSProducts"
             :key="p.id"
-            @click="selectProductForLookup(p)"
+            @click="addToCart(p)"
             class="bg-white border border-slate-200 p-3 rounded-xl shadow-sm hover:border-brand-300 hover:shadow-md transition cursor-pointer"
           >
             <div class="flex items-center gap-2 mb-1">
