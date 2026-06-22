@@ -34,6 +34,13 @@
         <SidebarLink to="/reportes" icon="fa-chart-line" label="Reportes" v-if="auth.isAdmin || auth.isEncargado" muted @navigate="emit('navigate')" />
         <SidebarLink to="/licencias" icon="fa-key" label="Licencias" v-if="auth.isAdmin" muted @navigate="emit('navigate')" />
         <SidebarLink to="/auditoria" icon="fa-shield-halved" label="Auditoría" v-if="auth.isAdmin" muted @navigate="emit('navigate')" />
+
+        <hr class="border-slate-800 my-2">
+
+        <button @click="showHelp = true" class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm transition duration-150 text-slate-400 hover:bg-slate-800 hover:text-white text-left">
+          <i class="fa-solid fa-circle-question text-lg w-5 text-center"></i>
+          <span>Ayuda y Atajos</span>
+        </button>
       </nav>
     </div>
 
@@ -52,17 +59,21 @@
       </div>
     </div>
   </aside>
+  <HelpModal :show="showHelp" @close="showHelp = false" />
 </template>
 
 <script setup>
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import SidebarLink from './SidebarLink.vue'
+import HelpModal from './HelpModal.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
 const emit = defineEmits(['navigate'])
 defineProps({ cajaAbierta: { type: Boolean, default: false } })
+const showHelp = ref(false)
 
 function doLogout() {
   auth.logout()

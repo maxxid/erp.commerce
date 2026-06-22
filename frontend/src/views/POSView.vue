@@ -215,8 +215,12 @@
           </div>
 
           <!-- Payment method -->
-          <div>
-            <label class="text-[10px] font-bold text-slate-400 uppercase block mb-1">Medio de Pago</label>
+          <div ref="pagoSection" tabindex="0" @keydown="handlePagoKeydown"
+               class="focus:outline-none focus:ring-2 focus:ring-brand-400 rounded-xl p-1 -m-1">
+            <label class="text-[10px] font-bold text-slate-400 uppercase block mb-1">
+              Medio de Pago
+              <span class="text-slate-300 ml-2 font-normal">Atajos: 1-5, ←→, Enter</span>
+            </label>
             <select
               v-model="cart.medio_pago"
               class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600 transition"
@@ -486,33 +490,70 @@ function selectProductForLookup(product) {
 }
 
 async function triggerPOSLookup() {
-  const code = posLookupCode.value.trim()
-  if (!code) return
+  const raw = posLookupCode.value.trim()
+  if (!raw) return
+
+  // 1) Carga manual rápida: *Nombre*Precio
+  if (raw.startsWith('*')) {
+    const parts = raw.split('*')
+    const nombre = (parts[1] || '').trim()
+    const precio = parseFloat(parts[2] || '0')
+    if (!nombre || precio <= 0) {
+      toast.add('warning', 'Formato: *Nombre*Precio. Ej: *COCA 1.5L*1500')
+      posLookupCode.value = ''
+      return
+    }
+    try {
+      const resp = await api.post('/api/productos', {
+        codigo_barras: `*MANUAL*${Date.now()}`,
+        nombre, precio_venta: precio, precio_costo: 0,
+        fuente: 'manual', cantidad_inicial: 10, categoria_id: categories.value[0]?.id || 1
+      }).catch(() => null)
+      if (resp && resp.id) {
+        toast.add('success', `${nombre} creado. Stock=10. Ajustá en Productos > Editar.`)
+        const p = { ...resp, nombre, precio_venta: precio, stock_actual: 10 }
+        products.value.push(p)
+        addToCart(p, 1, precio)
+      }
+    } catch {
+      const tempProd = {
+        id: Math.max(...products.value.map(p => p.id), 0) + 1,
+        codigo_barras: `*MANUAL*${Date.now()}`, nombre, marca: '',
+        precio_venta: precio, precio_costo: 0, stock_actual: 10,
+        categoria_id: categories.value[0]?.id || 1
+      }
+      products.value.push(tempProd)
+      addToCart(tempProd, 1, precio)
+      toast.add('success', `${nombre} agregado. Stock=10. Ajustá en Productos.`)
+    }
+    posLookupCode.value = ''
+    return
+  }
 
   lookupProduct._loading = true
   lookupProduct._searched = true
   lookupProduct.id = null
 
   try {
-    const resp = await api.post('/api/productos/lookup', { barcode: code }).catch(() => null)
+    const resp = await api.post('/api/productos/lookup', { barcode: raw }).catch(() => null)
     if (resp) {
       selectProductForLookup(resp)
       if (resp.comparacion) {
         lookupBadges.value = resp.comparacion.map(c => `${c.fuente}: ${fc(c.precio)}`)
       }
     } else {
-      const local = products.value.find(p => p.codigo_barras === code)
+      const local = products.value.find(p => p.codigo_barras === raw)
       if (local) selectProductForLookup(local)
     }
   } catch {
-    const local = products.value.find(p => p.codigo_barras === code)
+    const local = products.value.find(p => p.codigo_barras === raw)
     if (local) selectProductForLookup(local)
   }
 
   lookupProduct._loading = false
 
-  if (lookupProduct.id && !lookupBadges.value.some(b => b.includes(code))) {
-    lookupBadges.value.unshift(code)
+  if (lookupProduct.id && !lookupBadges.value.some(b => b.includes(raw))) {
+    lookupBadges.value.unshift(raw)
     if (lookupBadges.value.length > 10) lookupBadges.value.pop()
   }
 }
@@ -547,10 +588,46 @@ function addToCart(product, qty = 1, price = null) {
   recalcCart()
 }
 
+function handlePagoKeydown(event) {
+  const pagos = ['efectivo', 'debito', 'credito', 'transferencia']
+  const key = event.key
+  if (key >= '1' && key <= '4') {
+    event.preventDefault()
+    cart.medio_pago = pagos[parseInt(key) - 1]
+  } else if (key === 'ArrowLeft') {
+    event.preventDefault()
+    const idx = pagos.indexOf(cart.medio_pago)
+    cart.medio_pago = pagos[Math.max(0, idx - 1)]
+  } else if (key === 'ArrowRight') {
+    event.preventDefault()
+    const idx = pagos.indexOf(cart.medio_pago)
+    cart.medio_pago = pagos[Math.min(pagos.length - 1, idx + 1)]
+  } else if (key === 'Enter') {
+    event.preventDefault()
+    confirmarVenta()
+  }
+}
+
+function recalcCart() {
+  cart.subtotal = cart.items.reduce((sum, i) => sum + i.precio_unitario * i.cantidad, 0)
+  cart.total = Math.max(0, cart.subtotal - (cart.descuento || 0))
+}
+
+function vaciarCarrito() {
+  cart.items.splice(0, cart.items.length)
+  recalcCart()
+  cart.descuento = 0
+  cart.cliente_id = null
+}
+
 function updateCartQty(idx, qty) {
   if (qty <= 0) {
     removeFromCart(idx)
     return
+  }
+  cart.items[idx].cantidad = qty
+  recalcCart()
+}
   }
   cart.items[idx].cantidad = qty
   recalcCart()
