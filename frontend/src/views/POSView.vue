@@ -455,7 +455,7 @@ onMounted(async () => {
 async function fetchCajaState() {
   try {
     const state = await api.get('/api/caja/estado').catch(() => null)
-    if (state) cajaState.value = state
+    if (state && state.abierta !== undefined) Object.assign(cajaState.value, state)
   } catch { /* fallback */ }
 }
 
