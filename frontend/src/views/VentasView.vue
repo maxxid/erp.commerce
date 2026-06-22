@@ -81,7 +81,7 @@
                       </thead>
                       <tbody>
                         <tr v-for="(item, idx) in sale.items" :key="idx" class="border-t border-slate-100">
-                          <td class="py-1.5 text-slate-700">{{ item.producto }}</td>
+                          <td class="py-1.5 text-slate-700">{{ item.producto_nombre || item.producto }}</td>
                           <td class="py-1.5 text-slate-600 text-center">{{ item.cantidad }}</td>
                           <td class="py-1.5 text-slate-600 text-right font-mono-data">{{ fc(item.precio) }}</td>
                           <td class="py-1.5 text-slate-800 text-right font-mono-data font-bold">{{ fc(item.subtotal) }}</td>

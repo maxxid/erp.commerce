@@ -5,7 +5,7 @@ import api from '@/services/api'
 export const useAuthStore = defineStore('auth', () => {
   const authenticated = ref(false)
   const currentUser = ref(null)
-  const loginForm = ref({ username: 'admin', password: '' })
+  const loginForm = ref({ username: '', password: '' })
   const loginError = ref('')
   const loggingIn = ref(false)
 
