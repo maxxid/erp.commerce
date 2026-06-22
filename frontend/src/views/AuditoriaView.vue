@@ -1,9 +1,18 @@
 <template>
   <div class="p-6 space-y-6">
     <div class="flex items-center justify-between">
-      <div>
-        <h1 class="text-2xl font-bold text-slate-900">Auditoría</h1>
-        <p class="text-sm text-slate-500 mt-1">Registro de actividad y cambios en el sistema</p>
+      <div class="flex items-center gap-3">
+        <div>
+          <h1 class="text-2xl font-bold text-slate-900">Auditoría</h1>
+          <p class="text-sm text-slate-500 mt-1">Registro de actividad y cambios en el sistema</p>
+        </div>
+        <span
+          v-if="suspiciousToday"
+          class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700 shadow-sm"
+        >
+          <i class="fa-solid fa-triangle-exclamation text-[10px]"></i>
+          {{ suspiciousToday }} sospechoso{{ suspiciousToday !== 1 ? 's' : '' }} hoy
+        </span>
       </div>
       <div class="flex items-center gap-2">
         <button
@@ -37,7 +46,15 @@
         >
           {{ filter.label }}
         </button>
-        <div class="ml-auto flex items-center gap-2">
+        <div class="ml-auto flex items-center gap-3">
+          <button
+            @click="soloSospechosos = !soloSospechosos"
+            class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5"
+            :class="soloSospechosos ? 'bg-red-100 text-red-700 shadow-sm' : 'text-slate-500 hover:bg-slate-100'"
+          >
+            <i class="fa-solid fa-triangle-exclamation text-[10px]"></i>
+            Solo sospechosos
+          </button>
           <span class="w-2 h-2 rounded-full bg-rose-500"></span>
           <span class="text-xs text-slate-500">Actividad sospechosa: {{ suspiciousCount }}</span>
         </div>
@@ -51,9 +68,9 @@
             <tr>
               <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Timestamp</th>
               <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Usuario</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Tipo</th>
+              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Evento</th>
               <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Acción</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Descripción</th>
+              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Detalle</th>
               <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Alerta</th>
             </tr>
           </thead>
@@ -61,10 +78,13 @@
             <tr
               v-for="log in filteredLogs"
               :key="log.id"
-              class="hover:bg-slate-50 transition-colors"
-              :class="log.suspicious ? 'bg-rose-50/40' : ''"
+              class="transition-colors"
+              :class="rowBgClass(log)"
             >
-              <td class="px-5 py-3 font-mono-data text-xs text-slate-600">{{ log.timestamp }}</td>
+              <td class="px-5 py-3">
+                <span class="font-mono-data text-xs text-slate-600">{{ log.timestamp }}</span>
+                <div class="text-[10px] text-slate-400 mt-0.5">{{ timeAgo(log.timestamp) }}</div>
+              </td>
               <td class="px-5 py-3">
                 <div class="flex items-center gap-2">
                   <div class="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-semibold text-slate-500">
@@ -75,20 +95,48 @@
               </td>
               <td class="px-5 py-3">
                 <span
-                  class="inline-flex px-2 py-0.5 rounded-md text-xs font-medium"
-                  :class="typeClass(log.type)"
+                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium"
+                  :class="eventBadgeClass(log)"
                 >
-                  {{ log.type }}
+                  <span class="text-[10px]">{{ eventEmoji(log.event) }}</span>
+                  {{ eventLabel(log) }}
                 </span>
               </td>
               <td class="px-5 py-3 text-slate-700 font-medium">{{ log.action }}</td>
-              <td class="px-5 py-3 text-slate-600 text-xs max-w-xs truncate" :title="log.description">{{ log.description }}</td>
+              <td class="px-5 py-3 text-slate-600 text-xs max-w-xs">
+                <template v-if="log.event === 'carrito_abandonado'">
+                  <div class="space-y-0.5">
+                    <div>{{ log.items_count }} items, {{ formatCurrency(log.subtotal) }} subtotal</div>
+                    <div class="text-slate-400">Sin confirmar por {{ log.abandoned_min }} min</div>
+                  </div>
+                </template>
+                <template v-else-if="log.event === 'venta_anulada'">
+                  <div class="space-y-0.5">
+                    <div>Total anulado: <span class="font-mono-data font-semibold text-red-600">{{ formatCurrency(log.total_anulado) }}</span></div>
+                    <div class="text-slate-400">{{ log.medio_pago }}</div>
+                  </div>
+                </template>
+                <template v-else-if="log.event === 'item_quitado'">
+                  <div class="space-y-0.5">
+                    <div>{{ log.producto }} &times; {{ log.qty }} <span class="text-amber-600 font-mono-data">&minus;{{ formatCurrency(log.subtotal_change) }}</span></div>
+                  </div>
+                </template>
+                <template v-else-if="log.event === 'venta_confirmada' && log.total">
+                  <div class="space-y-0.5">
+                    <div class="font-mono-data font-semibold text-emerald-600">{{ formatCurrency(log.total) }}</div>
+                    <div class="text-slate-400">{{ log.medio_pago }}</div>
+                  </div>
+                </template>
+                <template v-else>
+                  <span class="truncate block" :title="log.description">{{ log.description }}</span>
+                </template>
+              </td>
               <td class="px-5 py-3">
-                <span v-if="log.suspicious" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-red-100 text-rose-700">
+                <span v-if="isSuspicious(log)" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-red-100 text-rose-700">
                   <i class="fa-solid fa-triangle-exclamation text-[10px]"></i>
                   Sospechoso
                 </span>
-                <span v-else class="text-slate-300 text-xs">—</span>
+                <span v-else class="text-slate-300 text-xs">&mdash;</span>
               </td>
             </tr>
           </tbody>
@@ -103,30 +151,40 @@
 </template>
 
 <script setup>
-import { ref, computed, onUnmounted, onMounted, watch } from 'vue'
+import { ref, computed, onUnmounted, onMounted } from 'vue'
 import api from '@/services/api'
+import { useToastStore } from '@/stores/toasts'
 import { formatCurrency } from '@/composables/useUtils'
 
+const toast = useToastStore()
+
 const logs = ref([
-  { id: 1, timestamp: '2026-06-20 18:45:12', user: 'admin.sistema', type: 'Ventas', action: 'Anulación de ticket', description: 'Ticket #001045 anulado. Motivo: error de carga. Monto revertido: $8,500', suspicious: false },
-  { id: 2, timestamp: '2026-06-20 17:30:00', user: 'maria.gomez', type: 'Caja', action: 'Cierre de caja', description: 'Cierre de caja diario. Balance: $345,200. Diferencia: $0', suspicious: false },
-  { id: 3, timestamp: '2026-06-20 16:15:45', user: 'carlos.lopez', type: 'Compras', action: 'Registro de compra', description: 'Compra registrada a Frigorífico Las Pampas por $156,800', suspicious: false },
-  { id: 4, timestamp: '2026-06-20 14:22:10', user: 'admin.sistema', type: 'Productos', action: 'Modificación de precio', description: 'Producto "Leche entera 1L": precio actualizado de $1,050 a $1,134 (+8%)', suspicious: false },
-  { id: 5, timestamp: '2026-06-20 12:05:33', user: 'laura.diaz', type: 'Ventas', action: 'Venta realizada', description: 'Ticket #001098 generado por $23,400. Pago: Efectivo', suspicious: false },
-  { id: 6, timestamp: '2026-06-20 11:30:18', user: 'maria.gomez', type: 'Clientes', action: 'Creación de cliente', description: 'Nuevo cliente creado: Comercio La Amistad (CUIT 30-11223344-5)', suspicious: false },
-  { id: 7, timestamp: '2026-06-20 10:15:00', user: 'admin.sistema', type: 'Caja', action: 'Retiro de efectivo', description: 'Retiro de caja por $180,000. Concepto: transferencia bancaria', suspicious: false },
-  { id: 8, timestamp: '2026-06-20 09:45:22', user: 'pedro.sanchez', type: 'Productos', action: 'Ajuste de stock', description: 'Stock de "Aceite girasol 1.5L" ajustado de 15 a 45 unidades. Diferencia: +30', suspicious: false },
-  { id: 9, timestamp: '2026-06-20 08:05:10', user: 'carlos.lopez', type: 'Caja', action: 'Apertura de caja', description: 'Apertura de caja. Monto inicial: $50,000', suspicious: false },
-  { id: 10, timestamp: '2026-06-20 03:12:00', user: 'carlos.lopez', type: 'Ventas', action: 'Venta fuera de horario', description: 'WARN: Ticket #001099 generado a las 03:12 AM por $98,500 desde IP 189.45.x.x — fuera de rango horario habitual', suspicious: true },
-  { id: 11, timestamp: '2026-06-19 23:00:00', user: 'admin.sistema', type: 'Sistema', action: 'Backup manual', description: 'Backup manual generado. Archivo: backup_20260619_2300.zip (128 MB)', suspicious: false },
-  { id: 12, timestamp: '2026-06-19 18:30:00', user: 'laura.diaz', type: 'Ventas', action: 'Venta anulada luego ejecutada', description: 'WARN: Ticket #001078 anulado y re-emitido como #001079 con $2,400 menos. Posible manipulación de precio', suspicious: true },
-  { id: 13, timestamp: '2026-06-19 15:45:00', user: 'maria.gomez', type: 'Clientes', action: 'Modificación de límite', description: 'Límite de crédito de "Carnicería Don Pedro" aumentado de $300,000 a $500,000', suspicious: false },
-  { id: 14, timestamp: '2026-06-19 10:00:00', user: 'admin.sistema', type: 'Sistema', action: 'Actualización de licencia', description: 'Licencia LIC-A7B3-9F2C-4D8E renovada para Supermercado La Esquina', suspicious: false },
+  { id: 1, timestamp: '2026-06-22 18:45:12', user: 'admin.sistema', type: 'Ventas', event: 'venta_anulada', action: 'Anulación de ticket', description: 'Ticket #001045 anulado. Motivo: error de carga.', total_anulado: 8500, medio_pago: 'Efectivo', suspicious: false },
+  { id: 2, timestamp: '2026-06-22 17:30:00', user: 'maria.gomez', type: 'Caja', event: 'cierre_caja', action: 'Cierre de caja', description: 'Cierre de caja diario. Balance: $345,200. Diferencia: $0', suspicious: false },
+  { id: 3, timestamp: '2026-06-22 16:15:45', user: 'carlos.lopez', type: 'Compras', event: 'registro_compra', action: 'Registro de compra', description: 'Compra registrada a Frigorífico Las Pampas por $156,800', suspicious: false },
+  { id: 4, timestamp: '2026-06-22 15:40:00', user: 'cliente.anonimo', type: 'Ventas', event: 'carrito_abandonado', action: 'Carrito abandonado', description: 'Carrito con 5 items por $12,300 abandonado sin confirmar', items_count: 5, subtotal: 12300, abandoned_min: 45, suspicious: false },
+  { id: 5, timestamp: '2026-06-22 15:10:22', user: 'cliente.anonimo', type: 'Ventas', event: 'item_quitado', action: 'Item quitado del carrito', description: 'Producto "Aceite girasol 1.5L" quitado del carrito activo', producto: 'Aceite girasol 1.5L', qty: 2, subtotal_change: 3200, suspicious: false },
+  { id: 6, timestamp: '2026-06-22 14:22:10', user: 'admin.sistema', type: 'Productos', event: 'modificacion_precio', action: 'Modificación de precio', description: 'Producto "Leche entera 1L": precio actualizado de $1,050 a $1,134 (+8%)', suspicious: false },
+  { id: 7, timestamp: '2026-06-22 14:00:00', user: 'cliente.anonimo', type: 'Ventas', event: 'carrito_creado', action: 'Carrito creado', description: 'Nuevo carrito iniciado con 1 item', items_count: 1, subtotal: 1200, suspicious: false },
+  { id: 8, timestamp: '2026-06-22 13:30:18', user: 'laura.diaz', type: 'Ventas', event: 'venta_confirmada', action: 'Venta realizada', description: 'Ticket #001098 generado por $23,400. Pago: Efectivo', total: 23400, medio_pago: 'Efectivo', suspicious: false },
+  { id: 9, timestamp: '2026-06-22 12:05:33', user: 'cliente.anonimo', type: 'Ventas', event: 'carrito_abandonado', action: 'Carrito abandonado', description: 'Carrito con 8 items por $18,700 abandonado sin confirmar', items_count: 8, subtotal: 18700, abandoned_min: 120, suspicious: false },
+  { id: 10, timestamp: '2026-06-22 11:30:18', user: 'maria.gomez', type: 'Clientes', event: 'creacion_cliente', action: 'Creación de cliente', description: 'Nuevo cliente creado: Comercio La Amistad (CUIT 30-11223344-5)', suspicious: false },
+  { id: 11, timestamp: '2026-06-22 10:15:00', user: 'admin.sistema', type: 'Caja', event: 'retiro_efectivo', action: 'Retiro de efectivo', description: 'Retiro de caja por $180,000. Concepto: transferencia bancaria', suspicious: false },
+  { id: 12, timestamp: '2026-06-22 09:45:22', user: 'pedro.sanchez', type: 'Productos', event: 'ajuste_stock', action: 'Ajuste de stock', description: 'Stock de "Aceite girasol 1.5L" ajustado de 15 a 45 unidades. Diferencia: +30', suspicious: false },
+  { id: 13, timestamp: '2026-06-22 09:10:00', user: 'cliente.anonimo', type: 'Ventas', event: 'item_quitado', action: 'Item quitado del carrito', description: 'Producto "Yerba mate 1kg" quitado del carrito activo', producto: 'Yerba mate 1kg', qty: 3, subtotal_change: 5700, suspicious: false },
+  { id: 14, timestamp: '2026-06-22 08:05:10', user: 'carlos.lopez', type: 'Caja', event: 'apertura_caja', action: 'Apertura de caja', description: 'Apertura de caja. Monto inicial: $50,000', suspicious: false },
+  { id: 15, timestamp: '2026-06-22 03:12:00', user: 'carlos.lopez', type: 'Ventas', event: 'venta_confirmada', action: 'Venta fuera de horario', description: 'WARN: Ticket #001099 generado a las 03:12 AM por $98,500 desde IP 189.45.x.x — fuera de rango horario habitual', total: 98500, medio_pago: 'Transferencia', suspicious: true },
+  { id: 16, timestamp: '2026-06-21 23:00:00', user: 'admin.sistema', type: 'Sistema', event: 'backup', action: 'Backup manual', description: 'Backup manual generado. Archivo: backup_20260621_2300.zip (128 MB)', suspicious: false },
+  { id: 17, timestamp: '2026-06-21 18:30:00', user: 'laura.diaz', type: 'Ventas', event: 'venta_anulada', action: 'Venta anulada luego ejecutada', description: 'WARN: Ticket #001078 anulado y re-emitido como #001079 con $2,400 menos. Posible manipulación de precio', total_anulado: 2400, medio_pago: 'Tarjeta de débito', suspicious: true },
+  { id: 18, timestamp: '2026-06-21 15:45:00', user: 'maria.gomez', type: 'Clientes', event: 'modificacion_limite', action: 'Modificación de límite', description: 'Límite de crédito de "Carnicería Don Pedro" aumentado de $300,000 a $500,000', suspicious: false },
+  { id: 19, timestamp: '2026-06-21 12:30:00', user: 'cliente.anonimo', type: 'Ventas', event: 'carrito_abandonado', action: 'Carrito abandonado', description: 'Carrito con 12 items por $34,500 abandonado sin confirmar', items_count: 12, subtotal: 34500, abandoned_min: 180, suspicious: false },
+  { id: 20, timestamp: '2026-06-21 10:00:00', user: 'admin.sistema', type: 'Sistema', event: 'actualizacion_licencia', action: 'Actualización de licencia', description: 'Licencia LIC-A7B3-9F2C-4D8E renovada para Supermercado La Esquina', suspicious: false },
 ])
 
 const activeFilter = ref('todo')
 const autoRefresh = ref(false)
 const syncing = ref(false)
+const soloSospechosos = ref(false)
 const lastRefresh = ref(new Date().toLocaleTimeString())
 let refreshInterval = null
 
@@ -139,15 +197,66 @@ const filters = [
   { key: 'Clientes', label: 'Clientes' },
 ]
 
-const suspiciousCount = computed(() => logs.value.filter(l => l.suspicious).length)
+const suspiciousEventTypes = ['carrito_abandonado', 'item_quitado', 'venta_anulada']
 
-const filteredLogs = computed(() => {
-  if (activeFilter.value === 'todo') return logs.value
-  return logs.value.filter(l => l.type === activeFilter.value)
+function isSuspicious(log) {
+  if (log.suspicious) return true
+  if (suspiciousEventTypes.includes(log.event)) return true
+  return false
+}
+
+const suspiciousCount = computed(() => logs.value.filter(l => isSuspicious(l)).length)
+
+const suspiciousToday = computed(() => {
+  const today = new Date().toISOString().slice(0, 10)
+  return logs.value.filter(l => {
+    const eventDate = l.timestamp?.slice(0, 10)
+    return eventDate === today && isSuspicious(l)
+  }).length
 })
 
-function typeClass(type) {
+const filteredLogs = computed(() => {
+  let result = logs.value
+  if (activeFilter.value !== 'todo') {
+    result = result.filter(l => l.type === activeFilter.value)
+  }
+  if (soloSospechosos.value) {
+    result = result.filter(l => isSuspicious(l))
+  }
+  return result
+})
+
+function eventEmoji(event) {
   const map = {
+    carrito_abandonado: '\u26A0\uFE0F',
+    item_quitado: '\u2715',
+    venta_anulada: '\u2298',
+    venta_confirmada: '\u2713',
+  }
+  return map[event] || ''
+}
+
+function eventLabel(log) {
+  const map = {
+    carrito_abandonado: 'Carrito abandonado',
+    item_quitado: 'Item quitado',
+    venta_anulada: 'Venta anulada',
+    carrito_creado: 'Carrito creado',
+    venta_confirmada: 'Venta confirmada',
+  }
+  return map[log.event] || log.type
+}
+
+function eventBadgeClass(log) {
+  const map = {
+    carrito_abandonado: 'bg-rose-100 text-rose-800',
+    item_quitado: 'bg-amber-100 text-amber-800',
+    venta_anulada: 'bg-rose-100 text-rose-800',
+    carrito_creado: 'bg-slate-100 text-slate-700',
+    venta_confirmada: 'bg-emerald-100 text-emerald-800',
+  }
+  if (map[log.event]) return map[log.event]
+  const typeMap = {
     Ventas: 'bg-emerald-50 text-emerald-700',
     Caja: 'bg-amber-50 text-amber-700',
     Compras: 'bg-blue-50 text-blue-700',
@@ -155,7 +264,28 @@ function typeClass(type) {
     Clientes: 'bg-cyan-50 text-cyan-700',
     Sistema: 'bg-slate-100 text-slate-700',
   }
-  return map[type] || 'bg-slate-50 text-slate-600'
+  return typeMap[log.type] || 'bg-slate-50 text-slate-600'
+}
+
+function rowBgClass(log) {
+  if (log.event === 'carrito_abandonado' || log.event === 'venta_anulada') return 'bg-rose-100/60 hover:bg-rose-100'
+  if (log.event === 'item_quitado') return 'bg-amber-100/60 hover:bg-amber-100'
+  if (log.event === 'venta_confirmada') return 'bg-emerald-100/60 hover:bg-emerald-100'
+  if (log.suspicious) return 'bg-rose-50/40 hover:bg-rose-50'
+  return 'hover:bg-slate-50'
+}
+
+function timeAgo(ts) {
+  if (!ts) return ''
+  const date = new Date(ts.replace(' ', 'T'))
+  const diff = Date.now() - date.getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'ahora'
+  if (mins < 60) return `hace ${mins} min`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `hace ${hours}h`
+  const days = Math.floor(hours / 24)
+  return `hace ${days}d`
 }
 
 async function refreshLogs() {

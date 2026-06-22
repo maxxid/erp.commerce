@@ -53,19 +53,22 @@
                 </td>
                 <td class="px-5 py-3">
                   <div class="flex items-center gap-1">
-                    <button v-if="sale.estado === 'Pendiente'"
+                    <button @click.stop="toggleRow(sale.id)"
+                            class="px-2 py-1 bg-brand-50 hover:bg-brand-100 text-brand-700 rounded-lg text-[10px] font-bold transition">
+                      <i class="fa-solid fa-eye mr-1"></i> Ver
+                    </button>
+                    <button v-if="sale.estado === 'Completada'"
                             :disabled="anullingId === sale.id"
                             @click.stop="anularVenta(sale)"
                             class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-[10px] font-bold transition">
                       <i :class="[anullingId === sale.id ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-ban', 'mr-1']"></i> {{ anullingId === sale.id ? 'Anulando...' : 'Anular' }}
                     </button>
-                    <span v-else class="text-[10px] text-slate-300">—</span>
                   </div>
                 </td>
               </tr>
-              <tr v-if="expandedRows.includes(sale.id)" class="bg-slate-50/50">
+              <tr v-show="expandedRows.includes(sale.id)" class="bg-slate-50/50">
                 <td colspan="8" class="px-5 py-4">
-                  <div class="space-y-2">
+                  <div class="space-y-3">
                     <p class="text-[10px] font-bold text-slate-400 uppercase">Detalle de Productos</p>
                     <table class="w-full text-xs">
                       <thead>
@@ -85,6 +88,20 @@
                         </tr>
                       </tbody>
                     </table>
+                    <div class="flex items-center gap-6 pt-3 border-t border-slate-100">
+                      <div class="flex items-center gap-2">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase">Total</span>
+                        <span class="text-sm font-mono-data font-bold text-brand-700">{{ fc(sale.total) }}</span>
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase">Descuento</span>
+                        <span class="text-sm font-mono-data font-bold text-rose-600">{{ fc(sale.descuento || 0) }}</span>
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase">Medio de Pago</span>
+                        <span class="text-xs font-bold text-slate-700">{{ sale.metodo_pago }}</span>
+                      </div>
+                    </div>
                   </div>
                 </td>
               </tr>

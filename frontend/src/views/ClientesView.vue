@@ -138,36 +138,91 @@
     <Teleport to="body">
       <div v-if="showTicketsModal" class="fixed inset-0 z-50 flex items-center justify-center">
         <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="showTicketsModal = false"></div>
-        <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl mx-4 max-h-[85vh] overflow-y-auto">
-          <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-            <h2 class="text-lg font-semibold text-slate-900">Tickets de {{ selectedClient?.name }}</h2>
+        <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl mx-4 max-h-[85vh] flex flex-col">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
+            <h2 class="text-lg font-semibold text-slate-900">Historial de tickets</h2>
             <button @click="showTicketsModal = false" class="text-slate-400 hover:text-slate-600 transition-colors">
               <i class="fa-solid fa-xmark text-lg"></i>
             </button>
           </div>
-          <div class="px-6 py-5">
-            <table class="w-full text-left text-sm">
-              <thead class="bg-slate-50 border-b border-slate-200">
-                <tr>
-                  <th class="px-4 py-2.5 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Ticket #</th>
-                  <th class="px-4 py-2.5 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Fecha</th>
-                  <th class="px-4 py-2.5 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Productos</th>
-                  <th class="px-4 py-2.5 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Total</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-100">
-                <tr v-for="ticket in tickets" :key="ticket.id" class="hover:bg-slate-50">
-                  <td class="px-4 py-3 font-mono-data text-slate-700">#{{ String(ticket.id).padStart(6, '0') }}</td>
-                  <td class="px-4 py-3 text-slate-600">{{ ticket.date }}</td>
-                  <td class="px-4 py-3 text-slate-600">{{ ticket.itemCount }} items</td>
-                  <td class="px-4 py-3 font-mono-data font-medium text-slate-900">{{ formatCurrency(ticket.total) }}</td>
-                </tr>
-              </tbody>
-            </table>
-            <div v-if="tickets.length === 0" class="text-center py-8 text-slate-400">
+
+          <div v-if="selectedClient" class="px-6 py-4 bg-slate-50 border-b border-slate-100 shrink-0">
+            <div class="flex items-center justify-between">
+              <div>
+                <span class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Cliente</span>
+                <p class="text-sm font-medium text-slate-900">{{ selectedClient.name }}</p>
+              </div>
+              <div class="text-right">
+                <span class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Deuda total</span>
+                <p class="text-sm font-mono-data font-semibold" :class="selectedClient.balance > 0 ? 'text-red-600' : 'text-slate-700'">{{ formatCurrency(selectedClient.balance) }}</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="overflow-y-auto flex-1">
+            <div v-if="loadingTickets" class="flex items-center justify-center py-16">
+              <i class="fa-solid fa-circle-notch animate-spin text-3xl text-brand-600"></i>
+            </div>
+
+            <div v-else-if="tickets.length === 0" class="text-center py-12 text-slate-400">
               <i class="fa-solid fa-ticket text-3xl mb-2 block"></i>
               Sin tickets registrados
             </div>
+
+            <div v-else class="divide-y divide-slate-100">
+              <div v-for="ticket in tickets" :key="ticket.id">
+                <div
+                  @click="toggleTicket(ticket.id)"
+                  class="flex items-center px-6 py-3.5 hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  <i
+                    :class="expandedTickets.has(ticket.id) ? 'fa-solid fa-chevron-down' : 'fa-solid fa-chevron-right'"
+                    class="text-slate-400 text-xs w-4 transition-transform"
+                  ></i>
+                  <span class="font-mono-data text-slate-700 w-28">#{{ String(ticket.numero || ticket.id).padStart(6, '0') }}</span>
+                  <span class="text-sm text-slate-600 w-44">{{ ticket.fecha }}</span>
+                  <span class="text-xs px-2.5 py-1 rounded-full font-medium capitalize"
+                    :class="ticket.medio_pago === 'efectivo' ? 'bg-green-100 text-green-700' : ticket.medio_pago === 'tarjeta' ? 'bg-blue-100 text-blue-700' : ticket.medio_pago === 'transferencia' ? 'bg-purple-100 text-purple-700' : ticket.medio_pago === 'cuenta_corriente' || ticket.medio_pago === 'cta_cte' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'"
+                  >{{ medioPagoLabel(ticket.medio_pago) }}</span>
+                  <span class="ml-auto font-mono-data font-medium text-slate-900">{{ formatCurrency(ticket.total) }}</span>
+                </div>
+
+                <div v-if="expandedTickets.has(ticket.id)" class="bg-slate-50/60 px-6 py-3 border-t border-slate-100">
+                  <table class="w-full text-left text-xs">
+                    <thead>
+                      <tr class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">
+                        <th class="pb-2 pr-3 font-medium">Producto</th>
+                        <th class="pb-2 pr-3 font-medium text-center w-20">Cantidad</th>
+                        <th class="pb-2 pr-3 font-medium text-right w-28">Precio Unit.</th>
+                        <th class="pb-2 font-medium text-right w-28">Subtotal</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-200/50">
+                      <tr v-for="(item, i) in ticket.items" :key="i">
+                        <td class="py-1.5 pr-3 text-slate-700">{{ item.producto_nombre }}</td>
+                        <td class="py-1.5 pr-3 text-slate-600 text-center font-mono-data">{{ item.cantidad }}</td>
+                        <td class="py-1.5 pr-3 text-slate-600 text-right font-mono-data">{{ formatCurrency(item.precio_unitario) }}</td>
+                        <td class="py-1.5 text-slate-900 text-right font-mono-data font-medium">{{ formatCurrency(item.subtotal) }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="tickets.length > 0" class="px-6 py-3 border-t border-slate-100 bg-slate-50 shrink-0">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-sm font-semibold text-slate-700">Total deuda en tickets</span>
+              <span class="text-sm font-mono-data font-semibold text-red-600">{{ formatCurrency(totalDebt) }}</span>
+            </div>
+            <button
+              @click="imprimirResumen"
+              class="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-slate-50 transition-colors flex items-center justify-center gap-2 shadow-sm"
+            >
+              <i class="fa-solid fa-print"></i>
+              Imprimir resumen
+            </button>
           </div>
         </div>
       </div>
@@ -176,7 +231,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { formatCurrency } from '@/composables/useUtils'
 import api from '@/services/api'
 import { useToastStore } from '@/stores/toasts'
@@ -194,13 +249,9 @@ const clients = ref([
   { id: 5, name: 'Almacén El Gaucho', docType: 'CUIT', docNumber: '23-18123456-4', phone: '+54 11 3987-6543', creditLimit: 350000, balance: 310000 },
 ])
 
-const tickets = ref([
-  { id: 1023, date: '2026-06-19 14:30', itemCount: 12, total: 67500 },
-  { id: 982, date: '2026-06-16 10:15', itemCount: 8, total: 42300 },
-  { id: 901, date: '2026-06-14 16:45', itemCount: 5, total: 18750 },
-  { id: 845, date: '2026-06-10 09:30', itemCount: 15, total: 98500 },
-  { id: 798, date: '2026-06-08 11:00', itemCount: 6, total: 31200 },
-])
+const tickets = ref([])
+const loadingTickets = ref(false)
+const expandedTickets = ref(new Set())
 
 const showModal = ref(false)
 const showTicketsModal = ref(false)
@@ -214,6 +265,32 @@ const form = reactive({
   phone: '',
   creditLimit: 0,
 })
+
+const totalDebt = computed(() => {
+  return tickets.value.reduce((sum, t) => sum + (parseFloat(t.total) || 0), 0)
+})
+
+const MEDIO_PAGO_LABELS = {
+  efectivo: 'Efectivo',
+  tarjeta: 'Tarjeta',
+  transferencia: 'Transferencia',
+  cuenta_corriente: 'Cta. cte.',
+  cta_cte: 'Cta. cte.',
+}
+
+function medioPagoLabel(value) {
+  return MEDIO_PAGO_LABELS[value] || value || '—'
+}
+
+function toggleTicket(id) {
+  const next = new Set(expandedTickets.value)
+  if (next.has(id)) {
+    next.delete(id)
+  } else {
+    next.add(id)
+  }
+  expandedTickets.value = next
+}
 
 onMounted(async () => {
   try {
@@ -251,9 +328,20 @@ function openEditModal(client) {
   showModal.value = true
 }
 
-function openTicketsModal(client) {
+async function openTicketsModal(client) {
   selectedClient.value = client
   showTicketsModal.value = true
+  tickets.value = []
+  expandedTickets.value = new Set()
+  loadingTickets.value = true
+  try {
+    const data = await api.get(`/api/ventas?cliente_id=${client.id}`)
+    if (Array.isArray(data)) tickets.value = data
+  } catch {
+    toast.error('Error al cargar el historial de tickets')
+  } finally {
+    loadingTickets.value = false
+  }
 }
 
 async function saveClient() {
@@ -269,5 +357,37 @@ async function saveClient() {
   }
   showModal.value = false
   saving.value = false
+}
+
+function imprimirResumen() {
+  if (!selectedClient.value || tickets.value.length === 0) return
+
+  const lines = []
+  lines.push(`Resumen de tickets — ${selectedClient.value.name}`)
+  lines.push(`Deuda total: ${formatCurrency(selectedClient.value.balance)}`)
+  lines.push('')
+  lines.push('Ticket # | Fecha | Medio de pago | Total')
+  lines.push('-'.repeat(60))
+
+  for (const t of tickets.value) {
+    const num = String(t.numero || t.id).padStart(6, '0')
+    lines.push(`#${num} | ${t.fecha} | ${medioPagoLabel(t.medio_pago)} | ${formatCurrency(t.total)}`)
+
+    if (t.items && t.items.length) {
+      for (const item of t.items) {
+        lines.push(`  - ${item.producto_nombre} x${item.cantidad} | ${formatCurrency(item.precio_unitario)} c/u | ${formatCurrency(item.subtotal)}`)
+      }
+    }
+  }
+
+  lines.push('')
+  lines.push(`Total acumulado: ${formatCurrency(totalDebt.value)}`)
+
+  const win = window.open('', '_blank', 'width=600,height=600')
+  if (win) {
+    win.document.write(`<pre style="font-family:monospace;font-size:13px;padding:24px;white-space:pre-wrap">${lines.join('\n')}</pre>`)
+    win.document.close()
+    win.print()
+  }
 }
 </script>

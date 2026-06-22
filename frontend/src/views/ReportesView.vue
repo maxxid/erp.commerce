@@ -7,13 +7,13 @@
       </div>
       <div class="flex items-center gap-2">
         <button
-          @click="syncData"
+          @click="syncAll"
           :disabled="syncing"
           class="px-4 py-2.5 rounded-xl shadow-sm text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-60"
           :class="syncing ? 'bg-slate-100 text-slate-400' : 'bg-white border border-slate-300 text-slate-600 hover:bg-slate-50'"
         >
           <i :class="syncing ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-arrows-rotate'"></i>
-          {{ syncing ? 'Sincronizando...' : 'Sincronizar' }}
+          {{ syncing ? 'Sincronizando...' : 'Sincronizar todo' }}
         </button>
         <button class="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-2xl shadow-sm font-medium transition-colors flex items-center gap-2">
           <i class="fa-solid fa-file-pdf text-sm"></i>
@@ -23,179 +23,242 @@
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+      <!-- ==================== SEMANAL ==================== -->
       <div class="bg-white rounded-2xl shadow-sm p-5 space-y-4">
-        <div class="flex items-center gap-2.5">
-          <div class="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center">
-            <i class="fa-solid fa-calendar-week text-indigo-600 text-sm"></i>
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center">
+              <i class="fa-solid fa-calendar-week text-indigo-600 text-sm"></i>
+            </div>
+            <h2 class="font-semibold text-slate-900">Semanal</h2>
           </div>
-          <h2 class="font-semibold text-slate-900">Semanal</h2>
+          <button
+            @click="syncWeekly"
+            :disabled="syncingWeekly"
+            class="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-brand-600 hover:bg-brand-50 transition-colors disabled:opacity-40"
+          >
+            <i :class="syncingWeekly ? 'fa-solid fa-circle-notch animate-spin text-xs' : 'fa-solid fa-arrows-rotate text-xs'"></i>
+          </button>
         </div>
 
-        <div class="space-y-3">
+        <div class="space-y-2">
           <div>
             <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Ventas totales</p>
             <p class="text-2xl font-mono-data font-bold text-slate-900">{{ formatCurrency(weekly.total) }}</p>
           </div>
-          <div class="flex items-center gap-3">
-            <div>
-              <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Tickets</p>
-              <p class="text-lg font-mono-data font-semibold text-slate-700">{{ weekly.tickets }}</p>
-            </div>
-            <div>
-              <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Promedio ticket</p>
-              <p class="text-lg font-mono-data font-semibold text-slate-700">{{ formatCurrency(weekly.averageTicket) }}</p>
-            </div>
-          </div>
           <div class="flex items-center gap-2">
             <span class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">vs semana anterior</span>
-            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold" :class="weekly.change >= 0 ? 'bg-green-100 text-emerald-700' : 'bg-red-100 text-rose-700'">
+            <span
+              class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold"
+              :class="weekly.change >= 0 ? 'bg-green-100 text-emerald-700' : 'bg-red-100 text-rose-700'"
+            >
               <i :class="weekly.change >= 0 ? 'fa-solid fa-arrow-trend-up' : 'fa-solid fa-arrow-trend-down'"></i>
               {{ Math.abs(weekly.change) }}%
             </span>
           </div>
         </div>
 
-        <div class="space-y-1.5">
-          <div v-for="(bar, idx) in weeklyBars" :key="idx" class="flex items-center gap-2">
-            <span class="w-12 text-[10px] text-slate-500 text-right">{{ bar.day }}</span>
-            <div class="flex-1 h-5 bg-slate-100 rounded-full overflow-hidden">
-              <div class="h-full bg-indigo-400 rounded-full transition-all" :style="{ width: bar.percent + '%' }"></div>
-            </div>
-            <span class="w-16 text-right font-mono-data text-xs text-slate-600">{{ formatCurrency(bar.value) }}</span>
+        <div v-if="weeklyBars.length" class="flex items-end gap-1" style="height: 130px;">
+          <div
+            v-for="(item, idx) in weeklyBars" :key="idx"
+            class="flex-1 flex flex-col items-center gap-1 min-w-0"
+          >
+            <span class="text-[10px] font-mono-data text-slate-500 font-medium leading-none text-center">
+              {{ item.ventas > 0 ? formatCurrency(item.ventas) : '' }}
+            </span>
+            <div
+              class="w-full bg-brand-500 rounded-t-md transition-all duration-500 ease-out hover:bg-brand-600 cursor-default"
+              :style="{ height: weeklyMax > 0 ? Math.max((item.ventas / weeklyMax) * 96, item.ventas > 0 ? 4 : 0) + 'px' : '0px' }"
+            ></div>
+            <span class="text-[10px] text-slate-500 font-medium">{{ item.dia }}</span>
           </div>
+        </div>
+        <div v-else class="py-6 text-center text-sm text-slate-400">
+          <i class="fa-solid fa-chart-bar text-2xl mb-1 block"></i>
+          Sin datos para esta semana
         </div>
 
         <div>
           <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-2">Top 5 productos</p>
           <div class="space-y-1.5">
-            <div v-for="(prod, idx) in weekly.topProducts" :key="idx" class="flex items-center justify-between text-sm">
+            <div v-for="(prod, idx) in weekly.topProducts.slice(0, 5)" :key="idx" class="flex items-center justify-between text-sm">
               <span class="text-slate-700 truncate mr-2">{{ prod.name }}</span>
               <span class="font-mono-data text-slate-500 text-xs">{{ prod.sold }} u.</span>
             </div>
           </div>
+          <p v-if="!weekly.topProducts.length" class="text-xs text-slate-400">Sin datos</p>
         </div>
       </div>
 
+      <!-- ==================== MENSUAL ==================== -->
       <div class="bg-white rounded-2xl shadow-sm p-5 space-y-4">
-        <div class="flex items-center gap-2.5">
-          <div class="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
-            <i class="fa-solid fa-calendar-check text-emerald-600 text-sm"></i>
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
+              <i class="fa-solid fa-calendar-check text-emerald-600 text-sm"></i>
+            </div>
+            <h2 class="font-semibold text-slate-900">Mensual</h2>
           </div>
-          <h2 class="font-semibold text-slate-900">Mensual</h2>
+          <button
+            @click="syncMonthly"
+            :disabled="syncingMonthly"
+            class="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-brand-600 hover:bg-brand-50 transition-colors disabled:opacity-40"
+          >
+            <i :class="syncingMonthly ? 'fa-solid fa-circle-notch animate-spin text-xs' : 'fa-solid fa-arrows-rotate text-xs'"></i>
+          </button>
         </div>
 
-        <div class="space-y-3">
+        <div class="space-y-2">
           <div>
             <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Ventas totales</p>
             <p class="text-2xl font-mono-data font-bold text-slate-900">{{ formatCurrency(monthly.total) }}</p>
           </div>
-          <div class="flex items-center gap-3">
-            <div>
-              <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Tickets</p>
-              <p class="text-lg font-mono-data font-semibold text-slate-700">{{ monthly.tickets }}</p>
-            </div>
-            <div>
-              <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Promedio ticket</p>
-              <p class="text-lg font-mono-data font-semibold text-slate-700">{{ formatCurrency(monthly.averageTicket) }}</p>
-            </div>
-          </div>
           <div class="flex items-center gap-2">
             <span class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">vs mes anterior</span>
-            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold" :class="monthly.change >= 0 ? 'bg-green-100 text-emerald-700' : 'bg-red-100 text-rose-700'">
+            <span
+              class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold"
+              :class="monthly.change >= 0 ? 'bg-green-100 text-emerald-700' : 'bg-red-100 text-rose-700'"
+            >
               <i :class="monthly.change >= 0 ? 'fa-solid fa-arrow-trend-up' : 'fa-solid fa-arrow-trend-down'"></i>
               {{ Math.abs(monthly.change) }}%
             </span>
           </div>
         </div>
 
-        <div class="space-y-1.5">
-          <div v-for="(bar, idx) in monthlyBars" :key="idx" class="flex items-center gap-2">
-            <span class="w-12 text-[10px] text-slate-500 text-right">{{ bar.week }}</span>
-            <div class="flex-1 h-5 bg-slate-100 rounded-full overflow-hidden">
-              <div class="h-full bg-emerald-400 rounded-full transition-all" :style="{ width: bar.percent + '%' }"></div>
-            </div>
-            <span class="w-16 text-right font-mono-data text-xs text-slate-600">{{ formatCurrency(bar.value) }}</span>
+        <div v-if="monthlyBars.length" class="flex items-end gap-1" style="height: 130px;">
+          <div
+            v-for="(item, idx) in monthlyBars" :key="idx"
+            class="flex-1 flex flex-col items-center gap-1 min-w-0"
+          >
+            <span class="text-[10px] font-mono-data text-slate-500 font-medium leading-none text-center">
+              {{ item.ventas > 0 ? formatCurrency(item.ventas) : '' }}
+            </span>
+            <div
+              class="w-full bg-brand-500 rounded-t-md transition-all duration-500 ease-out hover:bg-brand-600 cursor-default"
+              :style="{ height: monthlyMax > 0 ? Math.max((item.ventas / monthlyMax) * 96, item.ventas > 0 ? 4 : 0) + 'px' : '0px' }"
+            ></div>
+            <span class="text-[10px] text-slate-500 font-medium">{{ item.semana }}</span>
+          </div>
+        </div>
+        <div v-else class="py-6 text-center text-sm text-slate-400">
+          <i class="fa-solid fa-chart-bar text-2xl mb-1 block"></i>
+          Sin datos para este mes
+        </div>
+
+        <div v-if="monthlyCategories.length">
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-2">Por categoría</p>
+          <div class="flex flex-wrap gap-1.5">
+            <span
+              v-for="(cat, idx) in monthlyCategories" :key="idx"
+              class="px-2 py-0.5 rounded-md text-[11px] font-medium"
+              :class="catBadgeColor(idx)"
+            >
+              {{ cat.categoria }}: {{ formatCurrency(cat.total) }}
+            </span>
           </div>
         </div>
 
         <div>
           <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-2">Top 5 productos</p>
           <div class="space-y-1.5">
-            <div v-for="(prod, idx) in monthly.topProducts" :key="idx" class="flex items-center justify-between text-sm">
+            <div v-for="(prod, idx) in monthly.topProducts.slice(0, 5)" :key="idx" class="flex items-center justify-between text-sm">
               <span class="text-slate-700 truncate mr-2">{{ prod.name }}</span>
               <span class="font-mono-data text-slate-500 text-xs">{{ prod.sold }} u.</span>
             </div>
           </div>
+          <p v-if="!monthly.topProducts.length" class="text-xs text-slate-400">Sin datos</p>
         </div>
       </div>
 
+      <!-- ==================== TRIMESTRAL ==================== -->
       <div class="bg-white rounded-2xl shadow-sm p-5 space-y-4">
-        <div class="flex items-center gap-2.5">
-          <div class="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
-            <i class="fa-solid fa-calendar-alt text-amber-600 text-sm"></i>
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
+              <i class="fa-solid fa-calendar-alt text-amber-600 text-sm"></i>
+            </div>
+            <h2 class="font-semibold text-slate-900">Trimestral</h2>
           </div>
-          <h2 class="font-semibold text-slate-900">Trimestral</h2>
+          <button
+            @click="syncQuarterly"
+            :disabled="syncingQuarterly"
+            class="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-brand-600 hover:bg-brand-50 transition-colors disabled:opacity-40"
+          >
+            <i :class="syncingQuarterly ? 'fa-solid fa-circle-notch animate-spin text-xs' : 'fa-solid fa-arrows-rotate text-xs'"></i>
+          </button>
         </div>
 
-        <div class="space-y-3">
+        <div class="space-y-2">
           <div>
             <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Ventas totales</p>
             <p class="text-2xl font-mono-data font-bold text-slate-900">{{ formatCurrency(quarterly.total) }}</p>
           </div>
-          <div class="flex items-center gap-3">
-            <div>
-              <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Tickets</p>
-              <p class="text-lg font-mono-data font-semibold text-slate-700">{{ quarterly.tickets }}</p>
-            </div>
-            <div>
-              <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Promedio ticket</p>
-              <p class="text-lg font-mono-data font-semibold text-slate-700">{{ formatCurrency(quarterly.averageTicket) }}</p>
-            </div>
-          </div>
           <div class="flex items-center gap-2">
             <span class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">vs trim. anterior</span>
-            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold" :class="quarterly.change >= 0 ? 'bg-green-100 text-emerald-700' : 'bg-red-100 text-rose-700'">
+            <span
+              class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold"
+              :class="quarterly.change >= 0 ? 'bg-green-100 text-emerald-700' : 'bg-red-100 text-rose-700'"
+            >
               <i :class="quarterly.change >= 0 ? 'fa-solid fa-arrow-trend-up' : 'fa-solid fa-arrow-trend-down'"></i>
               {{ Math.abs(quarterly.change) }}%
             </span>
           </div>
         </div>
 
-        <div class="space-y-1.5">
-          <div v-for="(bar, idx) in quarterlyBars" :key="idx" class="flex items-center gap-2">
-            <span class="w-12 text-[10px] text-slate-500 text-right">{{ bar.month }}</span>
-            <div class="flex-1 h-5 bg-slate-100 rounded-full overflow-hidden">
-              <div class="h-full bg-amber-400 rounded-full transition-all" :style="{ width: bar.percent + '%' }"></div>
-            </div>
-            <span class="w-16 text-right font-mono-data text-xs text-slate-600">{{ formatCurrency(bar.value) }}</span>
+        <div v-if="quarterlyBars.length" class="flex items-end gap-2" style="height: 130px;">
+          <div
+            v-for="(item, idx) in quarterlyBars" :key="idx"
+            class="flex-1 flex flex-col items-center gap-1 min-w-0"
+          >
+            <span class="text-[10px] font-mono-data text-slate-500 font-medium leading-none text-center">
+              {{ item.ventas > 0 ? formatCurrency(item.ventas) : '' }}
+            </span>
+            <div
+              class="w-full bg-brand-500 rounded-t-md transition-all duration-500 ease-out hover:bg-brand-600 cursor-default"
+              :style="{ height: quarterlyMax > 0 ? Math.max((item.ventas / quarterlyMax) * 96, item.ventas > 0 ? 4 : 0) + 'px' : '0px' }"
+            ></div>
+            <span class="text-[10px] text-slate-500 font-medium">{{ item.mes }}</span>
           </div>
+        </div>
+        <div v-else class="py-6 text-center text-sm text-slate-400">
+          <i class="fa-solid fa-chart-bar text-2xl mb-1 block"></i>
+          Sin datos para este trimestre
         </div>
 
         <div>
           <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-2">Top 5 productos</p>
           <div class="space-y-1.5">
-            <div v-for="(prod, idx) in quarterly.topProducts" :key="idx" class="flex items-center justify-between text-sm">
+            <div v-for="(prod, idx) in quarterly.topProducts.slice(0, 5)" :key="idx" class="flex items-center justify-between text-sm">
               <span class="text-slate-700 truncate mr-2">{{ prod.name }}</span>
               <span class="font-mono-data text-slate-500 text-xs">{{ prod.sold }} u.</span>
             </div>
           </div>
+          <p v-if="!quarterly.topProducts.length" class="text-xs text-slate-400">Sin datos</p>
         </div>
       </div>
+
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import api from '@/services/api'
 import { formatCurrency } from '@/composables/useUtils'
+import { useToastStore } from '@/stores/toasts'
+
+const toast = useToastStore()
 
 const syncing = ref(false)
+const syncingWeekly = ref(false)
+const syncingMonthly = ref(false)
+const syncingQuarterly = ref(false)
+
+// ── Mock / fallback data ──────────────────────────────────────────────
 
 const weekly = ref({
   total: 2456800,
-  tickets: 342,
-  averageTicket: 7184,
   change: 4.5,
   topProducts: [
     { name: 'Leche entera 1L', sold: 245 },
@@ -207,19 +270,17 @@ const weekly = ref({
 })
 
 const weeklyBars = ref([
-  { day: 'Lun', value: 412000, percent: 68 },
-  { day: 'Mar', value: 389500, percent: 65 },
-  { day: 'Mié', value: 456200, percent: 76 },
-  { day: 'Jue', value: 512800, percent: 85 },
-  { day: 'Vie', value: 528300, percent: 88 },
-  { day: 'Sáb', value: 598000, percent: 100 },
-  { day: 'Dom', value: 0, percent: 0 },
+  { dia: 'Lun', ventas: 412000 },
+  { dia: 'Mar', ventas: 389500 },
+  { dia: 'Mié', ventas: 456200 },
+  { dia: 'Jue', ventas: 512800 },
+  { dia: 'Vie', ventas: 528300 },
+  { dia: 'Sáb', ventas: 598000 },
+  { dia: 'Dom', ventas: 0 },
 ])
 
 const monthly = ref({
   total: 9875200,
-  tickets: 1456,
-  averageTicket: 6783,
   change: -2.3,
   topProducts: [
     { name: 'Leche entera 1L', sold: 980 },
@@ -231,16 +292,22 @@ const monthly = ref({
 })
 
 const monthlyBars = ref([
-  { week: 'Sem 1', value: 2340000, percent: 74 },
-  { week: 'Sem 2', value: 2567800, percent: 81 },
-  { week: 'Sem 3', value: 2456800, percent: 78 },
-  { week: 'Sem 4', value: 3154600, percent: 100 },
+  { semana: 'Sem 1', ventas: 2340000 },
+  { semana: 'Sem 2', ventas: 2567800 },
+  { semana: 'Sem 3', ventas: 2456800 },
+  { semana: 'Sem 4', ventas: 3154600 },
+])
+
+const monthlyCategories = ref([
+  { categoria: 'Lácteos', total: 2340000 },
+  { categoria: 'Panadería', total: 1890000 },
+  { categoria: 'Carnes', total: 3120000 },
+  { categoria: 'Almacén', total: 1560000 },
+  { categoria: 'Bebidas', total: 965200 },
 ])
 
 const quarterly = ref({
   total: 29876500,
-  tickets: 4320,
-  averageTicket: 6916,
   change: 8.2,
   topProducts: [
     { name: 'Leche entera 1L', sold: 2980 },
@@ -252,27 +319,142 @@ const quarterly = ref({
 })
 
 const quarterlyBars = ref([
-  { month: 'Abr', value: 9875200, percent: 82 },
-  { month: 'May', value: 10234500, percent: 85 },
-  { month: 'Jun', value: 12046800, percent: 100 },
+  { mes: 'Abr', ventas: 9875200 },
+  { mes: 'May', ventas: 10234500 },
+  { mes: 'Jun', ventas: 12046800 },
 ])
 
-async function syncData() {
+// ── Computed: max value per dataset for bar scaling ───────────────────
+
+const weeklyMax = computed(() => {
+  const vals = weeklyBars.value.map(b => b.ventas || 0)
+  return vals.length ? Math.max(...vals) : 0
+})
+
+const monthlyMax = computed(() => {
+  const vals = monthlyBars.value.map(b => b.ventas || 0)
+  return vals.length ? Math.max(...vals) : 0
+})
+
+const quarterlyMax = computed(() => {
+  const vals = quarterlyBars.value.map(b => b.ventas || 0)
+  return vals.length ? Math.max(...vals) : 0
+})
+
+// ── Category badge colors ─────────────────────────────────────────────
+
+const catColors = [
+  'bg-blue-50 text-blue-700',
+  'bg-emerald-50 text-emerald-700',
+  'bg-amber-50 text-amber-700',
+  'bg-purple-50 text-purple-700',
+  'bg-rose-50 text-rose-700',
+  'bg-cyan-50 text-cyan-700',
+  'bg-indigo-50 text-indigo-700',
+  'bg-teal-50 text-teal-700',
+]
+
+function catBadgeColor(idx) {
+  return catColors[idx % catColors.length]
+}
+
+// ── API mapping helpers ───────────────────────────────────────────────
+
+function mapTopProducts(list) {
+  return (list || []).map(p => ({
+    name: p.nombre,
+    sold: p.cantidad,
+  }))
+}
+
+// ── Sync all ──────────────────────────────────────────────────────────
+
+async function syncAll() {
   syncing.value = true
   try {
-    const [w, m, q] = await Promise.all([
-      api.get('/api/dashboard/semanal'),
-      api.get('/api/dashboard/mensual'),
-      api.get('/api/dashboard/trimestral'),
-    ])
-    if (w) { weekly.value = w; if (w.bars) weeklyBars.value = w.bars }
-    if (m) { monthly.value = m; if (m.bars) monthlyBars.value = m.bars }
-    if (q) { quarterly.value = q; if (q.bars) quarterlyBars.value = q.bars }
-  } catch { /* fallback to mock */ }
+    await Promise.all([syncWeekly(true), syncMonthly(true), syncQuarterly(true)])
+    toast.success('Datos sincronizados')
+  } catch {
+    toast.error('No se pudieron sincronizar los datos')
+  }
   syncing.value = false
 }
 
-onMounted(() => { syncData() })
+// ── Per-period sync ───────────────────────────────────────────────────
+
+async function syncWeekly(silent = false) {
+  syncingWeekly.value = true
+  try {
+    const w = await api.get('/api/dashboard/semanal')
+    if (w) {
+      weekly.value = {
+        total: w.ventas_actual ?? weekly.value.total,
+        change: w.diff_ventas_pct ?? weekly.value.change,
+        topProducts: mapTopProducts(w.top_productos_semana || w.top_productos).length
+          ? mapTopProducts(w.top_productos_semana || w.top_productos)
+          : weekly.value.topProducts,
+      }
+      if (w.dias && w.dias.length) {
+        weeklyBars.value = w.dias.map(d => ({ dia: d.dia, ventas: d.ventas }))
+      }
+    }
+    if (!silent) toast.success('Reporte semanal actualizado')
+  } catch {
+    if (!silent) toast.error('Error al cargar reporte semanal')
+  }
+  syncingWeekly.value = false
+}
+
+async function syncMonthly(silent = false) {
+  syncingMonthly.value = true
+  try {
+    const m = await api.get('/api/dashboard/mensual')
+    if (m) {
+      monthly.value = {
+        total: m.ventas_actual ?? monthly.value.total,
+        change: m.diff_ventas_pct ?? monthly.value.change,
+        topProducts: mapTopProducts(m.top_productos).length
+          ? mapTopProducts(m.top_productos)
+          : monthly.value.topProducts,
+      }
+      if (m.semanas && m.semanas.length) {
+        monthlyBars.value = m.semanas.map(s => ({ semana: s.semana, ventas: s.ventas }))
+      }
+      if (m.por_categoria && m.por_categoria.length) {
+        monthlyCategories.value = m.por_categoria
+      }
+    }
+    if (!silent) toast.success('Reporte mensual actualizado')
+  } catch {
+    if (!silent) toast.error('Error al cargar reporte mensual')
+  }
+  syncingMonthly.value = false
+}
+
+async function syncQuarterly(silent = false) {
+  syncingQuarterly.value = true
+  try {
+    const q = await api.get('/api/dashboard/trimestral')
+    if (q) {
+      quarterly.value = {
+        total: q.ventas_actual ?? quarterly.value.total,
+        change: q.diff_ventas_pct ?? quarterly.value.change,
+        topProducts: mapTopProducts(q.top_productos).length
+          ? mapTopProducts(q.top_productos)
+          : quarterly.value.topProducts,
+      }
+      if (q.meses && q.meses.length) {
+        quarterlyBars.value = q.meses.map(m => ({ mes: m.mes, ventas: m.ventas }))
+      }
+    }
+    if (!silent) toast.success('Reporte trimestral actualizado')
+  } catch {
+    if (!silent) toast.error('Error al cargar reporte trimestral')
+  }
+  syncingQuarterly.value = false
+}
+
+onMounted(() => { syncAll() })
 </script>
 
 <style scoped>
