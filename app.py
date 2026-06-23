@@ -38,7 +38,8 @@ def api_lookup():
 @app.route("/api/products", methods=["GET"])
 def api_list_products():
     search = request.args.get("search", "").strip() or None
-    productos = database.obtener_productos(search=search)
+    categoria = request.args.get("categoria", "").strip() or None
+    productos = database.obtener_productos(search=search, categoria=categoria)
     return jsonify(productos)
 
 
@@ -52,6 +53,13 @@ def api_save_product():
 
     pid = database.guardar_producto(data)
     return jsonify({"id": pid, "message": "Producto guardado"})
+
+
+@app.route("/api/products/<int:pid>", methods=["PUT"])
+def api_update_product(pid):
+    data = request.get_json(silent=True) or {}
+    database.actualizar_producto(pid, data)
+    return jsonify({"message": "Producto actualizado"})
 
 
 @app.route("/api/products/<int:pid>", methods=["DELETE"])
@@ -79,6 +87,23 @@ def api_export_products():
         mimetype=mime,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
+
+
+@app.route("/api/config", methods=["GET"])
+def api_get_config():
+    return jsonify(database.get_config())
+
+
+@app.route("/api/config", methods=["PUT"])
+def api_update_config():
+    data = request.get_json(silent=True) or {}
+    database.set_config(data)
+    return jsonify({"message": "Configuración actualizada"})
+
+
+@app.route("/api/dashboard", methods=["GET"])
+def api_dashboard():
+    return jsonify(database.get_dashboard())
 
 
 if __name__ == "__main__":

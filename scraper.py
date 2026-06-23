@@ -122,7 +122,7 @@ def _extract_propiedades(state):
     return propiedades
 
 
-def _scrape_producto(html, barcode, fuente):
+def _scrape_producto(html, barcode, fuente, url=""):
     ld = _extract_json_ld(html)
     state = _extract_state(html)
 
@@ -140,14 +140,23 @@ def _scrape_producto(html, barcode, fuente):
     precio = None
     offers = ld.get("offers", {})
     if isinstance(offers, dict):
-        precio = offers.get("lowPrice") or offers.get("price")
-        if precio is None and offers.get("offers"):
-            first_offer = offers["offers"][0] if offers["offers"] else {}
-            precio = first_offer.get("price")
+        low = offers.get("lowPrice")
+        high = offers.get("highPrice")
+        if low is not None and high is not None and low != high:
+            precio = float(low)
+        else:
+            precio = low or offers.get("price")
+            if precio is None and offers.get("offers"):
+                first_offer = offers["offers"][0] if offers["offers"] else {}
+                precio = first_offer.get("price")
+
+    descuento = _detectar_descuento(state)
+
+    categorias_raw = _extract_categorias(state)
 
     return {
         "codigo_barras": barcode,
-        "nombre": nombre.strip(),
+        "nombre": _clean_name(nombre, categorias_raw),
         "marca": marca.strip() if isinstance(marca, str) else str(marca).strip(),
         "descripcion": descripcion.strip(),
         "precio_referencia": float(precio) if precio else None,
@@ -155,7 +164,162 @@ def _scrape_producto(html, barcode, fuente):
         "sku": str(sku).strip(),
         "propiedades": propiedades,
         "fuente": fuente,
+        "url": url,
+        "descuento": descuento,
+        "categoria": _map_categoria(categorias_raw),
     }
+
+
+def _extract_categorias(state):
+    if not state:
+        return []
+    for key, val in state.items():
+        if isinstance(val, dict) and "categories" in val:
+            cats = val["categories"]
+            if isinstance(cats, list):
+                return cats
+            if isinstance(cats, dict) and "json" in cats:
+                if isinstance(cats["json"], list):
+                    return cats["json"]
+            continue
+        if isinstance(val, dict) and "categoryId" in val:
+            cats = val.get("categories", [])
+            if isinstance(cats, list):
+                return cats
+    return []
+
+
+def _map_categoria(categorias):
+    if not categorias:
+        return ""
+    general = ""
+    for cat in categorias:
+        parts = [p for p in cat.strip("/").split("/") if p]
+        if not general or len(parts) < len(general.split("/")):
+            general = "/".join(parts)
+    if not general:
+        return ""
+    last = general.split("/")[-1].strip().lower()
+    mapping = {
+        "bebidas": "Bebidas", "gaseosas": "Bebidas", "aguas": "Bebidas",
+        "cervezas": "Bebidas", "vinos": "Bebidas", "licores": "Bebidas",
+        "jugos": "Bebidas", "aperitivos": "Bebidas", "isotonicos": "Bebidas",
+        "almacen": "Almacén", "almacén": "Almacén", "panaderia": "Almacén",
+        "panadería": "Almacén", "golosinas": "Golosinas", "galletitas": "Almacén",
+        "snacks": "Almacén", "conservas": "Almacén", "enlatados": "Almacén",
+        "arroz": "Almacén", "pastas": "Almacén", "harinas": "Almacén",
+        "aceites": "Almacén", "aderezos": "Almacén", "especias": "Almacén",
+        "infusiones": "Almacén", "cafe": "Almacén", "café": "Almacén",
+        "yerba": "Almacén", "azucar": "Almacén", "azúcar": "Almacén",
+        "lacteos": "Frescos", "lácteos": "Frescos", "quesos": "Frescos",
+        "fiambres": "Frescos", "yogures": "Frescos", "huevos": "Frescos",
+        "frescos": "Frescos", "congelados": "Frescos", "carnes": "Frescos",
+        "limpieza": "Limpieza", "perfumeria": "Perfumería", "perfumería": "Perfumería",
+        "cuidado personal": "Perfumería", "belleza": "Perfumería",
+        "mascotas": "Almacén", "electro": "Otros", "hogar": "Otros",
+        "libreria": "Otros", "librería": "Otros", "jardineria": "Otros",
+        "jardinería": "Otros", "bazar": "Otros", "automotor": "Otros",
+    }
+    return mapping.get(last, last.capitalize())
+
+
+def _clean_name(nombre, categorias):
+    if not categorias or not nombre:
+        return nombre
+    parts = set()
+    for cat in categorias:
+        cat_clean = cat.strip("/")
+        if cat_clean:
+            parts.add(cat_clean)
+        for part in cat.strip("/").split("/"):
+            if part:
+                parts.add(part)
+    nombre_lower = nombre.lower()
+    best_match = ""
+    best_len = 0
+    for part in parts:
+        variants = {part.lower()}
+        words = part.lower().split(" ")
+        singular = " ".join(w[:-1] if w.endswith("s") else w for w in words)
+        if singular != part.lower():
+            variants.add(singular)
+        for variant in variants:
+            if nombre_lower.startswith(variant + " ") and len(variant) > best_len:
+                best_match = variant
+                best_len = len(variant)
+    if best_match:
+        return nombre[:best_len] + " -" + nombre[best_len:]
+    return nombre
+
+
+def _detectar_descuento(state):
+    if not state:
+        return None
+
+    promocion = _find_promotion_code(state)
+
+    for key in state.keys():
+        if not key.startswith("$Product:") or not key.endswith(".priceRange"):
+            continue
+        pr = state.get(key, {})
+        if not isinstance(pr, dict):
+            continue
+        selling_id = pr.get("sellingPrice", {}).get("id", "") if isinstance(pr.get("sellingPrice"), dict) else ""
+        list_id = pr.get("listPrice", {}).get("id", "") if isinstance(pr.get("listPrice"), dict) else ""
+        selling = state.get(selling_id, {}) if selling_id else {}
+        list_p = state.get(list_id, {}) if list_id else {}
+        if not isinstance(selling, dict) or not isinstance(list_p, dict):
+            continue
+        sp = selling.get("highPrice") or selling.get("value")
+        lp = list_p.get("highPrice") or list_p.get("value")
+        if sp is None or lp is None:
+            continue
+        try:
+            sp, lp = float(sp), float(lp)
+        except (ValueError, TypeError):
+            continue
+        if sp <= 0 or lp <= 0 or sp >= lp or lp > sp * 6:
+            continue
+        return {"activo": True, "precio_original": lp, "precio_oferta": sp, "promocion": promocion}
+
+    for key in state.keys():
+        if "commertialOffer" not in key or "Installments" in key:
+            continue
+        offer = state.get(key, {})
+        if not isinstance(offer, dict):
+            continue
+        price = offer.get("Price")
+        list_price = offer.get("ListPrice")
+        teasers = offer.get("teasers", [])
+        if teasers:
+            t = teasers[0]
+            if isinstance(t, dict):
+                promocion = promocion or t.get("name", "") or t.get("<Name>k__BackingField", "")
+        if price is not None and list_price is not None:
+            try:
+                sp, lp = float(price), float(list_price)
+            except (ValueError, TypeError):
+                continue
+            if sp > 0 and lp > 0 and sp < lp and lp <= sp * 6:
+                return {"activo": True, "precio_original": lp, "precio_oferta": sp, "promocion": promocion}
+
+    if promocion:
+        return {"activo": True, "precio_original": None, "precio_oferta": None, "promocion": promocion}
+    return None
+
+
+def _find_promotion_code(state):
+    for key in state.keys():
+        if "enrichPromotions" not in key:
+            continue
+        if ".promotions." not in key and not key.endswith(".promotions.0"):
+            continue
+        promo = state.get(key, {})
+        if isinstance(promo, dict):
+            code = promo.get("code") or promo.get("name") or promo.get("promotionName", "")
+            if code:
+                return code
+    return ""
 
 
 def lookup_producto(barcode, fuente=None):
@@ -167,6 +331,22 @@ def lookup_producto(barcode, fuente=None):
         if result:
             return result
     return None
+
+
+def comparar_precios(barcode):
+    """Obtiene el precio de cada fuente disponible."""
+    precios = []
+    for f in FUENTES:
+        result = _lookup_fuente(barcode, f)
+        if result and result.get("precio_referencia"):
+            precios.append({
+                "fuente": f,
+                "precio": result["precio_referencia"],
+                "nombre": result["nombre"],
+                "url": result.get("url", ""),
+                "descuento": result.get("descuento"),
+            })
+    return precios
 
 
 def _lookup_fuente(barcode, fuente):
@@ -183,7 +363,7 @@ def _lookup_fuente(barcode, fuente):
 
     final_url = resp.url.rstrip("/")
     if final_url.endswith("/p"):
-        return _scrape_producto(resp.text, barcode, fuente)
+        return _scrape_producto(resp.text, barcode, fuente, url=final_url)
 
     product_path = _find_product_link(resp.text)
     if not product_path:
@@ -197,7 +377,7 @@ def _lookup_fuente(barcode, fuente):
     except requests.RequestException:
         return None
 
-    return _scrape_producto(prod_resp.text, barcode, fuente)
+    return _scrape_producto(prod_resp.text, barcode, fuente, url=product_url)
 
 
 def _lookup_carrefour_api(barcode):
@@ -220,9 +400,16 @@ def _lookup_carrefour_api(barcode):
     item = items[0]
     sellers = item.get("sellers", [])
     price = None
+    list_price = None
+    promocion = ""
     if sellers:
         offer = sellers[0].get("commertialOffer", {})
         price = offer.get("Price")
+        list_price = offer.get("ListPrice")
+        teasers = offer.get("Teasers", []) or offer.get("PromotionTeasers", [])
+        if teasers:
+            t = teasers[0]
+            promocion = t.get("Name", "") or t.get("<Name>k__BackingField", "")
 
     images = item.get("images", [])
     imagen = images[0].get("imageUrl", "") if images else ""
@@ -232,9 +419,26 @@ def _lookup_carrefour_api(barcode):
     descripcion = p.get("description") or nombre
     sku = str(item.get("itemId", ""))
 
+    product_url = p.get("link", "")
+    if product_url and not product_url.startswith("http"):
+        product_url = "https://www.carrefour.com.ar" + product_url
+
+    descuento = None
+    if price is not None and list_price is not None and float(price) < float(list_price):
+        descuento = {
+            "activo": True,
+            "precio_original": float(list_price),
+            "precio_oferta": float(price),
+            "promocion": promocion,
+        }
+    elif promocion:
+        descuento = {"activo": True, "precio_original": None, "precio_oferta": None, "promocion": promocion}
+
+    categorias = p.get("categories", [])
+
     return {
         "codigo_barras": barcode,
-        "nombre": nombre.strip(),
+        "nombre": _clean_name(nombre, categorias),
         "marca": marca.strip() if isinstance(marca, str) else str(marca).strip(),
         "descripcion": descripcion.strip(),
         "precio_referencia": float(price) if price else None,
@@ -242,6 +446,9 @@ def _lookup_carrefour_api(barcode):
         "sku": sku.strip(),
         "propiedades": {},
         "fuente": "carrefour",
+        "url": product_url,
+        "descuento": descuento,
+        "categoria": _map_categoria(categorias),
     }
 
 

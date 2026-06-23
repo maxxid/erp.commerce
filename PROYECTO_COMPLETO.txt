@@ -1,0 +1,154 @@
+================================================================================
+PROYECTO: Gestión Comercial con lookup por código de barras
+================================================================================
+Stack: Python 3.13 + Flask 3.1 + SQLite + Vanilla JS
+Archivos: 4 (app.py, database.py, scraper.py, static/index.html)
+Base de datos: productos.db (SQLite, auto-generada)
+Dependencias: flask, requests, beautifulsoup4, lxml
+================================================================================
+
+1. QUÉ HACE
+================================================================================
+Sistema para kioscos/almacenes que permite escanear un código de barras,
+buscar el producto en Carrefour (API VTEX), Vea y Masonline (scraping HTML),
+extraer nombre, marca, precio, foto, propiedades nutricionales, y guardarlo
+en una base SQLite local con precio de venta calculado (margen + redondeo).
+
+Características:
+- Lookup por código de barras desde 3 fuentes (Carrefour API, Vea HTML, Masonline HTML)
+- Comparación de precios entre las 3 fuentes (badges)
+- Detección de promociones/descuentos
+- Categorización automática
+- Precio de venta = precio_referencia * (1 + margen%) redondeado
+- CRUD de productos (editar, eliminar)
+- Exportación CSV/JSON
+- Dashboard con totales y valor del stock
+
+2. ESTRUCTURA DE ARCHIVOS
+================================================================================
+C:\Users\Paula\Documents\codigo de barra\
+├── app.py               # Servidor Flask (112 líneas)
+│   - GET  /             -> static/index.html
+│   - POST /api/lookup   -> Buscar por código de barras
+│   - GET  /api/products -> Listar productos (filtros: search, categoria)
+│   - POST /api/products -> Guardar producto
+│   - PUT  /api/products/<id> -> Actualizar producto
+│   - DELETE /api/products/<id> -> Eliminar producto
+│   - POST /api/products/export -> Exportar seleccionados
+│   - GET  /api/config   -> Obtener config (margen, redondeo, categorias)
+│   - PUT  /api/config   -> Guardar config
+│   - GET  /api/dashboard -> Dashboard stats
+│
+├── database.py           # Capa de datos SQLite (241 líneas)
+│   - Tabla: productos (codigo_barras UNIQUE, nombre, marca, descripcion,
+│     precio_referencia, precio_venta, imagen_url, sku, propiedades JSON,
+│     fuente, categoria, cantidad, ia_analizado, created_at, updated_at)
+│   - Tabla: config (key/value: margen, redondeo, categorias)
+│   - init_db(), get_config(), set_config()
+│   - guardar_producto() -> INSERT OR UPDATE por codigo_barras
+│   - obtener_productos(search, categoria) -> listado
+│   - obtener_por_barcode(codigo) -> lookup individual
+│   - actualizar_producto(id, data)
+│   - eliminar_producto(id) -> DELETE físico
+│   - get_dashboard() -> totales, valor stock, último producto
+│   - exportar_productos(ids, formato) -> CSV o JSON
+│
+├── scraper.py            # Scraping de 3 fuentes (457 líneas)
+│   - FUENTES = ["carrefour", "vea", "masonline"]
+│   - lookup_producto(barcode, fuente=None) -> busca en orden
+│   - comparar_precios(barcode) -> busca en todas las fuentes
+│   - Carrefour vía API REST: api/catalog_system/pub/products/search
+│   - Vea/Masonline vía scraping HTML:
+│     Paso 1: GET /{barcode}?_q={barcode}&map=ft (buscar)
+│     Paso 2: Extraer link del producto desde __STATE__
+│     Paso 3: GET /{slug}/p (página de producto)
+│     Paso 4: Extraer JSON-LD y __STATE__ del HTML
+│   - Detección de descuentos desde commertialOffer.Teasers
+│   - Categorización automática con mapping de ~40 términos VTEX
+│   - Extracción de propiedades nutricionales desde __STATE__
+│
+├── static/
+│   └── index.html        # Frontend single-page (895 líneas)
+│   - CSS vanilla + responsive
+│   - JS vanilla sin frameworks
+│   - Componentes:
+│     * Header: margen %, redondeo $, toggle IA (placeholder)
+│     * Dashboard: cards con totales
+│     * Scan area: input + botón buscar
+│     * Result card: imagen, nombre, marca, precio ref, precio venta,
+│       comparación de precios (badges), propiedades, cantidad, categoría
+│     * Tabla de productos: filtro, búsqueda, exportación
+│     * Modal de edición
+│   - Flujo teclado: Enter en input -> lookup -> Enter -> cantidad ->
+│     Enter -> precio venta -> Enter -> guardar -> Enter -> vuelve a scan
+│   - loadConfig(), loadDashboard(), loadProducts() al iniciar
+│
+├── requirements.txt      # flask, requests, beautifulsoup4
+├── DOCUMENTACION.txt     # Documentación técnica (233 líneas)
+├── productos.db          # SQLite (no trackeada en git)
+└── PROYECTO_COMPLETO.txt # ESTE ARCHIVO
+
+3. CÓMO FUNCIONA EL LOOKUP
+================================================================================
+1. Usuario escanea código de barras (o tipea)
+2. Enter -> POST /api/lookup { barcode }
+3. Backend busca en DB local primero (obtener_por_barcode)
+4. Si no está en DB:
+   a. Busca en Carrefour API (1-2 segundos)
+   b. Si no encuentra -> Vea scraping (3-5 segundos)
+   c. Si no encuentra -> Masonline scraping (3-5 segundos)
+5. Devuelve JSON con producto + fuente
+6. Frontend renderiza tarjeta con datos
+7. Mientras tanto, en paralelo, busca en las otras fuentes para comparar precios
+8. Badges se actualizan individualmente cuando llega cada respuesta
+9. Usuario ajusta cantidad, precio venta, categoría y guarda
+
+4. REGLAS DE NEGOCIO
+================================================================================
+- Precio venta = Math.ceil(precio_referencia * (1 + margen/100) / redondeo) * redondeo
+- Margen default: 30%, Redondeo default: $50
+- Si producto ya existe en DB (por codigo_barras), se actualiza (UPSERT)
+- Categorías se auto-asignan desde VTEX con mapping fijo
+- Categorías nuevas se persisten en config y re-aparecen en selects
+- El toggle "Analizar con IA" es placeholder (no hace nada todavía)
+
+5. CÓMO CORRERLO
+================================================================================
+# Local:
+cd "C:\Users\Paula\Documents\codigo de barra"
+pip install flask requests beautifulsoup4 lxml
+python app.py
+# Abrir http://localhost:5000
+
+# En servidor (ej: Oracle Cloud con nginx):
+python app.py --host 0.0.0.0 --port 5000
+# nginx proxy reverse a localhost:5000
+
+6. PROBLEMAS CONOCIDOS
+================================================================================
+- Carrefour API puede rate-limit (cambia poco)
+- Vea/Masonline: si cambian estructura HTML, el scraping rompe
+- __STATE__ parsing es frágil (busca llaves { } manualmente)
+- No hay autenticación (es local/single-user)
+- No hay logging estructurado
+- Las propiedades nutricionales a veces vienen vacías
+- No hay manejo de timeouts diferenciado por fuente
+
+7. POSIBLES MEJORAS PREGUNTADAS EN CONVERSACIONES ANTERIORES
+================================================================================
+- Migrar a FastAPI + SQLAlchemy (mejor performance async)
+- Agregar Alpine.js + Tailwind (mejor UX)
+- Ventas: carrito, medios de pago
+- Stock: movimientos, alertas de stock bajo
+- Clientes: cuenta corriente, historial
+- Caja: apertura/cierre, arqueo
+- Usuarios y roles
+- JWT auth
+- Backups automáticos
+- Despliegue en Oracle Cloud Free Tier
+- Versión mobile
+- Catálogo central con R2
+
+================================================================================
+FIN DEL DOCUMENTO
+================================================================================

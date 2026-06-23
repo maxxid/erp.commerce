@@ -1,0 +1,233 @@
+Documentación Técnica — Gestión Comercial con lookup por código de barras
+================================================================================
+
+1. VISIÓN GENERAL
+─────────────────
+Sistema de gestión comercial para kioscos y pequeños comercios que permite
+cargar productos escaneando el código de barras. Al escanear, el sistema
+busca automáticamente el producto en supermercados online (Carrefour, Vea,
+Masonline) y extrae nombre, marca, precio de referencia, foto y propiedades.
+
+Stack: Python + Flask (backend) + SQLite (base de datos) + HTML/JS vanilla (frontend).
+Una sola carpeta, sin dependencias pesadas. Corre en Windows, Linux y Mac.
+
+
+2. CÓMO CONSIGUE LOS DATOS
+───────────────────────────
+Las tres fuentes usan la plataforma VTEX (https://vtex.com), el e-commerce
+más usado por supermercados argentinos.
+
+2.1. Carrefour — vía API de catálogo (la más rápida)
+     GET /api/catalog_system/pub/products/search?fq=alternateIds_Ean={barcode}
+     Devuelve JSON directo: productName, brand, Price, ListPrice, imagen, link.
+     No requiere parsear HTML.
+     Las promociones vienen en: commertialOffer.Teasers + PromotionTeasers.
+
+2.2. Vea y Masonline — vía scraping HTML
+     Paso 1: GET /{barcode}?_q={barcode}&map=ft  (búsqueda full-text)
+             -> Extrae el link del producto desde window.__STATE__
+     Paso 2: GET /{slug}/p  (página de producto)
+             -> Extrae JSON-LD (<script type="application/ld+json">) para
+                nombre, marca, precio, imagen, SKU.
+             -> Extrae __STATE__ para especificaciones (ingredientes,
+                tabla nutricional, sellos, características).
+
+2.3. ¿Por qué tres fuentes?
+     - Carrefour: API más rápida, precios competitivos.
+     - Vea: Datos más ricos (ingredientes, nutrición, 12 sellos de certificación).
+     - Masonline: Respaldo si las otras no tienen el producto.
+     El orden de búsqueda es: Carrefour → Vea → Masonline.
+     La primera que encuentra el producto es la fuente primaria.
+     Luego se buscan las otras dos en paralelo para comparar precios.
+
+
+3. ORDEN DE BÚSQUEDA Y COMPARACIÓN DE PRECIOS
+──────────────────────────────────────────────
+Al escanear un código:
+  1. Se busca en Carrefour (API, ~1-2 segundos)
+  2. Si no encuentra -> Vea (HTML scraping, ~3-5 segundos)
+  3. Si no encuentra -> Masonline (HTML scraping, ~3-5 segundos)
+
+La primera que encuentra el producto muestra los datos principales.
+Inmediatamente después, en paralelo, se buscan las otras dos fuentes
+para llenar los badges de comparación de precios.
+
+Los badges muestran carga progresiva: cada uno se actualiza apenas
+llega la respuesta de su fuente, sin esperar a las demás.
+
+Cada badge es un hipervínculo a la página del producto en esa fuente.
+
+
+4. BASE DE DATOS (SQLite)
+──────────────────────────
+Tabla: productos
+  - codigo_barras  TEXT UNIQUE   (PK lógico)
+  - nombre         TEXT          (nombre limpio, categoría separada con " - ")
+  - marca          TEXT
+  - descripcion    TEXT
+  - precio_referencia  REAL      (precio de góndola en la fuente)
+  - precio_venta   REAL          (calculado con margen + redondeo, editable)
+  - imagen_url     TEXT
+  - sku            TEXT
+  - propiedades    TEXT (JSON)   (ingredientes, tabla nutricional, sellos, etc.)
+  - fuente         TEXT          (carrefour | vea | masonline)
+  - categoria      TEXT          (Bebidas, Almacén, Frescos... auto-asignada)
+  - cantidad       REAL          (stock inicial, def. 0)
+  - ia_analizado   INTEGER       (placeholder para futuro análisis con IA)
+  - created_at     TIMESTAMP
+  - updated_at     TIMESTAMP
+
+Tabla: config
+  - key   TEXT PRIMARY KEY
+  - value TEXT
+  Claves: margen (default 30), redondeo (default 50), categorias (JSON array)
+
+
+5. CARACTERÍSTICAS PRINCIPALES
+───────────────────────────────
+
+5.1. Precio de venta con margen y redondeo
+     - Inputs configurables en el header: Margen % y Redondear a $X.
+     - Se guardan automáticamente en /api/config.
+     - Cálculo: ceil(precio_referencia * (1 + margen/100) / redondeo) * redondeo.
+     - El precio calculado se puede editar antes de guardar.
+     - Ejemplo: $5.650 con 30% de margen redondeado a $50 = $7.400.
+
+5.2. Comparación de precios entre fuentes
+     - Badges con carga progresiva e independiente por fuente.
+     - Cada badge es un link a la página del producto en ese supermercado.
+     - Si la fuente tiene promo/descuento, se indica en el badge.
+
+5.3. Detección de promociones y descuentos
+     - Carrefour: desde commertialOffer.Price vs ListPrice + Teasers.
+     - Vea/Masonline: desde __STATE__ (priceRange, commertialOffer,
+       enrichPromotions de GraphQL).
+     - Se valida que el descuento sea razonable (no más de 6x de diferencia)
+       para evitar falsos positivos.
+     - Badges muestran "OFERTA" (descuento real) o "PROMO" (promoción).
+
+5.4. Edición de productos
+     - Modal con: nombre, marca, precio de venta, cantidad, categoría.
+     - También editable antes de guardar (en la tarjeta de resultado).
+
+5.5. Dashboard
+     - Total de productos, valor del stock (suma de precio_venta × cantidad),
+       último producto agregado.
+
+5.6. Categorías
+     - Auto-asignadas desde la categoría del supermercado (nivel más general).
+     - Mapping de ~40 términos VTEX → categorías del sistema.
+     - Categorías nuevas se crean automáticamente y se persisten.
+     - Filtro de productos por categoría en la tabla.
+
+5.7. Exportación
+     - Selección múltiple con checkboxes.
+     - Formatos: CSV y JSON.
+
+5.8. Flujo con lector de código de barras (solo teclado, sin mouse)
+     - Escanear → Enter → busca el producto.
+     - Resultado → foco en "Cantidad" (valor por defecto: 0 o el guardado).
+     - Enter → foco en "Precio venta".
+     - Enter → foco en "Guardar producto".
+     - Enter → guarda y vuelve al input de escaneo.
+
+5.9. Analizar con IA (placeholder)
+     - Toggle en el header. Por ahora sin función.
+     - El valor ia_mode se envía en cada lookup.
+     - Preparado para integrar análisis con IA más adelante.
+
+
+6. ESTRUCTURA DE ARCHIVOS
+──────────────────────────
+codigo de barra/
+├── app.py              # Servidor Flask: endpoints REST API + servir frontend
+├── scraper.py          # Lógica de scraping: Carrefour API, Vea/Masonline HTML
+├── database.py         # SQLite: init, CRUD, export, dashboard, config
+├── static/
+│   └── index.html      # Frontend completo (HTML + CSS + JS vanilla)
+├── requirements.txt    # flask, requests, beautifulsoup4
+└── productos.db        # Base de datos SQLite (auto-generada)
+
+
+7. ENDPOINTS DE LA API
+───────────────────────
+POST   /api/lookup          Buscar producto por código de barras
+GET    /api/products         Listar productos (filtros: search, categoria)
+POST   /api/products         Guardar producto nuevo
+PUT    /api/products/<id>    Actualizar producto existente
+DELETE /api/products/<id>    Eliminar producto
+POST   /api/products/export  Exportar seleccionados (CSV/JSON)
+GET    /api/config           Obtener configuración (margen, redondeo, categorías)
+PUT    /api/config           Actualizar configuración
+GET    /api/dashboard        Datos del dashboard (totales, valor stock, último)
+
+
+8. DECISIONES TÉCNICAS Y PORQUÉS
+─────────────────────────────────
+
+8.1. ¿Por qué VTEX y no una API oficial de supermercados?
+     No existen APIs públicas oficiales de Carrefour/Vea/Masonline para
+     consultar productos por código de barras. VTEX expone datos en el HTML
+     (JSON-LD, __STATE__) y en APIs internas de catálogo, que son accesibles
+     sin autenticación.
+
+8.2. ¿Por qué SQLite y no PostgreSQL/MySQL?
+     Cero configuración, archivo único, ideal para una app local/standalone.
+     Soporta concurrencia suficiente para un kiosco. Se puede migrar a
+     PostgreSQL si el sistema escala a multi-sucursal.
+
+8.3. ¿Por qué Flask y no FastAPI/Django?
+     Flask es mínimo, tiene lo justo para una API REST. No necesita async
+     (el scraping es I/O-bound pero secuencial por fuente). Si se escala a
+     multi-tenant, se puede migrar a FastAPI para mejor performance.
+
+8.4. ¿Por qué HTML/JS vanilla y no React/Vue?
+     Una sola página, sin build step, sin node_modules. Corre en cualquier
+     navegador moderno. Para la escala de un kiosco es más que suficiente.
+     Si el frontend crece mucho, se puede migrar a React o Vue sin cambiar
+     el backend.
+
+8.5. ¿Por qué buscar en las 3 fuentes y no en una sola?
+     - Cobertura: no todos los productos están en todos los supermercados.
+     - Comparación: el comerciante ve qué precio tiene cada supermercado
+       y puede decidir su precio de venta con mejor información.
+     - Respaldo: si una fuente falla o cambia su formato, las otras siguen
+       funcionando.
+
+8.6. ¿Por qué nombre "Categoría - Producto"?
+     Las fuentes anteponen la categoría al nombre (ej: "Gaseosa cola Coca Cola...").
+     Separar con " - " deja el nombre más limpio y la subcategoría visible.
+
+
+9. CAMINO A ERP DE COMERCIO
+────────────────────────────
+Este sistema es un MVP sólido. Sobre esta base se puede construir:
+
+9.1. Módulos adicionales
+     - Ventas: carrito, medios de pago, ticket/factura.
+     - Clientes: cuenta corriente, historial, fiado.
+     - Proveedores: órdenes de compra, recepción de mercadería.
+     - Caja: apertura/cierre, arqueo, movimientos.
+     - Reportes: ventas por día, margen por producto, rotación de stock.
+     - Multi-sucursal: base de datos compartida, transferencias entre
+       sucursales, consolidación de reportes.
+     - Control de stock: alertas de stock bajo, inventario periódico.
+     - Listas de precios: mayorista, minorista, por cliente.
+     - Usuarios y roles: administrador, cajero, repositor.
+
+9.2. Arquitectura escalada
+     - Backend: migrar Flask → FastAPI con async/await.
+     - Base de datos: SQLite → PostgreSQL con SQLAlchemy.
+     - Frontend: HTML vanilla → Vue.js o React con Vite.
+     - Sincronización: API REST → WebSocket para actualizaciones en tiempo real.
+     - Autenticación: JWT con refresh tokens.
+     - Respaldos: backups automáticos de la base de datos.
+     - Despliegue: Docker + docker-compose para desarrollo, PaaS/VPS para
+       producción.
+
+9.3. Integraciones futuras
+     - AFIP: factura electrónica, percepciones, retenciones.
+     - MercadoPago / MODO: cobro con QR.
+     - Proveedores mayoristas: lookup de precios de compra.
+     - Impresión: tickets térmicos, etiquetas de góndola con código de barras.
+     - E-commerce propio: catálogo online sincronizado con stock real.
