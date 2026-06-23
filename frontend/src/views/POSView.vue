@@ -1,337 +1,410 @@
 <template>
-  <div class="space-y-6">
-    <div class="flex items-center justify-between">
+  <div class="space-y-5">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
-        <h2 class="text-2xl font-bold text-slate-950 font-display">POS de Ventas</h2>
-        <p class="text-sm text-slate-500 mt-1">Punto de Venta</p>
+        <h2 class="text-2xl font-bold text-slate-950 dark:text-white font-display">POS de Ventas</h2>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Punto de Venta rápido</p>
       </div>
-      <div class="flex items-center gap-2">
-        <span class="text-xs text-slate-400 bg-slate-100 px-3 py-1 rounded-full font-bold">
-          <i class="fa-solid fa-user mr-1"></i>{{ auth.currentUser.nombre }}
-        </span>
+      <div class="flex items-center gap-3">
+        <BaseBadge variant="default" size="sm">
+          <i class="fa-solid fa-user mr-1"></i>
+          {{ auth.currentUser?.nombre || auth.currentUser?.username }}
+        </BaseBadge>
+        <BaseBadge :variant="cajaStore.abierta ? 'success' : 'danger'" size="sm" :dot="true">
+          {{ cajaStore.abierta ? 'CAJA ABIERTA' : 'CAJA CERRADA' }}
+        </BaseBadge>
       </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <!-- COLUMN 1: Product Catalog -->
-      <div class="lg:col-span-1 space-y-4">
-        <!-- Barcode lookup -->
-        <div class="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
-          <label class="text-[10px] font-bold text-slate-400 uppercase block">Código de Barras</label>
-          <div class="relative">
-            <i class="fa-solid fa-barcode absolute left-4 top-3.5 text-slate-400"></i>
-            <input
-              v-model="posLookupCode"
-              @keydown.enter="triggerPOSLookup"
-              @input="handlePOSInput"
-              placeholder="Escanear o escribir código..."
-              class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-sm font-mono-data focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600 transition"
-            />
-          </div>
+    <!-- Caja cerrada banner -->
+    <Transition
+      enter-active-class="transition duration-300 ease-out-expo"
+      enter-from-class="opacity-0 -translate-y-2"
+      enter-to-class="opacity-100 translate-y-0"
+      leave-active-class="transition duration-200 ease-in"
+      leave-from-class="opacity-100 translate-y-0"
+      leave-to-class="opacity-0 -translate-y-2"
+    >
+      <div
+        v-if="!cajaStore.abierta"
+        class="p-4 rounded-2xl border bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/50 flex items-center gap-4"
+      >
+        <div class="w-12 h-12 rounded-xl bg-red-100 dark:bg-red-800/40 flex items-center justify-center text-red-600 dark:text-red-300 shrink-0">
+          <i class="fa-solid fa-lock text-xl"></i>
+        </div>
+        <div class="flex-1">
+          <p class="text-sm font-bold text-red-800 dark:text-red-200">La caja está cerrada</p>
+          <p class="text-xs text-red-600 dark:text-red-300">Abrí la caja en <strong>Arqueos y Caja</strong> para poder confirmar ventas.</p>
+        </div>
+        <BaseButton variant="primary" size="sm" @click="$router.push('/caja')">Abrir caja</BaseButton>
+      </div>
+    </Transition>
 
-          <!-- Lookup result card -->
-          <div v-if="lookupProduct._loading" class="flex items-center justify-center py-4">
-            <i class="fa-solid fa-circle-notch animate-spin text-brand-600 text-lg"></i>
-            <span class="ml-2 text-sm text-slate-500">Buscando...</span>
-          </div>
-          <div v-else-if="lookupProduct.id" class="p-3 bg-brand-50 border border-brand-100 rounded-xl">
-            <div class="flex items-start gap-3">
-              <div class="w-12 h-12 rounded-xl bg-brand-100 flex items-center justify-center text-brand-600 flex-shrink-0">
-                <i class="fa-solid fa-box text-lg"></i>
+    <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
+      <!-- COLUMN 1: Product Catalog (5 cols) -->
+      <div class="xl:col-span-5 space-y-4">
+        <BaseCard padding="md">
+          <BaseInput
+            ref="barcodeInput"
+            v-model="posLookupCode"
+            label="Código de Barras"
+            placeholder="Escanear o escribir código..."
+            input-class="font-mono-data"
+            size="lg"
+            @input="handlePOSInput"
+            @enter="triggerPOSLookup"
+          >
+            <template #prefix>
+              <i class="fa-solid fa-barcode text-slate-400"></i>
+            </template>
+          </BaseInput>
+
+          <!-- Lookup result -->
+          <Transition
+            enter-active-class="transition duration-200 ease-out-expo"
+            enter-from-class="opacity-0 translate-y-1"
+            enter-to-class="opacity-100 translate-y-0"
+            leave-active-class="transition duration-150 ease-in"
+            leave-from-class="opacity-100 translate-y-0"
+            leave-to-class="opacity-0 translate-y-1"
+          >
+            <div v-if="lookupProduct._loading || lookupProduct.id || lookupProduct._searched" class="mt-3">
+              <div v-if="lookupProduct._loading" class="flex items-center justify-center py-6">
+                <i class="fa-solid fa-circle-notch fa-spin text-brand-500 text-xl"></i>
+                <span class="ml-2 text-sm text-slate-500 dark:text-slate-400">Buscando...</span>
               </div>
-              <div class="flex-1 min-w-0">
-                <p class="text-sm font-bold text-slate-900 truncate">{{ lookupProduct.nombre }}</p>
-                <p class="text-xs text-slate-500">{{ lookupProduct.marca }}</p>
-                <div class="flex items-center gap-3 mt-1.5">
-                  <span class="text-sm font-bold font-mono-data text-brand-600">{{ fc(lookupProduct.precio_venta) }}</span>
-                  <span class="text-[10px] text-slate-400">Stock: {{ lookupProduct.stock_actual }}</span>
+              <div v-else-if="lookupProduct.id" class="p-3 bg-brand-50 dark:bg-brand-900/20 border border-brand-100 dark:border-brand-800/40 rounded-xl">
+                <div class="flex items-start gap-3">
+                  <div class="w-12 h-12 rounded-xl bg-brand-100 dark:bg-brand-800/40 flex items-center justify-center text-brand-600 dark:text-brand-300 shrink-0">
+                    <i class="fa-solid fa-box text-lg"></i>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-sm font-bold text-slate-900 dark:text-white truncate">{{ lookupProduct.nombre }}</p>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">{{ lookupProduct.marca }}</p>
+                    <div class="flex items-center gap-3 mt-1.5">
+                      <span class="text-sm font-bold font-mono-data text-brand-600 dark:text-brand-400">{{ fc(lookupProduct.precio_venta) }}</span>
+                      <BaseBadge variant="default" size="xs">Stock: {{ lookupProduct.stock_actual }}</BaseBadge>
+                    </div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2 mt-3">
+                  <input
+                    v-model.number="lookupProduct._qty"
+                    type="number"
+                    min="1"
+                    class="w-16 px-2 py-1.5 text-sm text-center font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+                  >
+                  <input
+                    v-model.number="lookupProduct._price"
+                    type="number"
+                    step="0.01"
+                    class="flex-1 px-2 py-1.5 text-sm text-center font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+                  >
+                  <BaseButton size="sm" @click="addToCart(lookupProduct, lookupProduct._qty, lookupProduct._price)">
+                    <i class="fa-solid fa-plus"></i> Agregar
+                  </BaseButton>
                 </div>
               </div>
+              <div v-else-if="lookupProduct._searched" class="p-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800/40 rounded-xl text-xs text-red-600 dark:text-red-300 font-medium text-center flex items-center justify-center gap-2">
+                <i class="fa-solid fa-circle-xmark"></i>
+                Producto no encontrado
+              </div>
             </div>
-            <div class="flex items-center gap-2 mt-3">
-              <input
-                v-model.number="lookupProduct._qty"
-                type="number"
-                min="1"
-                class="w-16 bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-sm text-center font-mono-data focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600"
-              />
-              <input
-                v-model.number="lookupProduct._price"
-                type="number"
-                step="0.01"
-                class="flex-1 bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-sm text-center font-mono-data focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600"
-              />
-              <button
-                @click="addToCart(lookupProduct, lookupProduct._qty, lookupProduct._price)"
-                class="bg-brand-600 hover:bg-brand-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition flex-shrink-0"
-              >
-                <i class="fa-solid fa-plus mr-1"></i> Agregar
-              </button>
-            </div>
-          </div>
-          <div v-else-if="lookupProduct._searched" class="p-3 bg-rose-50 border border-rose-100 rounded-xl text-xs text-rose-600 font-bold text-center">
-            Producto no encontrado
-          </div>
-        </div>
+          </Transition>
+        </BaseCard>
 
-        <!-- Search input -->
-        <div class="relative">
-          <i class="fa-solid fa-magnifying-glass absolute left-4 top-3.5 text-slate-400"></i>
-          <input
-            v-model="posTextSearch"
-            placeholder="Buscar producto..."
-            class="w-full bg-white border border-slate-200 rounded-xl pl-11 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600 transition shadow-sm"
-          />
-        </div>
+        <BaseInput
+          v-model="posTextSearch"
+          placeholder="Buscar producto por nombre, marca o código..."
+          size="md"
+        >
+          <template #prefix>
+            <i class="fa-solid fa-magnifying-glass text-slate-400"></i>
+          </template>
+        </BaseInput>
 
-        <!-- Category filter buttons -->
+        <!-- Category chips -->
         <div class="flex flex-wrap gap-2">
           <button
+            type="button"
+            class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 border"
+            :class="!selectedPOSCategory
+              ? 'bg-brand-600 text-white border-brand-600 shadow-sm shadow-brand-500/20'
+              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'"
             @click="selectedPOSCategory = null"
-            :class="!selectedPOSCategory ? 'bg-brand-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'"
-            class="px-3 py-1.5 rounded-lg text-xs font-semibold transition shadow-sm"
           >
             Todos
           </button>
           <button
             v-for="cat in categories"
             :key="cat.id"
+            type="button"
+            class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 border"
+            :class="selectedPOSCategory === cat.id
+              ? 'bg-brand-600 text-white border-brand-600 shadow-sm shadow-brand-500/20'
+              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'"
             @click="selectedPOSCategory = cat.id"
-            :class="selectedPOSCategory === cat.id ? 'bg-brand-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'"
-            class="px-3 py-1.5 rounded-lg text-xs font-semibold transition shadow-sm"
           >
             {{ cat.nombre }}
           </button>
         </div>
 
         <!-- Product grid -->
-        <div class="grid grid-cols-2 gap-3 max-h-[420px] overflow-y-auto pr-1">
-          <div
-            v-for="p in filteredPOSProducts"
-            :key="p.id"
-            @click="addToCart(p)"
-            class="bg-white border border-slate-200 p-3 rounded-xl shadow-sm hover:border-brand-300 hover:shadow-md transition cursor-pointer"
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[520px] overflow-y-auto pr-1">
+          <TransitionGroup
+            enter-active-class="transition duration-200 ease-out-expo"
+            enter-from-class="opacity-0 scale-95"
+            enter-to-class="opacity-100 scale-100"
+            leave-active-class="transition duration-150 ease-in"
+            leave-from-class="opacity-100 scale-100"
+            leave-to-class="opacity-0 scale-95"
+            move-class="transition duration-200 ease-out-expo"
           >
-            <div class="flex items-center gap-2 mb-1">
-              <div class="w-8 h-8 rounded-lg bg-brand-50 flex items-center justify-center text-brand-600 flex-shrink-0">
-                <i class="fa-solid fa-box text-xs"></i>
+            <button
+              v-for="p in filteredPOSProducts"
+              :key="p.id"
+              type="button"
+              class="group relative text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-3 rounded-xl shadow-sm transition-all duration-200 ease-out-expo hover:shadow-md hover:border-brand-300 dark:hover:border-brand-700 hover:-translate-y-0.5 active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-brand-500/40"
+              @click="addToCart(p)"
+            >
+              <div class="flex items-center gap-2 mb-2">
+                <div class="w-9 h-9 rounded-lg bg-brand-50 dark:bg-brand-900/30 flex items-center justify-center text-brand-600 dark:text-brand-400 shrink-0 group-hover:scale-105 transition-transform">
+                  <i class="fa-solid fa-box text-xs"></i>
+                </div>
+                <p class="text-xs font-bold text-slate-900 dark:text-white truncate leading-tight">{{ p.nombre }}</p>
               </div>
-              <p class="text-xs font-bold text-slate-900 truncate leading-tight">{{ p.nombre }}</p>
-            </div>
-            <p class="text-[10px] text-slate-400 truncate">{{ p.marca }}</p>
-            <div class="flex items-center justify-between mt-1.5">
-              <span class="text-sm font-bold font-mono-data text-brand-600">{{ fc(p.precio_venta) }}</span>
-              <span class="text-[10px] text-slate-400">{{ p.stock_actual }} u</span>
-            </div>
+              <p class="text-[10px] text-slate-400 dark:text-slate-500 truncate">{{ p.marca }}</p>
+              <div class="flex items-center justify-between mt-2">
+                <span class="text-sm font-bold font-mono-data text-brand-600 dark:text-brand-400">{{ fc(p.precio_venta) }}</span>
+                <BaseBadge
+                  :variant="p.stock_actual <= 5 ? 'danger' : 'default'"
+                  size="xs"
+                >
+                  {{ p.stock_actual }} u
+                </BaseBadge>
+              </div>
+            </button>
+          </TransitionGroup>
+          <div v-if="!filteredPOSProducts.length" class="col-span-full">
+            <EmptyState icon="fa-box-open" title="Sin productos" text="No hay productos que coincidan con tu búsqueda." compact />
           </div>
-          <p v-if="!filteredPOSProducts.length" class="col-span-2 text-xs text-slate-400 text-center py-8">
-            Sin productos
-          </p>
         </div>
       </div>
 
-      <!-- COLUMN 2: Cart -->
-      <div class="lg:col-span-1 space-y-4">
-        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-          <div class="p-4 border-b border-slate-100 flex items-center gap-2">
-            <i class="fa-solid fa-cash-register text-brand-600"></i>
-            <span class="text-sm font-bold text-slate-900">Carrito</span>
-            <span class="text-[10px] text-slate-400 ml-auto">{{ cart.items.length }} productos</span>
+      <!-- COLUMN 2: Cart (4 cols) -->
+      <div class="xl:col-span-4 space-y-4">
+        <BaseCard padding="none" class="overflow-hidden">
+          <div class="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
+            <i class="fa-solid fa-cash-register text-brand-500"></i>
+            <span class="text-sm font-bold text-slate-900 dark:text-white">Carrito</span>
+            <BaseBadge variant="default" size="xs" class="ml-auto">{{ cart.items.length }} productos</BaseBadge>
           </div>
 
-          <!-- Cart items -->
-          <div class="max-h-[360px] overflow-y-auto divide-y divide-slate-50">
-            <div
-              v-for="(item, idx) in cart.items"
-              :key="idx"
-              class="p-3 flex items-center gap-3 hover:bg-slate-50 transition"
+          <div class="max-h-[340px] overflow-y-auto">
+            <TransitionGroup
+              tag="div"
+              class="divide-y divide-slate-50 dark:divide-slate-800/70"
+              enter-active-class="transition duration-250 ease-out-expo"
+              enter-from-class="opacity-0 -translate-x-3"
+              enter-to-class="opacity-100 translate-x-0"
+              leave-active-class="transition duration-200 ease-in"
+              leave-from-class="opacity-100 translate-x-0"
+              leave-to-class="opacity-0 translate-x-3"
+              move-class="transition duration-200 ease-out-expo"
             >
-              <div class="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500 flex-shrink-0">
-                <i class="fa-solid fa-box text-xs"></i>
-              </div>
-              <div class="flex-1 min-w-0">
-                <p class="text-xs font-bold text-slate-900 truncate">{{ item.nombre }}</p>
-                <p class="text-[10px] text-slate-400">{{ item.codigo_barras }}</p>
-                <div class="flex items-center gap-2 mt-0.5">
-                  <button
-                    @click="updateCartQty(idx, item.cantidad - 1)"
-                    class="w-5 h-5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-500 text-xs flex items-center justify-center transition"
-                  >&minus;</button>
-                  <span class="text-xs font-mono-data font-bold text-slate-700 w-5 text-center">{{ item.cantidad }}</span>
-                  <button
-                    @click="updateCartQty(idx, item.cantidad + 1)"
-                    class="w-5 h-5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-500 text-xs flex items-center justify-center transition"
-                  >+</button>
-                  <span class="text-xs font-mono-data font-bold text-brand-600 ml-auto">{{ fc(item.precio_unitario * item.cantidad) }}</span>
-                </div>
-              </div>
-              <button
-                @click="removeFromCart(idx)"
-                class="w-6 h-6 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition flex-shrink-0"
+              <div
+                v-for="(item, idx) in cart.items"
+                :key="`${item.producto_id}-${item.precio_unitario}`"
+                class="p-3 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
               >
-                <i class="fa-solid fa-trash text-[10px]"></i>
-              </button>
+                <div class="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 shrink-0">
+                  <i class="fa-solid fa-box text-xs"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <p class="text-xs font-bold text-slate-900 dark:text-white truncate">{{ item.nombre }}</p>
+                  <p class="text-[10px] text-slate-400 dark:text-slate-500 font-mono-data">{{ item.codigo_barras }}</p>
+                  <div class="flex items-center gap-2 mt-1.5">
+                    <button
+                      type="button"
+                      aria-label="Disminuir cantidad"
+                      class="w-6 h-6 rounded-md bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs flex items-center justify-center transition active:scale-95"
+                      @click="updateCartQty(idx, item.cantidad - 1)"
+                    >&minus;</button>
+                    <span class="text-xs font-mono-data font-bold text-slate-700 dark:text-slate-200 w-6 text-center">{{ item.cantidad }}</span>
+                    <button
+                      type="button"
+                      aria-label="Aumentar cantidad"
+                      class="w-6 h-6 rounded-md bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs flex items-center justify-center transition active:scale-95"
+                      @click="updateCartQty(idx, item.cantidad + 1)"
+                    >+</button>
+                    <span class="text-xs font-mono-data font-bold text-brand-600 dark:text-brand-400 ml-auto">{{ fc(item.precio_unitario * item.cantidad) }}</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Eliminar producto"
+                  class="w-7 h-7 rounded-lg text-rose-400 hover:text-rose-600 dark:hover:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-900/20 flex items-center justify-center transition flex-shrink-0"
+                  @click="removeFromCart(idx)"
+                >
+                  <i class="fa-solid fa-trash text-[10px]"></i>
+                </button>
+              </div>
+            </TransitionGroup>
+
+            <div v-if="!cart.items.length" class="p-8 text-center">
+              <div class="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-3">
+                <i class="fa-solid fa-basket-shopping text-slate-300 dark:text-slate-600 text-2xl"></i>
+              </div>
+              <p class="text-sm text-slate-500 dark:text-slate-400 font-semibold">Carrito vacío</p>
+              <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">Escaneá o seleccioná productos</p>
             </div>
           </div>
+        </BaseCard>
 
-          <!-- Empty cart -->
-          <div v-if="!cart.items.length" class="p-8 text-center">
-            <div class="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-3">
-              <i class="fa-solid fa-basket-shopping text-slate-300 text-2xl"></i>
-            </div>
-            <p class="text-sm text-slate-400 font-semibold">Carrito vacío</p>
-            <p class="text-xs text-slate-300 mt-1">Escaneá o seleccioná productos</p>
-          </div>
-        </div>
-
-        <!-- Caja cerrada -->
-        <div v-if="!cajaStore.abierta" class="mx-4 p-4 bg-rose-50 border border-rose-200 rounded-xl text-center">
-          <i class="fa-solid fa-lock text-rose-500 text-2xl mb-2 block"></i>
-          <p class="text-sm font-bold text-rose-700">CAJA CERRADA</p>
-          <p class="text-xs text-rose-500 mt-1">Abrí la caja en Arqueos y Caja para poder vender</p>
-        </div>
-
-        <!-- Cart summary -->
-        <div class="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
+        <!-- Summary -->
+        <BaseCard padding="md" class="space-y-4">
           <div class="flex justify-between text-sm">
-            <span class="text-slate-500">Subtotal</span>
-            <span class="font-mono-data font-bold text-slate-800">{{ fc(cart.subtotal) }}</span>
+            <span class="text-slate-500 dark:text-slate-400">Subtotal</span>
+            <span class="font-mono-data font-bold text-slate-800 dark:text-slate-200">{{ fc(cart.subtotal) }}</span>
           </div>
 
           <div class="flex items-center justify-between">
-            <span class="text-xs font-bold text-slate-500">Descuento</span>
+            <span class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Descuento</span>
             <div class="flex items-center gap-2">
               <input
                 v-model.number="cart.descuento"
-                @input="recalcCart"
                 type="number"
                 step="0.01"
                 min="0"
                 placeholder="0"
-                class="w-20 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-right font-mono-data focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600"
-              />
-              <span class="text-[10px] text-slate-400">$</span>
+                class="w-24 px-2 py-1.5 text-xs text-right font-mono-data bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+                @input="recalcCart"
+              >
+              <span class="text-[10px] text-slate-400 dark:text-slate-500">$</span>
             </div>
           </div>
 
-          <hr class="border-slate-100" />
+          <hr class="border-slate-100 dark:border-slate-800">
 
-          <div class="flex justify-between">
-            <span class="text-sm font-bold text-slate-900">Total</span>
-            <span class="text-lg font-bold font-mono-data text-brand-600">{{ fc(cart.total) }}</span>
+          <div class="flex justify-between items-end">
+            <span class="text-sm font-bold text-slate-900 dark:text-white">Total</span>
+            <span class="text-2xl font-bold font-mono-data text-brand-600 dark:text-brand-400">{{ fc(cart.total) }}</span>
           </div>
 
-          <!-- Payment method -->
-          <div ref="pagoSection" tabindex="0" @keydown="handlePagoKeydown"
-               class="focus:outline-none focus:ring-2 focus:ring-brand-400 rounded-xl p-1 -m-1">
-            <label class="text-[10px] font-bold text-slate-400 uppercase block mb-1">
+          <!-- Payment method segmented -->
+          <div ref="pagoSection" tabindex="0" @keydown="handlePagoKeydown">
+            <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase block mb-2">
               Medio de Pago
-              <span class="text-slate-300 ml-2 font-normal">Atajos: 1-5, ←→, Enter</span>
+              <span class="text-slate-300 dark:text-slate-600 ml-2 font-normal">Atajos: 1-5, ←→, Enter</span>
             </label>
-            <select
-              v-model="cart.medio_pago"
-              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600 transition"
-            >
-              <option value="efectivo">Efectivo</option>
-              <option value="transferencia">Transferencia</option>
-              <option value="debito">Débito</option>
-              <option value="credito">Crédito</option>
-              <option value="cta_corriente">Cta. Corriente</option>
-            </select>
+            <div class="grid grid-cols-5 gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
+              <button
+                v-for="(medio, idx) in mediosPago"
+                :key="medio.value"
+                type="button"
+                class="flex flex-col items-center gap-1 py-2 rounded-lg text-[10px] font-semibold transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
+                :class="cart.medio_pago === medio.value
+                  ? 'bg-white dark:bg-slate-700 text-brand-600 dark:text-brand-400 shadow-sm'
+                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700/50'"
+                @click="cart.medio_pago = medio.value"
+              >
+                <i :class="`fa-solid ${medio.icon}`"></i>
+                <span class="hidden sm:inline">{{ medio.label }}</span>
+                <span class="sm:hidden">{{ idx + 1 }}</span>
+              </button>
+            </div>
           </div>
 
-          <!-- Client selector -->
-          <div>
-            <label class="text-[10px] font-bold text-slate-400 uppercase block mb-1">Cliente</label>
-            <select
-              v-model="cart.cliente_id"
-              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600 transition"
-            >
-              <option :value="null">Consumidor Final</option>
-              <option v-for="c in clientes" :key="c.id" :value="c.id">{{ c.nombre }}</option>
-            </select>
-          </div>
+          <BaseSelect
+            v-model="cart.cliente_id"
+            label="Cliente"
+            placeholder=""
+            :options="[{ value: null, label: 'Consumidor Final' }, ...clientes.map(c => ({ value: c.id, label: c.nombre }))]"
+            option-value="value"
+            option-label="label"
+            size="sm"
+          />
 
-          <button
+          <BaseButton
+            variant="primary"
+            block
+            size="lg"
+            :loading="confirmando"
+            :disabled="!cart.items.length"
+            class="!bg-emerald-600 hover:!bg-emerald-700 !shadow-emerald-500/20"
             @click="confirmarVenta"
-            :disabled="!cart.items.length || confirmando"
-            class="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white py-3 rounded-xl text-sm font-semibold shadow-lg shadow-emerald-600/20 transition flex items-center justify-center gap-2"
           >
-            <i :class="confirmando ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-check-circle'"></i>
+            <i :class="confirmando ? 'fa-solid fa-circle-notch fa-spin' : 'fa-solid fa-check-circle'"></i>
             {{ confirmando ? 'Procesando...' : 'Confirmar Venta' }}
-          </button>
+          </BaseButton>
 
           <button
-            @click="vaciarCarrito"
             v-if="cart.items.length"
-            class="w-full text-rose-500 hover:text-rose-600 text-xs font-semibold transition text-center"
+            type="button"
+            class="w-full text-rose-500 hover:text-rose-600 dark:hover:text-rose-400 text-xs font-semibold transition text-center py-1"
+            @click="vaciarCarrito"
           >
             <i class="fa-solid fa-trash mr-1"></i> Vaciar carrito
           </button>
-        </div>
+        </BaseCard>
       </div>
 
-      <!-- COLUMN 3: Quick Stats -->
-      <div class="lg:col-span-1 space-y-4">
-        <!-- Stats cards -->
+      <!-- COLUMN 3: Stats & history (3 cols) -->
+      <div class="xl:col-span-3 space-y-4">
         <div class="grid grid-cols-2 gap-3">
-          <div class="bg-white border border-slate-200 p-3 rounded-2xl shadow-sm text-center">
-            <div class="text-[10px] font-bold text-slate-400 uppercase">Ventas Hoy</div>
-            <div class="text-lg font-bold font-mono-data text-emerald-600 mt-0.5">{{ fc(stats.ventas_hoy) }}</div>
-            <div class="text-[10px] text-slate-400 mt-0.5">{{ stats.tickets_hoy }} tickets</div>
-          </div>
-          <div class="bg-white border border-slate-200 p-3 rounded-2xl shadow-sm text-center">
-            <div class="text-[10px] font-bold text-slate-400 uppercase">Ticket Prom.</div>
-            <div class="text-lg font-bold font-mono-data text-brand-600 mt-0.5">{{ fc(stats.ticket_promedio) }}</div>
-          </div>
-          <div class="bg-white border border-slate-200 p-3 rounded-2xl shadow-sm text-center">
-            <div class="text-[10px] font-bold text-slate-400 uppercase">Efectivo</div>
-            <div class="text-base font-bold font-mono-data text-blue-600 mt-0.5">{{ fc(stats.efectivo) }}</div>
-          </div>
-          <div class="bg-white border border-slate-200 p-3 rounded-2xl shadow-sm text-center">
-            <div class="text-[10px] font-bold text-slate-400 uppercase">Caja</div>
-            <div class="text-base font-bold font-mono-data text-emerald-600 mt-0.5">{{ fc(stats.saldo_caja) }}</div>
-          </div>
+          <KpiCard label="Ventas Hoy" :value="stats.ventas_hoy" prefix="$" icon="fa-sack-dollar" icon-color="success" :sublabel="`${stats.tickets_hoy} tickets`" />
+          <KpiCard label="Ticket Prom." :value="stats.ticket_promedio" prefix="$" icon="fa-receipt" icon-color="brand" />
+          <KpiCard label="Efectivo" :value="stats.efectivo" prefix="$" icon="fa-money-bill-wave" icon-color="info" />
+          <KpiCard label="Caja" :value="stats.saldo_caja" prefix="$" icon="fa-vault" icon-color="success" />
         </div>
 
-        <!-- Recent transactions -->
-        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm">
-          <div class="p-4 border-b border-slate-100">
-            <h3 class="text-sm font-bold text-slate-900">Últimas Transacciones</h3>
+        <BaseCard padding="none">
+          <div class="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <h3 class="text-sm font-bold text-slate-900 dark:text-white">Últimas Transacciones</h3>
+            <BaseBadge variant="default" size="xs">Hoy</BaseBadge>
           </div>
-          <div class="divide-y divide-slate-50 max-h-[300px] overflow-y-auto">
-            <div
-              v-for="t in recentTransactions"
-              :key="t.id"
-              class="p-3 flex items-center gap-3 hover:bg-slate-50 transition"
+          <div class="max-h-[300px] overflow-y-auto divide-y divide-slate-50 dark:divide-slate-800/70">
+            <TransitionGroup
+              enter-active-class="transition duration-250 ease-out-expo"
+              enter-from-class="opacity-0 -translate-x-2"
+              enter-to-class="opacity-100 translate-x-0"
+              leave-active-class="transition duration-150 ease-in"
+              leave-from-class="opacity-100 translate-x-0"
+              leave-to-class="opacity-0 translate-x-2"
             >
-              <div :class="t.medio_pago === 'efectivo' ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'"
-                   class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0">
-                <i :class="t.medio_pago === 'efectivo' ? 'fa-solid fa-money-bill-wave' : 'fa-solid fa-credit-card'" class="text-xs"></i>
+              <div
+                v-for="t in recentTransactions"
+                :key="t.id"
+                class="p-3 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+              >
+                <div
+                  class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                  :class="t.medio_pago === 'efectivo' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400' : 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'"
+                >
+                  <i :class="t.medio_pago === 'efectivo' ? 'fa-solid fa-money-bill-wave' : 'fa-solid fa-credit-card'" class="text-xs"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <p class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">{{ t.cliente || 'Consumidor Final' }}</p>
+                  <p class="text-[10px] text-slate-400 dark:text-slate-500">{{ t.hora }} · {{ t.items }} productos</p>
+                </div>
+                <span class="text-xs font-bold font-mono-data text-slate-800 dark:text-slate-200">{{ fc(t.total) }}</span>
               </div>
-              <div class="flex-1 min-w-0">
-                <p class="text-xs font-bold text-slate-800 truncate">{{ t.cliente || 'Consumidor Final' }}</p>
-                <p class="text-[10px] text-slate-400">{{ t.hora }} · {{ t.items }} productos</p>
-              </div>
-              <span class="text-xs font-bold font-mono-data text-slate-800">{{ fc(t.total) }}</span>
-            </div>
-            <p v-if="!recentTransactions.length" class="text-xs text-slate-400 text-center py-6">
-              Sin transacciones hoy
-            </p>
+            </TransitionGroup>
+            <p v-if="!recentTransactions.length" class="text-xs text-slate-400 dark:text-slate-500 text-center py-6">Sin transacciones hoy</p>
           </div>
-        </div>
+        </BaseCard>
 
-        <!-- Product lookup badges -->
-        <div v-if="lookupBadges.length" class="bg-white border border-slate-200 p-3 rounded-2xl shadow-sm">
-          <p class="text-[10px] font-bold text-slate-400 uppercase mb-2">Escaneos Recientes</p>
+        <BaseCard v-if="lookupBadges.length" padding="md">
+          <p class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-2">Escaneos Recientes</p>
           <div class="flex flex-wrap gap-1.5">
             <span
               v-for="(b, bi) in lookupBadges"
               :key="bi"
-              class="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-mono-data font-bold text-slate-600"
+              class="px-2 py-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-[10px] font-mono-data font-bold text-slate-600 dark:text-slate-300"
             >{{ b }}</span>
           </div>
-        </div>
+        </BaseCard>
       </div>
     </div>
   </div>
@@ -347,6 +420,13 @@ import { formatCurrency as fc } from '@/composables/useUtils'
 import api from '@/services/api'
 import { useCajaStore } from '@/stores/caja'
 import TicketModal from '@/components/layout/TicketModal.vue'
+import BaseCard from '@/components/ui/BaseCard.vue'
+import BaseInput from '@/components/ui/BaseInput.vue'
+import BaseSelect from '@/components/ui/BaseSelect.vue'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseBadge from '@/components/ui/BaseBadge.vue'
+import KpiCard from '@/components/ui/KpiCard.vue'
+import EmptyState from '@/components/ui/EmptyState.vue'
 
 const auth = useAuthStore()
 const toast = useToastStore()
@@ -377,6 +457,14 @@ const lookupProduct = reactive({
 })
 
 const lookupBadges = ref([])
+
+const mediosPago = [
+  { value: 'efectivo', label: 'Efectivo', icon: 'fa-money-bill-wave' },
+  { value: 'debito', label: 'Débito', icon: 'fa-credit-card' },
+  { value: 'credito', label: 'Crédito', icon: 'fa-credit-card' },
+  { value: 'transferencia', label: 'Transf.', icon: 'fa-mobile-screen-button' },
+  { value: 'cta_corriente', label: 'Cta. Cte.', icon: 'fa-file-invoice-dollar' }
+]
 
 const cart = reactive({
   items: [],
@@ -512,14 +600,13 @@ async function triggerPOSLookup() {
   if (!raw || _processingLookup.value) return
   _processingLookup.value = true
 
-  // 1) Carga manual rápida: *Nombre*Precio → producto se crea al confirmar venta
   if (raw.startsWith('*')) {
     posLookupCode.value = ''
     const parts = raw.split('*')
     const nombre = (parts[1] || '').trim()
     const precio = parseFloat(parts[2] || '0')
     if (!nombre || precio <= 0) {
-      toast.add('warning', 'Formato: *Nombre*Precio. Ej: *COCA 1.5L*1500')
+      toast.warning('Formato: *Nombre*Precio. Ej: *COCA 1.5L*1500')
       _processingLookup.value = false
       return
     }
@@ -534,7 +621,7 @@ async function triggerPOSLookup() {
     }
     products.value.push(tempProd)
     addToCart(tempProd, 1, precio)
-    toast.add('info', `${nombre} → ${cleanCode}. Se creará al confirmar la venta.`)
+    toast.info(`${nombre} → ${cleanCode}. Se creará al confirmar la venta.`)
     _processingLookup.value = false
     return
   }
@@ -583,7 +670,7 @@ function addToCart(product, qty = 1, price = null) {
   const newQty = (existing ? existing.cantidad : 0) + qty
   const isManual = product._pending || (product.codigo_barras && (product.codigo_barras.startsWith('*MANUAL*') || product.codigo_barras.startsWith('GEN-')))
   if (!isManual && product.stock_actual !== undefined && newQty > product.stock_actual) {
-    toast.add('error', `Stock insuficiente: ${product.stock_actual} disponibles`)
+    toast.error(`Stock insuficiente: ${product.stock_actual} disponibles`)
     return
   }
 
@@ -606,7 +693,7 @@ function addToCart(product, qty = 1, price = null) {
 }
 
 function handlePagoKeydown(event) {
-  const pagos = ['efectivo', 'debito', 'credito', 'transferencia', 'cta_corriente']
+  const pagos = mediosPago.map(m => m.value)
   const key = event.key
   if (key >= '1' && key <= '5') {
     event.preventDefault()
@@ -646,7 +733,7 @@ function updateCartQty(idx, qty) {
   const prod = products.value.find(p => p.id === item.producto_id)
   const isManual = prod?._pending || (prod?.codigo_barras && (prod.codigo_barras.startsWith('*MANUAL*') || prod.codigo_barras.startsWith('GEN-')))
   if (!isManual && prod && prod.stock_actual !== undefined && qty > prod.stock_actual) {
-    toast.add('error', `Stock insuficiente: ${prod.stock_actual} disponibles`)
+    toast.error(`Stock insuficiente: ${prod.stock_actual} disponibles`)
     return
   }
   item.cantidad = qty
@@ -660,18 +747,20 @@ function removeFromCart(idx) {
 
 async function confirmarVenta() {
   if (!cart.items.length || cart.total <= 0) {
-    if (!cart.items.length) toast.add('warning', 'El carrito está vacío')
+    if (!cart.items.length) toast.warning('El carrito está vacío')
     return
   }
   if (!cajaStore.abierta) {
-    toast.add('error', 'La caja está cerrada. Andá a Arqueos y Caja para abrirla.')
+    toast.error('La caja está cerrada. Andá a Arqueos y Caja para abrirla.')
     return
   }
 
   confirmando.value = true
   let ventaNumero = ''
   let ventaTotal = cart.total
-  // Paso 0: Crear productos pendientes (*Nombre*Precio) con stock exacto = cantidad vendida
+  let ventaResp = null
+
+  try {
     for (const item of cart.items) {
       const prod = products.value.find(p => p.id === item.producto_id)
       if (prod && prod._pending) {
@@ -689,7 +778,7 @@ async function confirmarVenta() {
             prod.id = resp.id
             prod.stock_actual = item.cantidad
             prod._pending = false
-            toast.add('info', `${prod.nombre} creado con stock=${item.cantidad}. Tras la venta quedará en 0.`)
+            toast.info(`${prod.nombre} creado con stock=${item.cantidad}. Tras la venta quedará en 0.`)
           }
         } catch {
           prod._pending = false
@@ -698,50 +787,44 @@ async function confirmarVenta() {
       }
     }
 
-    // Paso 1: Crear venta vacía
-    let ventaId = null
-    try {
-      const ventaResp = await api.post('/api/ventas', { cliente_id: cart.cliente_id || undefined })
-      if (ventaResp && ventaResp.id) {
-        ventaId = ventaResp.id
-        ventaNumero = ventaResp.numero || `#${ventaId}`
+    ventaResp = await api.post('/api/ventas', { cliente_id: cart.cliente_id || undefined })
+    if (ventaResp && ventaResp.id) {
+      const ventaId = ventaResp.id
+      ventaNumero = ventaResp.numero || `#${ventaId}`
 
-        // Paso 2: Agregar ítems uno por uno
-        for (const item of cart.items) {
-          await api.post(`/api/ventas/${ventaId}/items`, {
-            producto_id: item.producto_id,
-            cantidad: item.cantidad,
-            precio_unitario: item.precio_unitario
-          })
-        }
-
-        // Paso 3: Confirmar venta (descuenta stock, registra caja)
-        const confirmResp = await api.put(`/api/ventas/${ventaId}/confirmar`, {
-          medio_pago: cart.medio_pago,
-          descuento: cart.descuento || 0,
-          cliente_id: cart.cliente_id || undefined
+      for (const item of cart.items) {
+        await api.post(`/api/ventas/${ventaId}/items`, {
+          producto_id: item.producto_id,
+          cantidad: item.cantidad,
+          precio_unitario: item.precio_unitario
         })
-        if (confirmResp && confirmResp.total) {
-          ventaTotal = confirmResp.total
-        }
-        toast.add('success', `Venta ${ventaNumero} confirmada. Total: ${fc(ventaTotal)}`)
-      } else {
-        throw new Error('No se pudo crear la venta')
       }
-    } catch (e) {
-      // Paso 1 falló → modo local. Pasos 2 o 3 fallaron → la venta queda pendiente, usamos modo local.
-      if (!ventaId) {
-        toast.add('success', 'Venta registrada (modo local)')
-        for (const item of cart.items) {
-          const prod = products.value.find(p => p.id === item.producto_id)
-          if (prod && !prod._pending) {
-            prod.stock_actual = Math.max(0, prod.stock_actual - item.cantidad)
-          }
-        }
-      } else {
-        toast.add('warning', 'Venta creada pero no confirmada en backend. Revisá en Ventas.')
+
+      const confirmResp = await api.put(`/api/ventas/${ventaId}/confirmar`, {
+        medio_pago: cart.medio_pago,
+        descuento: cart.descuento || 0,
+        cliente_id: cart.cliente_id || undefined
+      })
+      if (confirmResp && confirmResp.total) {
+        ventaTotal = confirmResp.total
       }
+      toast.success(`Venta ${ventaNumero} confirmada. Total: ${fc(ventaTotal)}`)
+    } else {
+      throw new Error('No se pudo crear la venta')
     }
+  } catch (e) {
+    if (!ventaResp) {
+      toast.success('Venta registrada (modo local)')
+      for (const item of cart.items) {
+        const prod = products.value.find(p => p.id === item.producto_id)
+        if (prod && !prod._pending) {
+          prod.stock_actual = Math.max(0, prod.stock_actual - item.cantidad)
+        }
+      }
+    } else {
+      toast.warning('Venta creada pero no confirmada en backend. Revisá en Ventas.')
+    }
+  }
 
   stats.ventas_hoy += ventaTotal
   stats.tickets_hoy += 1
@@ -761,7 +844,6 @@ async function confirmarVenta() {
   })
   if (recentTransactions.value.length > 20) recentTransactions.value.pop()
 
-  // Ticket para impresión
   ticketData.numero = ventaNumero || `#${Date.now().toString().slice(-6)}`
   ticketData.fecha = new Date().toLocaleString('es-AR')
   ticketData.items = cart.items.map(i => ({ ...i }))
