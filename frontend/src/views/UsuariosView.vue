@@ -5,146 +5,125 @@
         <h2 class="text-2xl font-bold text-slate-950 font-display">Usuarios</h2>
         <p class="text-sm text-slate-500 mt-1">Administración de usuarios del sistema</p>
       </div>
-      <div class="flex items-center gap-2">
-        <button
-          @click="openCreateModal"
-          class="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-2xl shadow-sm font-medium transition-colors flex items-center gap-2"
-        >
-          <i class="fa-solid fa-user-plus text-sm"></i>
-          Nuevo usuario
-        </button>
-      </div>
+      <BaseButton variant="primary" size="md" @click="openCreateModal">
+        <i class="fa-solid fa-user-plus text-sm"></i>
+        Nuevo usuario
+      </BaseButton>
     </div>
 
-    <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
-      <div class="overflow-x-auto">
-        <table class="w-full text-left text-sm">
-          <thead class="bg-slate-50 border-b border-gray-200">
-            <tr>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Usuario</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Nombre</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Rol</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Estado</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Último acceso</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Acciones</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-100">
-            <tr v-for="user in users" :key="user.id" class="hover:bg-slate-50 transition-colors">
-              <td class="px-5 py-4">
-                <div class="flex items-center gap-3">
-                  <div class="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-semibold text-slate-500">
-                    {{ (user.nombre || user.username || '??').charAt(0).toUpperCase() }}
-                  </div>
-                  <span class="font-medium text-slate-900">{{ user.username }}</span>
-                </div>
-              </td>
-              <td class="px-5 py-4 text-slate-700">{{ user.nombre || user.username }}</td>
-              <td class="px-5 py-4">
-                <span
-                  class="inline-flex px-2.5 py-1 rounded-full text-xs font-medium"
-                  :class="roleClass(user.role)"
-                >
-                  <i :class="roleIcon(user.role)" class="mr-1"></i>
-                  {{ user.role }}
-                </span>
-              </td>
-              <td class="px-5 py-4">
-                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium" :class="user.active ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'">
-                  <span class="w-1.5 h-1.5 rounded-full" :class="user.active ? 'bg-green-500 animate-pulse' : 'bg-red-500'"></span>
-                  {{ user.active ? 'Activo' : 'Inactivo' }}
-                </span>
-              </td>
-              <td class="px-5 py-4 text-slate-500 text-xs">{{ user.lastAccess }}</td>
-              <td class="px-5 py-4">
-                <div class="flex items-center gap-2">
-                  <button
-                    @click="openEditModal(user)"
-                    class="text-slate-400 hover:text-brand-600 transition-colors"
-                    title="Editar"
-                  >
-                    <i class="fa-solid fa-pen-to-square"></i>
-                  </button>
-                  <button
-                    v-if="user.active"
-                    :disabled="toggling[user.id]"
-                    @click="toggleUser(user)"
-                    class="text-slate-400 hover:text-red-600 transition-colors disabled:opacity-50"
-                    title="Desactivar"
-                  >
-                    <i :class="toggling[user.id] ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-circle-xmark'"></i>
-                  </button>
-                  <button
-                    v-else
-                    :disabled="toggling[user.id]"
-                    @click="toggleUser(user)"
-                    class="text-slate-400 hover:text-green-600 transition-colors disabled:opacity-50"
-                    title="Activar"
-                  >
-                    <i :class="toggling[user.id] ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-circle-check'"></i>
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <Teleport to="body">
-      <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center">
-        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="showModal = false"></div>
-        <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4">
-          <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-            <h2 class="text-lg font-semibold text-slate-900">{{ editingUser ? 'Editar usuario' : 'Nuevo usuario' }}</h2>
-            <button @click="showModal = false" class="text-slate-400 hover:text-slate-600 transition-colors">
-              <i class="fa-solid fa-xmark text-lg"></i>
-            </button>
+    <BaseCard padding="none">
+      <BaseTable :columns="columns" :rows="users">
+        <template #username="{ row }">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-semibold text-slate-500">
+              {{ (row.nombre || row.username || '??').charAt(0).toUpperCase() }}
+            </div>
+            <span class="font-medium text-slate-900">{{ row.username }}</span>
           </div>
-          <form @submit.prevent="saveUser" class="px-6 py-5 space-y-4">
-            <div>
-              <label class="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Usuario</label>
-              <input v-model="form.username" type="text" required class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all font-mono-data" placeholder="nombre.apellido" />
-            </div>
-            <div>
-              <label class="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Nombre completo</label>
-              <input v-model="form.nombre" type="text" required class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all" placeholder="Nombre y apellido" />
-            </div>
-            <div>
-              <label class="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Contraseña</label>
-              <input v-model="form.password" type="password" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all" :placeholder="editingUser ? 'Dejar vacío para mantener' : 'Ingresar contraseña'" />
-            </div>
-            <div>
-              <label class="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Rol</label>
-              <select v-model="form.role" required class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all">
-                <option value="">Seleccionar rol</option>
-                <option value="Admin">Administrador</option>
-                <option value="Encargado">Encargado</option>
-                <option value="Cajero">Cajero</option>
-                <option value="Repositor">Repositor</option>
-              </select>
-            </div>
-            <div class="flex justify-end gap-3 pt-2">
-              <button
-                type="button"
-                @click="showModal = false"
-                class="px-5 py-2.5 text-sm font-medium text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors"
-              >
-                Cancelar
-              </button>
-          <button
-            type="submit"
-            :disabled="saving"
-            class="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-xl shadow-sm font-medium transition-colors text-sm flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+        </template>
+        <template #role="{ row }">
+          <BaseBadge
+            :variant="row.role === 'admin' ? 'brand' : row.role === 'encargado' ? 'info' : row.role === 'cajero' ? 'warning' : row.role === 'repositor' ? 'success' : 'default'"
+            size="sm"
           >
-            <i :class="saving ? 'fa-solid fa-circle-notch animate-spin' : editingUser ? 'fa-solid fa-check' : 'fa-solid fa-plus'"></i>
-            {{ saving ? 'Guardando...' : editingUser ? 'Guardar cambios' : 'Crear usuario' }}
-          </button>
-            </div>
-          </form>
+            <i :class="roleIcon(row.role)" class="mr-1"></i>
+            {{ row.role }}
+          </BaseBadge>
+        </template>
+        <template #active="{ row }">
+          <BaseBadge :variant="row.active ? 'success' : 'danger'" size="sm" dot :pulse="row.active">
+            {{ row.active ? 'Activo' : 'Inactivo' }}
+          </BaseBadge>
+        </template>
+        <template #actions="{ row }">
+          <div class="flex items-center gap-2">
+            <BaseButton
+              variant="ghost"
+              size="sm"
+              iconOnly
+              title="Editar"
+              aria-label="Editar"
+              @click="openEditModal(row)"
+            >
+              <i class="fa-solid fa-pen-to-square"></i>
+            </BaseButton>
+            <BaseButton
+              v-if="row.active"
+              variant="ghost"
+              size="sm"
+              iconOnly
+              :loading="toggling[row.id]"
+              title="Desactivar"
+              aria-label="Desactivar"
+              @click="toggleUser(row)"
+            >
+              <i class="fa-solid fa-circle-xmark text-red-600"></i>
+            </BaseButton>
+            <BaseButton
+              v-else
+              variant="ghost"
+              size="sm"
+              iconOnly
+              :loading="toggling[row.id]"
+              title="Activar"
+              aria-label="Activar"
+              @click="toggleUser(row)"
+            >
+              <i class="fa-solid fa-circle-check text-green-600"></i>
+            </BaseButton>
+          </div>
+        </template>
+      </BaseTable>
+    </BaseCard>
+
+    <BaseModal v-model="showModal" :title="editingUser ? 'Editar usuario' : 'Nuevo usuario'" size="md">
+      <form @submit.prevent="saveUser" class="space-y-4">
+        <BaseInput
+          v-model="form.username"
+          label="Usuario"
+          type="text"
+          placeholder="nombre.apellido"
+          required
+          input-class="font-mono-data"
+        />
+        <BaseInput
+          v-model="form.nombre"
+          label="Nombre completo"
+          type="text"
+          placeholder="Nombre y apellido"
+          required
+        />
+        <BaseInput
+          v-model="form.password"
+          label="Contraseña"
+          type="password"
+          :placeholder="editingUser ? 'Dejar vacío para mantener' : 'Ingresar contraseña'"
+        />
+        <BaseSelect
+          v-model="form.role"
+          label="Rol"
+          required
+          placeholder="Seleccionar rol"
+          :options="[
+            { value: 'Admin', label: 'Administrador' },
+            { value: 'Encargado', label: 'Encargado' },
+            { value: 'Cajero', label: 'Cajero' },
+            { value: 'Repositor', label: 'Repositor' }
+          ]"
+          option-value="value"
+          option-label="label"
+        />
+        <div class="flex justify-end gap-3 pt-2">
+          <BaseButton type="button" variant="secondary" @click="showModal = false">
+            Cancelar
+          </BaseButton>
+          <BaseButton type="submit" variant="primary" :loading="saving">
+            <i :class="editingUser ? 'fa-solid fa-check' : 'fa-solid fa-plus'"></i>
+            {{ editingUser ? 'Guardar cambios' : 'Crear usuario' }}
+          </BaseButton>
         </div>
-      </div>
-    </Teleport>
+      </form>
+    </BaseModal>
   </div>
 </template>
 
@@ -152,6 +131,22 @@
 import { ref, reactive, onMounted } from 'vue'
 import api from '@/services/api'
 import { formatCurrency } from '@/composables/useUtils'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseInput from '@/components/ui/BaseInput.vue'
+import BaseSelect from '@/components/ui/BaseSelect.vue'
+import BaseModal from '@/components/ui/BaseModal.vue'
+import BaseCard from '@/components/ui/BaseCard.vue'
+import BaseTable from '@/components/ui/BaseTable.vue'
+import BaseBadge from '@/components/ui/BaseBadge.vue'
+
+const columns = [
+  { key: 'username', label: 'Usuario' },
+  { key: 'nombre', label: 'Nombre' },
+  { key: 'role', label: 'Rol' },
+  { key: 'active', label: 'Estado' },
+  { key: 'lastAccess', label: 'Último acceso' },
+  { key: 'actions', label: 'Acciones' }
+]
 
 const users = ref([
    { id: 1, username: 'admin.sistema', nombre: 'Administrador Sistema', role: 'admin', active: true, lastAccess: '2026-06-20 18:45' },
@@ -257,13 +252,3 @@ onMounted(async () => {
   } catch { /* fallback to mock */ }
 })
 </script>
-
-<style scoped>
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-.animate-spin {
-  animation: spin 1.5s linear infinite;
-}
-</style>

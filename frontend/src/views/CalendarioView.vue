@@ -1,245 +1,294 @@
 <template>
-  <div class="p-6 space-y-6">
+  <div class="space-y-6">
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-slate-900">Calendario</h1>
-        <p class="text-sm text-slate-500 mt-1">Resumen diario de actividad del comercio</p>
+        <h2 class="text-2xl font-bold text-slate-950 dark:text-white font-display">Calendario</h2>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Resumen diario de actividad del comercio</p>
       </div>
-      <div class="flex items-center gap-3">
-        <button
+      <div class="flex items-center gap-2">
+        <BaseButton
+          variant="secondary"
+          size="md"
+          :loading="syncing"
           :disabled="syncing"
           @click="syncCalendario"
-          class="bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm hover:bg-slate-50 transition-colors flex items-center gap-2 shadow-sm disabled:opacity-60"
-          title="Actualizar datos"
         >
-          <i :class="syncing ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-sync'"></i>
+          <i class="fa-solid fa-arrows-rotate"></i>
           {{ syncing ? 'Actualizando...' : 'Actualizar' }}
-        </button>
-        <button class="bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm hover:bg-slate-50 transition-colors flex items-center gap-2 shadow-sm">
-          <i class="fa-solid fa-download text-slate-500"></i>
+        </BaseButton>
+        <BaseButton variant="primary" size="md">
+          <i class="fa-solid fa-download text-sm"></i>
           Exportar
-        </button>
+        </BaseButton>
       </div>
     </div>
 
-    <div class="bg-white rounded-2xl shadow-sm p-5">
-      <div class="flex items-center gap-4">
-        <label class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Fecha</label>
-        <input
-          v-model="selectedDate"
-          type="date"
-          class="border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all"
-        />
-        <div class="flex items-center gap-1.5 ml-auto">
-          <button
+    <BaseCard padding="md">
+      <div class="flex flex-col sm:flex-row sm:items-center gap-4">
+        <div class="w-full sm:w-44">
+          <BaseInput
+            v-model="selectedDate"
+            label="Fecha"
+            type="date"
+          />
+        </div>
+        <div class="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl inline-flex ml-auto">
+          <BaseButton
             v-for="tab in tabs"
             :key="tab.key"
+            :variant="activeTab === tab.key ? 'primary' : 'ghost'"
+            size="sm"
             @click="activeTab = tab.key"
-            class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors"
-            :class="activeTab === tab.key ? 'bg-brand-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'"
           >
             {{ tab.label }}
-          </button>
+          </BaseButton>
         </div>
       </div>
-    </div>
+    </BaseCard>
 
-    <div v-show="activeTab === 'todo' || activeTab === 'ventas'" class="bg-white rounded-2xl shadow-sm p-5">
-      <div class="flex items-center justify-between mb-4">
+    <BaseCard v-show="activeTab === 'todo' || activeTab === 'ventas'" padding="md" class="space-y-4">
+      <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
-          <div class="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center">
-            <i class="fa-solid fa-cart-shopping text-emerald-600"></i>
+          <div class="w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+            <i class="fa-solid fa-cart-shopping text-emerald-600 dark:text-emerald-400"></i>
           </div>
           <div>
-            <h3 class="font-semibold text-slate-900">Ventas del día</h3>
-            <p class="text-xs text-slate-500">{{ selectedDate }}</p>
+            <h3 class="font-semibold text-slate-900 dark:text-white">Ventas del día</h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400">{{ selectedDate }}</p>
           </div>
         </div>
         <div class="text-right">
-          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Total</p>
-          <p class="text-xl font-mono-data font-bold text-slate-900">{{ formatCurrency(dailySalesTotal) }}</p>
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">Total</p>
+          <p class="text-xl font-mono-data font-bold text-slate-900 dark:text-white">{{ formatCurrency(dailySalesTotal) }}</p>
         </div>
       </div>
-      <div class="grid grid-cols-3 gap-4 mb-4">
-        <div class="bg-slate-50 rounded-xl p-4 text-center">
-          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Tickets</p>
-          <p class="text-lg font-mono-data font-bold text-slate-900">{{ dailySales.length }}</p>
-        </div>
-        <div class="bg-slate-50 rounded-xl p-4 text-center">
-          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Promedio</p>
-          <p class="text-lg font-mono-data font-bold text-slate-900">{{ formatCurrency(dailySalesAvg) }}</p>
-        </div>
-        <div class="bg-slate-50 rounded-xl p-4 text-center">
-          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Productos vendidos</p>
-          <p class="text-lg font-mono-data font-bold text-slate-900">{{ totalItemsSold }}</p>
-        </div>
+
+      <div class="grid grid-cols-3 gap-4">
+        <BaseCard padding="md" class="text-center bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800">
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">Tickets</p>
+          <p class="text-lg font-mono-data font-bold text-slate-900 dark:text-white">{{ dailySales.length }}</p>
+        </BaseCard>
+        <BaseCard padding="md" class="text-center bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800">
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">Promedio</p>
+          <p class="text-lg font-mono-data font-bold text-slate-900 dark:text-white">{{ formatCurrency(dailySalesAvg) }}</p>
+        </BaseCard>
+        <BaseCard padding="md" class="text-center bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800">
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">Productos vendidos</p>
+          <p class="text-lg font-mono-data font-bold text-slate-900 dark:text-white">{{ totalItemsSold }}</p>
+        </BaseCard>
       </div>
-      <details class="group">
-        <summary class="cursor-pointer text-sm font-medium text-brand-600 hover:text-brand-700 transition-colors flex items-center gap-1.5">
-          <i class="fa-solid fa-chevron-down text-xs group-open:rotate-180 transition-transform"></i>
+
+      <div>
+        <BaseButton variant="ghost" size="sm" @click="showSalesDetail = !showSalesDetail">
+          <i class="fa-solid fa-chevron-down text-xs transition-transform" :class="showSalesDetail ? 'rotate-180' : ''"></i>
           Ver detalle de ventas
-        </summary>
-        <div class="mt-3 space-y-2">
-          <div v-for="sale in dailySales" :key="sale.id" class="flex items-center justify-between px-4 py-2.5 bg-slate-50 rounded-xl text-sm">
-            <span class="text-slate-700 font-mono-data">Ticket #{{ String(sale.id).padStart(6, '0') }}</span>
-            <span class="text-slate-500">{{ sale.time }}</span>
-            <span class="text-slate-500">{{ sale.paymentMethod }}</span>
-            <span class="font-mono-data font-medium text-slate-900">{{ formatCurrency(sale.total) }}</span>
-          </div>
+        </BaseButton>
+        <div v-show="showSalesDetail" class="mt-3">
+          <BaseTable
+            :columns="salesColumns"
+            :rows="dailySales"
+            compact
+            empty-icon="fa-cart-shopping"
+            empty-title="Sin ventas"
+            empty-text="No hay ventas registradas para esta fecha."
+          >
+            <template #id="{ row }">
+              <span class="text-slate-700 dark:text-slate-300 font-mono-data">Ticket #{{ String(row.id).padStart(6, '0') }}</span>
+            </template>
+            <template #total="{ row }">
+              <span class="font-mono-data font-medium text-slate-900 dark:text-white">{{ formatCurrency(row.total) }}</span>
+            </template>
+          </BaseTable>
         </div>
-      </details>
-    </div>
+      </div>
+    </BaseCard>
 
-    <div v-show="activeTab === 'todo' || activeTab === 'caja'" class="bg-white rounded-2xl shadow-sm p-5">
-      <div class="flex items-center justify-between mb-4">
+    <BaseCard v-show="activeTab === 'todo' || activeTab === 'caja'" padding="md" class="space-y-4">
+      <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
-          <div class="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center">
-            <i class="fa-solid fa-cash-register text-amber-600"></i>
+          <div class="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+            <i class="fa-solid fa-cash-register text-amber-600 dark:text-amber-400"></i>
           </div>
           <div>
-            <h3 class="font-semibold text-slate-900">Movimientos de caja</h3>
-            <p class="text-xs text-slate-500">{{ selectedDate }}</p>
+            <h3 class="font-semibold text-slate-900 dark:text-white">Movimientos de caja</h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400">{{ selectedDate }}</p>
           </div>
         </div>
         <div class="text-right">
-          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Balance</p>
-          <p class="text-xl font-mono-data font-bold" :class="cashBalance >= 0 ? 'text-emerald-600' : 'text-red-600'">{{ formatCurrency(cashBalance) }}</p>
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">Balance</p>
+          <p class="text-xl font-mono-data font-bold" :class="cashBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'">{{ formatCurrency(cashBalance) }}</p>
         </div>
       </div>
-      <div class="grid grid-cols-2 gap-4 mb-4">
-        <div class="bg-emerald-50 rounded-xl p-4 text-center">
-          <p class="text-[10px] uppercase tracking-wider text-emerald-600 font-semibold">Ingresos</p>
-          <p class="text-lg font-mono-data font-bold text-emerald-700">{{ formatCurrency(cashInTotal) }}</p>
-        </div>
-        <div class="bg-rose-50 rounded-xl p-4 text-center">
-          <p class="text-[10px] uppercase tracking-wider text-red-500 font-semibold">Egresos</p>
-          <p class="text-lg font-mono-data font-bold text-red-600">{{ formatCurrency(cashOutTotal) }}</p>
-        </div>
-      </div>
-      <details class="group">
-        <summary class="cursor-pointer text-sm font-medium text-brand-600 hover:text-brand-700 transition-colors flex items-center gap-1.5">
-          <i class="fa-solid fa-chevron-down text-xs group-open:rotate-180 transition-transform"></i>
-          Ver detalle de movimientos
-        </summary>
-        <div class="mt-3 space-y-2">
-          <div v-for="mov in cashMovements" :key="mov.id" class="flex items-center justify-between px-4 py-2.5 bg-slate-50 rounded-xl text-sm">
-            <div class="flex items-center gap-2">
-              <span :class="mov.type === 'ingreso' ? 'text-emerald-600' : 'text-red-600'">
-                <i :class="mov.type === 'ingreso' ? 'fa-solid fa-circle-arrow-down' : 'fa-solid fa-circle-arrow-up'"></i>
-              </span>
-              <span class="text-slate-700">{{ mov.description }}</span>
-            </div>
-            <span class="text-slate-500 text-xs">{{ mov.time }}</span>
-            <span class="font-mono-data font-medium" :class="mov.type === 'ingreso' ? 'text-emerald-600' : 'text-red-600'">{{ mov.type === 'ingreso' ? '+' : '-' }}{{ formatCurrency(mov.amount) }}</span>
-          </div>
-        </div>
-      </details>
-    </div>
 
-    <div v-show="activeTab === 'todo' || activeTab === 'compras'" class="bg-white rounded-2xl shadow-sm p-5">
-      <div class="flex items-center justify-between mb-4">
-        <div class="flex items-center gap-3">
-          <div class="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center">
-            <i class="fa-solid fa-truck-fast text-blue-600"></i>
-          </div>
-          <div>
-            <h3 class="font-semibold text-slate-900">Compras recibidas</h3>
-            <p class="text-xs text-slate-500">{{ selectedDate }}</p>
-          </div>
-        </div>
-        <div class="text-right">
-          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Total compras</p>
-          <p class="text-xl font-mono-data font-bold text-slate-900">{{ formatCurrency(purchasesTotal) }}</p>
-        </div>
-      </div>
-      <div class="grid grid-cols-2 gap-4 mb-4">
-        <div class="bg-slate-50 rounded-xl p-4 text-center">
-          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Recepciones</p>
-          <p class="text-lg font-mono-data font-bold text-slate-900">{{ purchases.length }}</p>
-        </div>
-        <div class="bg-slate-50 rounded-xl p-4 text-center">
-          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Ítems recibidos</p>
-          <p class="text-lg font-mono-data font-bold text-slate-900">{{ totalItemsPurchased }}</p>
-        </div>
-      </div>
-      <details class="group">
-        <summary class="cursor-pointer text-sm font-medium text-brand-600 hover:text-brand-700 transition-colors flex items-center gap-1.5">
-          <i class="fa-solid fa-chevron-down text-xs group-open:rotate-180 transition-transform"></i>
-          Ver detalle de compras
-        </summary>
-        <div class="mt-3 space-y-2">
-          <div v-for="purchase in purchases" :key="purchase.id" class="flex items-center justify-between px-4 py-2.5 bg-slate-50 rounded-xl text-sm">
-            <span class="text-slate-700">{{ purchase.supplier }}</span>
-            <span class="text-slate-500 text-xs">{{ purchase.time }}</span>
-            <span class="text-slate-500">{{ purchase.items }} items</span>
-            <span class="font-mono-data font-medium text-slate-900">{{ formatCurrency(purchase.total) }}</span>
-          </div>
-        </div>
-      </details>
-    </div>
-
-    <div v-show="activeTab === 'todo' || activeTab === 'productos'" class="bg-white rounded-2xl shadow-sm p-5">
-      <div class="flex items-center justify-between mb-4">
-        <div class="flex items-center gap-3">
-          <div class="w-9 h-9 rounded-xl bg-purple-100 flex items-center justify-center">
-            <i class="fa-solid fa-boxes-stacked text-purple-600"></i>
-          </div>
-          <div>
-            <h3 class="font-semibold text-slate-900">Productos nuevos / modificados</h3>
-            <p class="text-xs text-slate-500">{{ selectedDate }}</p>
-          </div>
-        </div>
-        <div class="flex items-center gap-3">
-          <span class="px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-emerald-700">{{ newProducts.length }} nuevos</span>
-          <span class="px-3 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">{{ modifiedProducts.length }} modificados</span>
-        </div>
-      </div>
       <div class="grid grid-cols-2 gap-4">
-        <div>
-          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-2">Productos nuevos</p>
-          <div class="space-y-1.5">
-            <div v-for="prod in newProducts" :key="prod.id" class="flex items-center justify-between px-3 py-2 bg-emerald-50 rounded-lg text-sm">
-              <span class="text-slate-800">{{ prod.name }}</span>
-              <span class="font-mono-data text-slate-600 text-xs">{{ prod.code }}</span>
-            </div>
-          </div>
-        </div>
-        <div>
-          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-2">Productos modificados</p>
-          <div class="space-y-1.5">
-            <div v-for="prod in modifiedProducts" :key="prod.id" class="flex items-center justify-between px-3 py-2 bg-amber-50 rounded-lg text-sm">
-              <span class="text-slate-800">{{ prod.name }}</span>
-              <span class="text-slate-500 text-xs">{{ prod.change }}</span>
-            </div>
-          </div>
+        <BaseCard padding="md" class="text-center bg-emerald-50 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-900/30">
+          <p class="text-[10px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-semibold">Ingresos</p>
+          <p class="text-lg font-mono-data font-bold text-emerald-700 dark:text-emerald-300">{{ formatCurrency(cashInTotal) }}</p>
+        </BaseCard>
+        <BaseCard padding="md" class="text-center bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-900/30">
+          <p class="text-[10px] uppercase tracking-wider text-red-500 dark:text-red-400 font-semibold">Egresos</p>
+          <p class="text-lg font-mono-data font-bold text-red-600 dark:text-red-400">{{ formatCurrency(cashOutTotal) }}</p>
+        </BaseCard>
+      </div>
+
+      <div>
+        <BaseButton variant="ghost" size="sm" @click="showCashDetail = !showCashDetail">
+          <i class="fa-solid fa-chevron-down text-xs transition-transform" :class="showCashDetail ? 'rotate-180' : ''"></i>
+          Ver detalle de movimientos
+        </BaseButton>
+        <div v-show="showCashDetail" class="mt-3">
+          <BaseTable
+            :columns="cashColumns"
+            :rows="cashMovements"
+            compact
+            empty-icon="fa-cash-register"
+            empty-title="Sin movimientos"
+            empty-text="No hay movimientos de caja para esta fecha."
+          >
+            <template #type="{ row }">
+              <BaseBadge :variant="row.type === 'ingreso' ? 'success' : 'danger'" size="xs">
+                <i :class="row.type === 'ingreso' ? 'fa-solid fa-circle-arrow-down' : 'fa-solid fa-circle-arrow-up'"></i>
+                {{ row.type === 'ingreso' ? 'Ingreso' : 'Egreso' }}
+              </BaseBadge>
+            </template>
+            <template #amount="{ row }">
+              <span class="font-mono-data font-medium" :class="row.type === 'ingreso' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'">
+                {{ row.type === 'ingreso' ? '+' : '-' }}{{ formatCurrency(row.amount) }}
+              </span>
+            </template>
+          </BaseTable>
         </div>
       </div>
-    </div>
+    </BaseCard>
 
-    <div v-show="activeTab === 'todo' || activeTab === 'clientes'" class="bg-white rounded-2xl shadow-sm p-5">
-      <div class="flex items-center justify-between mb-4">
+    <BaseCard v-show="activeTab === 'todo' || activeTab === 'compras'" padding="md" class="space-y-4">
+      <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
-          <div class="w-9 h-9 rounded-xl bg-cyan-100 flex items-center justify-center">
-            <i class="fa-solid fa-user-plus text-cyan-600"></i>
+          <div class="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+            <i class="fa-solid fa-truck-fast text-blue-600 dark:text-blue-400"></i>
           </div>
           <div>
-            <h3 class="font-semibold text-slate-900">Nuevos clientes</h3>
-            <p class="text-xs text-slate-500">{{ selectedDate }}</p>
+            <h3 class="font-semibold text-slate-900 dark:text-white">Compras recibidas</h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400">{{ selectedDate }}</p>
           </div>
         </div>
-        <span class="px-3 py-1 rounded-full text-xs font-medium bg-cyan-100 text-cyan-700">{{ newClients.length }} registrados</span>
-      </div>
-      <div class="space-y-1.5" v-if="newClients.length > 0">
-        <div v-for="client in newClients" :key="client.id" class="flex items-center justify-between px-4 py-2.5 bg-cyan-50 rounded-xl text-sm">
-          <span class="text-slate-800 font-medium">{{ client.name }}</span>
-          <span class="text-slate-500">{{ client.docType }} {{ client.docNumber }}</span>
-          <span class="text-slate-400 text-xs">{{ client.time }}</span>
+        <div class="text-right">
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">Total compras</p>
+          <p class="text-xl font-mono-data font-bold text-slate-900 dark:text-white">{{ formatCurrency(purchasesTotal) }}</p>
         </div>
       </div>
-      <div v-else class="text-center py-6 text-slate-400 text-sm">
-        Sin nuevos clientes en esta fecha
+
+      <div class="grid grid-cols-2 gap-4">
+        <BaseCard padding="md" class="text-center bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800">
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">Recepciones</p>
+          <p class="text-lg font-mono-data font-bold text-slate-900 dark:text-white">{{ purchases.length }}</p>
+        </BaseCard>
+        <BaseCard padding="md" class="text-center bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800">
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">Ítems recibidos</p>
+          <p class="text-lg font-mono-data font-bold text-slate-900 dark:text-white">{{ totalItemsPurchased }}</p>
+        </BaseCard>
       </div>
-    </div>
+
+      <div>
+        <BaseButton variant="ghost" size="sm" @click="showPurchasesDetail = !showPurchasesDetail">
+          <i class="fa-solid fa-chevron-down text-xs transition-transform" :class="showPurchasesDetail ? 'rotate-180' : ''"></i>
+          Ver detalle de compras
+        </BaseButton>
+        <div v-show="showPurchasesDetail" class="mt-3">
+          <BaseTable
+            :columns="purchaseColumns"
+            :rows="purchases"
+            compact
+            empty-icon="fa-truck-fast"
+            empty-title="Sin compras"
+            empty-text="No hay compras recibidas para esta fecha."
+          >
+            <template #total="{ row }">
+              <span class="font-mono-data font-medium text-slate-900 dark:text-white">{{ formatCurrency(row.total) }}</span>
+            </template>
+          </BaseTable>
+        </div>
+      </div>
+    </BaseCard>
+
+    <BaseCard v-show="activeTab === 'todo' || activeTab === 'productos'" padding="md" class="space-y-4">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+            <i class="fa-solid fa-boxes-stacked text-purple-600 dark:text-purple-400"></i>
+          </div>
+          <div>
+            <h3 class="font-semibold text-slate-900 dark:text-white">Productos nuevos / modificados</h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400">{{ selectedDate }}</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <BaseBadge variant="success" size="sm">{{ newProducts.length }} nuevos</BaseBadge>
+          <BaseBadge variant="warning" size="sm">{{ modifiedProducts.length }} modificados</BaseBadge>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold mb-2">Productos nuevos</p>
+          <BaseTable
+            :columns="newProductColumns"
+            :rows="newProducts"
+            compact
+            empty-icon="fa-box"
+            empty-title="Sin productos nuevos"
+            empty-text="No hay productos nuevos para esta fecha."
+          >
+            <template #code="{ row }">
+              <span class="font-mono-data text-slate-600 dark:text-slate-400 text-xs">{{ row.code }}</span>
+            </template>
+          </BaseTable>
+        </div>
+        <div>
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold mb-2">Productos modificados</p>
+          <BaseTable
+            :columns="modifiedProductColumns"
+            :rows="modifiedProducts"
+            compact
+            empty-icon="fa-pen-to-square"
+            empty-title="Sin modificaciones"
+            empty-text="No hay productos modificados para esta fecha."
+          >
+            <template #change="{ row }">
+              <span class="text-slate-500 dark:text-slate-400 text-xs">{{ row.change }}</span>
+            </template>
+          </BaseTable>
+        </div>
+      </div>
+    </BaseCard>
+
+    <BaseCard v-show="activeTab === 'todo' || activeTab === 'clientes'" padding="md" class="space-y-4">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-cyan-100 dark:bg-cyan-900/30 flex items-center justify-center">
+            <i class="fa-solid fa-user-plus text-cyan-600 dark:text-cyan-400"></i>
+          </div>
+          <div>
+            <h3 class="font-semibold text-slate-900 dark:text-white">Nuevos clientes</h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400">{{ selectedDate }}</p>
+          </div>
+        </div>
+        <BaseBadge variant="info" size="sm">{{ newClients.length }} registrados</BaseBadge>
+      </div>
+
+      <BaseTable
+        :columns="clientColumns"
+        :rows="newClients"
+        compact
+        empty-icon="fa-user-plus"
+        empty-title="Sin nuevos clientes"
+        empty-text="No hay nuevos clientes registrados para esta fecha."
+      >
+        <template #doc="{ row }">
+          <span class="text-slate-500 dark:text-slate-400">{{ row.docType }} {{ row.docNumber }}</span>
+        </template>
+      </BaseTable>
+    </BaseCard>
   </div>
 </template>
 
@@ -248,12 +297,21 @@ import { ref, computed, onMounted } from 'vue'
 import { formatCurrency } from '@/composables/useUtils'
 import api from '@/services/api'
 import { useToastStore } from '@/stores/toasts'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseInput from '@/components/ui/BaseInput.vue'
+import BaseCard from '@/components/ui/BaseCard.vue'
+import BaseTable from '@/components/ui/BaseTable.vue'
+import BaseBadge from '@/components/ui/BaseBadge.vue'
+import EmptyState from '@/components/ui/EmptyState.vue'
 
 const toast = useToastStore()
 
 const syncing = ref(false)
 const selectedDate = ref('2026-06-20')
 const activeTab = ref('todo')
+const showSalesDetail = ref(false)
+const showCashDetail = ref(false)
+const showPurchasesDetail = ref(false)
 
 const tabs = [
   { key: 'todo', label: 'Todo' },
@@ -262,6 +320,43 @@ const tabs = [
   { key: 'compras', label: 'Compras' },
   { key: 'productos', label: 'Productos' },
   { key: 'clientes', label: 'Clientes' },
+]
+
+const salesColumns = [
+  { key: 'id', label: 'Ticket' },
+  { key: 'time', label: 'Hora' },
+  { key: 'paymentMethod', label: 'Método' },
+  { key: 'total', label: 'Total', align: 'right' },
+]
+
+const cashColumns = [
+  { key: 'type', label: 'Tipo' },
+  { key: 'description', label: 'Descripción' },
+  { key: 'time', label: 'Hora' },
+  { key: 'amount', label: 'Monto', align: 'right' },
+]
+
+const purchaseColumns = [
+  { key: 'supplier', label: 'Proveedor' },
+  { key: 'time', label: 'Hora' },
+  { key: 'items', label: 'Ítems', align: 'center' },
+  { key: 'total', label: 'Total', align: 'right' },
+]
+
+const newProductColumns = [
+  { key: 'name', label: 'Nombre' },
+  { key: 'code', label: 'Código', align: 'right' },
+]
+
+const modifiedProductColumns = [
+  { key: 'name', label: 'Nombre' },
+  { key: 'change', label: 'Cambio', align: 'right' },
+]
+
+const clientColumns = [
+  { key: 'name', label: 'Nombre' },
+  { key: 'doc', label: 'Documento' },
+  { key: 'time', label: 'Hora', align: 'right' },
 ]
 
 onMounted(async () => {

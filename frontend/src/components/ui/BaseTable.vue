@@ -73,48 +73,51 @@ function isExpanded(row) {
             </tr>
           </template>
           <template v-else-if="rows.length">
-            <tr
+            <template
               v-for="(row, rIdx) in rows"
               :key="row.id || rIdx"
-              class="group transition-colors duration-150"
-              :class="[
-                striped && rIdx % 2 === 1 ? 'bg-slate-50/50 dark:bg-slate-800/30' : 'bg-white dark:bg-slate-900',
-                'hover:bg-slate-50 dark:hover:bg-slate-800/60',
-                rowClass ? rowClass(row) : ''
-              ]"
-              @click="emit('row-click', row)"
             >
-              <td
-                v-for="col in columns"
-                :key="col.key"
-                class="px-4 text-slate-700 dark:text-slate-300"
+              <tr
+                class="group transition-colors duration-150"
                 :class="[
-                  compact ? 'py-2.5' : 'py-3.5',
-                  col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left'
+                  striped && rIdx % 2 === 1 ? 'bg-slate-50/50 dark:bg-slate-800/30' : 'bg-white dark:bg-slate-900',
+                  'hover:bg-slate-50 dark:hover:bg-slate-800/60',
+                  rowClass ? rowClass(row) : ''
                 ]"
+                @click="emit('row-click', row)"
               >
-                <slot :name="col.key" :row="row" :value="row[col.key]">
-                  {{ row[col.key] }}
-                </slot>
-              </td>
-            </tr>
-            <Transition
-              v-if="$slots.detail && isExpanded(row)"
-              enter-active-class="transition-all duration-250 ease-out-expo"
-              enter-from-class="opacity-0 -translate-y-2"
-              enter-to-class="opacity-100 translate-y-0"
-              leave-active-class="transition-all duration-200 ease-in"
-              leave-from-class="opacity-100 translate-y-0"
-              leave-to-class="opacity-0 -translate-y-2"
-            >
-              <tr :key="`detail-${row[rowKey]}`" class="bg-slate-50/70 dark:bg-slate-800/40">
-                <td :colspan="columns.length" class="p-0">
-                  <div class="p-4 border-t border-slate-100 dark:border-slate-800">
-                    <slot name="detail" :row="row" />
-                  </div>
+                <td
+                  v-for="col in columns"
+                  :key="col.key"
+                  class="px-4 text-slate-700 dark:text-slate-300"
+                  :class="[
+                    compact ? 'py-2.5' : 'py-3.5',
+                    col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left'
+                  ]"
+                >
+                  <slot :name="col.key" :row="row" :value="row[col.key]">
+                    {{ row[col.key] }}
+                  </slot>
                 </td>
               </tr>
-            </Transition>
+              <Transition
+                v-if="$slots.detail && isExpanded(row)"
+                enter-active-class="transition-all duration-250 ease-out-expo"
+                enter-from-class="opacity-0 -translate-y-2"
+                enter-to-class="opacity-100 translate-y-0"
+                leave-active-class="transition-all duration-200 ease-in"
+                leave-from-class="opacity-100 translate-y-0"
+                leave-to-class="opacity-0 -translate-y-2"
+              >
+                <tr :key="`detail-${row[rowKey]}`" class="bg-slate-50/70 dark:bg-slate-800/40">
+                  <td :colspan="columns.length" class="p-0">
+                    <div class="p-4 border-t border-slate-100 dark:border-slate-800">
+                      <slot name="detail" :row="row" />
+                    </div>
+                  </td>
+                </tr>
+              </Transition>
+            </template>
           </template>
           <template v-else>
             <tr>

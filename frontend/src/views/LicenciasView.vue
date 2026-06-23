@@ -1,166 +1,149 @@
 <template>
-  <div class="p-6 space-y-6">
+  <div class="space-y-6">
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-slate-900">Licencias</h1>
-        <p class="text-sm text-slate-500 mt-1">Gestión de licencias del sistema</p>
+        <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Licencias</h1>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Gestión de licencias del sistema</p>
       </div>
-      <button
-        @click="openGenerateModal"
-        class="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-2xl shadow-sm font-medium transition-colors flex items-center gap-2"
-      >
+      <BaseButton variant="primary" @click="openGenerateModal">
         <i class="fa-solid fa-key text-sm"></i>
         Generar licencia
-      </button>
+      </BaseButton>
     </div>
 
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-      <div class="bg-white rounded-2xl shadow-sm p-5">
-        <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Licencias totales</p>
-        <p class="text-2xl font-mono-data font-bold text-slate-900 mt-1">{{ licenses.length }}</p>
-      </div>
-      <div class="bg-white rounded-2xl shadow-sm p-5">
-        <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Licencias activas</p>
-        <p class="text-2xl font-mono-data font-bold text-emerald-600 mt-1">{{ licenses.filter(l => l.active).length }}</p>
-      </div>
-      <div class="bg-white rounded-2xl shadow-sm p-5">
-        <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Próximas a vencer (30d)</p>
-        <p class="text-2xl font-mono-data font-bold text-amber-600 mt-1">{{ licenses.filter(l => l.daysUntilExpiry <= 30 && l.active).length }}</p>
-      </div>
+      <KpiCard label="Licencias totales" :value="licenses.length" icon="fa-key" icon-color="brand" />
+      <KpiCard label="Licencias activas" :value="licenses.filter(l => l.active).length" icon="fa-check-circle" icon-color="success" />
+      <KpiCard label="Próximas a vencer (30d)" :value="licenses.filter(l => l.daysUntilExpiry <= 30 && l.active).length" icon="fa-clock" icon-color="warning" />
     </div>
 
-    <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
-      <div class="overflow-x-auto">
-        <table class="w-full text-left text-sm">
-          <thead class="bg-slate-50 border-b border-slate-200">
-            <tr>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Clave</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Cliente</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">ID Máquina</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Vencimiento</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Días restantes</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Estado</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Acciones</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-100">
-            <tr v-for="lic in licenses" :key="lic.id" class="hover:bg-slate-50 transition-colors" :class="lic.daysUntilExpiry <= 7 && lic.active ? 'bg-rose-50/30' : ''">
-              <td class="px-5 py-4">
-                <code class="font-mono-data text-xs bg-slate-100 px-2 py-1 rounded-md text-slate-700">{{ lic.clave || lic.key }}</code>
-              </td>
-              <td class="px-5 py-4 font-medium text-slate-900">{{ lic.client || lic.cliente }}</td>
-              <td class="px-5 py-4 font-mono-data text-slate-600 text-xs">{{ lic.machineId }}</td>
-              <td class="px-5 py-4 text-slate-600">{{ lic.expirationDate }}</td>
-              <td class="px-5 py-4">
-                <span class="font-mono-data text-sm font-semibold" :class="lic.daysUntilExpiry <= 7 ? 'text-red-600' : lic.daysUntilExpiry <= 30 ? 'text-amber-600' : 'text-slate-700'">
-                  {{ lic.daysUntilExpiry }} días
-                </span>
-              </td>
-              <td class="px-5 py-4">
-                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium" :class="lic.active ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'">
-                  <span class="w-1.5 h-1.5 rounded-full" :class="lic.active ? 'bg-emerald-500' : 'bg-rose-500'"></span>
-                  {{ lic.active ? 'Activa' : 'Inactiva' }}
-                </span>
-              </td>
-              <td class="px-5 py-4">
-                <div class="flex items-center gap-2">
-                  <button
-                    v-if="!lic.active"
-                    :disabled="activatingId === lic.id"
-                    @click="activateLicense(lic)"
-                    class="text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5"
-                    title="Activar"
-                  >
-                    <i :class="activatingId === lic.id ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-circle-check'"></i>
-                    {{ activatingId === lic.id ? 'Activando...' : 'Activar' }}
-                  </button>
-                  <button
-                    v-if="lic.active"
-                    :disabled="toggling[lic.id]"
-                    @click="deactivateLicense(lic)"
-                    class="text-slate-400 hover:text-red-600 transition-colors text-xs disabled:opacity-50"
-                    title="Desactivar"
-                  >
-                    <i :class="toggling[lic.id] ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-circle-xmark'"></i>
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <Teleport to="body">
-      <div v-if="showGenerateModal" class="fixed inset-0 z-50 flex items-center justify-center">
-        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="showGenerateModal = false"></div>
-        <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4">
-          <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-            <h2 class="text-lg font-semibold text-slate-900">Generar nueva licencia</h2>
-            <button @click="showGenerateModal = false" class="text-slate-400 hover:text-slate-600 transition-colors">
-              <i class="fa-solid fa-xmark text-lg"></i>
-            </button>
+    <BaseCard padding="none">
+      <BaseTable
+        :columns="[
+          { key: 'clave', label: 'Clave' },
+          { key: 'client', label: 'Cliente' },
+          { key: 'machineId', label: 'ID Máquina' },
+          { key: 'expirationDate', label: 'Vencimiento' },
+          { key: 'daysUntilExpiry', label: 'Días restantes', align: 'right' },
+          { key: 'active', label: 'Estado', align: 'center' },
+          { key: 'actions', label: 'Acciones', align: 'center' }
+        ]"
+        :rows="licenses"
+        :row-class="row => row.daysUntilExpiry <= 7 && row.active ? 'bg-rose-50/30 dark:bg-rose-900/20' : ''"
+        empty-icon="fa-key"
+        empty-title="Sin licencias"
+        empty-text="No hay licencias registradas en este momento."
+      >
+        <template #clave="{ row }">
+          <code class="font-mono-data text-xs bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-md text-slate-700 dark:text-slate-300">{{ row.clave || row.key }}</code>
+        </template>
+        <template #client="{ row }">
+          <span class="font-medium text-slate-900 dark:text-slate-100">{{ row.client || row.cliente }}</span>
+        </template>
+        <template #machineId="{ row }">
+          <span class="font-mono-data text-slate-600 dark:text-slate-400 text-xs">{{ row.machineId }}</span>
+        </template>
+        <template #expirationDate="{ row }">
+          <span class="text-slate-600 dark:text-slate-400">{{ row.expirationDate }}</span>
+        </template>
+        <template #daysUntilExpiry="{ row }">
+          <span class="font-mono-data text-sm font-semibold" :class="row.daysUntilExpiry <= 7 ? 'text-red-600 dark:text-red-400' : row.daysUntilExpiry <= 30 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-700 dark:text-slate-300'">
+            {{ row.daysUntilExpiry }} días
+          </span>
+        </template>
+        <template #active="{ row }">
+          <BaseBadge :variant="row.active ? 'success' : 'danger'" dot>
+            {{ row.active ? 'Activa' : 'Inactiva' }}
+          </BaseBadge>
+        </template>
+        <template #actions="{ row }">
+          <div class="flex items-center justify-center gap-2">
+            <BaseButton
+              v-if="!row.active"
+              variant="primary"
+              size="sm"
+              :loading="activatingId === row.id"
+              @click="activateLicense(row)"
+              title="Activar"
+            >
+              <i :class="activatingId === row.id ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-circle-check'"></i>
+              {{ activatingId === row.id ? 'Activando...' : 'Activar' }}
+            </BaseButton>
+            <BaseButton
+              v-if="row.active"
+              variant="ghost"
+              size="sm"
+              icon-only
+              aria-label="Desactivar"
+              :loading="toggling[row.id]"
+              @click="deactivateLicense(row)"
+              title="Desactivar"
+            >
+              <i :class="toggling[row.id] ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-circle-xmark'"></i>
+            </BaseButton>
           </div>
-          <form @submit.prevent="generateLicense" class="px-6 py-5 space-y-4">
-            <div>
-              <label class="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Nombre del cliente</label>
-              <input v-model="genForm.client" type="text" required class="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all" placeholder="Nombre del cliente" />
-            </div>
-            <div>
-              <label class="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">ID de máquina</label>
-              <input v-model="genForm.machineId" type="text" required class="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all font-mono-data" placeholder="MACHINE-XXXX-XXXX" />
-            </div>
-            <div>
-              <label class="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Duración (días)</label>
-              <select v-model.number="genForm.days" required class="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all">
-                <option value="30">30 días</option>
-                <option value="90">90 días</option>
-                <option value="180">180 días</option>
-                <option value="365">365 días (1 año)</option>
-                <option value="730">730 días (2 años)</option>
-              </select>
-            </div>
+        </template>
+      </BaseTable>
+    </BaseCard>
 
-            <div v-if="generatedKey" class="bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-2">
-              <p class="text-[10px] uppercase tracking-wider text-emerald-700 font-semibold">Clave generada</p>
-              <code
-                class="block w-full font-mono-data text-lg font-bold text-emerald-900 bg-white border border-emerald-100 rounded-lg px-3 py-2 select-all cursor-pointer break-all"
-                @click="copyKey"
-                title="Clic para copiar"
-              >{{ generatedKey }}</code>
-              <p class="text-[10px] text-emerald-600">Clic en la clave para copiarla</p>
-            </div>
+    <BaseModal v-model="showGenerateModal" title="Generar nueva licencia" size="md">
+      <form @submit.prevent="generateLicense" class="space-y-4">
+        <BaseInput v-model="genForm.client" label="Nombre del cliente" placeholder="Nombre del cliente" required />
+        <BaseInput v-model="genForm.machineId" label="ID de máquina" placeholder="MACHINE-XXXX-XXXX" required input-class="font-mono-data" />
+        <BaseSelect
+          :model-value="genForm.days"
+          @update:modelValue="genForm.days = Number($event)"
+          label="Duración (días)"
+          :options="[
+            { value: 30, label: '30 días' },
+            { value: 90, label: '90 días' },
+            { value: 180, label: '180 días' },
+            { value: 365, label: '365 días (1 año)' },
+            { value: 730, label: '730 días (2 años)' }
+          ]"
+          option-value="value"
+          option-label="label"
+          required
+        />
 
-            <div class="flex justify-end gap-3 pt-2">
-              <button
-                type="button"
-                @click="showGenerateModal = false"
-                class="px-5 py-2.5 text-sm font-medium text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                v-if="!generatedKey"
-                type="submit"
-                :disabled="generating"
-                class="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-xl shadow-sm font-medium transition-colors text-sm flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                <i :class="generating ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-wand-magic-sparkles text-xs'"></i>
-                {{ generating ? 'Generando...' : 'Generar' }}
-              </button>
-              <button
-                v-else
-                type="button"
-                @click="showGenerateModal = false; generatedKey = ''"
-                class="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-xl shadow-sm font-medium transition-colors text-sm"
-              >
-                Listo
-              </button>
-            </div>
-          </form>
+        <div v-if="generatedKey" class="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-4 space-y-2">
+          <p class="text-[10px] uppercase tracking-wider text-emerald-700 dark:text-emerald-300 font-semibold">Clave generada</p>
+          <code
+            class="block w-full font-mono-data text-lg font-bold text-emerald-900 dark:text-emerald-100 bg-white dark:bg-slate-900 border border-emerald-100 dark:border-emerald-800 rounded-lg px-3 py-2 select-all cursor-pointer break-all"
+            @click="copyKey"
+            title="Clic para copiar"
+          >{{ generatedKey }}</code>
+          <p class="text-[10px] text-emerald-600 dark:text-emerald-400">Clic en la clave para copiarla</p>
         </div>
-      </div>
-    </Teleport>
+
+        <div class="flex justify-end gap-3 pt-2">
+          <BaseButton
+            type="button"
+            variant="secondary"
+            @click="showGenerateModal = false"
+          >
+            Cancelar
+          </BaseButton>
+          <BaseButton
+            v-if="!generatedKey"
+            type="submit"
+            variant="primary"
+            :loading="generating"
+          >
+            <i :class="generating ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-wand-magic-sparkles text-xs'"></i>
+            {{ generating ? 'Generando...' : 'Generar' }}
+          </BaseButton>
+          <BaseButton
+            v-else
+            type="button"
+            variant="primary"
+            @click="showGenerateModal = false; generatedKey = ''"
+          >
+            Listo
+          </BaseButton>
+        </div>
+      </form>
+    </BaseModal>
   </div>
 </template>
 
@@ -168,6 +151,14 @@
 import { ref, reactive, onMounted } from 'vue'
 import api from '@/services/api'
 import { useToastStore } from '@/stores/toasts'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseInput from '@/components/ui/BaseInput.vue'
+import BaseSelect from '@/components/ui/BaseSelect.vue'
+import BaseModal from '@/components/ui/BaseModal.vue'
+import BaseCard from '@/components/ui/BaseCard.vue'
+import BaseTable from '@/components/ui/BaseTable.vue'
+import BaseBadge from '@/components/ui/BaseBadge.vue'
+import KpiCard from '@/components/ui/KpiCard.vue'
 
 const toast = useToastStore()
 
@@ -209,10 +200,10 @@ async function generateLicense() {
       dias: genForm.days,
     })
     generatedKey.value = resp.clave
-    toast.add('success', 'Licencia generada correctamente')
+    toast.success('Licencia generada correctamente')
     await loadLicenses()
   } catch (e) {
-    toast.add('error', e.message || 'Error al generar licencia')
+    toast.error(e.message || 'Error al generar licencia')
   }
   generating.value = false
 }
@@ -222,9 +213,9 @@ async function activateLicense(lic) {
   try {
     await api.post('/api/licencia/activar', { clave: lic.clave || lic.key })
     lic.active = true
-    toast.add('success', 'Licencia activada correctamente')
+    toast.success('Licencia activada correctamente')
   } catch (e) {
-    toast.add('error', e.message || 'Error al activar licencia')
+    toast.error(e.message || 'Error al activar licencia')
   }
   activatingId.value = null
 }
@@ -240,7 +231,7 @@ async function deactivateLicense(lic) {
 
 function copyKey() {
   navigator.clipboard.writeText(generatedKey.value)
-  toast.add('info', 'Clave copiada al portapapeles')
+  toast.info('Clave copiada al portapapeles')
 }
 
 async function loadLicenses() {

@@ -6,26 +6,27 @@
         <p class="text-sm text-slate-500 mt-1">Análisis de ventas y rendimiento por período</p>
       </div>
       <div class="flex items-center gap-2">
-        <button
-          @click="syncAll"
+        <BaseButton
+          variant="secondary"
+          size="md"
+          :loading="syncing"
           :disabled="syncing"
-          class="px-4 py-2.5 rounded-xl shadow-sm text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-60"
-          :class="syncing ? 'bg-slate-100 text-slate-400' : 'bg-white border border-slate-300 text-slate-600 hover:bg-slate-50'"
+          @click="syncAll"
         >
-          <i :class="syncing ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-arrows-rotate'"></i>
+          <i class="fa-solid fa-arrows-rotate"></i>
           {{ syncing ? 'Sincronizando...' : 'Sincronizar todo' }}
-        </button>
-        <button class="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-2xl shadow-sm font-medium transition-colors flex items-center gap-2">
+        </BaseButton>
+        <BaseButton variant="primary" size="md">
           <i class="fa-solid fa-file-pdf text-sm"></i>
           Exportar todo
-        </button>
+        </BaseButton>
       </div>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
       <!-- ==================== SEMANAL ==================== -->
-      <div class="bg-white rounded-2xl shadow-sm p-5 space-y-4">
+      <BaseCard class="space-y-4">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2.5">
             <div class="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center">
@@ -33,13 +34,18 @@
             </div>
             <h2 class="font-semibold text-slate-900">Semanal</h2>
           </div>
-          <button
-            @click="syncWeekly"
+          <BaseButton
+            variant="ghost"
+            size="xs"
+            icon-only
+            title="Sincronizar semanal"
+            aria-label="Sincronizar semanal"
+            :loading="syncingWeekly"
             :disabled="syncingWeekly"
-            class="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-brand-600 hover:bg-brand-50 transition-colors disabled:opacity-40"
+            @click="syncWeekly"
           >
-            <i :class="syncingWeekly ? 'fa-solid fa-circle-notch animate-spin text-xs' : 'fa-solid fa-arrows-rotate text-xs'"></i>
-          </button>
+            <i class="fa-solid fa-arrows-rotate text-xs"></i>
+          </BaseButton>
         </div>
 
         <div class="space-y-2">
@@ -49,13 +55,10 @@
           </div>
           <div class="flex items-center gap-2">
             <span class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">vs semana anterior</span>
-            <span
-              class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold"
-              :class="weekly.change >= 0 ? 'bg-green-100 text-emerald-700' : 'bg-red-100 text-rose-700'"
-            >
+            <BaseBadge :variant="weekly.change >= 0 ? 'success' : 'danger'" size="sm">
               <i :class="weekly.change >= 0 ? 'fa-solid fa-arrow-trend-up' : 'fa-solid fa-arrow-trend-down'"></i>
               {{ Math.abs(weekly.change) }}%
-            </span>
+            </BaseBadge>
           </div>
         </div>
 
@@ -74,10 +77,13 @@
             <span class="text-[10px] text-slate-500 font-medium">{{ item.dia }}</span>
           </div>
         </div>
-        <div v-else class="py-6 text-center text-sm text-slate-400">
-          <i class="fa-solid fa-chart-bar text-2xl mb-1 block"></i>
-          Sin datos para esta semana
-        </div>
+        <EmptyState
+          v-else
+          icon="fa-chart-bar"
+          title="Sin datos para esta semana"
+          text=""
+          compact
+        />
 
         <div>
           <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-2">Top 5 productos</p>
@@ -89,10 +95,10 @@
           </div>
           <p v-if="!weekly.topProducts.length" class="text-xs text-slate-400">Sin datos</p>
         </div>
-      </div>
+      </BaseCard>
 
       <!-- ==================== MENSUAL ==================== -->
-      <div class="bg-white rounded-2xl shadow-sm p-5 space-y-4">
+      <BaseCard class="space-y-4">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2.5">
             <div class="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
@@ -100,13 +106,18 @@
             </div>
             <h2 class="font-semibold text-slate-900">Mensual</h2>
           </div>
-          <button
-            @click="syncMonthly"
+          <BaseButton
+            variant="ghost"
+            size="xs"
+            icon-only
+            title="Sincronizar mensual"
+            aria-label="Sincronizar mensual"
+            :loading="syncingMonthly"
             :disabled="syncingMonthly"
-            class="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-brand-600 hover:bg-brand-50 transition-colors disabled:opacity-40"
+            @click="syncMonthly"
           >
-            <i :class="syncingMonthly ? 'fa-solid fa-circle-notch animate-spin text-xs' : 'fa-solid fa-arrows-rotate text-xs'"></i>
-          </button>
+            <i class="fa-solid fa-arrows-rotate text-xs"></i>
+          </BaseButton>
         </div>
 
         <div class="space-y-2">
@@ -116,13 +127,10 @@
           </div>
           <div class="flex items-center gap-2">
             <span class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">vs mes anterior</span>
-            <span
-              class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold"
-              :class="monthly.change >= 0 ? 'bg-green-100 text-emerald-700' : 'bg-red-100 text-rose-700'"
-            >
+            <BaseBadge :variant="monthly.change >= 0 ? 'success' : 'danger'" size="sm">
               <i :class="monthly.change >= 0 ? 'fa-solid fa-arrow-trend-up' : 'fa-solid fa-arrow-trend-down'"></i>
               {{ Math.abs(monthly.change) }}%
-            </span>
+            </BaseBadge>
           </div>
         </div>
 
@@ -141,21 +149,24 @@
             <span class="text-[10px] text-slate-500 font-medium">{{ item.semana }}</span>
           </div>
         </div>
-        <div v-else class="py-6 text-center text-sm text-slate-400">
-          <i class="fa-solid fa-chart-bar text-2xl mb-1 block"></i>
-          Sin datos para este mes
-        </div>
+        <EmptyState
+          v-else
+          icon="fa-chart-bar"
+          title="Sin datos para este mes"
+          text=""
+          compact
+        />
 
         <div v-if="monthlyCategories.length">
           <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-2">Por categoría</p>
           <div class="flex flex-wrap gap-1.5">
-            <span
+            <BaseBadge
               v-for="(cat, idx) in monthlyCategories" :key="idx"
-              class="px-2 py-0.5 rounded-md text-[11px] font-medium"
-              :class="catBadgeColor(idx)"
+              :variant="['brand', 'success', 'warning', 'danger', 'info', 'default'][idx % 6]"
+              size="sm"
             >
               {{ cat.categoria }}: {{ formatCurrency(cat.total) }}
-            </span>
+            </BaseBadge>
           </div>
         </div>
 
@@ -169,10 +180,10 @@
           </div>
           <p v-if="!monthly.topProducts.length" class="text-xs text-slate-400">Sin datos</p>
         </div>
-      </div>
+      </BaseCard>
 
       <!-- ==================== TRIMESTRAL ==================== -->
-      <div class="bg-white rounded-2xl shadow-sm p-5 space-y-4">
+      <BaseCard class="space-y-4">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2.5">
             <div class="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
@@ -180,13 +191,18 @@
             </div>
             <h2 class="font-semibold text-slate-900">Trimestral</h2>
           </div>
-          <button
-            @click="syncQuarterly"
+          <BaseButton
+            variant="ghost"
+            size="xs"
+            icon-only
+            title="Sincronizar trimestral"
+            aria-label="Sincronizar trimestral"
+            :loading="syncingQuarterly"
             :disabled="syncingQuarterly"
-            class="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-brand-600 hover:bg-brand-50 transition-colors disabled:opacity-40"
+            @click="syncQuarterly"
           >
-            <i :class="syncingQuarterly ? 'fa-solid fa-circle-notch animate-spin text-xs' : 'fa-solid fa-arrows-rotate text-xs'"></i>
-          </button>
+            <i class="fa-solid fa-arrows-rotate text-xs"></i>
+          </BaseButton>
         </div>
 
         <div class="space-y-2">
@@ -196,13 +212,10 @@
           </div>
           <div class="flex items-center gap-2">
             <span class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">vs trim. anterior</span>
-            <span
-              class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold"
-              :class="quarterly.change >= 0 ? 'bg-green-100 text-emerald-700' : 'bg-red-100 text-rose-700'"
-            >
+            <BaseBadge :variant="quarterly.change >= 0 ? 'success' : 'danger'" size="sm">
               <i :class="quarterly.change >= 0 ? 'fa-solid fa-arrow-trend-up' : 'fa-solid fa-arrow-trend-down'"></i>
               {{ Math.abs(quarterly.change) }}%
-            </span>
+            </BaseBadge>
           </div>
         </div>
 
@@ -221,10 +234,13 @@
             <span class="text-[10px] text-slate-500 font-medium">{{ item.mes }}</span>
           </div>
         </div>
-        <div v-else class="py-6 text-center text-sm text-slate-400">
-          <i class="fa-solid fa-chart-bar text-2xl mb-1 block"></i>
-          Sin datos para este trimestre
-        </div>
+        <EmptyState
+          v-else
+          icon="fa-chart-bar"
+          title="Sin datos para este trimestre"
+          text=""
+          compact
+        />
 
         <div>
           <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-2">Top 5 productos</p>
@@ -236,7 +252,7 @@
           </div>
           <p v-if="!quarterly.topProducts.length" class="text-xs text-slate-400">Sin datos</p>
         </div>
-      </div>
+      </BaseCard>
 
     </div>
   </div>
@@ -247,6 +263,10 @@ import { ref, computed, onMounted } from 'vue'
 import api from '@/services/api'
 import { formatCurrency } from '@/composables/useUtils'
 import { useToastStore } from '@/stores/toasts'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseCard from '@/components/ui/BaseCard.vue'
+import BaseBadge from '@/components/ui/BaseBadge.vue'
+import EmptyState from '@/components/ui/EmptyState.vue'
 
 const toast = useToastStore()
 

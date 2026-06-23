@@ -1,152 +1,157 @@
 <template>
-  <div class="p-6 space-y-6">
+  <div class="space-y-6">
     <div class="flex items-center justify-between">
       <div class="flex items-center gap-3">
         <div>
-          <h1 class="text-2xl font-bold text-slate-900">Auditoría</h1>
-          <p class="text-sm text-slate-500 mt-1">Registro de actividad y cambios en el sistema</p>
+          <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Auditoría</h1>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Registro de actividad y cambios en el sistema</p>
         </div>
-        <span
+        <BaseBadge
           v-if="suspiciousToday"
-          class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700 shadow-sm"
+          variant="danger"
+          size="sm"
         >
           <i class="fa-solid fa-triangle-exclamation text-[10px]"></i>
           {{ suspiciousToday }} sospechoso{{ suspiciousToday !== 1 ? 's' : '' }} hoy
-        </span>
+        </BaseBadge>
       </div>
       <div class="flex items-center gap-2">
-        <button
+        <BaseButton
+          :variant="autoRefresh ? 'success' : 'secondary'"
+          size="sm"
           @click="toggleAutoRefresh"
-          class="px-4 py-2.5 rounded-xl shadow-sm text-sm font-medium transition-colors flex items-center gap-2"
-          :class="autoRefresh ? 'bg-green-100 text-emerald-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
         >
           <i :class="autoRefresh ? 'fa-solid fa-rotate text-emerald-600 animate-spin' : 'fa-solid fa-rotate text-slate-400'"></i>
           Auto-refrescar
-        </button>
-        <button
+        </BaseButton>
+        <BaseButton
+          variant="primary"
+          size="sm"
+          :loading="syncing"
           @click="refreshLogs"
-          :disabled="syncing"
-          class="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-2xl shadow-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          <i :class="syncing ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-arrows-rotate'"></i>
+          <i v-if="!syncing" class="fa-solid fa-arrows-rotate"></i>
           {{ syncing ? 'Sincronizando...' : 'Refrescar' }}
-        </button>
+        </BaseButton>
       </div>
     </div>
 
-    <div class="bg-white rounded-2xl shadow-sm p-5">
+    <BaseCard padding="sm">
       <div class="flex items-center gap-3 flex-wrap">
-        <span class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Filtrar por tipo</span>
-        <button
-          v-for="filter in filters"
-          :key="filter.key"
-          @click="activeFilter = filter.key"
-          class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors"
-          :class="activeFilter === filter.key ? 'bg-brand-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'"
-        >
-          {{ filter.label }}
-        </button>
+        <span class="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">Filtrar por tipo</span>
+        <div class="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl inline-flex">
+          <BaseButton
+            v-for="filter in filters"
+            :key="filter.key"
+            :variant="activeFilter === filter.key ? 'primary' : 'ghost'"
+            size="xs"
+            @click="activeFilter = filter.key"
+          >
+            {{ filter.label }}
+          </BaseButton>
+        </div>
         <div class="ml-auto flex items-center gap-3">
-          <button
+          <BaseButton
+            :variant="soloSospechosos ? 'danger' : 'ghost'"
+            size="xs"
             @click="soloSospechosos = !soloSospechosos"
-            class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5"
-            :class="soloSospechosos ? 'bg-red-100 text-red-700 shadow-sm' : 'text-slate-500 hover:bg-slate-100'"
           >
             <i class="fa-solid fa-triangle-exclamation text-[10px]"></i>
             Solo sospechosos
-          </button>
+          </BaseButton>
           <span class="w-2 h-2 rounded-full bg-rose-500"></span>
-          <span class="text-xs text-slate-500">Actividad sospechosa: {{ suspiciousCount }}</span>
+          <span class="text-xs text-slate-500 dark:text-slate-400">Actividad sospechosa: {{ suspiciousCount }}</span>
         </div>
       </div>
-    </div>
+    </BaseCard>
 
-    <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
-      <div class="overflow-x-auto">
-        <table class="w-full text-left text-sm">
-          <thead class="bg-slate-50 border-b border-slate-200">
-            <tr>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Timestamp</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Usuario</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Evento</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Acción</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Detalle</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Alerta</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-100">
-            <tr
-              v-for="log in filteredLogs"
-              :key="log.id"
-              class="transition-colors"
-              :class="rowBgClass(log)"
-            >
-              <td class="px-5 py-3">
-                <span class="font-mono-data text-xs text-slate-600">{{ log.timestamp }}</span>
-                <div class="text-[10px] text-slate-400 mt-0.5">{{ timeAgo(log.timestamp) }}</div>
-              </td>
-              <td class="px-5 py-3">
-                <div class="flex items-center gap-2">
-                  <div class="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-semibold text-slate-500">
-                    {{ log.user.charAt(0) }}
-                  </div>
-                  <span class="text-slate-700">{{ log.user }}</span>
-                </div>
-              </td>
-              <td class="px-5 py-3">
-                <span
-                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium"
-                  :class="eventBadgeClass(log)"
-                >
-                  <span class="text-[10px]">{{ eventEmoji(log.event) }}</span>
-                  {{ eventLabel(log) }}
-                </span>
-              </td>
-              <td class="px-5 py-3 text-slate-700 font-medium">{{ log.action }}</td>
-              <td class="px-5 py-3 text-slate-600 text-xs max-w-xs">
-                <template v-if="log.event === 'carrito_abandonado'">
-                  <div class="space-y-0.5">
-                    <div>{{ log.items_count }} items, {{ formatCurrency(log.subtotal) }} subtotal</div>
-                    <div class="text-slate-400">Sin confirmar por {{ log.abandoned_min }} min</div>
-                  </div>
-                </template>
-                <template v-else-if="log.event === 'venta_anulada'">
-                  <div class="space-y-0.5">
-                    <div>Total anulado: <span class="font-mono-data font-semibold text-red-600">{{ formatCurrency(log.total_anulado) }}</span></div>
-                    <div class="text-slate-400">{{ log.medio_pago }}</div>
-                  </div>
-                </template>
-                <template v-else-if="log.event === 'item_quitado'">
-                  <div class="space-y-0.5">
-                    <div>{{ log.producto }} &times; {{ log.qty }} <span class="text-amber-600 font-mono-data">&minus;{{ formatCurrency(log.subtotal_change) }}</span></div>
-                  </div>
-                </template>
-                <template v-else-if="log.event === 'venta_confirmada' && log.total">
-                  <div class="space-y-0.5">
-                    <div class="font-mono-data font-semibold text-emerald-600">{{ formatCurrency(log.total) }}</div>
-                    <div class="text-slate-400">{{ log.medio_pago }}</div>
-                  </div>
-                </template>
-                <template v-else>
-                  <span class="truncate block" :title="log.description">{{ log.description }}</span>
-                </template>
-              </td>
-              <td class="px-5 py-3">
-                <span v-if="isSuspicious(log)" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-red-100 text-rose-700">
-                  <i class="fa-solid fa-triangle-exclamation text-[10px]"></i>
-                  Sospechoso
-                </span>
-                <span v-else class="text-slate-300 text-xs">&mdash;</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="px-5 py-3 border-t border-slate-100 text-sm text-slate-500 flex items-center justify-between">
+    <BaseCard padding="none">
+      <BaseTable
+        :columns="[
+          { key: 'timestamp', label: 'Timestamp' },
+          { key: 'user', label: 'Usuario' },
+          { key: 'event', label: 'Evento' },
+          { key: 'action', label: 'Acción' },
+          { key: 'detail', label: 'Detalle' },
+          { key: 'alert', label: 'Alerta' }
+        ]"
+        :rows="filteredLogs"
+        :row-class="rowBgClass"
+        empty-title="Sin registros"
+        empty-text="No hay registros que coincidan con los filtros seleccionados."
+        empty-icon="fa-inbox"
+      >
+        <template #timestamp="{ row }">
+          <span class="font-mono-data text-xs text-slate-600 dark:text-slate-400">{{ row.timestamp }}</span>
+          <div class="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">{{ timeAgo(row.timestamp) }}</div>
+        </template>
+        <template #user="{ row }">
+          <div class="flex items-center gap-2">
+            <div class="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+              {{ row.user.charAt(0) }}
+            </div>
+            <span class="text-slate-700 dark:text-slate-300">{{ row.user }}</span>
+          </div>
+        </template>
+        <template #event="{ row }">
+          <span
+            class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium"
+            :class="eventBadgeClass(row)"
+          >
+            <span class="text-[10px]">{{ eventEmoji(row.event) }}</span>
+            {{ eventLabel(row) }}
+          </span>
+        </template>
+        <template #action="{ row }">
+          <span class="text-slate-700 dark:text-slate-300 font-medium">{{ row.action }}</span>
+        </template>
+        <template #detail="{ row }">
+          <div class="text-slate-600 dark:text-slate-400 text-xs max-w-xs">
+            <template v-if="row.event === 'carrito_abandonado'">
+              <div class="space-y-0.5">
+                <div>{{ row.items_count }} items, {{ formatCurrency(row.subtotal) }} subtotal</div>
+                <div class="text-slate-400 dark:text-slate-500">Sin confirmar por {{ row.abandoned_min }} min</div>
+              </div>
+            </template>
+            <template v-else-if="row.event === 'venta_anulada'">
+              <div class="space-y-0.5">
+                <div>Total anulado: <span class="font-mono-data font-semibold text-red-600 dark:text-red-400">{{ formatCurrency(row.total_anulado) }}</span></div>
+                <div class="text-slate-400 dark:text-slate-500">{{ row.medio_pago }}</div>
+              </div>
+            </template>
+            <template v-else-if="row.event === 'item_quitado'">
+              <div class="space-y-0.5">
+                <div>{{ row.producto }} &times; {{ row.qty }} <span class="text-amber-600 dark:text-amber-400 font-mono-data">&minus;{{ formatCurrency(row.subtotal_change) }}</span></div>
+              </div>
+            </template>
+            <template v-else-if="row.event === 'venta_confirmada' && row.total">
+              <div class="space-y-0.5">
+                <div class="font-mono-data font-semibold text-emerald-600 dark:text-emerald-400">{{ formatCurrency(row.total) }}</div>
+                <div class="text-slate-400 dark:text-slate-500">{{ row.medio_pago }}</div>
+              </div>
+            </template>
+            <template v-else>
+              <span class="truncate block" :title="row.description">{{ row.description }}</span>
+            </template>
+          </div>
+        </template>
+        <template #alert="{ row }">
+          <BaseBadge
+            v-if="isSuspicious(row)"
+            variant="danger"
+            size="xs"
+          >
+            <i class="fa-solid fa-triangle-exclamation text-[10px]"></i>
+            Sospechoso
+          </BaseBadge>
+          <span v-else class="text-slate-300 dark:text-slate-600 text-xs">&mdash;</span>
+        </template>
+      </BaseTable>
+      <div class="px-5 py-3 border-t border-slate-100 dark:border-slate-800 text-sm text-slate-500 dark:text-slate-400 flex items-center justify-between">
         <span>{{ filteredLogs.length }} registros</span>
-        <span class="text-xs text-slate-400">Última actualización: {{ lastRefresh }}</span>
+        <span class="text-xs text-slate-400 dark:text-slate-500">Última actualización: {{ lastRefresh }}</span>
       </div>
-    </div>
+    </BaseCard>
   </div>
 </template>
 
@@ -155,6 +160,10 @@ import { ref, computed, onUnmounted, onMounted } from 'vue'
 import api from '@/services/api'
 import { useToastStore } from '@/stores/toasts'
 import { formatCurrency } from '@/composables/useUtils'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseCard from '@/components/ui/BaseCard.vue'
+import BaseBadge from '@/components/ui/BaseBadge.vue'
+import BaseTable from '@/components/ui/BaseTable.vue'
 
 const toast = useToastStore()
 
