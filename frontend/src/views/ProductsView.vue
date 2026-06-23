@@ -35,6 +35,26 @@ const formError = ref('')
 const highlightedIds = ref(new Set())
 const showBarcodeHint = ref(false)
 
+const ofertas = ref([])
+const showOfertaModal = ref(false)
+const editingOferta = ref(null)
+const deleteOfertaTarget = ref(null)
+const savingOferta = ref(false)
+const deletingOferta = ref(false)
+const filterEnOferta = ref(false)
+
+const defaultOfertaForm = () => ({
+  producto_id: null,
+  tipo: 'porcentaje',
+  valor: 10,
+  requiere_cantidad: 2,
+  fecha_inicio: null,
+  fecha_fin: null,
+  max_unidades: null,
+  descripcion: ''
+})
+const ofertaForm = reactive(defaultOfertaForm())
+
 const products = ref([
   { id: 1, codigo_barras: '7791234567890', nombre: 'Coca-Cola 2.25L', marca: 'Coca-Cola', precio_venta: 2800, precio_costo: 2100, categoria_id: 1, stock_actual: 45 },
   { id: 2, codigo_barras: '7799876543210', nombre: 'Arroz Gallo 1kg', marca: 'Gallo', precio_venta: 1500, precio_costo: 1100, categoria_id: 2, stock_actual: 120 },
@@ -67,6 +87,7 @@ const tableColumns = [
   { key: 'precio_venta', label: 'Precio', align: 'right' },
   { key: 'stock_actual', label: 'Stock', align: 'right' },
   { key: 'categoria', label: 'Categoría' },
+  { key: 'oferta', label: 'Oferta', align: 'center', width: 'w-24' },
   { key: 'acciones', label: '', align: 'right', width: 'w-24' }
 ]
 
@@ -81,6 +102,11 @@ const filteredProducts = computed(() => {
   if (filterPrecioDefasado.value) {
     list = list.filter(p => p.precio_venta > 0 && p.precio_costo > 0 && p.precio_venta <= p.precio_costo)
   }
+  if (filterEnOferta.value) {
+    const ofertasActivas = ofertas.value.filter(o => o.activo)
+    const pids = new Set(ofertasActivas.map(o => o.producto_id))
+    list = list.filter(p => pids.has(p.id))
+  }
   if (searchQuery.value.trim()) {
     const q = searchQuery.value.toLowerCase()
     list = list.filter(p =>
@@ -92,7 +118,10 @@ const filteredProducts = computed(() => {
   return list
 })
 
-const tableRows = computed(() => filteredProducts.value.map(p => ({ ...p, categoria: categoryName(p.categoria_id) })))
+const tableRows = computed(() => filteredProducts.value.map(p => {
+  const oferta = ofertas.value.find(o => o.producto_id === p.id && o.activo)
+  return { ...p, categoria: categoryName(p.categoria_id), _oferta: oferta || null }
+}))
 
 function categoryName(catId) {
   const cat = categories.value.find(c => c.id === catId)
@@ -102,12 +131,14 @@ function categoryName(catId) {
 async function fetchProductsData(checkPendientes = false) {
   loading.value = true
   try {
-    const [prods, cats] = await Promise.all([
+    const [prods, cats, ofs] = await Promise.all([
       api.get('/api/productos?page_size=200').catch(() => null),
-      api.get('/api/categorias').catch(() => null)
+      api.get('/api/categorias').catch(() => null),
+      api.get('/api/ofertas?page_size=200').catch(() => null)
     ])
     if (prods && prods.length) products.value = prods
     if (cats && cats.length) categories.value = cats
+    if (ofs && Array.isArray(ofs)) ofertas.value = ofs
 
     if (checkPendientes) {
       const pendientes = prods?.filter(p =>
@@ -131,12 +162,14 @@ watch(() => route.path, (path) => {
 async function syncProducts() {
   syncing.value = true
   try {
-    const [prods, cats] = await Promise.all([
+    const [prods, cats, ofs] = await Promise.all([
       api.get('/api/productos').catch(() => null),
-      api.get('/api/categorias').catch(() => null)
+      api.get('/api/categorias').catch(() => null),
+      api.get('/api/ofertas?page_size=200').catch(() => null)
     ])
     if (prods && prods.length) products.value = prods
     if (cats && cats.length) categories.value = cats
+    if (ofs && Array.isArray(ofs)) ofertas.value = ofs
     toast.success('Productos sincronizados')
   } catch {
     toast.info('Usando datos locales')
@@ -261,6 +294,88 @@ async function executeDelete() {
   deleteTarget.value = null
   deleting.value = false
 }
+
+function openCreateOfertaModal(productoId = null) {
+  editingOferta.value = null
+  Object.assign(ofertaForm, defaultOfertaForm())
+  if (productoId) ofertaForm.producto_id = productoId
+  showOfertaModal.value = true
+}
+
+function openEditOfertaModal(oferta) {
+  editingOferta.value = oferta
+  Object.assign(ofertaForm, {
+    producto_id: oferta.producto_id,
+    tipo: oferta.tipo,
+    valor: oferta.valor,
+    requiere_cantidad: oferta.requiere_cantidad,
+    fecha_inicio: oferta.fecha_inicio ? oferta.fecha_inicio.slice(0, 16) : null,
+    fecha_fin: oferta.fecha_fin ? oferta.fecha_fin.slice(0, 16) : null,
+    max_unidades: oferta.max_unidades,
+    descripcion: oferta.descripcion || ''
+  })
+  showOfertaModal.value = true
+}
+
+function closeOfertaModal() {
+  showOfertaModal.value = false
+  editingOferta.value = null
+}
+
+async function saveOferta() {
+  if (!ofertaForm.producto_id) {
+    toast.error('Seleccioná un producto')
+    return
+  }
+  savingOferta.value = true
+  try {
+    const payload = {
+      ...ofertaForm,
+      fecha_inicio: ofertaForm.fecha_inicio || null,
+      fecha_fin: ofertaForm.fecha_fin || null,
+      max_unidades: ofertaForm.max_unidades || null
+    }
+    if (editingOferta.value) {
+      await api.put(`/api/ofertas/${editingOferta.value.id}`, payload)
+      toast.success('Oferta actualizada')
+    } else {
+      await api.post('/api/ofertas', payload)
+      toast.success('Oferta creada')
+    }
+    closeOfertaModal()
+    const ofs = await api.get('/api/ofertas?page_size=200').catch(() => null)
+    if (ofs && Array.isArray(ofs)) ofertas.value = ofs
+  } catch (e) {
+    toast.error(e.message || 'Error al guardar oferta')
+  }
+  savingOferta.value = false
+}
+
+function confirmDeleteOferta(oferta) {
+  deleteOfertaTarget.value = oferta
+}
+
+async function executeDeleteOferta() {
+  if (!deleteOfertaTarget.value) return
+  deletingOferta.value = true
+  try {
+    await api.delete(`/api/ofertas/${deleteOfertaTarget.value.id}`)
+    toast.success('Oferta eliminada')
+    ofertas.value = ofertas.value.filter(o => o.id !== deleteOfertaTarget.value.id)
+  } catch {
+    toast.error('Error al eliminar oferta')
+  }
+  deleteOfertaTarget.value = null
+  deletingOferta.value = false
+}
+
+function ofertaTipoLabel(tipo) {
+  return { '2x1': '2x1', porcentaje: '%', monto_fijo: '$' }[tipo] || tipo
+}
+
+function ofertaTipoColor(tipo) {
+  return { '2x1': 'warning', porcentaje: 'success', monto_fijo: 'info' }[tipo] || 'default'
+}
 </script>
 
 <template>
@@ -277,6 +392,9 @@ async function executeDelete() {
         </BaseButton>
         <BaseButton variant="primary" size="sm" @click="openCreateModal">
           <i class="fa-solid fa-plus"></i> Nuevo Producto
+        </BaseButton>
+        <BaseButton variant="secondary" size="sm" @click="openCreateOfertaModal()">
+          <i class="fa-solid fa-tag"></i> Nueva Oferta
         </BaseButton>
       </div>
     </div>
@@ -323,6 +441,16 @@ async function executeDelete() {
       >
         <i class="fa-solid fa-dollar-sign"></i> Precio ≤ costo
       </button>
+      <button
+        type="button"
+        class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 border flex items-center gap-1.5"
+        :class="filterEnOferta
+          ? 'bg-orange-500 text-white border-orange-500 shadow-sm shadow-orange-500/20'
+          : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'"
+        @click="filterEnOferta = !filterEnOferta"
+      >
+        <i class="fa-solid fa-tag"></i> En oferta
+      </button>
     </div>
 
     <!-- Products table -->
@@ -366,8 +494,25 @@ async function executeDelete() {
       <template #categoria="{ row }">
         <span class="text-xs text-slate-500 dark:text-slate-400">{{ row.categoria }}</span>
       </template>
+      <template #oferta="{ row }">
+        <div v-if="row._oferta" class="flex items-center justify-center gap-1">
+          <BaseBadge :variant="ofertaTipoColor(row._oferta.tipo)" size="xs">
+            {{ row._oferta.tipo === '2x1' ? '2x1' : row._oferta.tipo === 'porcentaje' ? row._oferta.valor + '%' : '$' + row._oferta.valor }}
+          </BaseBadge>
+        </div>
+        <span v-else class="text-slate-300 dark:text-slate-600 text-xs">—</span>
+      </template>
       <template #acciones="{ row }">
         <div class="flex items-center justify-end gap-1">
+          <button
+            v-if="row._oferta"
+            type="button"
+            aria-label="Editar oferta"
+            class="w-7 h-7 rounded-lg text-orange-400 hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20 flex items-center justify-center transition"
+            @click="openEditOfertaModal(row._oferta)"
+          >
+            <i class="fa-solid fa-tag text-[10px]"></i>
+          </button>
           <button
             type="button"
             aria-label="Editar"
@@ -481,6 +626,123 @@ async function executeDelete() {
           <BaseButton variant="danger" :loading="deleting" class="flex-1" @click="executeDelete">
             <i :class="deleting ? 'fa-solid fa-circle-notch fa-spin' : 'fa-solid fa-trash'"></i>
             {{ deleting ? 'Eliminando...' : 'Eliminar' }}
+          </BaseButton>
+        </div>
+      </div>
+    </BaseModal>
+
+    <!-- Oferta Modal -->
+    <BaseModal v-model="showOfertaModal" :title="editingOferta ? 'Editar Oferta' : 'Nueva Oferta'" size="md">
+      <form class="space-y-4" @submit.prevent="saveOferta">
+        <BaseSelect
+          v-model="ofertaForm.producto_id"
+          label="Producto"
+          :options="products.map(p => ({ value: p.id, label: p.nombre }))"
+          option-value="value"
+          option-label="label"
+          required
+        />
+
+        <BaseSelect
+          v-model="ofertaForm.tipo"
+          label="Tipo de Oferta"
+          :options="[
+            { value: 'porcentaje', label: 'Porcentaje (%)' },
+            { value: 'monto_fijo', label: 'Monto Fijo ($)' },
+            { value: '2x1', label: '2x1 (Llevá 2, Pagá 1)' }
+          ]"
+          option-value="value"
+          option-label="label"
+          required
+        />
+
+        <div v-if="ofertaForm.tipo !== '2x1'" class="grid grid-cols-2 gap-4">
+          <BaseInput
+            v-model.number="ofertaForm.valor"
+            :label="ofertaForm.tipo === 'porcentaje' ? 'Porcentaje (%)' : 'Monto ($)'"
+            type="number"
+            step="0.01"
+            min="0"
+            required
+            input-class="font-mono-data text-right"
+          />
+          <BaseInput
+            v-model.number="ofertaForm.requiere_cantidad"
+            label="Cantidad Mínima"
+            type="number"
+            min="1"
+            required
+            input-class="font-mono-data text-right"
+          />
+        </div>
+
+        <div v-else class="grid grid-cols-2 gap-4">
+          <BaseInput
+            v-model.number="ofertaForm.requiere_cantidad"
+            label="Cantidad Mínima"
+            type="number"
+            min="2"
+            required
+            input-class="font-mono-data text-right"
+            placeholder="2"
+          />
+          <div class="flex items-end">
+            <p class="text-xs text-slate-500 dark:text-slate-400">2x1: 50% de descuento automático al llevar 2+ unidades</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <BaseInput
+            v-model="ofertaForm.fecha_inicio"
+            label="Fecha Inicio"
+            type="datetime-local"
+          />
+          <BaseInput
+            v-model="ofertaForm.fecha_fin"
+            label="Fecha Fin (opcional)"
+            type="datetime-local"
+          />
+        </div>
+
+        <BaseInput
+          v-model.number="ofertaForm.max_unidades"
+          label="Máx. Unidades en Oferta (opcional)"
+          type="number"
+          min="1"
+          input-class="font-mono-data text-right"
+        />
+
+        <BaseInput
+          v-model="ofertaForm.descripcion"
+          label="Descripción (opcional)"
+          placeholder="Ej: Liquidación de stock, Promoción especial..."
+        />
+
+        <div class="flex items-center gap-3 pt-2">
+          <BaseButton variant="secondary" class="flex-1" @click="closeOfertaModal">Cancelar</BaseButton>
+          <BaseButton variant="primary" type="submit" :loading="savingOferta" class="flex-1">
+            <i :class="savingOferta ? 'fa-solid fa-circle-notch fa-spin' : 'fa-solid fa-tag'"></i>
+            {{ savingOferta ? 'Guardando...' : (editingOferta ? 'Actualizar' : 'Crear Oferta') }}
+          </BaseButton>
+        </div>
+      </form>
+    </BaseModal>
+
+    <!-- Delete Oferta Modal -->
+    <BaseModal v-model="deleteOfertaTarget" title="Eliminar Oferta" size="sm" :close-on-overlay="true">
+      <div class="text-center">
+        <div class="w-12 h-12 rounded-2xl bg-orange-50 dark:bg-orange-900/20 flex items-center justify-center mx-auto mb-3">
+          <i class="fa-solid fa-tag text-orange-500 text-xl"></i>
+        </div>
+        <h3 class="text-lg font-bold text-slate-950 dark:text-white font-display mb-1">Eliminar Oferta</h3>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mb-5">
+          ¿Estás seguro de eliminar esta oferta? Esta acción no se puede deshacer.
+        </p>
+        <div class="flex items-center gap-3">
+          <BaseButton variant="secondary" class="flex-1" @click="deleteOfertaTarget = null">Cancelar</BaseButton>
+          <BaseButton variant="danger" :loading="deletingOferta" class="flex-1" @click="executeDeleteOferta">
+            <i :class="deletingOferta ? 'fa-solid fa-circle-notch fa-spin' : 'fa-solid fa-trash'"></i>
+            {{ deletingOferta ? 'Eliminando...' : 'Eliminar' }}
           </BaseButton>
         </div>
       </div>

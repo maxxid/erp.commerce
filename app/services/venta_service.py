@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.models.venta import Venta, VentaItem
 from app.models.producto import Producto
 from app.models.cliente import Cliente
-from app.services import stock_service, caja_service
+from app.services import stock_service, caja_service, oferta_service
 
 
 def generar_numero(db: Session, prefijo: str = "V") -> str:
@@ -183,6 +183,10 @@ def confirmar_venta(
             referencia_tipo="venta",
             referencia_id=venta.id,
         )
+
+    # Actualizar contadores de ofertas vendidas
+    for item in venta.items:
+        oferta_service.incrementar_vendidas(db, item.producto_id, item.cantidad)
 
     # Aplicar descuento y actualizar total
     venta.descuento = descuento
