@@ -6,155 +6,170 @@
         <p class="text-sm text-slate-500 mt-1">Gestión de proveedores de mercadería</p>
       </div>
       <div class="flex items-center gap-2">
-        <button
+        <BaseButton
+          variant="secondary"
+          size="md"
+          :loading="syncing"
           :disabled="syncing"
           @click="syncProveedores"
-          class="bg-white border border-slate-300 rounded-2xl px-4 py-2.5 text-sm font-medium hover:bg-slate-50 transition-colors flex items-center gap-2 shadow-sm disabled:opacity-60"
           title="Sincronizar proveedores"
         >
           <i :class="syncing ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-sync'"></i>
           {{ syncing ? 'Sincronizando...' : 'Sincronizar' }}
-        </button>
-        <button
+        </BaseButton>
+        <BaseButton
+          variant="primary"
+          size="md"
           @click="openCreateModal"
-          class="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-2xl shadow-sm font-medium transition-colors flex items-center gap-2"
         >
           <i class="fa-solid fa-plus text-sm"></i>
           Nuevo proveedor
-        </button>
+        </BaseButton>
       </div>
     </div>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      <div class="bg-white rounded-2xl shadow-sm p-5">
+      <BaseCard padding="md">
         <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Total proveedores</p>
         <p class="text-2xl font-mono-data font-bold text-slate-900 mt-1">{{ suppliers.length }}</p>
-      </div>
-      <div class="bg-white rounded-2xl shadow-sm p-5">
+      </BaseCard>
+      <BaseCard padding="md">
         <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Activos</p>
         <p class="text-2xl font-mono-data font-bold text-emerald-600 mt-1">{{ suppliers.filter(s => s.active).length }}</p>
-      </div>
-      <div class="bg-white rounded-2xl shadow-sm p-5">
+      </BaseCard>
+      <BaseCard padding="md">
         <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Inactivos</p>
         <p class="text-2xl font-mono-data font-bold text-red-500 mt-1">{{ suppliers.filter(s => !s.active).length }}</p>
-      </div>
-      <div class="bg-white rounded-2xl shadow-sm p-5">
+      </BaseCard>
+      <BaseCard padding="md">
         <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Último agregado</p>
         <p class="text-sm font-medium text-slate-900 mt-1 truncate">{{ suppliers[suppliers.length - 1]?.name || '—' }}</p>
-      </div>
+      </BaseCard>
     </div>
 
-    <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
-      <div class="overflow-x-auto">
-        <table class="w-full text-left text-sm">
-          <thead class="bg-slate-50 border-b border-slate-200">
-            <tr>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Nombre</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">CUIT</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Teléfono</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Email</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Contacto</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Estado</th>
-              <th class="px-5 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Acciones</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-100">
-            <tr v-for="supplier in suppliers" :key="supplier.id" class="hover:bg-slate-50 transition-colors">
-              <td class="px-5 py-4 font-medium text-slate-900">{{ supplier.name }}</td>
-              <td class="px-5 py-4 font-mono-data text-slate-700">{{ supplier.cuit }}</td>
-              <td class="px-5 py-4 text-slate-600">{{ supplier.phone }}</td>
-              <td class="px-5 py-4 text-slate-600">
-                <a :href="'mailto:' + supplier.email" class="text-brand-600 hover:underline">{{ supplier.email }}</a>
-              </td>
-              <td class="px-5 py-4 text-slate-600">{{ supplier.contact }}</td>
-              <td class="px-5 py-4">
-                <span
-                  class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
-                  :class="supplier.active ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'"
-                >
-                  <span class="w-1.5 h-1.5 rounded-full" :class="supplier.active ? 'bg-emerald-500' : 'bg-rose-500'"></span>
-                  {{ supplier.active ? 'Activo' : 'Inactivo' }}
-                </span>
-              </td>
-              <td class="px-5 py-4">
-                <div class="flex items-center gap-2">
-                  <button
-                    @click="openEditModal(supplier)"
-                    class="text-slate-400 hover:text-brand-600 transition-colors"
-                    title="Editar"
-                  >
-                    <i class="fa-solid fa-pen-to-square"></i>
-                  </button>
-                  <button
-                    @click="toggleActive(supplier)"
-                    :disabled="togglingId === supplier.id"
-                    class="transition-colors disabled:opacity-60"
-                    :class="supplier.active ? 'text-slate-400 hover:text-red-600' : 'text-slate-400 hover:text-emerald-600'"
-                    title="Cambiar estado"
-                  >
-                    <i v-if="togglingId === supplier.id" class="fa-solid fa-circle-notch animate-spin"></i>
-                    <i v-else :class="supplier.active ? 'fa-solid fa-circle-xmark' : 'fa-solid fa-circle-check'"></i>
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <Teleport to="body">
-      <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center">
-        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="showModal = false"></div>
-        <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
-          <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-            <h2 class="text-lg font-semibold text-slate-900">{{ editingSupplier ? 'Editar proveedor' : 'Nuevo proveedor' }}</h2>
-            <button @click="showModal = false" class="text-slate-400 hover:text-slate-600 transition-colors">
-              <i class="fa-solid fa-xmark text-lg"></i>
-            </button>
+    <BaseCard padding="none">
+      <BaseTable
+        :columns="columns"
+        :rows="suppliers"
+        :loading="false"
+      >
+        <template #name="{ row }">
+          <span class="font-medium text-slate-900">{{ row.name }}</span>
+        </template>
+        <template #cuit="{ row }">
+          <span class="font-mono-data text-slate-700">{{ row.cuit }}</span>
+        </template>
+        <template #phone="{ row }">
+          <span class="text-slate-600">{{ row.phone }}</span>
+        </template>
+        <template #email="{ row }">
+          <a :href="'mailto:' + row.email" class="text-brand-600 hover:underline">{{ row.email }}</a>
+        </template>
+        <template #contact="{ row }">
+          <span class="text-slate-600">{{ row.contact }}</span>
+        </template>
+        <template #active="{ row }">
+          <BaseBadge
+            :variant="row.active ? 'success' : 'danger'"
+            size="sm"
+            dot
+          >
+            {{ row.active ? 'Activo' : 'Inactivo' }}
+          </BaseBadge>
+        </template>
+        <template #actions="{ row }">
+          <div class="flex items-center gap-2">
+            <BaseButton
+              variant="ghost"
+              size="sm"
+              icon-only
+              @click="openEditModal(row)"
+              title="Editar"
+            >
+              <i class="fa-solid fa-pen-to-square"></i>
+            </BaseButton>
+            <BaseButton
+              variant="ghost"
+              size="sm"
+              icon-only
+              :loading="togglingId === row.id"
+              :disabled="togglingId === row.id"
+              @click="toggleActive(row)"
+              title="Cambiar estado"
+            >
+              <i v-if="togglingId === row.id" class="fa-solid fa-circle-notch animate-spin"></i>
+              <i v-else :class="row.active ? 'fa-solid fa-circle-xmark' : 'fa-solid fa-circle-check'"></i>
+            </BaseButton>
           </div>
-          <form @submit.prevent="saveSupplier" class="px-6 py-5 space-y-4">
-            <div>
-              <label class="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Nombre / Razón social</label>
-              <input v-model="form.name" type="text" required class="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all" placeholder="Nombre del proveedor" />
-            </div>
-            <div>
-              <label class="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">CUIT</label>
-              <input v-model="form.cuit" type="text" required class="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all font-mono-data" placeholder="XX-XXXXXXXX-X" />
-            </div>
-            <div>
-              <label class="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Teléfono</label>
-              <input v-model="form.phone" type="text" required class="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all" placeholder="+54 11 1234-5678" />
-            </div>
-            <div>
-              <label class="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Email</label>
-              <input v-model="form.email" type="email" required class="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all" placeholder="email@proveedor.com" />
-            </div>
-            <div>
-              <label class="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Persona de contacto</label>
-              <input v-model="form.contact" type="text" required class="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 outline-none transition-all" placeholder="Nombre del contacto" />
-            </div>
-            <div class="flex justify-end gap-3 pt-2">
-              <button
-                type="button"
-                @click="showModal = false"
-                class="px-5 py-2.5 text-sm font-medium text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                :disabled="saving"
-                class="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-xl shadow-sm font-medium transition-colors text-sm disabled:opacity-60"
-              >
-                <i :class="saving ? 'fa-solid fa-circle-notch animate-spin' : editingSupplier ? 'fa-solid fa-check' : 'fa-solid fa-plus'"></i>
-                {{ saving ? 'Guardando...' : editingSupplier ? 'Guardar cambios' : 'Crear proveedor' }}
-              </button>
-            </div>
-          </form>
+        </template>
+      </BaseTable>
+    </BaseCard>
+
+    <BaseModal
+      v-model="showModal"
+      :title="editingSupplier ? 'Editar proveedor' : 'Nuevo proveedor'"
+      size="lg"
+      @close="showModal = false"
+    >
+      <form @submit.prevent="saveSupplier" class="space-y-4">
+        <BaseInput
+          v-model="form.name"
+          label="Nombre / Razón social"
+          type="text"
+          placeholder="Nombre del proveedor"
+          required
+        />
+        <BaseInput
+          v-model="form.cuit"
+          label="CUIT"
+          type="text"
+          placeholder="XX-XXXXXXXX-X"
+          input-class="font-mono-data"
+          required
+        />
+        <BaseInput
+          v-model="form.phone"
+          label="Teléfono"
+          type="text"
+          placeholder="+54 11 1234-5678"
+          required
+        />
+        <BaseInput
+          v-model="form.email"
+          label="Email"
+          type="email"
+          placeholder="email@proveedor.com"
+          required
+        />
+        <BaseInput
+          v-model="form.contact"
+          label="Persona de contacto"
+          type="text"
+          placeholder="Nombre del contacto"
+          required
+        />
+        <div class="flex justify-end gap-3 pt-2">
+          <BaseButton
+            type="button"
+            variant="secondary"
+            size="md"
+            @click="showModal = false"
+          >
+            Cancelar
+          </BaseButton>
+          <BaseButton
+            type="submit"
+            variant="primary"
+            size="md"
+            :loading="saving"
+            :disabled="saving"
+          >
+            <i :class="saving ? 'fa-solid fa-circle-notch animate-spin' : editingSupplier ? 'fa-solid fa-check' : 'fa-solid fa-plus'"></i>
+            {{ saving ? 'Guardando...' : editingSupplier ? 'Guardar cambios' : 'Crear proveedor' }}
+          </BaseButton>
         </div>
-      </div>
-    </Teleport>
+      </form>
+    </BaseModal>
   </div>
 </template>
 
@@ -163,6 +178,13 @@ import { ref, reactive, onMounted } from 'vue'
 import { formatCurrency } from '@/composables/useUtils'
 import api from '@/services/api'
 import { useToastStore } from '@/stores/toasts'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseInput from '@/components/ui/BaseInput.vue'
+import BaseModal from '@/components/ui/BaseModal.vue'
+import BaseCard from '@/components/ui/BaseCard.vue'
+import BaseTable from '@/components/ui/BaseTable.vue'
+import BaseBadge from '@/components/ui/BaseBadge.vue'
+import EmptyState from '@/components/ui/EmptyState.vue'
 
 const toast = useToastStore()
 
@@ -177,6 +199,16 @@ const suppliers = ref([
   { id: 4, name: 'Envasados del Sur', cuit: '27-33445566-1', phone: '+54 11 5555-7890', email: 'admin@envasadossur.com.ar', contact: 'Marina Díaz', active: false },
   { id: 5, name: 'Panificadora El Trigo', cuit: '20-12349876-3', phone: '+54 11 6123-4567', email: 'ventas@eltrigo.com.ar', contact: 'Roberto Suárez', active: true },
 ])
+
+const columns = [
+  { key: 'name', label: 'Nombre' },
+  { key: 'cuit', label: 'CUIT' },
+  { key: 'phone', label: 'Teléfono' },
+  { key: 'email', label: 'Email' },
+  { key: 'contact', label: 'Contacto' },
+  { key: 'active', label: 'Estado' },
+  { key: 'actions', label: 'Acciones' },
+]
 
 const showModal = ref(false)
 const editingSupplier = ref(null)

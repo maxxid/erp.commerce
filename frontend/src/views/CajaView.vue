@@ -6,67 +6,54 @@
         <p class="text-sm text-slate-500 mt-1">Gestión de caja registradora</p>
       </div>
       <div class="flex items-center gap-2">
-        <button :disabled="syncing" @click="syncData"
-                class="px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl flex items-center gap-1.5 transition shadow-sm">
+        <BaseButton :loading="syncing" :disabled="syncing" variant="secondary" size="sm" @click="syncData">
           <i :class="syncing ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-arrows-rotate'"></i>
           {{ syncing ? 'Sincronizando...' : 'Sincronizar' }}
-        </button>
-        <span :class="cajaStore.abierta ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'"
-              class="px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5">
-          <span class="w-2 h-2 rounded-full" :class="cajaStore.abierta ? 'bg-emerald-500' : 'bg-rose-500'"></span>
+        </BaseButton>
+        <BaseBadge :variant="cajaStore.abierta ? 'success' : 'danger'" size="sm" dot>
           {{ cajaStore.abierta ? 'Caja Abierta' : 'Caja Cerrada' }}
-        </span>
-        <button v-if="cajaStore.abierta"
-                :disabled="closing"
-                @click="cerrarCaja"
-                class="px-4 py-2 bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-700 font-semibold text-sm rounded-xl flex items-center gap-2 shadow-sm transition">
-          <i :class="closing ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-lock'"></i> {{ closing ? 'Cerrando...' : 'Cerrar Caja' }}
-        </button>
-        <button v-else
-                :disabled="opening"
-                @click="abrirCaja"
-                class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-xl flex items-center gap-2 shadow-sm transition">
-          <i :class="opening ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-lock-open'"></i> {{ opening ? 'Abriendo...' : 'Abrir Caja' }}
-        </button>
+        </BaseBadge>
+        <BaseButton v-if="cajaStore.abierta" :loading="closing" :disabled="closing" variant="danger" size="sm" @click="cerrarCaja">
+          <i :class="closing ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-lock'"></i>
+          {{ closing ? 'Cerrando...' : 'Cerrar Caja' }}
+        </BaseButton>
+        <BaseButton v-else :loading="opening" :disabled="opening" variant="primary" size="sm" @click="abrirCaja">
+          <i :class="opening ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-lock-open'"></i>
+          {{ opening ? 'Abriendo...' : 'Abrir Caja' }}
+        </BaseButton>
       </div>
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <div class="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm text-center">
+      <BaseCard padding="md" class="text-center">
         <div class="text-[10px] font-bold text-slate-400 uppercase">Saldo Actual</div>
         <div class="text-xl font-bold font-mono-data text-brand-600 mt-1">{{ fc(cajaStore.saldo_actual) }}</div>
         <div class="text-[10px] text-slate-400 mt-0.5">en caja</div>
-      </div>
-      <div class="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm text-center">
+      </BaseCard>
+      <BaseCard padding="md" class="text-center">
         <div class="text-[10px] font-bold text-slate-400 uppercase">Ingresos del Día</div>
         <div class="text-xl font-bold font-mono-data text-emerald-600 mt-1">{{ fc(ingresosHoy) }}</div>
         <div class="text-[10px] text-slate-400 mt-0.5">{{ movimientosIngresos }} movimientos</div>
-      </div>
-      <div class="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm text-center">
+      </BaseCard>
+      <BaseCard padding="md" class="text-center">
         <div class="text-[10px] font-bold text-slate-400 uppercase">Egresos del Día</div>
         <div class="text-xl font-bold font-mono-data text-rose-600 mt-1">{{ fc(egresosHoy) }}</div>
         <div class="text-[10px] text-slate-400 mt-0.5">{{ movimientosEgresos }} movimientos</div>
-      </div>
+      </BaseCard>
     </div>
 
     <!-- Cierre Parcial por Método -->
-    <div v-if="cajaStore.abierta" class="bg-white border border-slate-200 rounded-2xl shadow-sm p-5 space-y-4">
+    <BaseCard v-if="cajaStore.abierta" padding="md" class="space-y-4">
       <h3 class="font-bold text-slate-900 text-sm">Cerrar por Método</h3>
       <div class="flex flex-wrap gap-2">
-        <button v-for="metodo in metodosPago" :key="metodo.valor"
-                :disabled="cerrandoMetodo || cajaResumen.metodos_cerrados?.includes(metodo.valor)"
-                @click="cierreParcial.activo = true; cierreParcial.metodo = metodo.valor; cierreParcial.monto_real = 0; cierreParcial.comentario = ''"
-                :class="[
-                  'px-4 py-2 text-sm font-semibold rounded-xl transition flex items-center gap-1.5',
-                  cierreParcial.activo && cierreParcial.metodo === metodo.valor
-                    ? 'bg-brand-600 text-white shadow-sm'
-                    : cajaResumen.metodos_cerrados?.includes(metodo.valor)
-                      ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
-                      : 'bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700'
-                ]">
+        <BaseButton v-for="metodo in metodosPago" :key="metodo.valor"
+                    :variant="cierreParcial.activo && cierreParcial.metodo === metodo.valor ? 'primary' : 'secondary'"
+                    :disabled="cerrandoMetodo || cajaResumen.metodos_cerrados?.includes(metodo.valor)"
+                    size="sm"
+                    @click="cierreParcial.activo = true; cierreParcial.metodo = metodo.valor; cierreParcial.monto_real = 0; cierreParcial.comentario = ''">
           <i v-if="cajaResumen.metodos_cerrados?.includes(metodo.valor)" class="fa-solid fa-check text-xs"></i>
           {{ metodo.label }}
-        </button>
+        </BaseButton>
       </div>
 
       <div v-if="cierreParcial.activo" class="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
@@ -74,130 +61,65 @@
           <span class="text-xs font-bold text-slate-600">
             Cerrando: <span class="text-brand-600">{{ cierreParcial.metodo }}</span>
           </span>
-          <button @click="cancelarCierre" class="text-slate-400 hover:text-slate-600">
+          <BaseButton variant="ghost" size="xs" iconOnly @click="cancelarCierre">
             <i class="fa-solid fa-xmark"></i>
-          </button>
+          </BaseButton>
         </div>
-        <div>
-          <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Monto Real</label>
-          <input v-model.number="cierreParcial.monto_real" type="number" placeholder="0.00"
-                 class="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600 font-mono-data">
-        </div>
-        <div>
-          <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Comentario (opcional)</label>
-          <input v-model="cierreParcial.comentario" placeholder="Nota del cierre"
-                 class="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600">
-        </div>
+        <BaseInput v-model.number="cierreParcial.monto_real" label="Monto Real" type="number" placeholder="0.00" input-class="font-mono-data" />
+        <BaseInput v-model="cierreParcial.comentario" label="Comentario (opcional)" placeholder="Nota del cierre" />
         <div class="flex gap-2 pt-1">
-          <button @click="cancelarCierre"
-                  class="flex-1 px-4 py-2.5 border border-slate-200 hover:bg-white text-slate-700 font-semibold text-sm rounded-xl transition">
-            Cancelar
-          </button>
-          <button :disabled="cerrandoMetodo" @click="cerrarMetodo"
-                  class="flex-1 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-xl transition">
+          <BaseButton variant="secondary" size="sm" block @click="cancelarCierre">Cancelar</BaseButton>
+          <BaseButton :loading="cerrandoMetodo" :disabled="cerrandoMetodo" variant="primary" size="sm" block @click="cerrarMetodo">
             <i :class="cerrandoMetodo ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-lock'"></i>
             {{ cerrandoMetodo ? 'Cerrando...' : 'Cerrar Método' }}
-          </button>
+          </BaseButton>
         </div>
       </div>
-    </div>
+    </BaseCard>
 
     <div v-if="!cajaStore.abierta" class="bg-amber-50 border border-amber-200 p-4 rounded-2xl text-sm text-amber-700 font-semibold flex items-center gap-2">
       <i class="fa-solid fa-triangle-exclamation"></i>
       La caja está cerrada. Abrila para registrar operaciones.
     </div>
 
-    <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+    <BaseCard padding="none">
       <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
         <h3 class="font-bold text-slate-900 text-sm">Movimientos del Día</h3>
-        <button v-if="cajaStore.abierta"
-                @click="showNuevoMovimiento = true"
-                class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs rounded-lg flex items-center gap-1.5 transition">
+        <BaseButton v-if="cajaStore.abierta" variant="primary" size="xs" @click="showNuevoMovimiento = true">
           <i class="fa-solid fa-plus"></i> Nuevo Movimiento
-        </button>
+        </BaseButton>
       </div>
       <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="bg-slate-50 text-left">
-              <th class="px-5 py-3 text-[10px] font-bold text-slate-400 uppercase">Fecha</th>
-              <th class="px-5 py-3 text-[10px] font-bold text-slate-400 uppercase">Tipo</th>
-              <th class="px-5 py-3 text-[10px] font-bold text-slate-400 uppercase">Monto</th>
-              <th class="px-5 py-3 text-[10px] font-bold text-slate-400 uppercase">Método</th>
-              <th class="px-5 py-3 text-[10px] font-bold text-slate-400 uppercase">Comentario</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-slate-50">
-            <tr v-for="m in movements" :key="m.id" class="hover:bg-slate-50 transition">
-              <td class="px-5 py-3 text-xs text-slate-600">{{ m.fecha }}</td>
-              <td class="px-5 py-3">
-                <span :class="m.tipo === 'Ingreso' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'"
-                      class="px-2 py-0.5 rounded-lg text-[10px] font-bold">
-                  {{ m.tipo }}
-                </span>
-              </td>
-              <td class="px-5 py-3 text-xs font-mono-data font-bold" :class="m.tipo === 'Ingreso' ? 'text-emerald-600' : 'text-rose-600'">
-                {{ m.tipo === 'Ingreso' ? '+' : '-' }} {{ fc(m.monto) }}
-              </td>
-              <td class="px-5 py-3 text-xs text-slate-600">{{ m.metodo }}</td>
-              <td class="px-5 py-3 text-xs text-slate-500">{{ m.comentario }}</td>
-            </tr>
-            <tr v-if="!movements.length">
-              <td colspan="5" class="px-5 py-8 text-xs text-slate-400 text-center">Sin movimientos registrados</td>
-            </tr>
-          </tbody>
-        </table>
+        <BaseTable v-if="movements.length" :columns="movementColumns" :rows="movements">
+          <template #tipo="{ row }">
+            <BaseBadge :variant="row.tipo === 'Ingreso' ? 'success' : 'danger'" size="xs">{{ row.tipo }}</BaseBadge>
+          </template>
+          <template #monto="{ row }">
+            <span class="font-mono-data font-bold" :class="row.tipo === 'Ingreso' ? 'text-emerald-600' : 'text-rose-600'">
+              {{ row.tipo === 'Ingreso' ? '+' : '-' }} {{ fc(row.monto) }}
+            </span>
+          </template>
+        </BaseTable>
+        <EmptyState v-else icon="fa-receipt" title="Sin movimientos" text="No hay movimientos registrados." />
       </div>
-    </div>
+    </BaseCard>
 
     <!-- Modal Nuevo Movimiento -->
-    <div v-if="showNuevoMovimiento" class="fixed inset-0 z-50 flex items-center justify-center">
-      <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" @click="showNuevoMovimiento = false"></div>
-      <div class="relative bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md border border-slate-200 space-y-4">
-        <div class="flex items-center justify-between">
-          <h3 class="font-bold text-slate-900 text-lg">Nuevo Movimiento</h3>
-          <button @click="showNuevoMovimiento = false" class="text-slate-400 hover:text-slate-600">
-            <i class="fa-solid fa-xmark text-lg"></i>
-          </button>
-        </div>
-        <div>
-          <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Tipo</label>
-          <select v-model="nuevoMovimiento.tipo" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600">
-            <option value="Ingreso">Ingreso</option>
-            <option value="Egreso">Egreso</option>
-          </select>
-        </div>
-        <div>
-          <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Monto</label>
-          <input v-model.number="nuevoMovimiento.monto" type="number" placeholder="0.00"
-                 class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600 font-mono-data">
-        </div>
-        <div>
-          <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Método</label>
-          <select v-model="nuevoMovimiento.metodo" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600">
-            <option value="Efectivo">Efectivo</option>
-            <option value="Transferencia">Transferencia</option>
-            <option value="Tarjeta">Tarjeta</option>
-          </select>
-        </div>
-        <div>
-          <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Comentario</label>
-          <input v-model="nuevoMovimiento.comentario" placeholder="Descripción del movimiento"
-                 class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600">
-        </div>
+    <BaseModal v-model="showNuevoMovimiento" title="Nuevo Movimiento" size="md">
+      <div class="space-y-4">
+        <BaseSelect v-model="nuevoMovimiento.tipo" label="Tipo" :options="[{ value: 'Ingreso', label: 'Ingreso' }, { value: 'Egreso', label: 'Egreso' }]" />
+        <BaseInput v-model.number="nuevoMovimiento.monto" label="Monto" type="number" placeholder="0.00" input-class="font-mono-data" />
+        <BaseSelect v-model="nuevoMovimiento.metodo" label="Método" :options="['Efectivo', 'Transferencia', 'Tarjeta']" />
+        <BaseInput v-model="nuevoMovimiento.comentario" label="Comentario" placeholder="Descripción del movimiento" />
         <div class="flex gap-2 pt-2">
-          <button @click="showNuevoMovimiento = false"
-                  class="flex-1 px-4 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-sm rounded-xl transition">
-            Cancelar
-          </button>
-          <button :disabled="saving" @click="registrarMovimiento"
-                  class="flex-1 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-xl transition">
+          <BaseButton variant="secondary" size="sm" block @click="showNuevoMovimiento = false">Cancelar</BaseButton>
+          <BaseButton :loading="saving" :disabled="saving" variant="primary" size="sm" block @click="registrarMovimiento">
             <i :class="saving ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-check'"></i>
             {{ saving ? 'Guardando...' : 'Registrar' }}
-          </button>
+          </BaseButton>
         </div>
       </div>
-    </div>
+    </BaseModal>
   </div>
 </template>
 
@@ -208,6 +130,14 @@ import { useToastStore } from '@/stores/toasts'
 import { useCajaStore } from '@/stores/caja'
 import api from '@/services/api'
 import { formatCurrency as fc } from '@/composables/useUtils'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseInput from '@/components/ui/BaseInput.vue'
+import BaseSelect from '@/components/ui/BaseSelect.vue'
+import BaseModal from '@/components/ui/BaseModal.vue'
+import BaseCard from '@/components/ui/BaseCard.vue'
+import BaseTable from '@/components/ui/BaseTable.vue'
+import BaseBadge from '@/components/ui/BaseBadge.vue'
+import EmptyState from '@/components/ui/EmptyState.vue'
 
 const auth = useAuthStore()
 const toast = useToastStore()
@@ -244,6 +174,14 @@ const metodosPago = [
   { label: 'Transferencia', valor: 'transferencia' },
 ]
 
+const movementColumns = [
+  { key: 'fecha', label: 'Fecha' },
+  { key: 'tipo', label: 'Tipo' },
+  { key: 'monto', label: 'Monto' },
+  { key: 'metodo', label: 'Método' },
+  { key: 'comentario', label: 'Comentario' },
+]
+
 onMounted(async () => {
   await fetchMovimientos()
   await fetchResumen()
@@ -271,9 +209,9 @@ async function syncData() {
   try {
     await fetchMovimientos()
     await fetchResumen()
-    toast.add('success', 'Datos sincronizados')
+    toast.success('Datos sincronizados')
   } catch {
-    toast.add('warning', 'Error al sincronizar')
+    toast.warning('Error al sincronizar')
   } finally {
     syncing.value = false
   }
@@ -287,9 +225,9 @@ async function abrirCaja() {
     await api.post('/api/caja/apertura', { monto_inicial: monto })
     await cajaStore.fetchEstado()
     await fetchMovimientos()
-    toast.add('success', `Caja abierta con $${monto.toLocaleString()}`)
+    toast.success(`Caja abierta con $${monto.toLocaleString()}`)
   } catch (e) {
-    toast.add('error', 'Error al abrir caja: ' + (e.message || ''))
+    toast.error('Error al abrir caja: ' + (e.message || ''))
   } finally {
     opening.value = false
   }
@@ -302,9 +240,9 @@ async function cerrarCaja() {
     await api.post('/api/caja/cierre-total', { comentario: '' })
     await cajaStore.fetchEstado()
     await fetchMovimientos()
-    toast.add('success', 'Jornada finalizada. Caja cerrada.')
+    toast.success('Jornada finalizada. Caja cerrada.')
   } catch (e) {
-    toast.add('error', 'Error al cerrar caja: ' + (e.message || ''))
+    toast.error('Error al cerrar caja: ' + (e.message || ''))
   } finally {
     closing.value = false
   }
@@ -312,7 +250,7 @@ async function cerrarCaja() {
 
 async function registrarMovimiento() {
   if (!nuevoMovimiento.monto || nuevoMovimiento.monto <= 0) {
-    toast.add('warning', 'Ingresá un monto válido')
+    toast.warning('Ingresá un monto válido')
     return
   }
   saving.value = true
@@ -335,7 +273,7 @@ async function registrarMovimiento() {
     nuevoMovimiento.monto = 0
     nuevoMovimiento.comentario = ''
     showNuevoMovimiento.value = false
-    toast.add('success', 'Movimiento registrado')
+    toast.success('Movimiento registrado')
   } finally {
     saving.value = false
   }
@@ -350,7 +288,7 @@ function cancelarCierre() {
 
 async function cerrarMetodo() {
   if (!cierreParcial.monto_real || cierreParcial.monto_real <= 0) {
-    toast.add('warning', 'Ingresá un monto real válido')
+    toast.warning('Ingresá un monto real válido')
     return
   }
   cerrandoMetodo.value = true
@@ -360,7 +298,7 @@ async function cerrarMetodo() {
       monto_real: cierreParcial.monto_real,
       comentario: cierreParcial.comentario || '',
     })
-    toast.add('success', `Método ${cierreParcial.metodo} cerrado correctamente`)
+    toast.success(`Método ${cierreParcial.metodo} cerrado correctamente`)
     cierreParcial.activo = false
     cierreParcial.metodo = ''
     cierreParcial.monto_real = 0
@@ -368,7 +306,7 @@ async function cerrarMetodo() {
     await fetchMovimientos()
     await fetchResumen()
   } catch {
-    toast.add('error', 'Error al cerrar el método')
+    toast.error('Error al cerrar el método')
   } finally {
     cerrandoMetodo.value = false
   }

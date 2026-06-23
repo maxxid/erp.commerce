@@ -6,136 +6,147 @@
         <p class="text-sm text-slate-500 mt-1">Órdenes de compra y recepción de mercadería</p>
       </div>
       <div class="flex items-center gap-2">
-        <button :disabled="syncing" @click="syncData"
-                class="px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl flex items-center gap-1.5 transition shadow-sm">
+        <BaseButton variant="secondary" size="sm" :disabled="syncing" @click="syncData">
           <i :class="syncing ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-arrows-rotate'"></i>
           {{ syncing ? 'Sincronizando...' : 'Sincronizar' }}
-        </button>
-        <button @click="abrirModalNuevaCompra"
-                class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-xl flex items-center gap-2 shadow-sm transition">
+        </BaseButton>
+        <BaseButton variant="primary" size="sm" @click="abrirModalNuevaCompra">
           <i class="fa-solid fa-plus"></i> Nueva Compra
-        </button>
+        </BaseButton>
       </div>
     </div>
 
-    <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="bg-slate-50 text-left">
-              <th class="px-5 py-3 text-[10px] font-bold text-slate-400 uppercase">N° Orden</th>
-              <th class="px-5 py-3 text-[10px] font-bold text-slate-400 uppercase">Proveedor</th>
-              <th class="px-5 py-3 text-[10px] font-bold text-slate-400 uppercase">Total</th>
-              <th class="px-5 py-3 text-[10px] font-bold text-slate-400 uppercase">Estado</th>
-              <th class="px-5 py-3 text-[10px] font-bold text-slate-400 uppercase">Fecha</th>
-              <th class="px-5 py-3 text-[10px] font-bold text-slate-400 uppercase">Acciones</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-slate-50">
-            <tr v-for="compra in compras" :key="compra.id" class="hover:bg-slate-50 transition">
-              <td class="px-5 py-3 text-xs font-bold text-slate-700">{{ compra.numero_orden }}</td>
-              <td class="px-5 py-3 text-xs text-slate-600">{{ compra.proveedor }}</td>
-              <td class="px-5 py-3 text-xs font-mono-data font-bold text-slate-800">{{ fc(compra.total) }}</td>
-              <td class="px-5 py-3">
-                <span :class="estadoCompraClass(compra.estado)"
-                      class="px-2 py-0.5 rounded-lg text-[10px] font-bold">
-                  {{ compra.estado }}
-                </span>
-              </td>
-              <td class="px-5 py-3 text-xs text-slate-600">{{ compra.fecha }}</td>
-              <td class="px-5 py-3">
-                <div class="flex items-center gap-1">
-                  <button v-if="compra.estado === 'Pendiente' || compra.estado === 'Parcial'"
-                          :disabled="receiving"
-                          @click="openReceiveModal(compra)"
-                          class="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg text-[10px] font-bold transition">
-                    <i class="fa-solid fa-boxes-packing mr-1"></i> Recibir
-                  </button>
-                  <span v-if="compra.estado !== 'Pendiente' && compra.estado !== 'Parcial'" class="text-[10px] text-slate-300">—</span>
-                </div>
-              </td>
-            </tr>
-            <tr v-if="!compras.length">
-              <td colspan="6" class="px-5 py-8 text-xs text-slate-400 text-center">Sin órdenes de compra</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <BaseCard padding="none">
+      <BaseTable
+        :columns="[
+          { key: 'numero_orden', label: 'N° Orden' },
+          { key: 'proveedor', label: 'Proveedor' },
+          { key: 'total', label: 'Total', align: 'right' },
+          { key: 'estado', label: 'Estado', align: 'center' },
+          { key: 'fecha', label: 'Fecha' },
+          { key: 'acciones', label: 'Acciones', align: 'center' }
+        ]"
+        :rows="compras"
+        empty-title="Sin órdenes de compra"
+        empty-text="No hay órdenes de compra registradas."
+        empty-icon="fa-inbox"
+      >
+        <template #numero_orden="{ row }">
+          <span class="text-xs font-bold text-slate-700">{{ row.numero_orden }}</span>
+        </template>
+        <template #proveedor="{ row }">
+          <span class="text-xs text-slate-600">{{ row.proveedor }}</span>
+        </template>
+        <template #total="{ row }">
+          <span class="text-xs font-mono-data font-bold text-slate-800">{{ fc(row.total) }}</span>
+        </template>
+        <template #estado="{ row }">
+          <BaseBadge :variant="estadoBadgeVariant(row.estado)" size="xs">{{ row.estado }}</BaseBadge>
+        </template>
+        <template #fecha="{ row }">
+          <span class="text-xs text-slate-600">{{ row.fecha }}</span>
+        </template>
+        <template #acciones="{ row }">
+          <div class="flex items-center justify-center gap-1">
+            <BaseButton
+              v-if="row.estado === 'Pendiente' || row.estado === 'Parcial'"
+              variant="primary"
+              size="xs"
+              :disabled="receiving"
+              @click="openReceiveModal(row)"
+            >
+              <i class="fa-solid fa-boxes-packing"></i> Recibir
+            </BaseButton>
+            <span v-else class="text-[10px] text-slate-300">—</span>
+          </div>
+        </template>
+      </BaseTable>
+    </BaseCard>
 
-    <!-- Modal Nueva Compra -->
-    <div v-if="showModalCompra" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" @click="showModalCompra = false"></div>
-      <div class="relative bg-white rounded-2xl shadow-2xl p-6 w-full max-w-2xl border border-slate-200 space-y-5 max-h-[85vh] overflow-y-auto">
-        <div class="flex items-center justify-between">
-          <h3 class="font-bold text-slate-900 text-lg">Nueva Orden de Compra</h3>
-          <button @click="showModalCompra = false" class="text-slate-400 hover:text-slate-600">
-            <i class="fa-solid fa-xmark text-lg"></i>
-          </button>
-        </div>
-
+    <BaseModal v-model="showModalCompra" title="Nueva Orden de Compra" size="2xl">
+      <div class="space-y-5">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Proveedor</label>
-            <select v-model="nuevaCompra.proveedor_id"
-                    class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600">
-              <option :value="null" disabled>Seleccionar proveedor</option>
-              <option v-for="p in proveedores" :key="p.id" :value="p.id">{{ p.nombre }}</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Notas</label>
-            <input v-model="nuevaCompra.notas" placeholder="Notas u observaciones"
-                   class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600">
-          </div>
+          <BaseSelect
+            label="Proveedor"
+            :model-value="nuevaCompra.proveedor_id"
+            :options="proveedores"
+            option-value="id"
+            option-label="nombre"
+            placeholder="Seleccionar proveedor"
+            @update:modelValue="nuevaCompra.proveedor_id = Number($event)"
+          />
+          <BaseInput
+            v-model="nuevaCompra.notas"
+            label="Notas"
+            placeholder="Notas u observaciones"
+          />
         </div>
 
         <div class="space-y-3">
           <div class="flex items-center justify-between">
             <p class="text-[10px] font-bold text-slate-400 uppercase">Ítems</p>
-            <button @click="agregarItem"
-                    class="px-3 py-1 bg-brand-50 hover:bg-brand-100 text-brand-600 font-semibold text-xs rounded-lg flex items-center gap-1 transition">
+            <BaseButton variant="primary" size="xs" @click="agregarItem">
               <i class="fa-solid fa-plus"></i> Agregar ítem
-            </button>
+            </BaseButton>
           </div>
-          <div class="overflow-x-auto border border-slate-200 rounded-xl">
-            <table class="w-full text-xs">
-              <thead>
-                <tr class="bg-slate-50 text-left">
-                  <th class="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase">Producto</th>
-                  <th class="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase text-center w-20">Cantidad</th>
-                  <th class="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase text-right w-28">Precio</th>
-                  <th class="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase text-right w-28">Subtotal</th>
-                  <th class="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase w-8"></th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-slate-50">
-                <tr v-for="(item, idx) in nuevaCompra.items" :key="idx">
-                  <td class="px-4 py-2">
-                    <input v-model="item.producto" placeholder="Nombre del producto"
-                           class="w-full bg-transparent text-slate-700 text-xs focus:outline-none">
-                  </td>
-                  <td class="px-4 py-2">
-                    <input v-model.number="item.cantidad" type="number" min="1" placeholder="0"
-                           class="w-full bg-transparent text-slate-700 text-xs text-center focus:outline-none font-mono-data">
-                  </td>
-                  <td class="px-4 py-2">
-                    <input v-model.number="item.precio" type="number" min="0" placeholder="0.00"
-                           class="w-full bg-transparent text-slate-700 text-xs text-right focus:outline-none font-mono-data">
-                  </td>
-                  <td class="px-4 py-2 text-xs font-mono-data font-bold text-slate-800 text-right">{{ fc(item.cantidad * item.precio || 0) }}</td>
-                  <td class="px-4 py-2 text-center">
-                    <button @click="quitarItem(idx)" class="text-slate-300 hover:text-rose-500 transition">
-                      <i class="fa-solid fa-xmark"></i>
-                    </button>
-                  </td>
-                </tr>
-                <tr v-if="!nuevaCompra.items.length">
-                  <td colspan="5" class="px-4 py-4 text-xs text-slate-400 text-center">Sin ítems. Agregá productos a la orden.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+
+          <BaseTable
+            :columns="[
+              { key: 'producto', label: 'Producto' },
+              { key: 'cantidad', label: 'Cantidad', align: 'center', width: 'w-20' },
+              { key: 'precio', label: 'Precio', align: 'right', width: 'w-28' },
+              { key: 'subtotal', label: 'Subtotal', align: 'right', width: 'w-28' },
+              { key: 'acciones', label: '', align: 'center', width: 'w-8' }
+            ]"
+            :rows="nuevaCompra.items"
+            compact
+            empty-title="Sin ítems"
+            empty-text="Agregá productos a la orden."
+            empty-icon="fa-box-open"
+          >
+            <template #producto="{ row }">
+              <BaseInput
+                v-model="row.producto"
+                placeholder="Nombre del producto"
+                size="sm"
+              />
+            </template>
+            <template #cantidad="{ row }">
+              <BaseInput
+                :model-value="row.cantidad"
+                type="number"
+                placeholder="0"
+                size="sm"
+                input-class="text-center font-mono-data"
+                @update:modelValue="row.cantidad = Number($event)"
+              />
+            </template>
+            <template #precio="{ row }">
+              <BaseInput
+                :model-value="row.precio"
+                type="number"
+                placeholder="0.00"
+                size="sm"
+                input-class="text-right font-mono-data"
+                @update:modelValue="row.precio = Number($event)"
+              />
+            </template>
+            <template #subtotal="{ row }">
+              <span class="text-xs font-mono-data font-bold text-slate-800">{{ fc(row.cantidad * row.precio || 0) }}</span>
+            </template>
+            <template #acciones="{ row }">
+              <BaseButton
+                icon-only
+                variant="ghost"
+                size="xs"
+                aria-label="Quitar"
+                @click="quitarItem(nuevaCompra.items.indexOf(row))"
+              >
+                <i class="fa-solid fa-xmark"></i>
+              </BaseButton>
+            </template>
+          </BaseTable>
+
           <div v-if="nuevaCompra.items.length" class="flex justify-end">
             <span class="text-sm font-mono-data font-bold text-slate-800">
               Total: {{ fc(totalCompra) }}
@@ -144,74 +155,65 @@
         </div>
 
         <div class="flex gap-2 pt-2">
-          <button @click="showModalCompra = false"
-                  class="flex-1 px-4 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-sm rounded-xl transition">
+          <BaseButton variant="secondary" class="flex-1" @click="showModalCompra = false">
             Cancelar
-          </button>
-          <button :disabled="saving" @click="guardarCompra"
-                  class="flex-1 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-xl transition">
+          </BaseButton>
+          <BaseButton variant="primary" class="flex-1" :disabled="saving" @click="guardarCompra">
             <i :class="saving ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-check'"></i>
             {{ saving ? 'Guardando...' : 'Guardar Orden' }}
-          </button>
+          </BaseButton>
         </div>
       </div>
-    </div>
+    </BaseModal>
 
-    <!-- Modal Recibir Mercadería -->
-    <Teleport to="body">
-      <div v-if="showReceiveModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" @click="showReceiveModal = false"></div>
-        <div class="relative bg-white rounded-2xl shadow-2xl p-6 w-full max-w-2xl border border-slate-200 space-y-5 max-h-[85vh] overflow-y-auto">
-          <div class="flex items-center justify-between">
-            <h3 class="font-bold text-slate-900 text-lg">Recibir Mercadería — {{ receiveTarget?.numero_orden }}</h3>
-            <button @click="showReceiveModal = false" class="text-slate-400 hover:text-slate-600">
-              <i class="fa-solid fa-xmark text-lg"></i>
-            </button>
-          </div>
+    <BaseModal v-model="showReceiveModal" :title="'Recibir Mercadería — ' + receiveTarget?.numero_orden" size="2xl">
+      <div class="space-y-5">
+        <BaseTable
+          :columns="[
+            { key: 'producto', label: 'Producto' },
+            { key: 'cantidad', label: 'Pedido', align: 'center', width: 'w-20' },
+            { key: 'cantidad_recibida', label: 'Recibido', align: 'center', width: 'w-20' },
+            { key: 'pendiente', label: 'Pendiente', align: 'center', width: 'w-20' },
+            { key: 'recibir', label: 'Recibir ahora', align: 'center', width: 'w-28' }
+          ]"
+          :rows="receiveTarget?.items || []"
+          compact
+        >
+          <template #producto="{ row }">
+            <span class="text-xs text-slate-700 font-medium">{{ row.producto }}</span>
+          </template>
+          <template #cantidad="{ row }">
+            <span class="text-xs font-mono-data text-slate-700">{{ row.cantidad }}</span>
+          </template>
+          <template #cantidad_recibida="{ row }">
+            <span class="text-xs font-mono-data text-slate-700">{{ row.cantidad_recibida || 0 }}</span>
+          </template>
+          <template #pendiente="{ row }">
+            <span class="text-xs font-mono-data font-bold text-slate-700">{{ row.cantidad - (row.cantidad_recibida || 0) }}</span>
+          </template>
+          <template #recibir="{ row }">
+            <BaseInput
+              :model-value="receiveCantidades[row.id]"
+              type="number"
+              placeholder="0"
+              size="sm"
+              input-class="w-20 text-center font-mono-data"
+              @update:modelValue="receiveCantidades[row.id] = Number($event)"
+            />
+          </template>
+        </BaseTable>
 
-          <div class="overflow-x-auto border border-slate-200 rounded-xl">
-            <table class="w-full text-xs">
-              <thead>
-                <tr class="bg-slate-50 text-left">
-                  <th class="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase">Producto</th>
-                  <th class="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase text-center w-20">Pedido</th>
-                  <th class="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase text-center w-20">Recibido</th>
-                  <th class="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase text-center w-20">Pendiente</th>
-                  <th class="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase text-center w-28">Recibir ahora</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-slate-50">
-                <tr v-for="item in receiveTarget?.items" :key="item.id">
-                  <td class="px-4 py-2.5 text-xs text-slate-700 font-medium">{{ item.producto }}</td>
-                  <td class="px-4 py-2.5 text-xs font-mono-data text-slate-700 text-center">{{ item.cantidad }}</td>
-                  <td class="px-4 py-2.5 text-xs font-mono-data text-slate-700 text-center">{{ item.cantidad_recibida || 0 }}</td>
-                  <td class="px-4 py-2.5 text-xs font-mono-data font-bold text-slate-700 text-center">{{ item.cantidad - (item.cantidad_recibida || 0) }}</td>
-                  <td class="px-4 py-2.5 text-center">
-                    <input v-model.number="receiveCantidades[item.id]"
-                           type="number"
-                           :min="0"
-                           :max="item.cantidad - (item.cantidad_recibida || 0)"
-                           class="w-20 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-600 font-mono-data">
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div class="flex gap-2 pt-2">
-            <button @click="showReceiveModal = false"
-                    class="flex-1 px-4 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-sm rounded-xl transition">
-              Cancelar
-            </button>
-            <button :disabled="receiving" @click="confirmarRecepcion"
-                    class="flex-1 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-xl transition">
-              <i :class="receiving ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-check'"></i>
-              {{ receiving ? 'Confirmando...' : 'Confirmar Recepción' }}
-            </button>
-          </div>
+        <div class="flex gap-2 pt-2">
+          <BaseButton variant="secondary" class="flex-1" @click="showReceiveModal = false">
+            Cancelar
+          </BaseButton>
+          <BaseButton variant="primary" class="flex-1" :disabled="receiving" @click="confirmarRecepcion">
+            <i :class="receiving ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-check'"></i>
+            {{ receiving ? 'Confirmando...' : 'Confirmar Recepción' }}
+          </BaseButton>
         </div>
       </div>
-    </Teleport>
+    </BaseModal>
   </div>
 </template>
 
@@ -221,6 +223,14 @@ import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
 import api from '@/services/api'
 import { formatCurrency as fc } from '@/composables/useUtils'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseInput from '@/components/ui/BaseInput.vue'
+import BaseSelect from '@/components/ui/BaseSelect.vue'
+import BaseModal from '@/components/ui/BaseModal.vue'
+import BaseCard from '@/components/ui/BaseCard.vue'
+import BaseTable from '@/components/ui/BaseTable.vue'
+import BaseBadge from '@/components/ui/BaseBadge.vue'
+import EmptyState from '@/components/ui/EmptyState.vue'
 
 const auth = useAuthStore()
 const toast = useToastStore()
@@ -284,9 +294,9 @@ async function syncData() {
   try {
     await fetchCompras()
     await fetchProveedores()
-    toast.add('success', 'Datos sincronizados')
+    toast.success('Datos sincronizados')
   } catch {
-    toast.add('warning', 'Error al sincronizar')
+    toast.warning('Error al sincronizar')
   } finally {
     syncing.value = false
   }
@@ -300,6 +310,16 @@ function estadoCompraClass(estado) {
     'Cancelado': 'bg-rose-50 text-rose-700',
   }
   return map[estado] || 'bg-slate-50 text-slate-600'
+}
+
+function estadoBadgeVariant(estado) {
+  const map = {
+    'Pendiente': 'warning',
+    'Recibido': 'success',
+    'Parcial': 'info',
+    'Cancelado': 'danger',
+  }
+  return map[estado] || 'default'
 }
 
 function abrirModalNuevaCompra() {
@@ -319,11 +339,11 @@ function quitarItem(idx) {
 
 async function guardarCompra() {
   if (!nuevaCompra.proveedor_id) {
-    toast.add('warning', 'Seleccioná un proveedor')
+    toast.warning('Seleccioná un proveedor')
     return
   }
   if (!nuevaCompra.items.length) {
-    toast.add('warning', 'Agregá al menos un ítem')
+    toast.warning('Agregá al menos un ítem')
     return
   }
   saving.value = true
@@ -347,7 +367,7 @@ async function guardarCompra() {
     }
     compras.value.push(orden)
     showModalCompra.value = false
-    toast.add('success', 'Orden de compra creada')
+    toast.success('Orden de compra creada')
   } finally {
     saving.value = false
   }
@@ -366,7 +386,7 @@ async function confirmarRecepcion() {
   if (!receiveTarget.value) return
   const tieneCantidad = Object.values(receiveCantidades).some(v => v > 0)
   if (!tieneCantidad) {
-    toast.add('warning', 'Ingresá al menos una cantidad a recibir')
+    toast.warning('Ingresá al menos una cantidad a recibir')
     return
   }
   receiving.value = true
@@ -387,16 +407,16 @@ async function confirmarRecepcion() {
 
     if (totalAcumulado >= totalPedido) {
       receiveTarget.value.estado = 'Recibido'
-      toast.add('success', `${receiveTarget.value.numero_orden} recibida completamente`)
+      toast.success(`${receiveTarget.value.numero_orden} recibida completamente`)
     } else {
       receiveTarget.value.estado = 'Parcial'
-      toast.add('success', `Recepción parcial de ${receiveTarget.value.numero_orden} registrada`)
+      toast.success(`Recepción parcial de ${receiveTarget.value.numero_orden} registrada`)
     }
 
     showReceiveModal.value = false
     await fetchCompras()
   } catch {
-    toast.add('error', 'Error al confirmar recepción')
+    toast.error('Error al confirmar recepción')
   } finally {
     receiving.value = false
   }
