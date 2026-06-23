@@ -153,6 +153,7 @@ async function executeAnular() {
         :columns="tableColumns"
         :rows="tableRows"
         :loading="loading"
+        :expanded-rows="expandedRows"
         empty-title="Sin ventas"
         empty-text="No hay ventas para mostrar en este período."
         empty-icon="fa-receipt"
@@ -205,23 +206,7 @@ async function executeAnular() {
             </button>
           </div>
         </template>
-      </BaseTable>
-
-      <!-- Expanded detail -->
-      <TransitionGroup
-        tag="div"
-        enter-active-class="transition-all duration-300 ease-out-expo"
-        enter-from-class="opacity-0 -translate-y-2"
-        enter-to-class="opacity-100 translate-y-0"
-        leave-active-class="transition-all duration-200 ease-in"
-        leave-from-class="opacity-100 translate-y-0"
-        leave-to-class="opacity-0 -translate-y-2"
-      >
-        <div
-          v-for="sale in filteredSales.filter(s => expandedRows.includes(s.id))"
-          :key="`detail-${sale.id}`"
-          class="bg-slate-50/70 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800 p-4"
-        >
+        <template #detail="{ row }">
           <p class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-2">Detalle de Productos</p>
           <div class="overflow-x-auto">
             <table class="w-full text-xs">
@@ -234,7 +219,7 @@ async function executeAnular() {
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
-                <tr v-for="(item, idx) in sale.items" :key="idx">
+                <tr v-for="(item, idx) in row.items" :key="idx">
                   <td class="py-1.5 text-slate-700 dark:text-slate-200">{{ item.producto_nombre || item.producto }}</td>
                   <td class="py-1.5 text-slate-600 dark:text-slate-400 text-center">{{ item.cantidad }}</td>
                   <td class="py-1.5 text-slate-600 dark:text-slate-400 text-right font-mono-data">{{ fc(item.precio) }}</td>
@@ -246,19 +231,19 @@ async function executeAnular() {
           <div class="flex flex-wrap items-center gap-4 sm:gap-6 pt-3 border-t border-slate-200 dark:border-slate-700 mt-3">
             <div class="flex items-center gap-2">
               <span class="text-[10px] font-bold text-slate-400 uppercase">Total</span>
-              <span class="text-sm font-mono-data font-bold text-brand-700 dark:text-brand-400">{{ fc(sale.total) }}</span>
+              <span class="text-sm font-mono-data font-bold text-brand-700 dark:text-brand-400">{{ fc(row.total) }}</span>
             </div>
             <div class="flex items-center gap-2">
               <span class="text-[10px] font-bold text-slate-400 uppercase">Descuento</span>
-              <span class="text-sm font-mono-data font-bold text-red-600 dark:text-red-400">{{ fc(sale.descuento || 0) }}</span>
+              <span class="text-sm font-mono-data font-bold text-red-600 dark:text-red-400">{{ fc(row.descuento || 0) }}</span>
             </div>
             <div class="flex items-center gap-2">
               <span class="text-[10px] font-bold text-slate-400 uppercase">Medio de Pago</span>
-              <span class="text-xs font-bold text-slate-700 dark:text-slate-200">{{ sale.metodo_pago }}</span>
+              <span class="text-xs font-bold text-slate-700 dark:text-slate-200">{{ row.metodo_pago }}</span>
             </div>
           </div>
-        </div>
-      </TransitionGroup>
+        </template>
+      </BaseTable>
     </BaseCard>
 
     <BaseModal v-model="anularTarget" title="Anular Venta" size="sm">

@@ -14,10 +14,17 @@ const props = defineProps({
   stickyHeader: { type: Boolean, default: true },
   compact: { type: Boolean, default: false },
   maxHeight: { type: String, default: '' },
-  rowClass: { type: Function, default: null }
+  rowClass: { type: Function, default: null },
+  expandedRows: { type: Array, default: () => [] },
+  rowKey: { type: String, default: 'id' }
 })
 
 const emit = defineEmits(['sort', 'row-click'])
+
+function isExpanded(row) {
+  const key = row[props.rowKey]
+  return props.expandedRows.includes(key)
+}
 </script>
 
 <template>
@@ -91,6 +98,23 @@ const emit = defineEmits(['sort', 'row-click'])
                 </slot>
               </td>
             </tr>
+            <Transition
+              v-if="$slots.detail && isExpanded(row)"
+              enter-active-class="transition-all duration-250 ease-out-expo"
+              enter-from-class="opacity-0 -translate-y-2"
+              enter-to-class="opacity-100 translate-y-0"
+              leave-active-class="transition-all duration-200 ease-in"
+              leave-from-class="opacity-100 translate-y-0"
+              leave-to-class="opacity-0 -translate-y-2"
+            >
+              <tr :key="`detail-${row[rowKey]}`" class="bg-slate-50/70 dark:bg-slate-800/40">
+                <td :colspan="columns.length" class="p-0">
+                  <div class="p-4 border-t border-slate-100 dark:border-slate-800">
+                    <slot name="detail" :row="row" />
+                  </div>
+                </td>
+              </tr>
+            </Transition>
           </template>
           <template v-else>
             <tr>
