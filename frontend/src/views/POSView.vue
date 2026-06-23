@@ -427,11 +427,15 @@ import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseBadge from '@/components/ui/BaseBadge.vue'
 import KpiCard from '@/components/ui/KpiCard.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
+import { useSounds } from '@/composables/useSounds'
+import { useConfetti } from '@/composables/useConfetti'
 
 const auth = useAuthStore()
 const toast = useToastStore()
 const cajaStore = useCajaStore()
 const route = useRoute()
+const { playSale } = useSounds()
+const { firstSaleOfDay } = useConfetti()
 
 const posLookupCode = ref('')
 const posTextSearch = ref('')
@@ -809,6 +813,8 @@ async function confirmarVenta() {
         ventaTotal = confirmResp.total
       }
       toast.success(`Venta ${ventaNumero} confirmada. Total: ${fc(ventaTotal)}`)
+      playSale()
+      firstSaleOfDay()
     } else {
       throw new Error('No se pudo crear la venta')
     }

@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#6366f1">
+    <link rel="manifest" href="/app/manifest.json">
     <title>ApexERP</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛒</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -18,10 +19,17 @@
         if (isDark) document.documentElement.classList.add('dark');
       })();
     </script>
-  <script type="module" crossorigin src="/app/assets/index-CqOV6n49.js"></script>
-  <link rel="stylesheet" crossorigin href="/app/assets/index-DaIHiv46.css">
+  <script type="module" crossorigin src="/app/assets/index-BOsHsc1m.js"></script>
+  <link rel="stylesheet" crossorigin href="/app/assets/index-DtTTNur1.css">
 </head>
 <body class="bg-slate-50 text-slate-800 antialiased dark:bg-slate-950 dark:text-slate-100">
     <div id="app" v-cloak></div>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/app/sw.js').catch(() => {})
+        })
+      }
+    </script>
 </body>
 </html>

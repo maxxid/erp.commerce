@@ -12,6 +12,10 @@ function clearToken() {
   localStorage.removeItem('apex_token')
 }
 
+function touchSync() {
+  try { localStorage.setItem('apex-last-sync', String(Date.now())) } catch {}
+}
+
 async function request(method, path, body = null) {
   const headers = { 'Content-Type': 'application/json' }
   const token = getToken()
@@ -33,6 +37,8 @@ async function request(method, path, body = null) {
     error.data = data
     throw error
   }
+
+  touchSync()
 
   if (data && typeof data === 'object' && data.ok !== false && 'data' in data) {
     return data.data

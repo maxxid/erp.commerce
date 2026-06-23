@@ -138,10 +138,12 @@ import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseTable from '@/components/ui/BaseTable.vue'
 import BaseBadge from '@/components/ui/BaseBadge.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
+import { useSounds } from '@/composables/useSounds'
 
 const auth = useAuthStore()
 const toast = useToastStore()
 const cajaStore = useCajaStore()
+const { playOpenCash, playCloseCash } = useSounds()
 const cajaResumen = reactive({ metodos_cerrados: [] })
 const cierreParcial = reactive({ activo: false, metodo: '', monto_real: 0, comentario: '' })
 
@@ -226,6 +228,7 @@ async function abrirCaja() {
     await cajaStore.fetchEstado()
     await fetchMovimientos()
     toast.success(`Caja abierta con $${monto.toLocaleString()}`)
+    playOpenCash()
   } catch (e) {
     toast.error('Error al abrir caja: ' + (e.message || ''))
   } finally {
@@ -241,6 +244,7 @@ async function cerrarCaja() {
     await cajaStore.fetchEstado()
     await fetchMovimientos()
     toast.success('Jornada finalizada. Caja cerrada.')
+    playCloseCash()
   } catch (e) {
     toast.error('Error al cerrar caja: ' + (e.message || ''))
   } finally {

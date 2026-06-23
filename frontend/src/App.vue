@@ -10,6 +10,9 @@ import TheHeader from '@/components/layout/TheHeader.vue'
 import TheFooter from '@/components/layout/TheFooter.vue'
 import ToastContainer from '@/components/layout/ToastContainer.vue'
 import CommandPalette from '@/components/layout/CommandPalette.vue'
+import TheBreadcrumbs from '@/components/layout/TheBreadcrumbs.vue'
+import OfflineIndicator from '@/components/layout/OfflineIndicator.vue'
+import KeyboardShortcutsModal from '@/components/layout/KeyboardShortcutsModal.vue'
 
 const auth = useAuthStore()
 const toast = useToastStore()
@@ -21,8 +24,16 @@ const apiLogs = ref([])
 const currentTime = ref('')
 const commandPaletteOpen = ref(false)
 const networkActive = ref(false)
+const shortcutsModalOpen = ref(false)
 let clockInterval = null
 let networkTimeout = null
+
+const globalShortcuts = [
+  { key: 'Ctrl+K', description: 'Abrir búsqueda global' },
+  { key: 'F2', description: 'Ir al POS de Ventas' },
+  { key: '?', description: 'Ver atajos de teclado' },
+  { key: 'Esc', description: 'Cerrar modales / búsqueda' }
+]
 
 function toggleApiMode(mode) {
   apiMode.value = mode
@@ -43,6 +54,10 @@ function onKeydown(e) {
   if (e.key === 'F2' && auth.authenticated) {
     e.preventDefault()
     router.push('/pos')
+  }
+  if (e.key === '?' && auth.authenticated) {
+    e.preventDefault()
+    shortcutsModalOpen.value = true
   }
 }
 
@@ -81,7 +96,9 @@ onUnmounted(() => {
 <template>
   <div class="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
     <ToastContainer />
-    <CommandPalette v-model="commandPaletteOpen" @help="toast.info('Atajos: Ctrl+K para buscar, F2 para POS')" />
+    <OfflineIndicator />
+    <CommandPalette v-model="commandPaletteOpen" @help="shortcutsModalOpen = true" />
+    <KeyboardShortcutsModal v-model="shortcutsModalOpen" :global-shortcuts="globalShortcuts" />
 
     <Transition
       enter-active-class="transition duration-300 ease-out-expo"
@@ -122,7 +139,11 @@ onUnmounted(() => {
               @toggle-api-mode="toggleApiMode"
               @open-command-palette="openCommandPalette"
             />
-            <div class="flex-1 overflow-y-auto p-6 lg:p-8 relative scroll-smooth">
+            <div class="flex-1 overflow-y-auto relative scroll-smooth">
+              <div class="px-6 lg:px-8 pt-4 pb-0">
+                <TheBreadcrumbs />
+              </div>
+              <div class="p-6 lg:p-8 pt-2">
               <router-view v-slot="{ Component, route }">
                 <Transition
                   name="page"
@@ -158,6 +179,7 @@ onUnmounted(() => {
                   </div>
                 </div>
               </Transition>
+              </div>
             </div>
             <TheFooter :api-mode="apiMode" :api-base-url="apiBaseUrl" :logs="apiLogs" />
           </main>

@@ -4,6 +4,8 @@ import { useRoute } from 'vue-router'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseToggle from '@/components/ui/BaseToggle.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
+import SyncIndicator from '@/components/layout/SyncIndicator.vue'
+import { useSounds } from '@/composables/useSounds'
 
 const props = defineProps({
   apiMode: { type: String, default: 'real' },
@@ -16,6 +18,14 @@ const emit = defineEmits(['toggleApiMode', 'openCommandPalette'])
 const route = useRoute()
 const showSettings = ref(false)
 const justSaved = ref(false)
+const soundsEnabled = ref(false)
+const { toggleEnabled } = useSounds()
+
+soundsEnabled.value = localStorage.getItem('apex-sounds-enabled') === 'true'
+
+function toggleSounds() {
+  soundsEnabled.value = toggleEnabled()
+}
 
 const sources = [
   { key: 'carrefour', label: 'Carrefour', desc: 'API VTEX' },
@@ -105,6 +115,19 @@ function saveSettings() {
         :class="networkActive ? 'bg-brand-500 animate-ping' : 'bg-emerald-500'"
         :title="networkActive ? 'Red activa' : 'Conectado'"
       ></div>
+
+      <SyncIndicator />
+
+      <button
+        type="button"
+        :aria-label="soundsEnabled ? 'Desactivar sonidos' : 'Activar sonidos'"
+        :title="soundsEnabled ? 'Sonidos activados' : 'Sonidos desactivados'"
+        class="w-9 h-9 rounded-lg flex items-center justify-center transition-colors outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
+        :class="soundsEnabled ? 'text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/20' : 'text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'"
+        @click="toggleSounds"
+      >
+        <i :class="soundsEnabled ? 'fa-solid fa-volume-high' : 'fa-solid fa-volume-xmark'"></i>
+      </button>
 
       <button
         type="button"
