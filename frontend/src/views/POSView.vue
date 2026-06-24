@@ -77,11 +77,41 @@
             leave-from-class="opacity-100 translate-y-0"
             leave-to-class="opacity-0 translate-y-1"
           >
-            <div v-if="lookupProduct._loading || lookupProduct.id || lookupProduct._searched" class="mt-3">
+            <div v-if="lookupProduct._loading || lookupProduct._searchingExternal || lookupProduct.id || lookupProduct._searched || lookupProduct._manualEntry" class="mt-3">
+              <!-- Loading local -->
               <div v-if="lookupProduct._loading" class="flex items-center justify-center py-6">
                 <i class="fa-solid fa-circle-notch fa-spin text-brand-500 text-xl"></i>
-                <span class="ml-2 text-sm text-slate-500 dark:text-slate-400">Buscando...</span>
+                <span class="ml-2 text-sm text-slate-500 dark:text-slate-400">Buscando en base local...</span>
               </div>
+              <!-- Searching external with spinning border -->
+              <div v-else-if="lookupProduct._searchingExternal" class="lookup-external-searching relative p-[2px] rounded-xl overflow-hidden">
+                <div class="absolute inset-0 bg-gradient-to-r from-orange-500 via-amber-400 to-orange-600 animate-spin-slow"></div>
+                <div class="relative bg-slate-900 rounded-[10px] p-4">
+                  <div class="flex items-center gap-3 mb-3">
+                    <div class="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center text-orange-400 shrink-0">
+                      <i class="fa-solid fa-globe text-lg animate-pulse"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <p class="text-sm font-bold text-white truncate">Buscando en fuentes externas...</p>
+                      <p class="text-xs text-slate-400">{{ lookupProduct._barcode || '' }}</p>
+                    </div>
+                    <i class="fa-solid fa-circle-notch fa-spin text-orange-400 text-xl"></i>
+                  </div>
+                  <div class="flex flex-wrap gap-2">
+                    <BaseBadge variant="warning" size="xs">
+                      <i class="fa-solid fa-magnifying-glass mr-1"></i> Carrefour
+                    </BaseBadge>
+                    <BaseBadge variant="warning" size="xs">
+                      <i class="fa-solid fa-magnifying-glass mr-1"></i> Vea
+                    </BaseBadge>
+                    <BaseBadge variant="warning" size="xs">
+                      <i class="fa-solid fa-magnifying-glass mr-1"></i> Disco
+                    </BaseBadge>
+                  </div>
+                  <p class="text-[10px] text-slate-500 mt-2">Podés seguir escaneando mientras tanto</p>
+                </div>
+              </div>
+              <!-- Found externally or locally -->
               <div v-else-if="lookupProduct.id" class="p-3 bg-brand-50 dark:bg-brand-900/20 border border-brand-100 dark:border-brand-800/40 rounded-xl">
                 <div class="flex items-start gap-3">
                   <div class="w-12 h-12 rounded-xl bg-brand-100 dark:bg-brand-800/40 flex items-center justify-center text-brand-600 dark:text-brand-300 shrink-0">
@@ -114,6 +144,45 @@
                   </BaseButton>
                 </div>
               </div>
+              <!-- Manual entry (not found externally) -->
+              <div v-else-if="lookupProduct._manualEntry" class="p-3 bg-red-50 dark:bg-red-900/20 border-2 border-red-400 dark:border-red-600 rounded-xl">
+                <div class="flex items-center gap-2 mb-3">
+                  <i class="fa-solid fa-circle-xmark text-red-500"></i>
+                  <p class="text-xs font-bold text-red-700 dark:text-red-300">No encontrado en fuentes externas</p>
+                </div>
+                <p class="text-[10px] text-red-600 dark:text-red-400 mb-3">Ingresá los datos manualmente. Se guardará como <strong>*MANUAL*</strong> para revisión posterior.</p>
+                <div class="space-y-2">
+                  <BaseInput
+                    v-model="lookupProduct._manualNombre"
+                    placeholder="Nombre del producto"
+                    size="sm"
+                    input-class="text-sm"
+                  />
+                  <div class="grid grid-cols-2 gap-2">
+                    <BaseInput
+                      v-model.number="lookupProduct._manualPrecio"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="Precio"
+                      size="sm"
+                      input-class="text-sm font-mono-data text-right"
+                    />
+                    <BaseInput
+                      v-model.number="lookupProduct._manualQty"
+                      type="number"
+                      min="1"
+                      placeholder="Cantidad"
+                      size="sm"
+                      input-class="text-sm font-mono-data text-right"
+                    />
+                  </div>
+                  <BaseButton size="sm" block @click="addManualToCart">
+                    <i class="fa-solid fa-plus mr-1"></i> Agregar al carrito
+                  </BaseButton>
+                </div>
+              </div>
+              <!-- Not found (simple error) -->
               <div v-else-if="lookupProduct._searched" class="p-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800/40 rounded-xl text-xs text-red-600 dark:text-red-300 font-medium text-center flex items-center justify-center gap-2">
                 <i class="fa-solid fa-circle-xmark"></i>
                 Producto no encontrado
@@ -465,6 +534,12 @@ const lookupProduct = reactive({
   stock_actual: 0,
   _loading: false,
   _searched: false,
+  _searchingExternal: false,
+  _manualEntry: false,
+  _manualNombre: '',
+  _manualPrecio: 0,
+  _manualQty: 1,
+  _barcode: '',
   _qty: 1,
   _price: 0
 })
@@ -639,33 +714,62 @@ async function triggerPOSLookup() {
     return
   }
 
+  // Reset state
   lookupProduct._loading = true
-  lookupProduct._searched = true
+  lookupProduct._searched = false
+  lookupProduct._searchingExternal = false
+  lookupProduct._manualEntry = false
   lookupProduct.id = null
+  lookupProduct._barcode = raw
+
+  // 1. Buscar en base local primero
+  const local = products.value.find(p => p.codigo_barras === raw)
+  if (local) {
+    selectProductForLookup(local)
+    lookupProduct._loading = false
+    _processingLookup.value = false
+    posLookupCode.value = ''
+    if (!lookupBadges.value.some(b => b.includes(raw))) {
+      lookupBadges.value.unshift(raw)
+      if (lookupBadges.value.length > 10) lookupBadges.value.pop()
+    }
+    return
+  }
+
+  // 2. No está en local, buscar en API (que busca en fuentes externas)
+  lookupProduct._loading = false
+  lookupProduct._searchingExternal = true
 
   try {
     const resp = await api.post('/api/productos/lookup', { barcode: raw }).catch(() => null)
-    if (resp) {
+    if (resp && resp.nombre) {
+      // Encontrado en fuentes externas
+      lookupProduct._searchingExternal = false
       selectProductForLookup(resp)
       if (resp.comparacion) {
         lookupBadges.value = resp.comparacion.map(c => `${c.fuente}: ${fc(c.precio)}`)
       }
+      toast.success(`Encontrado: ${resp.nombre}`)
     } else {
-      const local = products.value.find(p => p.codigo_barras === raw)
-      if (local) selectProductForLookup(local)
+      // No encontrado en ninguna fuente, mostrar manual entry
+      lookupProduct._searchingExternal = false
+      lookupProduct._manualEntry = true
+      lookupProduct._manualNombre = ''
+      lookupProduct._manualPrecio = 0
+      lookupProduct._manualQty = 1
+      toast.warning('No encontrado. Ingresá los datos manualmente.')
     }
   } catch {
-    const local = products.value.find(p => p.codigo_barras === raw)
-    if (local) selectProductForLookup(local)
+    lookupProduct._searchingExternal = false
+    lookupProduct._manualEntry = true
+    lookupProduct._manualNombre = ''
+    lookupProduct._manualPrecio = 0
+    lookupProduct._manualQty = 1
   }
 
-  lookupProduct._loading = false
-
-  if (lookupProduct.id && !lookupBadges.value.some(b => b.includes(raw))) {
-    lookupBadges.value.unshift(raw)
-    if (lookupBadges.value.length > 10) lookupBadges.value.pop()
-  }
   _processingLookup.value = false
+  // Limpiar input pero mantener focus para seguir escaneando
+  posLookupCode.value = ''
 }
 
 function handlePOSInput() {
@@ -674,6 +778,40 @@ function handlePOSInput() {
   }
   lookupProduct._searched = false
   lookupProduct.id = null
+}
+
+function addManualToCart() {
+  const nombre = lookupProduct._manualNombre?.trim()
+  const precio = lookupProduct._manualPrecio || 0
+  const qty = lookupProduct._manualQty || 1
+
+  if (!nombre) {
+    toast.error('Ingresá un nombre para el producto')
+    return
+  }
+  if (precio <= 0) {
+    toast.error('Ingresá un precio válido')
+    return
+  }
+
+  const seq = products.value.filter(p => p.codigo_barras && (p.codigo_barras.startsWith('GEN-') || p.codigo_barras.startsWith('*MANUAL*'))).length + 1
+  const cleanCode = `*MANUAL*${String(seq).padStart(6, '0')}`
+  const tempProd = {
+    id: Date.now() + Math.random(),
+    codigo_barras: cleanCode,
+    nombre, marca: '', precio_venta: precio, precio_costo: 0,
+    stock_actual: 0, categoria_id: categories.value[0]?.id || 1,
+    _pending: true, _nombre: nombre, _precio: precio
+  }
+  products.value.push(tempProd)
+  addToCart(tempProd, qty, precio)
+  toast.info(`${nombre} agregado. Se guardará como *MANUAL* al confirmar venta.`)
+
+  // Reset manual entry state
+  lookupProduct._manualEntry = false
+  lookupProduct._manualNombre = ''
+  lookupProduct._manualPrecio = 0
+  lookupProduct._manualQty = 1
 }
 
 function addToCart(product, qty = 1, price = null) {
@@ -872,3 +1010,36 @@ async function confirmarVenta() {
   confirmando.value = false
 }
 </script>
+
+<style scoped>
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 3s linear infinite;
+}
+
+.lookup-external-searching {
+  background: linear-gradient(90deg, #f97316, #fbbf24, #ea580c, #f97316);
+  background-size: 200% 200%;
+  animation: gradient-shift 2s ease infinite;
+}
+
+@keyframes gradient-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+</style>

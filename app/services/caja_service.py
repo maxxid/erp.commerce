@@ -5,15 +5,20 @@ Reglas de negocio:
 - Para vender, la caja debe estar abierta.
 - Cada medio de pago se cierra independientemente con su propio arqueo.
 - Cierre total = cierra todos los métodos pendientes de una vez.
+- Auto-cierre: si el día cambió desde la apertura, se cierra automáticamente.
 """
 
 from typing import Optional, List, Tuple
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from app.models.movimiento_caja import MovimientoCaja
 
 
 def caja_abierta(db: Session, sucursal_id: int = 1) -> bool:
-    """Verifica si hay una caja abierta (sin cierre total)."""
+    """Verifica si hay una caja abierta (sin cierre total).
+    
+    Auto-cierre: si la apertura fue en un día diferente al actual, cierra automáticamente.
+    """
     ultimo = (
         db.query(MovimientoCaja)
         .filter(MovimientoCaja.sucursal_id == sucursal_id)
@@ -26,7 +31,41 @@ def caja_abierta(db: Session, sucursal_id: int = 1) -> bool:
     if ultimo is None:
         return False
     # Si es apertura o cierre_parcial, está abierta
+    if ultimo.tipo == "apertura":
+        # Verificar si la apertura fue en un día diferente al actual
+        apertura_fecha = ultimo.created_at
+        if apertura_fecha:
+            # Convertir a datetime si es string
+            if isinstance(apertura_fecha, str):
+                try:
+                    apertura_fecha = datetime.fromisoformat(apertura_fecha.replace('Z', '+00:00'))
+                except:
+                    return True
+            ahora = datetime.now(timezone.utc)
+            # Comparar fechas (día, mes, año)
+            if apertura_fecha.date() != ahora.date():
+                # Auto-cierre: crear movimiento de cierre automático
+                _cierre_automatico(db, sucursal_id, ultimo)
+                return False
     return True
+
+
+def _cierre_automatico(db: Session, sucursal_id: int, apertura: MovimientoCaja):
+    """Cierra automáticamente la caja cuando cambia el día."""
+    try:
+        movimiento = MovimientoCaja(
+            tipo="cierre",
+            monto=0.0,
+            descripcion=f"Cierre automático por cambio de día (apertura: {apertura.created_at})",
+            usuario_id=apertura.usuario_id,
+            sucursal_id=sucursal_id,
+            medio_pago=None,
+        )
+        db.add(movimiento)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"[Caja] Error en cierre automático: {e}")
 
 
 def abrir_caja(
