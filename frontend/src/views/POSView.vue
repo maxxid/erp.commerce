@@ -7,6 +7,14 @@
         <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Punto de Venta rápido</p>
       </div>
       <div class="flex items-center gap-3">
+        <button
+          type="button"
+          class="w-9 h-9 rounded-xl flex items-center justify-center border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          :title="showStatsPanel ? 'Ocultar panel lateral' : 'Mostrar panel lateral'"
+          @click="showStatsPanel = !showStatsPanel"
+        >
+          <i :class="showStatsPanel ? 'fa-solid fa-panel-right fa-rectangle-xmark' : 'fa-solid fa-rectangle-list'" class="text-sm"></i>
+        </button>
         <BaseBadge variant="default" size="sm">
           <i class="fa-solid fa-user mr-1"></i>
           {{ auth.currentUser?.nombre || auth.currentUser?.username }}
@@ -43,7 +51,7 @@
 
     <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
       <!-- COLUMN 1: Product Catalog (5 cols) -->
-      <div class="xl:col-span-5 space-y-4">
+      <div :class="showStatsPanel ? 'xl:col-span-5' : 'xl:col-span-8'" class="space-y-4">
         <BaseCard padding="md">
           <BaseInput
             ref="barcodeInput"
@@ -351,7 +359,7 @@
       </div>
 
       <!-- COLUMN 3: Stats & history (3 cols) -->
-      <div class="xl:col-span-3 space-y-4">
+      <div v-show="showStatsPanel" class="xl:col-span-3 space-y-4">
         <div class="grid grid-cols-2 gap-3">
           <KpiCard label="Ventas Hoy" :value="stats.ventas_hoy" prefix="$" icon="fa-sack-dollar" icon-color="success" :sublabel="`${stats.tickets_hoy} tickets`" />
           <KpiCard label="Ticket Prom." :value="stats.ticket_promedio" prefix="$" icon="fa-receipt" icon-color="brand" />
@@ -443,6 +451,7 @@ const selectedPOSCategory = ref(null)
 const confirmando = ref(false)
 const _processingLookup = ref(false)
 const showTicket = ref(false)
+const showStatsPanel = ref(true)
 const ticketData = reactive({ items: [], numero: '', fecha: '', total: 0, descuento: 0, medio_pago: '', cliente: '', sucursal: '' })
 
 const lookupProduct = reactive({
