@@ -17,6 +17,7 @@ from app.services import producto_service
 from app.services import lookup_service as lk
 from app.services import stock_service
 from app.services import catalogo_service
+from app.services import auditoria_service
 
 router = APIRouter(prefix="/api/productos", tags=["Productos"])
 
@@ -125,12 +126,36 @@ def actualizar(
     db: Session = Depends(get_db),
     user: Usuario = Depends(require_role("admin", "encargado")),
 ):
-    """Actualiza un producto existente."""
+    """Actualiza un producto existente.
+    
+    Si el usuario no es admin y modifica stock, se registra como movimiento sospechoso.
+    """
     producto = producto_service.obtener_producto(db, producto_id)
     if not producto:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+    update_data = data.model_dump(exclude_unset=True)
+    update_data["usuario_id"] = user.id
+
+    # Auditoría si no-admin cambia stock
+    if "stock_actual" in update_data and update_data["stock_actual"] is not None:
+        nuevo = update_data["stock_actual"]
+        anterior = producto.stock_actual
+        if nuevo != anterior and user.rol != "admin":
+            auditoria_service.registrar(
+                db, user.id, "stock_sospechoso", None, None,
+                {
+                    "producto_id": producto.id,
+                    "producto": producto.nombre,
+                    "stock_anterior": anterior,
+                    "stock_nuevo": nuevo,
+                    "usuario": user.username,
+                    "rol": user.rol,
+                }
+            )
+
     producto = producto_service.actualizar_producto(
-        db, producto, data.model_dump(exclude_unset=True)
+        db, producto, update_data
     )
     return RespuestaData(data=producto, message="Producto actualizado")
 

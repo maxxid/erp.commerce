@@ -72,18 +72,35 @@ def crear_producto(db: Session, data: dict) -> Producto:
 
 
 def actualizar_producto(db: Session, producto: Producto, data: dict) -> Producto:
-    """Actualiza campos de un producto existente."""
-    # Solo actualizar campos que vienen en data y no son None
+    """Actualiza campos de un producto existente.
+
+    Si viene stock_actual, lo maneja via stock_service.ajustar_stock()
+    para generar MovimientoStock. Requiere usuario_id en data.
+    """
+    from app.services import stock_service
+
     updatable = [
         "nombre", "marca", "descripcion", "precio_referencia", "precio_costo",
         "precio_venta", "imagen_url", "sku", "propiedades", "fuente",
-        "categoria_id", "stock_minimo",
+        "categoria_id", "stock_minimo", "observaciones",
     ]
     for field in updatable:
         if field in data and data[field] is not None:
             setattr(producto, field, data[field])
 
-    # Estos se tratan distinto porque pueden ser None intencionalmente
+    if "stock_actual" in data and data["stock_actual"] is not None:
+        nuevo_stock = data["stock_actual"]
+        usuario_id = data.get("usuario_id")
+        diff = nuevo_stock - producto.stock_actual
+        if diff != 0 and usuario_id:
+            tipo = "entrada" if diff > 0 else "salida"
+            notas = data.get("notas")
+            stock_service.ajustar_stock(
+                db, producto.id, diff, tipo, usuario_id,
+                referencia_tipo="ajuste_manual",
+                notas=notas,
+            )
+
     if "activo" in data:
         producto.activo = data["activo"]
 

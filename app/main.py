@@ -226,6 +226,9 @@ def _migrate_new_columns():
         if "precio_etiqueta" not in existentes_prod:
             conn.execute(sa.text("ALTER TABLE productos ADD COLUMN precio_etiqueta FLOAT"))
             conn.commit()
+        if "observaciones" not in existentes_prod:
+            conn.execute(sa.text("ALTER TABLE productos ADD COLUMN observaciones TEXT"))
+            conn.commit()
         existentes_lic = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(licencias)"))]
         if "machine_id" not in existentes_lic:
             conn.execute(sa.text("ALTER TABLE licencias ADD COLUMN machine_id VARCHAR(200)"))

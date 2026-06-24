@@ -73,7 +73,8 @@ const defaultForm = () => ({
   precio_venta: 0,
   precio_costo: 0,
   categoria_id: null,
-  stock_actual: 0
+  stock_actual: 0,
+  observaciones: ''
 })
 
 const form = reactive(defaultForm())
@@ -202,7 +203,8 @@ function openEditModal(product) {
     precio_venta: product.precio_venta,
     precio_costo: product.precio_costo,
     categoria_id: product.categoria_id,
-    stock_actual: product.stock_actual
+    stock_actual: product.stock_actual,
+    observaciones: product.observaciones || ''
   })
   showModal.value = true
 }
@@ -245,9 +247,7 @@ async function saveProduct() {
   saving.value = true
   try {
     if (editingProduct.value) {
-      try {
-        await api.put(`/api/productos/${editingProduct.value.id}`, form)
-      } catch { /* local fallback */ }
+      await api.put(`/api/productos/${editingProduct.value.id}`, form)
 
       const idx = products.value.findIndex(p => p.id === editingProduct.value.id)
       if (idx !== -1) {
@@ -255,15 +255,8 @@ async function saveProduct() {
       }
       toast.success('Producto actualizado')
     } else {
-      let newId = 1
-      try {
-        const resp = await api.post('/api/productos', form)
-        if (resp && resp.id) newId = resp.id
-      } catch {
-        newId = Math.max(...products.value.map(p => p.id), 0) + 1
-      }
-
-      products.value.push({ id: newId, ...form })
+      const resp = await api.post('/api/productos', form)
+      products.value.push({ id: resp.id, ...form })
       toast.success('Producto creado')
     }
     closeModal()
@@ -595,6 +588,12 @@ function ofertaTipoColor(tipo) {
           option-value="value"
           option-label="label"
           required
+        />
+
+        <BaseInput
+          v-model="form.observaciones"
+          label="Observaciones (opcional)"
+          placeholder="Notas internas sobre este producto..."
         />
 
         <div v-if="formError" class="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 rounded-xl border border-red-100 dark:border-red-800/50 text-xs font-medium flex items-center gap-2">

@@ -43,6 +43,8 @@ class ProductoUpdate(BaseModel):
     fuente: Optional[str] = None
     categoria_id: Optional[int] = None
     stock_minimo: Optional[float] = None
+    stock_actual: Optional[float] = None
+    observaciones: Optional[str] = None
     activo: Optional[bool] = None
 
 
@@ -54,6 +56,7 @@ class ProductoOut(ProductoBase):
     precio_etiqueta: Optional[float] = None
     activo: bool
     ia_analizado: bool
+    observaciones: Optional[str] = None
     categoria_nombre: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None

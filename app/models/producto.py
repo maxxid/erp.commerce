@@ -48,6 +48,8 @@ class Producto(Base):
     stock_transito = Column(Float, default=0.0)    # Mercadería comprada, aún no recibida
     stock_minimo = Column(Float, default=0.0)
 
+    observaciones = Column(Text, nullable=True)
+
     activo = Column(Boolean, default=True)
     ia_analizado = Column(Boolean, default=False)
 
