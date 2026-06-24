@@ -13,7 +13,7 @@
           :title="showStatsPanel ? 'Ocultar panel lateral' : 'Mostrar panel lateral'"
           @click="showStatsPanel = !showStatsPanel"
         >
-          <i :class="showStatsPanel ? 'fa-solid fa-panel-right fa-rectangle-xmark' : 'fa-solid fa-rectangle-list'" class="text-sm"></i>
+          <i :class="showStatsPanel ? 'fa-solid fa-chevron-right' : 'fa-solid fa-chevron-left'" class="text-sm"></i>
         </button>
         <BaseBadge variant="default" size="sm">
           <i class="fa-solid fa-user mr-1"></i>
