@@ -43,6 +43,12 @@ const savingOferta = ref(false)
 const deletingOferta = ref(false)
 const filterEnOferta = ref(false)
 
+const showCatQuick = ref(false)
+const newCatNombre = ref('')
+const showProvQuick = ref(false)
+const newProvNombre = ref('')
+const newProvCuit = ref('')
+
 const defaultOfertaForm = () => ({
   producto_id: null,
   tipo: 'porcentaje',
@@ -66,6 +72,8 @@ const categories = ref([
   { id: 2, nombre: 'Almacén' }
 ])
 
+const proveedores = ref([])
+
 const defaultForm = () => ({
   codigo_barras: '',
   nombre: '',
@@ -74,6 +82,9 @@ const defaultForm = () => ({
   precio_costo: 0,
   categoria_id: null,
   stock_actual: 0,
+  stock_minimo: 0,
+  fecha_vencimiento: null,
+  proveedor_id: null,
   observaciones: ''
 })
 
@@ -155,7 +166,7 @@ async function fetchProductsData(checkPendientes = false) {
   loading.value = false
 }
 
-onMounted(() => fetchProductsData(true))
+onMounted(() => { fetchProductsData(true); fetchProveedores() })
 watch(() => route.path, (path) => {
   if (path === '/products') fetchProductsData()
 })
@@ -204,6 +215,9 @@ function openEditModal(product) {
     precio_costo: product.precio_costo,
     categoria_id: product.categoria_id,
     stock_actual: product.stock_actual,
+    stock_minimo: product.stock_minimo || 0,
+    fecha_vencimiento: product.fecha_vencimiento ? product.fecha_vencimiento.slice(0, 10) : null,
+    proveedor_id: product.proveedor_id || null,
     observaciones: product.observaciones || ''
   })
   showModal.value = true
@@ -258,6 +272,12 @@ async function saveProduct() {
       const resp = await api.post('/api/productos', form)
       products.value.push({ id: resp.id, ...form })
       toast.success('Producto creado')
+
+      if (form.proveedor_id && resp.id) {
+        try {
+          await api.post(`/api/productos/${resp.id}/proveedores`, { proveedor_id: form.proveedor_id })
+        } catch { /* silencioso */ }
+      }
     }
     closeModal()
   } catch (e) {
@@ -368,6 +388,48 @@ function ofertaTipoLabel(tipo) {
 
 function ofertaTipoColor(tipo) {
   return { '2x1': 'warning', porcentaje: 'success', monto_fijo: 'info' }[tipo] || 'default'
+}
+
+async function quickCreateCategoria() {
+  const nombre = newCatNombre.value.trim()
+  if (!nombre) return
+  try {
+    const resp = await api.post('/api/categorias', { nombre })
+    if (resp && resp.id) {
+      categories.value.push({ id: resp.id, nombre: resp.nombre })
+      form.categoria_id = resp.id
+      toast.success(`Categoría "${nombre}" creada`)
+    }
+  } catch (e) {
+    toast.error(e.message || 'Error al crear categoría')
+  }
+  newCatNombre.value = ''
+  showCatQuick.value = false
+}
+
+async function quickCreateProveedor() {
+  const nombre = newProvNombre.value.trim()
+  if (!nombre) return
+  try {
+    const resp = await api.post('/api/proveedores', { nombre, cuit: newProvCuit.value || undefined })
+    if (resp && resp.id) {
+      proveedores.value.push({ id: resp.id, nombre: resp.nombre })
+      form.proveedor_id = resp.id
+      toast.success(`Proveedor "${nombre}" creado`)
+    }
+  } catch (e) {
+    toast.error(e.message || 'Error al crear proveedor')
+  }
+  newProvNombre.value = ''
+  newProvCuit.value = ''
+  showProvQuick.value = false
+}
+
+async function fetchProveedores() {
+  try {
+    const data = await api.get('/api/proveedores')
+    if (data && data.length) proveedores.value = data
+  } catch { /* fallback to mock */ }
 }
 </script>
 
@@ -552,7 +614,7 @@ function ofertaTipoColor(tipo) {
 
         <BaseInput v-model="form.nombre" label="Nombre del Producto" placeholder="Nombre del producto" required />
 
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <BaseInput
             v-model.number="form.precio_costo"
             label="Precio Costo"
@@ -571,23 +633,67 @@ function ofertaTipoColor(tipo) {
             required
             input-class="font-mono-data text-right"
           />
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <BaseInput
             v-model.number="form.stock_actual"
-            label="Stock Actual"
+            label="Stock Inicial"
             type="number"
             min="0"
             required
             input-class="font-mono-data text-right"
           />
+          <BaseInput
+            v-model.number="form.stock_minimo"
+            label="Stock Mínimo"
+            type="number"
+            min="0"
+            input-class="font-mono-data text-right"
+          >
+            <template #hint>
+              <span class="text-[10px] text-slate-400">0 = sin alerta de bajo stock</span>
+            </template>
+          </BaseInput>
         </div>
 
-        <BaseSelect
-          v-model="form.categoria_id"
-          label="Categoría"
-          :options="categories.map(c => ({ value: c.id, label: c.nombre }))"
-          option-value="value"
-          option-label="label"
-          required
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="flex items-end gap-2">
+            <div class="flex-1">
+              <BaseSelect
+                v-model="form.categoria_id"
+                label="Categoría"
+                :options="categories.map(c => ({ value: c.id, label: c.nombre }))"
+                option-value="value"
+                option-label="label"
+                required
+              />
+            </div>
+            <BaseButton variant="ghost" size="sm" aria-label="Nueva categoría" class="shrink-0 mb-0.5" @click="showCatQuick = true">
+              <i class="fa-solid fa-plus"></i>
+            </BaseButton>
+          </div>
+          <div class="flex items-end gap-2">
+            <div class="flex-1">
+              <label class="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Proveedor</label>
+              <select
+                v-model="form.proveedor_id"
+                class="w-full px-3 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition"
+              >
+                <option :value="null">Sin proveedor</option>
+                <option v-for="p in proveedores" :key="p.id" :value="p.id">{{ p.nombre }}</option>
+              </select>
+            </div>
+            <BaseButton variant="ghost" size="sm" aria-label="Nuevo proveedor" class="shrink-0 mb-0.5" @click="showProvQuick = true">
+              <i class="fa-solid fa-plus"></i>
+            </BaseButton>
+          </div>
+        </div>
+
+        <BaseInput
+          v-model="form.fecha_vencimiento"
+          label="Fecha de Vencimiento (opcional)"
+          type="date"
         />
 
         <BaseInput
@@ -595,6 +701,23 @@ function ofertaTipoColor(tipo) {
           label="Observaciones (opcional)"
           placeholder="Notas internas sobre este producto..."
         />
+
+        <!-- Quick-create Categoria -->
+        <div v-if="showCatQuick" class="p-3 bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800/40 rounded-xl flex items-center gap-2">
+          <BaseInput v-model="newCatNombre" placeholder="Nombre de la categoría" size="sm" class="flex-1" @enter="quickCreateCategoria" />
+          <BaseButton variant="primary" size="xs" @click="quickCreateCategoria">Crear</BaseButton>
+          <BaseButton variant="ghost" size="xs" @click="showCatQuick = false"><i class="fa-solid fa-xmark"></i></BaseButton>
+        </div>
+
+        <!-- Quick-create Proveedor -->
+        <div v-if="showProvQuick" class="p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/40 rounded-xl space-y-2">
+          <BaseInput v-model="newProvNombre" placeholder="Nombre del proveedor" size="sm" />
+          <BaseInput v-model="newProvCuit" placeholder="CUIT (opcional)" size="sm" />
+          <div class="flex items-center gap-2">
+            <BaseButton variant="primary" size="xs" @click="quickCreateProveedor">Crear Proveedor</BaseButton>
+            <BaseButton variant="ghost" size="xs" @click="showProvQuick = false"><i class="fa-solid fa-xmark"></i></BaseButton>
+          </div>
+        </div>
 
         <div v-if="formError" class="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 rounded-xl border border-red-100 dark:border-red-800/50 text-xs font-medium flex items-center gap-2">
           <i class="fa-solid fa-triangle-exclamation"></i>{{ formError }}

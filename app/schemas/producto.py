@@ -21,6 +21,8 @@ class ProductoBase(BaseModel):
     fuente: Optional[str] = "manual"
     categoria_id: Optional[int] = None
     stock_minimo: Optional[float] = 0.0
+    stock_actual: Optional[float] = 0.0
+    fecha_vencimiento: Optional[datetime] = None
 
 
 class ProductoCreate(ProductoBase):
@@ -45,6 +47,7 @@ class ProductoUpdate(BaseModel):
     stock_minimo: Optional[float] = None
     stock_actual: Optional[float] = None
     observaciones: Optional[str] = None
+    fecha_vencimiento: Optional[datetime] = None
     activo: Optional[bool] = None
 
 
@@ -57,6 +60,7 @@ class ProductoOut(ProductoBase):
     activo: bool
     ia_analizado: bool
     observaciones: Optional[str] = None
+    fecha_vencimiento: Optional[datetime] = None
     categoria_nombre: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None

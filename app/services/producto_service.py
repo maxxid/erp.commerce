@@ -61,7 +61,7 @@ def obtener_por_barcode(db: Session, codigo_barras: str) -> Optional[Producto]:
 
 def crear_producto(db: Session, data: dict) -> Producto:
     """Crea un producto nuevo con stock inicial."""
-    cantidad_inicial = data.pop("cantidad_inicial", 0)
+    cantidad_inicial = data.pop("cantidad_inicial", 0) or data.pop("stock_actual", 0) or 0
 
     producto = Producto(**data)
     producto.stock_actual = cantidad_inicial
@@ -82,7 +82,7 @@ def actualizar_producto(db: Session, producto: Producto, data: dict) -> Producto
     updatable = [
         "nombre", "marca", "descripcion", "precio_referencia", "precio_costo",
         "precio_venta", "imagen_url", "sku", "propiedades", "fuente",
-        "categoria_id", "stock_minimo", "observaciones",
+        "categoria_id", "stock_minimo", "observaciones", "fecha_vencimiento",
     ]
     for field in updatable:
         if field in data and data[field] is not None:
