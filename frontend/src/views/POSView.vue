@@ -35,6 +35,32 @@
       </div>
     </div>
 
+    <!-- Tickets sospechosos banner -->
+    <Transition
+      enter-active-class="transition duration-300 ease-out-expo"
+      enter-from-class="opacity-0 -translate-y-2"
+      enter-to-class="opacity-100 translate-y-0"
+      leave-active-class="transition duration-200 ease-in"
+      leave-from-class="opacity-100 translate-y-0"
+      leave-to-class="opacity-0 -translate-y-2"
+    >
+      <div
+        v-if="hasSuspicious && showSusWarning"
+        class="p-3 rounded-2xl border bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800/50 flex items-center gap-3"
+      >
+        <div class="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-800/40 flex items-center justify-center text-amber-600 dark:text-amber-300 shrink-0">
+          <i class="fa-solid fa-clock-rotate-left text-lg"></i>
+        </div>
+        <div class="flex-1">
+          <p class="text-sm font-bold text-amber-800 dark:text-amber-200">{{ suspiciousTickets.length }} ticket(s) apartados hace más de 2 horas</p>
+          <p class="text-xs text-amber-600 dark:text-amber-300">Posible fraude. Revisar y confirmar/descartar en el panel de tickets apartados.</p>
+        </div>
+        <button type="button" class="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-amber-400 hover:text-amber-600 hover:bg-amber-100 dark:hover:bg-amber-800/40 transition" @click="showSusWarning = false">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+    </Transition>
+
     <!-- Caja cerrada banner -->
     <Transition
       enter-active-class="transition duration-300 ease-out-expo"
@@ -453,6 +479,7 @@
                 v-for="t in heldTickets"
                 :key="t.id"
                 class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 group transition text-[11px]"
+                :class="t.createdAt && Date.now() - new Date(t.createdAt).getTime() > 2 * 60 * 60 * 1000 ? 'bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30' : ''"
               >
                 <button
                   class="flex-1 flex items-center gap-2 text-left min-w-0"
@@ -460,11 +487,12 @@
                 >
                   <i class="fa-solid fa-rotate-left text-amber-500 shrink-0 text-[10px]"></i>
                   <span class="text-slate-600 dark:text-slate-400 font-medium truncate">{{ t.itemCount }} items</span>
+                  <span class="text-[9px] text-slate-400 ml-1 hidden sm:inline">{{ formatHeldTime(t.createdAt) }}</span>
                   <span class="text-slate-800 dark:text-slate-200 font-bold font-mono-data ml-auto">{{ fc(t.total) }}</span>
                 </button>
                 <button
                   class="shrink-0 w-5 h-5 rounded flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition"
-                  title="Descartar"
+                  title="Descartar (quedará registrado en auditoría)"
                   @click.stop="deleteHeldTicket(t.id)"
                 >
                   <i class="fa-solid fa-xmark text-[10px]"></i>
@@ -557,6 +585,7 @@ import KpiCard from '@/components/ui/KpiCard.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import { useSounds } from '@/composables/useSounds'
 import { useConfetti } from '@/composables/useConfetti'
+import { useHeldTickets } from '@/composables/useHeldTickets'
 
 const auth = useAuthStore()
 const toast = useToastStore()
@@ -575,79 +604,54 @@ const showStatsPanel = ref(true)
 const showRecallDropdown = ref(false)
 const ticketData = reactive({ items: [], numero: '', fecha: '', total: 0, descuento: 0, medio_pago: '', cliente: '', sucursal: '' })
 
-const heldTickets = ref(loadHeldTickets())
-const heldCount = computed(() => heldTickets.value.length)
+const {
+  heldTickets, heldCount, suspiciousTickets,
+  holdTicket: _holdTicket, recallTicket: _recallTicket, deleteHeldTicket: _deleteHeldTicket,
+} = useHeldTickets()
 
-const recallHotkey = ref('')
-
-function loadHeldTickets() {
-  try {
-    return JSON.parse(localStorage.getItem('apex-pos-held') || '[]')
-  } catch { return [] }
-}
-
-function saveHeldTickets() {
-  localStorage.setItem('apex-pos-held', JSON.stringify(heldTickets.value))
-}
+const hasSuspicious = computed(() => suspiciousTickets.value.length > 0)
+const showSusWarning = ref(true)
 
 function holdTicket() {
-  if (!cart.items.length) {
-    toast.warning('El carrito está vacío')
-    return
-  }
-  const ticket = {
-    id: Date.now(),
-    createdAt: new Date().toLocaleString('es-AR'),
-    items: cart.items.map(i => ({ ...i })),
-    cliente_id: cart.cliente_id,
-    subtotal: cart.subtotal,
-    descuento: cart.descuento,
-    total: cart.total,
-    medio_pago: cart.medio_pago,
-    itemCount: cart.items.reduce((s, i) => s + i.cantidad, 0),
-  }
-  heldTickets.value.push(ticket)
-  saveHeldTickets()
+  const t = _holdTicket(cart)
+  if (!t) { toast.warning('El carrito está vacío'); return }
   vaciarCarrito()
-  toast.info(`Ticket #${ticket.id.toString().slice(-6)} apartado (${ticket.itemCount} items, ${fc(ticket.total)})`)
+  toast.info(`Ticket #${t.id.toString().slice(-6)} apartado (${t.itemCount} items, ${fc(t.total)})`)
+  showRecallDropdown.value = false
 }
 
 function recallTicket(id) {
-  const ticket = heldTickets.value.find(t => t.id === id)
-  if (!ticket) return
   if (cart.items.length) {
     toast.warning('El carrito actual no está vacío. Vacialo o confirmalo primero.')
     return
   }
+  const ticket = _recallTicket(id)
+  if (!ticket) return
   cart.items = ticket.items.map(i => ({ ...i }))
   cart.subtotal = ticket.subtotal
   cart.total = ticket.total
   cart.descuento = ticket.descuento || 0
   cart.cliente_id = ticket.cliente_id
   cart.medio_pago = ticket.medio_pago || 'efectivo'
-  heldTickets.value = heldTickets.value.filter(t => t.id !== id)
-  saveHeldTickets()
   showRecallDropdown.value = false
   toast.info(`Ticket recuperado — ${ticket.itemCount} items`)
 }
 
 function deleteHeldTicket(id) {
-  heldTickets.value = heldTickets.value.filter(t => t.id !== id)
-  saveHeldTickets()
+  _deleteHeldTicket(id)
   if (!heldTickets.value.length) showRecallDropdown.value = false
 }
 
-function formatHeldTime(dateStr) {
-  if (!dateStr) return ''
+function formatHeldTime(iso) {
+  if (!iso) return ''
   try {
-    const d = new Date(dateStr)
-    if (isNaN(d.getTime())) return dateStr
-    const now = new Date()
-    const diff = Math.floor((now - d) / 60000)
-    if (diff < 1) return 'ahora'
-    if (diff < 60) return `hace ${diff}min`
-    return dateStr
-  } catch { return dateStr }
+    const diff = Date.now() - new Date(iso).getTime()
+    const mins = Math.floor(diff / 60000)
+    if (mins < 1) return 'ahora'
+    if (mins < 60) return `hace ${mins}min`
+    const hrs = Math.floor(mins / 60)
+    return `hace ${hrs}h${mins % 60 > 0 ? mins % 60 + 'm' : ''}`
+  } catch { return iso }
 }
 
 const lookupProduct = reactive({
@@ -740,6 +744,7 @@ const filteredPOSProducts = computed(() => {
 })
 
 onMounted(async () => {
+  localStorage.setItem('apex_user', JSON.stringify({ nombre: auth.currentUser?.nombre || auth.currentUser?.username || '' }))
   try {
     const [prods, cats, clis] = await Promise.all([
       api.get('/api/productos').catch(() => null),
@@ -1019,6 +1024,8 @@ function updateCartQty(idx, qty) {
 }
 
 function removeFromCart(idx) {
+  const item = cart.items[idx]
+  if (item && !confirm(`¿Eliminar "${item.nombre || item.producto_nombre || 'producto'}" (${fc(item.precio_venta * item.cantidad)}) del carrito?`)) return
   cart.items.splice(idx, 1)
   recalcCart()
 }

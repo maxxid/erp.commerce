@@ -139,6 +139,7 @@ import BaseTable from '@/components/ui/BaseTable.vue'
 import BaseBadge from '@/components/ui/BaseBadge.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import { useSounds } from '@/composables/useSounds'
+import { useHeldTickets } from '@/composables/useHeldTickets'
 
 const auth = useAuthStore()
 const toast = useToastStore()
@@ -237,6 +238,14 @@ async function abrirCaja() {
 }
 
 async function cerrarCaja() {
+  const { heldCount, deleteHeldTicket, getHeldAuditLog } = useHeldTickets()
+  if (heldCount.value > 0) {
+    if (!confirm(`Hay ${heldCount.value} ticket(s) apartados en POS. Si cerrás la caja sin recuperarlos se marcarán como huérfanos en la auditoría. ¿Cerrar de todas formas?`)) return
+    // mark all current held as orphaned
+    const held = JSON.parse(localStorage.getItem('apex-pos-held') || '[]')
+    held.forEach(t => { t._orphaned = true })
+    localStorage.setItem('apex-pos-held', JSON.stringify(held))
+  }
   if (!confirm('¿Cerrar la caja y finalizar la jornada?')) return
   closing.value = true
   try {
