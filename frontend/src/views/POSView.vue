@@ -22,6 +22,16 @@
         <BaseBadge :variant="cajaStore.abierta ? 'success' : 'danger'" size="sm" :dot="true">
           {{ cajaStore.abierta ? 'CAJA ABIERTA' : 'CAJA CERRADA' }}
         </BaseBadge>
+        <button
+          v-if="heldCount"
+          type="button"
+          class="relative w-9 h-9 rounded-xl flex items-center justify-center border border-slate-200 dark:border-slate-700 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors"
+          title="Tickets apartados"
+          @click="showRecallDropdown = !showRecallDropdown"
+        >
+          <i class="fa-solid fa-clock-rotate-left text-sm"></i>
+          <span class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-500 text-white text-[8px] font-bold flex items-center justify-center">{{ heldCount }}</span>
+        </button>
       </div>
     </div>
 
@@ -416,14 +426,55 @@
             {{ confirmando ? 'Procesando...' : 'Confirmar Venta' }}
           </BaseButton>
 
-          <button
-            v-if="cart.items.length"
-            type="button"
-            class="w-full text-rose-500 hover:text-rose-600 dark:hover:text-rose-400 text-xs font-semibold transition text-center py-1"
-            @click="vaciarCarrito"
-          >
-            <i class="fa-solid fa-trash mr-1"></i> Vaciar carrito
-          </button>
+          <div class="flex items-center gap-2 pt-1">
+            <button
+              v-if="cart.items.length"
+              type="button"
+              class="flex-1 text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 text-xs font-semibold transition text-center py-1.5 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/10"
+              @click="holdTicket"
+            >
+              <i class="fa-solid fa-clock-rotate-left mr-1"></i> Hold
+            </button>
+            <button
+              v-if="cart.items.length"
+              type="button"
+              class="flex-1 text-rose-500 hover:text-rose-600 dark:hover:text-rose-400 text-xs font-semibold transition text-center py-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-900/10"
+              @click="vaciarCarrito"
+            >
+              <i class="fa-solid fa-trash mr-1"></i> Vaciar
+            </button>
+          </div>
+
+          <!-- Recall Dropdown -->
+          <div v-if="showRecallDropdown && heldTickets.length" class="border-t border-slate-100 dark:border-slate-700 pt-2 mt-1">
+            <p class="text-[10px] font-bold text-slate-400 uppercase mb-1.5 px-1">Tickets apartados</p>
+            <div class="space-y-1 max-h-40 overflow-y-auto">
+              <div
+                v-for="t in heldTickets"
+                :key="t.id"
+                class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 group transition text-[11px]"
+              >
+                <button
+                  class="flex-1 flex items-center gap-2 text-left min-w-0"
+                  @click="recallTicket(t.id)"
+                >
+                  <i class="fa-solid fa-rotate-left text-amber-500 shrink-0 text-[10px]"></i>
+                  <span class="text-slate-600 dark:text-slate-400 font-medium truncate">{{ t.itemCount }} items</span>
+                  <span class="text-slate-800 dark:text-slate-200 font-bold font-mono-data ml-auto">{{ fc(t.total) }}</span>
+                </button>
+                <button
+                  class="shrink-0 w-5 h-5 rounded flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition"
+                  title="Descartar"
+                  @click.stop="deleteHeldTicket(t.id)"
+                >
+                  <i class="fa-solid fa-xmark text-[10px]"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div v-else-if="showRecallDropdown && !heldTickets.length" class="border-t border-slate-100 dark:border-slate-700 pt-2 mt-1">
+            <p class="text-[10px] text-slate-400 text-center py-2">No hay tickets apartados</p>
+          </div>
         </BaseCard>
       </div>
 
@@ -521,7 +572,83 @@ const confirmando = ref(false)
 const _processingLookup = ref(false)
 const showTicket = ref(false)
 const showStatsPanel = ref(true)
+const showRecallDropdown = ref(false)
 const ticketData = reactive({ items: [], numero: '', fecha: '', total: 0, descuento: 0, medio_pago: '', cliente: '', sucursal: '' })
+
+const heldTickets = ref(loadHeldTickets())
+const heldCount = computed(() => heldTickets.value.length)
+
+const recallHotkey = ref('')
+
+function loadHeldTickets() {
+  try {
+    return JSON.parse(localStorage.getItem('apex-pos-held') || '[]')
+  } catch { return [] }
+}
+
+function saveHeldTickets() {
+  localStorage.setItem('apex-pos-held', JSON.stringify(heldTickets.value))
+}
+
+function holdTicket() {
+  if (!cart.items.length) {
+    toast.warning('El carrito está vacío')
+    return
+  }
+  const ticket = {
+    id: Date.now(),
+    createdAt: new Date().toLocaleString('es-AR'),
+    items: cart.items.map(i => ({ ...i })),
+    cliente_id: cart.cliente_id,
+    subtotal: cart.subtotal,
+    descuento: cart.descuento,
+    total: cart.total,
+    medio_pago: cart.medio_pago,
+    itemCount: cart.items.reduce((s, i) => s + i.cantidad, 0),
+  }
+  heldTickets.value.push(ticket)
+  saveHeldTickets()
+  vaciarCarrito()
+  toast.info(`Ticket #${ticket.id.toString().slice(-6)} apartado (${ticket.itemCount} items, ${fc(ticket.total)})`)
+}
+
+function recallTicket(id) {
+  const ticket = heldTickets.value.find(t => t.id === id)
+  if (!ticket) return
+  if (cart.items.length) {
+    toast.warning('El carrito actual no está vacío. Vacialo o confirmalo primero.')
+    return
+  }
+  cart.items = ticket.items.map(i => ({ ...i }))
+  cart.subtotal = ticket.subtotal
+  cart.total = ticket.total
+  cart.descuento = ticket.descuento || 0
+  cart.cliente_id = ticket.cliente_id
+  cart.medio_pago = ticket.medio_pago || 'efectivo'
+  heldTickets.value = heldTickets.value.filter(t => t.id !== id)
+  saveHeldTickets()
+  showRecallDropdown.value = false
+  toast.info(`Ticket recuperado — ${ticket.itemCount} items`)
+}
+
+function deleteHeldTicket(id) {
+  heldTickets.value = heldTickets.value.filter(t => t.id !== id)
+  saveHeldTickets()
+  if (!heldTickets.value.length) showRecallDropdown.value = false
+}
+
+function formatHeldTime(dateStr) {
+  if (!dateStr) return ''
+  try {
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime())) return dateStr
+    const now = new Date()
+    const diff = Math.floor((now - d) / 60000)
+    if (diff < 1) return 'ahora'
+    if (diff < 60) return `hace ${diff}min`
+    return dateStr
+  } catch { return dateStr }
+}
 
 const lookupProduct = reactive({
   id: null,
