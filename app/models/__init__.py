@@ -18,6 +18,7 @@ from app.models.configuracion import Configuracion
 from app.models.auditoria import Auditoria
 from app.models.licencia import Licencia
 from app.models.oferta import Oferta
+from app.models.factura_electronica import FacturaElectronica
 
 __all__ = [
     "Categoria",
@@ -36,4 +37,5 @@ __all__ = [
     "Auditoria",
     "Licencia",
     "Oferta",
+    "FacturaElectronica",
 ]

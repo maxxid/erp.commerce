@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from app.config import settings
 from app.database import engine, Base
 from app.models import *  # noqa: F401, F403 — Registrar todos los modelos
-from app.routers import auth, productos, categorias, dashboard, caja, clientes, ventas, proveedores, compras, calendario, backups, usuarios, auditoria, licencia, catalogo, ofertas
+from app.routers import auth, productos, categorias, dashboard, caja, clientes, ventas, proveedores, compras, calendario, backups, usuarios, auditoria, licencia, catalogo, ofertas, facturacion, configuracion as config_router
 
 
 def crear_app() -> FastAPI:
@@ -49,6 +49,8 @@ def crear_app() -> FastAPI:
     app.include_router(licencia.router)
     app.include_router(catalogo.router)
     app.include_router(ofertas.router)
+    app.include_router(facturacion.router)
+    app.include_router(config_router.router)
 
     # Servir el frontend Vue 3 (producción)
     @app.get("/app")
@@ -236,7 +238,10 @@ def _migrate_new_columns():
         if "machine_id" not in existentes_lic:
             conn.execute(sa.text("ALTER TABLE licencias ADD COLUMN machine_id VARCHAR(200)"))
             conn.commit()
-        # La tabla ofertas se crea automáticamente via create_all
+        existentes_conf = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(configuraciones)"))]
+        if "valor_texto" not in existentes_conf:
+            conn.execute(sa.text("ALTER TABLE configuraciones ADD COLUMN valor_texto TEXT"))
+            conn.commit()
     finally:
         conn.close()
 

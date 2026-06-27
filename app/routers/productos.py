@@ -4,6 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from sqlalchemy import func, desc
 from app.database import get_db
 from app.schemas.producto import (
     ProductoCreate, ProductoUpdate, ProductoOut,
@@ -18,6 +19,8 @@ from app.services import lookup_service as lk
 from app.services import stock_service
 from app.services import catalogo_service
 from app.services import auditoria_service
+from app.models.compra import Compra, CompraItem
+from app.models.proveedor import Proveedor
 
 router = APIRouter(prefix="/api/productos", tags=["Productos"])
 
@@ -87,6 +90,58 @@ def marcar_etiquetado(
             count += 1
     db.commit()
     return RespuestaData(data={"marcados": count}, message=f"{count} producto(s) marcados como etiquetados")
+
+
+@router.get("/costos", response_model=RespuestaLista)
+def costos(
+    search: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """Lista productos con su último precio de compra y margen actual."""
+    query = db.query(
+        Producto.id, Producto.nombre, Producto.precio_venta, Producto.precio_costo,
+        Producto.codigo_barras,
+        func.coalesce(
+            db.query(CompraItem.precio_unitario)
+            .join(Compra, CompraItem.compra_id == Compra.id)
+            .filter(CompraItem.producto_id == Producto.id, Compra.estado == "recibida")
+            .order_by(desc(Compra.fecha))
+            .limit(1).correlate(Producto).scalar_subquery(), 0
+        ).label("ultimo_costo"),
+        db.query(Compra.fecha)
+            .join(CompraItem, CompraItem.compra_id == Compra.id)
+            .filter(CompraItem.producto_id == Producto.id, Compra.estado == "recibida")
+            .order_by(desc(Compra.fecha))
+            .limit(1).correlate(Producto).scalar_subquery().label("ultima_compra"),
+        db.query(Proveedor.nombre)
+            .join(Compra, Compra.proveedor_id == Proveedor.id)
+            .join(CompraItem, CompraItem.compra_id == Compra.id)
+            .filter(CompraItem.producto_id == Producto.id, Compra.estado == "recibida")
+            .order_by(desc(Compra.fecha))
+            .limit(1).correlate(Producto).scalar_subquery().label("proveedor"),
+    ).filter(Producto.activo == True)
+
+    if search:
+        query = query.filter(Producto.nombre.ilike(f"%{search}%"))
+
+    rows = query.order_by(Producto.nombre).limit(200).all()
+
+    data = []
+    for r in rows:
+        costo = float(r.ultimo_costo or 0)
+        venta = float(r.precio_venta or 0)
+        margen = venta - costo
+        pct = round((margen / venta * 100), 1) if venta > 0 else 0
+        data.append({
+            "id": r.id, "nombre": r.nombre, "codigo_barras": r.codigo_barras,
+            "precio_venta": venta, "ultimo_costo": costo,
+            "margen": margen, "margen_pct": pct,
+            "ultima_compra": r.ultima_compra.isoformat() if r.ultima_compra else None,
+            "proveedor": r.proveedor or "",
+        })
+
+    return RespuestaLista(data=data, total=len(data), message=f"{len(data)} producto(s)")
 
 
 @router.get("/{producto_id}", response_model=RespuestaData[ProductoOut])
@@ -331,59 +386,3 @@ def quitar_proveedor(
         producto.proveedores.remove(prov)
         db.commit()
     return RespuestaData(message="Proveedor quitado")
-
-
-@router.get("/costos", response_model=RespuestaLista)
-def costos(
-    search: Optional[str] = Query(None),
-    db: Session = Depends(get_db),
-    user: Usuario = Depends(get_current_user),
-):
-    """Lista productos con su último precio de compra y margen actual."""
-    from app.models.compra import Compra, CompraItem
-    from app.models.proveedor import Proveedor
-    from sqlalchemy import desc
-
-    query = db.query(
-        Producto.id, Producto.nombre, Producto.precio_venta, Producto.precio_costo,
-        Producto.codigo_barras,
-        func.coalesce(
-            db.query(CompraItem.precio_unitario)
-            .join(Compra, CompraItem.compra_id == Compra.id)
-            .filter(CompraItem.producto_id == Producto.id, Compra.estado == "recibida")
-            .order_by(desc(Compra.fecha))
-            .limit(1).correlate(Producto).scalar_subquery(), 0
-        ).label("ultimo_costo"),
-        db.query(Compra.fecha)
-            .join(CompraItem, CompraItem.compra_id == Compra.id)
-            .filter(CompraItem.producto_id == Producto.id, Compra.estado == "recibida")
-            .order_by(desc(Compra.fecha))
-            .limit(1).correlate(Producto).scalar_subquery().label("ultima_compra"),
-        db.query(Proveedor.nombre)
-            .join(Compra, Compra.proveedor_id == Proveedor.id)
-            .join(CompraItem, CompraItem.compra_id == Compra.id)
-            .filter(CompraItem.producto_id == Producto.id, Compra.estado == "recibida")
-            .order_by(desc(Compra.fecha))
-            .limit(1).correlate(Producto).scalar_subquery().label("proveedor"),
-    ).filter(Producto.activo == True)
-
-    if search:
-        query = query.filter(Producto.nombre.ilike(f"%{search}%"))
-
-    rows = query.order_by(Producto.nombre).limit(200).all()
-
-    data = []
-    for r in rows:
-        costo = float(r.ultimo_costo or 0)
-        venta = float(r.precio_venta or 0)
-        margen = venta - costo
-        pct = round((margen / venta * 100), 1) if venta > 0 else 0
-        data.append({
-            "id": r.id, "nombre": r.nombre, "codigo_barras": r.codigo_barras,
-            "precio_venta": venta, "ultimo_costo": costo,
-            "margen": margen, "margen_pct": pct,
-            "ultima_compra": r.ultima_compra.isoformat() if r.ultima_compra else None,
-            "proveedor": r.proveedor or "",
-        })
-
-    return RespuestaLista(data=data, total=len(data), message=f"{len(data)} producto(s)")

@@ -14,6 +14,7 @@ class Configuracion(Base):
     id = Column(Integer, primary_key=True, index=True)
     clave = Column(String(100), unique=True, nullable=False, index=True)
     valor = Column(String(500), nullable=False)
+    valor_texto = Column(Text, nullable=True)  # Para valores largos (certs, keys)
     descripcion = Column(Text, nullable=True)
 
     def __repr__(self):

@@ -962,6 +962,11 @@ async function confirmarVenta() {
       toast.success(`Venta ${ventaNumero} confirmada. Total: ${fc(ventaTotal)}`)
       playSale()
       firstSaleOfDay()
+      try {
+        const fe = await api.get(`/api/facturacion/facturas/${ventaId}`)
+        if (fe && fe.cae) ticketData.factura = `CAE: ${fe.cae}`
+        else if (fe && fe.estado) ticketData.factura = `FE: ${fe.estado}`
+      } catch { /* sin factura */ }
     } else {
       throw new Error('No se pudo crear la venta')
     }

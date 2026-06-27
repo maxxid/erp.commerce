@@ -47,6 +47,13 @@ class Settings:
     R2_BUCKET: str = os.getenv("R2_BUCKET", "erp-backups")
     R2_ENABLED: bool = bool(os.getenv("R2_ACCESS_KEY", ""))  # solo si hay credenciales
 
+    # AFIP — Factura Electrónica (pyafipws)
+    AFIP_CERT: str = os.getenv("AFIP_CERT", "")          # Ruta al certificado .crt
+    AFIP_KEY: str = os.getenv("AFIP_KEY", "")            # Ruta a la clave .key
+    AFIP_CUIT: str = os.getenv("AFIP_CUIT", "")
+    AFIP_PTO_VTA: int = int(os.getenv("AFIP_PTO_VTA", "1"))
+    AFIP_MODE: str = os.getenv("AFIP_MODE", "testing")   # testing | production
+
     # Backup automático (minutos, 0 = deshabilitado)
     BACKUP_INTERVAL_MIN: int = int(os.getenv("BACKUP_INTERVAL_MIN", "0"))
     BACKUP_KEEP_LOCAL: int = int(os.getenv("BACKUP_KEEP_LOCAL", "5"))  # backups locales a conservar

@@ -21,33 +21,9 @@ const anullingId = ref(null)
 const loading = ref(true)
 const anularTarget = ref(null)
 
-const sales = ref([
-  {
-    id: 1024, fecha: '2026-06-20 09:15', cliente: 'Juan Pérez',
-    metodo_pago: 'Efectivo', total: 5000, estado: 'Completada',
-    items: [
-      { producto_nombre: 'Coca-Cola 500ml', cantidad: 2, precio: 1200, subtotal: 2400 },
-      { producto_nombre: 'Papas Fritas', cantidad: 1, precio: 800, subtotal: 800 },
-      { producto_nombre: 'Alfajor', cantidad: 3, precio: 600, subtotal: 1800 },
-    ]
-  },
-  {
-    id: 1025, fecha: '2026-06-20 10:30', cliente: 'María Gómez',
-    metodo_pago: 'Transferencia', total: 3200, estado: 'Pendiente',
-    items: [
-      { producto_nombre: 'Agua Mineral', cantidad: 2, precio: 800, subtotal: 1600 },
-      { producto_nombre: 'Sandwich', cantidad: 1, precio: 1600, subtotal: 1600 },
-    ]
-  },
-  {
-    id: 1026, fecha: '2026-06-19 12:00', cliente: 'Consumidor Final',
-    metodo_pago: 'Efectivo', total: 8000, estado: 'Completada',
-    items: [
-      { producto_nombre: 'Cerveza 1L', cantidad: 4, precio: 1500, subtotal: 6000 },
-      { producto_nombre: 'Maní', cantidad: 2, precio: 1000, subtotal: 2000 },
-    ]
-  },
-])
+const sales = ref([])
+const facturasMap = ref({})
+const facturandoId = ref(null)
 
 const tableColumns = [
   { key: 'expand', label: '', width: 'w-10' },
@@ -57,6 +33,7 @@ const tableColumns = [
   { key: 'metodo_pago', label: 'Medio de Pago' },
   { key: 'total', label: 'Total', align: 'right' },
   { key: 'estado', label: 'Estado' },
+  { key: 'factura', label: 'Factura' },
   { key: 'acciones', label: '', align: 'right' }
 ]
 
@@ -76,8 +53,36 @@ async function fetchVentas() {
   try {
     const data = await api.get('/api/ventas')
     if (data && data.length) sales.value = data
+    await fetchFacturas()
   } catch { /* fallback to mock */ }
   loading.value = false
+}
+
+async function fetchFacturas() {
+  try {
+    const facturas = await api.get('/api/facturacion/facturas')
+    if (facturas && facturas.length) {
+      facturasMap.value = {}
+      for (const f of facturas) {
+        facturasMap.value[f.venta_id] = f
+      }
+    }
+  } catch { /* silently ignore */ }
+}
+
+async function emitirFactura(ventaId) {
+  facturandoId.value = ventaId
+  try {
+    const res = await api.post(`/api/facturacion/facturas/${ventaId}/emitir`, {})
+    if (res && res.id) {
+      facturasMap.value[ventaId] = res
+      toast.success(res.cae ? `Factura emitida CAE: ${res.cae}` : 'Factura pendiente')
+    }
+  } catch (e) {
+    toast.error(e?.message || 'Error al emitir factura')
+  } finally {
+    facturandoId.value = null
+  }
 }
 
 async function syncData() {
@@ -185,8 +190,29 @@ async function executeAnular() {
         <template #estado="{ row }">
           <BaseBadge :variant="estadoVariant(row.estado)" size="xs">{{ row.estado }}</BaseBadge>
         </template>
+        <template #factura="{ row }">
+          <div v-if="facturasMap[row.id]" class="flex items-center gap-1">
+            <BaseBadge
+              :variant="facturasMap[row.id].estado === 'emitida' ? 'success' : facturasMap[row.id].estado === 'rechazada' ? 'danger' : 'warning'"
+              size="xs"
+            >
+              {{ facturasMap[row.id].estado === 'emitida' ? `CAE: ${facturasMap[row.id].cae}` : facturasMap[row.id].estado }}
+            </BaseBadge>
+          </div>
+          <span v-else class="text-[10px] text-slate-400">—</span>
+        </template>
         <template #acciones="{ row }">
           <div class="flex items-center justify-end gap-1">
+            <button
+              v-if="row.estado === 'Completada' && !facturasMap[row.id]"
+              type="button"
+              :disabled="facturandoId === row.id"
+              class="px-2 py-1 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-lg text-[10px] font-bold transition disabled:opacity-50"
+              @click.stop="emitirFactura(row.id)"
+            >
+              <i :class="facturandoId === row.id ? 'fa-solid fa-circle-notch fa-spin' : 'fa-regular fa-file-lines'" class="mr-1"></i>
+              {{ facturandoId === row.id ? 'Facturando...' : 'Facturar' }}
+            </button>
             <button
               type="button"
               class="px-2 py-1 bg-brand-50 dark:bg-brand-900/20 hover:bg-brand-100 dark:hover:bg-brand-900/30 text-brand-700 dark:text-brand-300 rounded-lg text-[10px] font-bold transition"

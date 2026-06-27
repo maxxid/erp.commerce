@@ -66,6 +66,14 @@
             </div>
           </div>
 
+          <!-- Factura Electrónica -->
+          <div class="border-t border-dotted border-slate-300 mt-2 pt-1 text-[9px] space-y-0.5" v-if="ticket.factura">
+            <div class="flex justify-between">
+              <span>Factura Electrónica</span>
+              <span class="font-bold">{{ ticket.factura }}</span>
+            </div>
+          </div>
+
           <!-- Footer -->
           <div class="text-center text-[8px] text-slate-400 mt-3 pt-2 border-t border-slate-200">
             <p>Gracias por su compra</p>

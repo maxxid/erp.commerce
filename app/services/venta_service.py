@@ -200,6 +200,14 @@ def confirmar_venta(
         if cliente:
             cliente.saldo_cta_corriente += venta.total
 
+    # Emitir factura electrónica AFIP
+    try:
+        from app.services import afip_service
+        afip_service.emitir_factura(db, venta)
+    except Exception as e:
+        logger = __import__("logging").getLogger(__name__)
+        logger.warning(f"AFIP no disponible para venta {venta.numero}: {e}")
+
     # Registrar ingreso en caja (solo si no es cta_corriente, porque la plata
     # no entra físicamente en ese caso)
     if medio_pago != "cta_corriente":
