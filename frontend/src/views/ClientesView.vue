@@ -281,6 +281,32 @@ const saving = ref(false)
 
 const clients = ref([])
 
+function apiToClient(item) {
+  return {
+    id: item.id,
+    name: item.nombre || '',
+    docType: item.tipo_documento || '',
+    docNumber: item.numero_documento || '',
+    phone: item.telefono || '',
+    email: item.email || '',
+    creditLimit: item.limite_credito || 0,
+    balance: item.saldo_cta_corriente || 0,
+    notas: item.notas || '',
+    direccion: item.direccion || '',
+    activo: item.activo !== false,
+  }
+}
+
+function formToPayload() {
+  return {
+    nombre: form.name,
+    tipo_documento: form.docType,
+    numero_documento: form.docNumber,
+    telefono: form.phone,
+    limite_credito: form.creditLimit,
+  }
+}
+
 const tickets = ref([])
 const loadingTickets = ref(false)
 const expandedTickets = ref(new Set())
@@ -326,16 +352,18 @@ function toggleTicket(id) {
 
 onMounted(async () => {
   try {
-    const data = await api.get('/api/clientes')
-    if (data) clients.value = data
+    const resp = await api.get('/api/clientes')
+    const items = resp?.data || resp || []
+    if (Array.isArray(items)) clients.value = items.map(apiToClient)
   } catch { /* sin datos */ }
 })
 
 async function syncClients() {
   syncing.value = true
   try {
-    const data = await api.get('/api/clientes')
-    if (data) clients.value = data
+    const resp = await api.get('/api/clientes')
+    const items = resp?.data || resp || []
+    if (Array.isArray(items)) clients.value = items.map(apiToClient)
   } catch { /* sin datos */ }
   syncing.value = false
 }
@@ -378,17 +406,22 @@ async function openTicketsModal(client) {
 
 async function saveClient() {
   saving.value = true
-  if (editingClient.value) {
-    Object.assign(editingClient.value, { ...form })
-  } else {
-    clients.value.push({
-      id: clients.value.length + 1,
-      ...form,
-      balance: 0,
-    })
+  try {
+    if (editingClient.value) {
+      const resp = await api.put(`/api/clientes/${editingClient.value.id}`, formToPayload())
+      Object.assign(editingClient.value, apiToClient(resp?.data || resp))
+      toast.success('Cliente actualizado')
+    } else {
+      const resp = await api.post('/api/clientes', formToPayload())
+      clients.value.push(apiToClient(resp?.data || resp))
+      toast.success('Cliente creado')
+    }
+    showModal.value = false
+  } catch (e) {
+    toast.error(e?.data?.detail || 'Error al guardar el cliente')
+  } finally {
+    saving.value = false
   }
-  showModal.value = false
-  saving.value = false
 }
 
 function imprimirResumen() {
