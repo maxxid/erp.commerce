@@ -157,6 +157,10 @@
 
     <BaseModal v-model="showR2Config" title="Configuración R2 Cloud" size="md">
       <form @submit.prevent="saveR2Config" class="space-y-4">
+        <div v-if="r2SyncOk" class="text-sm rounded-xl p-3 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+          <i class="fa-solid fa-check-circle"></i>
+          <span>R2 ya configurado. Completá los campos solo si querés actualizar las credenciales.</span>
+        </div>
         <BaseInput v-model="r2Form.endpoint" label="Endpoint" type="url" required placeholder="https://&lt;account&gt;.r2.cloudflarestorage.com" input-class="font-mono-data" />
         <BaseInput v-model="r2Form.access_key" label="Access Key" type="text" required placeholder="xxxxxxxxxxxxxxxx" input-class="font-mono-data" />
         <BaseInput v-model="r2Form.secret_key" label="Secret Key" type="password" required placeholder="••••••••••••••••" input-class="font-mono-data" />
@@ -168,7 +172,7 @@
           </BaseButton>
           <div class="flex gap-3">
             <BaseButton type="button" variant="secondary" @click="showR2Config = false">Cancelar</BaseButton>
-            <BaseButton type="submit">Guardar</BaseButton>
+            <BaseButton type="submit" :loading="savingR2Config">Guardar</BaseButton>
           </div>
         </div>
         <div v-if="connectionResult" class="text-sm rounded-xl p-3" :class="connectionResult.success ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' : 'bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300'">
@@ -203,6 +207,7 @@ const deletingR2File = ref({})
 const uploadingFile = ref({})
 const showR2Config = ref(false)
 const testingConnection = ref(false)
+const savingR2Config = ref(false)
 const r2SyncOk = ref(false)
 const connectionResult = ref(null)
 const exportingCatalogo = ref(false)
@@ -446,6 +451,7 @@ function openR2Config() {
 }
 
 async function saveR2Config() {
+  savingR2Config.value = true
   try {
     await api.put('/api/backups/config-r2', r2Form)
     toast.success('Configuración R2 guardada')
@@ -454,6 +460,7 @@ async function saveR2Config() {
   } catch (e) {
     toast.error(e?.data?.detail || e?.message || 'Error al guardar configuración R2')
   }
+  savingR2Config.value = false
 }
 
 async function testConnection() {
