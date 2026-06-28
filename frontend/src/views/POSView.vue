@@ -831,6 +831,14 @@ onMounted(async () => {
   fetchPOSStats()
   fetchRecentTransactions()
   cajaStore.fetchEstado()
+  // Auto-sync catálogo si pasó >1h desde última descarga
+  const lastSync = localStorage.getItem('catalogo_last_sync')
+  const hour = 60 * 60 * 1000
+  if (!lastSync || Date.now() - Number(lastSync) > hour) {
+    api.post('/api/catalogo/descargar').then(() => {
+      localStorage.setItem('catalogo_last_sync', String(Date.now()))
+    }).catch(() => {})
+  }
   await nextTick()
   textSearchRef.value?.focus()
 })

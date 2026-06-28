@@ -5,6 +5,7 @@ import { useToastStore } from '@/stores/toasts'
 import { useCajaStore } from '@/stores/caja'
 import { pageLoading } from '@/router'
 import router from '@/router'
+import api from '@/services/api'
 import TheSidebar from '@/components/layout/TheSidebar.vue'
 import TheHeader from '@/components/layout/TheHeader.vue'
 import TheFooter from '@/components/layout/TheFooter.vue'
@@ -67,8 +68,20 @@ function bumpNetwork() {
   networkTimeout = setTimeout(() => { networkActive.value = false }, 400)
 }
 
+function syncCatalogoSilently() {
+  const lastSync = localStorage.getItem('catalogo_last_sync')
+  const hour = 60 * 60 * 1000
+  if (lastSync && Date.now() - Number(lastSync) < hour) return
+  api.post('/api/catalogo/descargar').then(() => {
+    localStorage.setItem('catalogo_last_sync', String(Date.now()))
+  }).catch(() => {})
+}
+
 watch(() => auth.authenticated, (val) => {
-  if (val) cajaStore.fetchEstado()
+  if (val) {
+    cajaStore.fetchEstado()
+    syncCatalogoSilently()
+  }
 })
 
 onMounted(async () => {
@@ -83,7 +96,10 @@ onMounted(async () => {
     return origFetch.apply(this, args)
   }
   await auth.checkLicense()
-  if (auth.authenticated) cajaStore.fetchEstado()
+  if (auth.authenticated) {
+    cajaStore.fetchEstado()
+    syncCatalogoSilently()
+  }
 })
 
 onUnmounted(() => {

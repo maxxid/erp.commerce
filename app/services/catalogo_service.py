@@ -220,11 +220,17 @@ def estado_catalogo(db: Session) -> dict:
     if os.path.exists(path):
         ultimo = datetime.fromtimestamp(os.path.getmtime(path)).isoformat()
 
+    ultima_descarga = None
+    cp = _catalogo_path()
+    if os.path.exists(cp):
+        ultima_descarga = datetime.fromtimestamp(os.path.getmtime(cp)).isoformat()
+
     return {
         "r2_habilitado": r2_ok,
         "exportables": reales,
-        "total_productos": total_local or 0,  # local = 0 means not loaded
+        "total_productos": total_local or 0,
         "catalogo_cargado": _catalogo_cargado,
         "ultimo_export": ultimo,
+        "ultima_descarga": ultima_descarga,
         "machine_id": obtener_machine_id(),
     }

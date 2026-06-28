@@ -153,6 +153,10 @@
             {{ reloadingCatalogo ? 'Recargando...' : 'Recargar Catálogo' }}
           </BaseButton>
         </div>
+        <p v-if="catalogoStatus.ultima_descarga" class="text-xs text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
+          <i class="fa-solid fa-cloud-check text-emerald-500"></i>
+          Última sincronización: {{ formatDate(catalogoStatus.ultima_descarga) }}
+        </p>
       </div>
     </BaseCard>
 
@@ -431,6 +435,7 @@ async function descargarCatalogoCentral() {
   downloadingCatalogoCentral.value = true
   try {
     await api.post('/api/catalogo/descargar')
+    localStorage.setItem('catalogo_last_sync', String(Date.now()))
     toast.success('Catálogo central descargado')
     await fetchCatalogoStatus()
   } catch (e) {
@@ -443,6 +448,7 @@ async function recargarCatalogo() {
   reloadingCatalogo.value = true
   try {
     await api.post('/api/catalogo/recargar')
+    localStorage.setItem('catalogo_last_sync', String(Date.now()))
     toast.success('Catálogo recargado')
     await fetchCatalogoStatus()
   } catch (e) {
