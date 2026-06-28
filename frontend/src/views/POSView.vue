@@ -595,7 +595,7 @@
     @created="onProductCreated"
   />
 
-  <TicketModal :show="showTicket" :ticket="ticketData" @close="showTicket = false" />
+  <TicketModal :show="showTicket" :ticket="ticketData" @close="showTicket = false; nextTick(() => barcodeInput.value?.focus())" />
 </template>
 
 <script setup>
@@ -646,6 +646,7 @@ const hasSuspicious = computed(() => suspiciousTickets.value.length > 0)
 const showSusWarning = ref(true)
 
 const textSearchRef = ref(null)
+const barcodeInput = ref(null)
 
 // Missing product dialog states
 const showMissingDialog = ref(false)
@@ -840,7 +841,7 @@ onMounted(async () => {
     }).catch(() => {})
   }
   await nextTick()
-  textSearchRef.value?.focus()
+  barcodeInput.value?.focus()
 })
 
 async function fetchPOSStats() {
@@ -1055,6 +1056,7 @@ function addToCart(product, qty = 1, price = null) {
   lookupProduct.id = null
   lookupProduct._searched = false
   recalcCart()
+  nextTick(() => barcodeInput.value?.focus())
 }
 
 function handlePagoKeydown(event) {
@@ -1229,6 +1231,7 @@ async function confirmarVenta() {
 
   vaciarCarrito()
   confirmando.value = false
+  nextTick(() => barcodeInput.value?.focus())
 }
 </script>
 
