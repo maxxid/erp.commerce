@@ -38,6 +38,8 @@ def cargar_catalogo_memoria(force=False) -> int:
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
+        if isinstance(data, dict) and "productos" in data:
+            data = data["productos"]
         _catalogo_memoria = {p["codigo_barras"]: p for p in data}
         _catalogo_cargado = True
         return len(_catalogo_memoria)
