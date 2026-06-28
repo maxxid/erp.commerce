@@ -45,12 +45,19 @@ def listar_r2(db: Session = Depends(get_db), user: Usuario = Depends(require_rol
 
 
 @router.post("/descargar", response_model=RespuestaData)
-def descargar(filename: str, db: Session = Depends(get_db), user: Usuario = Depends(require_role("admin", "encargado"))):
-    """Descarga un archivo del catálogo desde R2."""
-    path = catalogo_service.descargar_de_r2(filename, db)
+def descargar(db: Session = Depends(get_db), user: Usuario = Depends(require_role("admin", "encargado"))):
+    """Descarga el catálogo central desde R2 (catalogo/{machine_id}/productos.json)."""
+    path = catalogo_service.descargar_catalogo_central(db)
     if not path:
-        raise HTTPException(status_code=404, detail="No se pudo descargar")
-    return RespuestaData(data={"filename": filename, "path": path}, message="Catálogo descargado de R2")
+        raise HTTPException(status_code=404, detail="No se pudo descargar el catálogo central")
+    return RespuestaData(data={"path": path}, message="Catálogo central descargado")
+
+
+@router.post("/recargar", response_model=RespuestaData)
+def recargar(user: Usuario = Depends(require_role("admin", "encargado"))):
+    """Recarga el catálogo local (catalogo_completo.json) en memoria."""
+    total = catalogo_service.cargar_catalogo_memoria(force=True)
+    return RespuestaData(data={"total": total}, message=f"Catálogo recargado: {total} producto(s)")
 
 
 @router.post("/importar", response_model=RespuestaData)

@@ -157,6 +157,23 @@ def descargar_de_r2(filename: str, db: Session) -> Optional[str]:
         return None
 
 
+def descargar_catalogo_central(db: Session) -> Optional[str]:
+    """Descarga catalogo/{machine_id}/productos.json de R2 a catalogo_completo.json y recarga en memoria."""
+    cfg = _get_r2_config(db)
+    if not cfg:
+        return None
+    try:
+        mid = obtener_machine_id()
+        key = f"catalogo/{mid}/productos.json"
+        local_path = _catalogo_path()
+        client = _make_r2_client(cfg)
+        client.download_file(cfg["bucket"], key, local_path)
+        total = cargar_catalogo_memoria(force=True)
+        return local_path
+    except Exception:
+        return None
+
+
 def importar_catalogo(data: List[dict]) -> int:
     """Importa un catálogo mergeado: guarda en catalogo_completo.json y carga en memoria.
     Retorna cuántos productos se importaron."""
