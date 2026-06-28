@@ -133,10 +133,11 @@
         <span class="ml-auto text-xs text-slate-400 dark:text-slate-500">Exportación a R2</span>
       </div>
       <div class="p-5 space-y-5">
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard label="Productos exportables" :value="catalogoStatus.exportables" icon="fa-box-open" icon-color="brand" />
-          <KpiCard label="Última exportación" :value="catalogoStatus.lastExport || '—'" icon="fa-calendar-check" icon-color="info" :animate="false" />
-          <KpiCard label="Catálogo cargado" :value="catalogoStatus.loaded ? 'Cargado' : 'No cargado'" :icon="catalogoStatus.loaded ? 'fa-check-circle' : 'fa-clock'" :icon-color="catalogoStatus.loaded ? 'success' : 'warning'" :animate="false" />
+          <KpiCard label="Última exportación" :value="catalogoStatus.ultimo_export ? formatDate(catalogoStatus.ultimo_export) : '—'" icon="fa-calendar-check" icon-color="info" :animate="false" />
+          <KpiCard label="Productos en catálogo" :value="catalogoStatus.total_productos || '0'" icon="fa-box" icon-color="info" :animate="false" />
+          <KpiCard label="Catálogo cargado" :value="catalogoStatus.catalogo_cargado ? 'Cargado' : 'No cargado'" :icon="catalogoStatus.catalogo_cargado ? 'fa-check-circle' : 'fa-clock'" :icon-color="catalogoStatus.catalogo_cargado ? 'success' : 'warning'" :animate="false" />
         </div>
         <div class="flex flex-wrap items-center gap-3">
           <BaseButton :loading="exportingCatalogo" @click="exportarCatalogo">
@@ -221,6 +222,11 @@ const catalogoStatus = reactive({
   exportables: 0,
   lastExport: null,
   loaded: false,
+  r2_habilitado: false,
+  total_productos: 0,
+  catalogo_cargado: false,
+  ultimo_export: null,
+  machine_id: '',
 })
 
 const r2Form = reactive({
