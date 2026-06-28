@@ -990,6 +990,7 @@ async function triggerPOSLookup() {
 function handlePOSInput() {
   if (posLookupCode.value.length >= 13 && !posLookupCode.value.startsWith('*')) {
     triggerPOSLookup()
+    return
   }
   lookupProduct._searched = false
   lookupProduct.id = null
