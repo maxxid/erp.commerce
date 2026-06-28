@@ -228,9 +228,11 @@
         </BaseCard>
 
         <BaseInput
+          ref="textSearchRef"
           v-model="posTextSearch"
           placeholder="Buscar producto por nombre, marca o código..."
           size="md"
+          @enter="handleTextSearchEnter"
         >
           <template #prefix>
             <i class="fa-solid fa-magnifying-glass text-slate-400"></i>
@@ -564,11 +566,40 @@
       </div>
     </div>
   </div>
+  <!-- Missing product dialog -->
+  <BaseModal v-model="showMissingDialog" title="Producto no encontrado" size="sm" :close-on-esc="true" @close="showMissingDialog = false">
+    <div class="text-center">
+      <div class="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center mx-auto mb-3">
+        <i class="fa-solid fa-circle-question text-amber-500 text-xl"></i>
+      </div>
+      <p class="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">Producto no registrado</p>
+      <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">¿Desea crearlo?</p>
+      <div class="flex items-center gap-3">
+        <BaseButton variant="secondary" class="flex-1" @click="showMissingDialog = false">
+          <i class="fa-solid fa-xmark mr-1"></i> No <span class="text-[10px] text-slate-400 ml-1">(Esc)</span>
+        </BaseButton>
+        <BaseButton variant="primary" class="flex-1" @click="confirmCreateFromSearch">
+          <i class="fa-solid fa-check mr-1"></i> Sí <span class="text-[10px] text-brand-300 ml-1">(Enter)</span>
+        </BaseButton>
+      </div>
+    </div>
+  </BaseModal>
+
+  <!-- Quick-create product modal -->
+  <QuickCreateModal
+    :show="showCreateModal"
+    :barcode="createBarcode"
+    :categories="categories"
+    :next-gen-code="nextGenCode"
+    @close="showCreateModal = false"
+    @created="onProductCreated"
+  />
+
   <TicketModal :show="showTicket" :ticket="ticketData" @close="showTicket = false" />
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
@@ -581,8 +612,10 @@ import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseBadge from '@/components/ui/BaseBadge.vue'
+import BaseModal from '@/components/ui/BaseModal.vue'
 import KpiCard from '@/components/ui/KpiCard.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
+import QuickCreateModal from '@/components/pos/QuickCreateModal.vue'
 import { useSounds } from '@/composables/useSounds'
 import { useConfetti } from '@/composables/useConfetti'
 import { useHeldTickets } from '@/composables/useHeldTickets'
@@ -611,6 +644,45 @@ const {
 
 const hasSuspicious = computed(() => suspiciousTickets.value.length > 0)
 const showSusWarning = ref(true)
+
+const textSearchRef = ref(null)
+
+// Missing product dialog states
+const showMissingDialog = ref(false)
+const showCreateModal = ref(false)
+const createBarcode = ref('')
+
+const nextGenCode = computed(() => {
+  const codes = products.value
+    .filter(p => p.codigo_barras?.startsWith('GEN-'))
+    .map(p => parseInt(p.codigo_barras.replace('GEN-', ''), 10))
+    .filter(n => !isNaN(n))
+  const maxSeq = codes.length ? Math.max(...codes) : 0
+  return `GEN-${String(maxSeq + 1).padStart(8, '0')}`
+})
+
+function handleTextSearchEnter() {
+  const q = posTextSearch.value.trim()
+  if (!q || filteredPOSProducts.value.length > 0) return
+  // Check if query looks like a barcode (mostly digits)
+  createBarcode.value = /^\d{8,}$/.test(q) ? q : ''
+  showMissingDialog.value = true
+}
+
+function confirmCreateFromSearch() {
+  showMissingDialog.value = false
+  showCreateModal.value = true
+}
+
+function onProductCreated(product) {
+  // Add to local products list so it appears immediately
+  products.value.push(product)
+  // Clear search and select the new product
+  posTextSearch.value = ''
+  selectedPOSCategory.value = product.categoria_id || null
+  toast.success(`${product.nombre} creado. Podés agregarlo al carrito desde la grilla.`)
+  showCreateModal.value = false
+}
 
 function holdTicket() {
   const t = _holdTicket(cart)
@@ -759,6 +831,8 @@ onMounted(async () => {
   fetchPOSStats()
   fetchRecentTransactions()
   cajaStore.fetchEstado()
+  await nextTick()
+  textSearchRef.value?.focus()
 })
 
 async function fetchPOSStats() {

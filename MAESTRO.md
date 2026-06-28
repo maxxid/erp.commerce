@@ -165,6 +165,8 @@
 | **Toggle panel de estadísticas** | `showStatsPanel = !showStatsPanel` — icono chevron-left/right |
 | **Badge usuario actual** | Muestra nombre del operador |
 | **Badge estado caja** | Verde "Caja abierta" / Rojo "Caja cerrada" |
+| **Botón tickets apartados** | `v-if="heldCount"` — icono reloj con badge contador. Abre dropdown de recall |
+| **Banner tickets sospechosos** | Alerta ámbar cuando hay tickets apartados > 2h. Botón X para descartar |
 
 ### Banner Caja Cerrada
 *(visible cuando `!cajaStore.abierta`)*
@@ -173,6 +175,14 @@
 |----------|--------|
 | **Mensaje "Caja cerrada"** | Alerta amarilla |
 | **Botón "Abrir caja"** | `$router.push('/caja')` |
+
+### Banner Tickets Sospechosos
+*(visible cuando `hasSuspicious && showSusWarning`)*
+
+| Elemento | Acción |
+|----------|--------|
+| **Mensaje** | "X ticket(s) apartados hace más de 2 horas — Posible fraude" |
+| **Botón X** | `showSusWarning = false` — descarta banner (persiste en sesión) |
 
 ### Columna 1: Catálogo de Productos (5-8 columnas)
 
@@ -197,7 +207,8 @@
 
 | Elemento | Acción |
 |----------|--------|
-| **Input de búsqueda textual** | `v-model="posTextSearch"`, filtra grilla de productos en vivo |
+| **Input de búsqueda textual** | `v-model="posTextSearch"`, filtra grilla de productos en vivo. `ref="textSearchRef"` — auto-focus al montar la vista |
+| **Enter sin resultados** | `handleTextSearchEnter()` — abre diálogo "Producto no registrado, ¿desea crearlo?" |
 
 #### Filtros por Categoría
 
@@ -220,7 +231,7 @@
 | **Cada item del carrito** | Muestra nombre, cantidad, precio, subtotal |
 | **Botón `-`** | `updateCartQty(idx, -1)` — decrementa cantidad |
 | **Botón `+`** | `updateCartQty(idx, +1)` — incrementa cantidad |
-| **Botón eliminar** | `removeFromCart(idx)` — quita item del carrito |
+| **Botón eliminar** | `removeFromCart(idx, silent=false)` — quita item con confirmación (`confirm()`). Si `silent=true` (usado desde qty=0), omite confirmación |
 
 #### Resumen
 
@@ -233,6 +244,10 @@
 | **Select Cliente** | Dropdown de clientes + "Consumidor Final" |
 | **Botón "Confirmar Venta"** | `confirmarVenta()` — flujo completo de confirmación |
 | **Link "Vaciar carrito"** | `vaciarCarrito()` — limpia carrito |
+| **Link "Hold"** | `holdTicket()` — aparta el carrito en localStorage, vacía el carrito. Muestra toast con ID del ticket |
+| **Dropdown recall** | `showRecallDropdown` — lista tickets apartados con items, total, tiempo transcurrido. Tickets >2h destacados en ámbar |
+| **Botón recall por ticket** | `recallTicket(id)` — restaura items, subtotal, descuento, cliente, medio de pago |
+| **Botón descartar** | `deleteHeldTicket(id)` — elimina ticket (registra en auditoría local) |
 
 ### Columna 3: Estadísticas e Historial (3 columnas, toggleable)
 
@@ -254,6 +269,42 @@
 8. Suena efecto sonoro (si activado) + confeti (si es primera venta del día)
 9. Muestra TicketModal
 10. Carrito se vacía, focus vuelve al escáner
+
+### Flujo de Apartado (Hold) / Recall
+
+1. "Hold" → `holdTicket()` guarda carrito en `localStorage('apex-pos-held')` con timestamp, items, total
+2. Carrito se vacía, toast informa ID del ticket
+3. Badge contador en header del POS muestra cantidad de tickets apartados
+4. "Recall" → dropdown lista tickets con items, total y tiempo transcurrido
+5. Click en ticket → `recallTicket(id)` restaura carrito completo
+6. Tickets > 2h se muestran con fondo ámbar y se marcan como sospechosos
+7. Botón X → `deleteHeldTicket(id)` elimina ticket, queda registrado en auditoría local
+
+### Flujo de Búsqueda por Texto + Creación Rápida
+
+1. El buscador de texto tiene auto-focus al montar POS
+2. Escribir nombre/marca/código → grilla filtra en vivo
+3. Presionar Enter sin resultados → diálogo "Producto no registrado, ¿desea crearlo?"
+4. Sí → abre QuickCreateModal con código pre-cargado (si el texto son 8+ dígitos)
+5. En el modal: botón 🔍 busca en fuentes externas (deshabilita Nombre/Marca mientras busca)
+6. Si código de barras vacío al guardar → se asigna `GEN-XXXXXXXX` secuencial
+7. Guardar → POST `/api/productos` → producto se agrega a la grilla local
+8. No → cierra diálogo, focus vuelve al buscador
+
+### Modal: Creación Rápida de Producto (QuickCreateModal)
+
+| Campo | Tipo | Detalle |
+|-------|------|---------|
+| **Código de Barras** | Input + botón 🔍 suffix | `lookupBarcode()` — busca en fuentes externas. Si vacío al guardar, auto-asigna `GEN-XXXXXXXX` |
+| **Nombre del Producto** | Input text | Requerido, deshabilitado durante búsqueda externa |
+| **Marca** | Input text | Deshabilitado durante búsqueda externa |
+| **Precio Venta** | Input number | Requerido |
+| **Categoría** | BaseSelect | Lista de categorías |
+| **Botón "Crear Producto"** | Primary | `save()` → POST `/api/productos` → emite `created(product)` |
+| **Botón "Cancelar"** | Ghost | Cierra modal |
+
+**Origen:** Se abre desde el diálogo "Producto no registrado" al presionar Enter en el buscador de texto sin resultados.
+**Props:** `show`, `barcode` (pre-cargado), `categories`, `nextGenCode`.
 
 ### API Calls en POS
 - `GET /api/productos` — catálogo completo
@@ -381,7 +432,7 @@
 | **Botón "Sincronizar"** | `syncData()` — recarga movimientos y resumen |
 | **Badge estado caja** | Verde "Abierta" / Rojo "Cerrada" |
 | **Botón "Abrir Caja"** | `abrirCaja()` — prompt por monto inicial, POST `/api/caja/apertura` |
-| **Botón "Cerrar Caja"** | `cerrarCaja()` — confirm, POST `/api/caja/cierre-total` |
+| **Botón "Cerrar Caja"** | `cerrarCaja()` — si hay tickets apartados, muestra confirmación extra: "Hay X ticket(s) apartados en POS. Si cerrás la caja sin recuperarlos se marcarán como huérfanos en la auditoría. ¿Cerrar de todas formas?". Al confirmar: marca como `_orphaned = true` y POST `/api/caja/cierre-total` |
 
 ### Resumen
 
@@ -1187,6 +1238,61 @@ Al confirmar venta:
       └─ ¿unidades_vendidas >= max_unidades? → activo = false
 ```
 
+### Flujo 8: Apartado (Hold) y Recuperación de Tickets
+```
+[HOLD — APARTAR CARRITO]
+Cajero → POS → "Hold"
+  ├─ Guarda carrito completo en localStorage('apex-pos-held'):
+  │   ├─ items, subtotal, descuento, total, medio_pago, cliente_id
+  │   ├─ timestamp creado (createdAt)
+  │   └─ itemCount
+  ├─ Registra auditoría local: evento 'HOLD'
+  ├─ Carrito se vacía
+  └─ Badge contador en POS se actualiza
+
+[RECALL — RECUPERAR]
+Dropdown de tickets apartados:
+  ├─ Muestra items, total, tiempo transcurrido
+  ├─ Tickets >2h resaltados en ámbar (sospechosos)
+  └─ Click → recallTicket(id):
+      ├─ Restaura items, subtotal, descuento, cliente, medio_pago
+      ├─ Elimina ticket de localStorage
+      ├─ Registra auditoría local: evento 'RECALL'
+      └─ Badge contador decrementa
+
+[DESCARTAR]
+Botón X en ticket del dropdown:
+  ├─ Marca _deleted = true + timestamp
+  ├─ Registra auditoría local: evento 'DELETE_HELD'
+  └─ Elimina del array
+
+[ORPHANED — CIERRE DE CAJA]
+Si hay tickets apartados al cerrar caja:
+  ├─ Advertencia: "Se marcarán como huérfanos"
+  ├─ Marca _orphaned = true en cada ticket
+  └─ Visibles en getHeldAuditLog()
+
+[SOSPECHOSOS]
+Tickets con createdAt > 2hs:
+  ├─ Banner ámbar en POS: "X ticket(s) apartados hace más de 2 horas — Posible fraude"
+  ├─ Dropdown los resalta con fondo ámbar
+  └─ No se eliminan automáticamente, requieren acción manual
+```
+
+### Flujo 9: Creación Rápida de Producto desde Búsqueda POS
+```
+[BUSCAR SIN RESULTADOS]
+Cajero escribe en buscador de texto → Enter
+  └─ filteredPOSProducts está vacío → diálogo "Producto no registrado, ¿desea crearlo?"
+      ├─ Sí (Enter) → abre QuickCreateModal
+      │   ├─ Si texto son 8+ dígitos → pre-carga como código de barras
+      │   ├─ Si vacío → auto-asigna GEN-XXXXXXXX secuencial
+      │   ├─ Botón 🔍 → POST /api/productos/lookup → deshabilita Nombre/Marca
+      │   ├─ Guardar → POST /api/productos → agrega a grilla local
+      │   └─ Cierra modal, focus a grilla
+      └─ No (Esc) → cierra diálogo, focus al buscador
+```
+
 ---
 
 ## 19. Reglas de Negocio
@@ -1206,6 +1312,10 @@ Al confirmar venta:
 13. **Stock mínimo**: Si stock_actual <= stock_minimo, se marca como "bajo stock" (alerta visual).
 14. **Barcode lookup en POS**: Auto-trigger a los 13+ caracteres escaneados.
 15. **Confirmación de venta**: Si hay ofertas, se incrementa unidades_vendidas y se verifica desactivación.
+16. **Hold/Recall**: Los tickets apartados se guardan en localStorage y no tienen respaldo en servidor. Si se pierde localStorage, se pierden.
+17. **Sospechosos**: Tickets apartados > 2h se consideran sospechosos (posible fraude) y se destacan visualmente.
+18. **Huérfanos**: Tickets apartados al momento de cerrar caja se marcan como `_orphaned` para auditoría.
+19. **Auto-generación de código de barras**: Si se deja vacío al crear producto, se asigna `GEN-XXXXXXXX` secuencial.
 
 ---
 
@@ -1220,7 +1330,7 @@ Al confirmar venta:
 | `?` | Abrir modal de atajos |
 | `Esc` | Cerrar modales / command palette |
 
-### POS (teclas rápidas de medio de pago)
+### POS (teclas rápidas)
 
 | Tecla | Acción |
 |-------|--------|
@@ -1232,6 +1342,9 @@ Al confirmar venta:
 | `←` / `→` | Navegar entre medios de pago |
 | `Enter` | Confirmar venta (en sección pago) |
 | `Enter` | Disparar búsqueda por código de barras |
+| `Enter` (en buscador texto sin resultados) | Abrir diálogo "Producto no registrado" → crear producto |
+| `Enter` (en diálogo "crear producto") | Confirmar creación |
+| `Esc` (en diálogo "crear producto") | Cancelar creación |
 
 ### Compras (grilla de items)
 
@@ -1251,4 +1364,4 @@ Al confirmar venta:
 
 ---
 
-*Documento generado el 26/06/2026 — Refleja el estado actual del sistema con todas las funcionalidades desarrolladas.*
+*Documento generado el 28/06/2026 — Refleja el estado actual del sistema con todas las funcionalidades desarrolladas.*
