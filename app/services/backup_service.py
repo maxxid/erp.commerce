@@ -13,11 +13,22 @@ import gzip
 import glob
 from datetime import datetime, timezone
 from typing import Optional, List, Dict
+from urllib.parse import urlparse
 from sqlalchemy.orm import Session
 from app.config import settings
 
 BACKUP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "backups")
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "erp_comercio.db")
+
+def _db_path() -> str:
+    """Extrae la ruta del archivo SQLite desde settings.DATABASE_URL."""
+    raw = settings.DATABASE_URL
+    if not raw.startswith("sqlite:///"):
+        return os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "erp_comercio.db")
+    path = raw[len("sqlite:///"):]
+    # Si es relativo, resolver contra current working directory (como hace SQLAlchemy)
+    if not os.path.isabs(path):
+        path = os.path.join(os.getcwd(), path)
+    return os.path.normpath(path)
 
 
 def _ensure_backup_dir():
@@ -82,7 +93,7 @@ def crear_backup_local() -> str:
     filename = f"erp_comercio_{ts}.db.gz"
     filepath = os.path.join(BACKUP_DIR, filename)
 
-    with open(DB_PATH, "rb") as src, gzip.open(filepath, "wb") as dst:
+    with open(_db_path(), "rb") as src, gzip.open(filepath, "wb") as dst:
         shutil.copyfileobj(src, dst)
 
     _limpiar_backups_locales()

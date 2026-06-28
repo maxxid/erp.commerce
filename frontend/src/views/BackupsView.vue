@@ -257,24 +257,32 @@ function clearHighlight() {
 }
 
 async function fetchAll() {
+  let r2Ok = false
   try {
-    const [estado, locales, r2] = await Promise.all([
+    const [estado, locales] = await Promise.all([
       api.get('/api/backups/estado'),
       api.get('/api/backups/local'),
-      api.get('/api/backups/r2'),
     ])
     if (locales && Array.isArray(locales)) {
       localBackups.value = locales.map(mapBackup)
     }
-    if (r2 && Array.isArray(r2)) {
-      r2Backups.value = r2.map(mapBackup)
-    }
     if (estado) {
       r2SyncOk.value = estado.r2_habilitado ?? false
+      r2Ok = estado.r2_habilitado
     }
   } catch (e) {
     if (e?.status === 401) authError.value = true
     else toast.error('Error al cargar backups')
+  }
+  try {
+    if (r2Ok) {
+      const r2 = await api.get('/api/backups/r2')
+      if (r2 && Array.isArray(r2)) {
+        r2Backups.value = r2.map(mapBackup)
+      }
+    }
+  } catch {
+    // R2 no configurado o error de red — se ignora
   }
   fetchCatalogoStatus()
 }
