@@ -279,13 +279,7 @@ const toast = useToastStore()
 const syncing = ref(false)
 const saving = ref(false)
 
-const clients = ref([
-  { id: 1, name: 'Carnicería Don Pedro', docType: 'CUIT', docNumber: '20-30123456-7', phone: '+54 11 4123-7890', creditLimit: 500000, balance: 234500 },
-  { id: 2, name: 'Supermercado La Esquina', docType: 'CUIT', docNumber: '30-70897654-2', phone: '+54 11 4567-1234', creditLimit: 800000, balance: 720000 },
-  { id: 3, name: 'Distribuidora Norte SRL', docType: 'CUIT', docNumber: '33-55123478-9', phone: '+54 11 4890-5678', creditLimit: 1200000, balance: 345000 },
-  { id: 4, name: 'María González', docType: 'DNI', docNumber: '28.456.789', phone: '+54 11 6123-9012', creditLimit: 200000, balance: 45000 },
-  { id: 5, name: 'Almacén El Gaucho', docType: 'CUIT', docNumber: '23-18123456-4', phone: '+54 11 3987-6543', creditLimit: 350000, balance: 310000 },
-])
+const clients = ref([])
 
 const tickets = ref([])
 const loadingTickets = ref(false)
@@ -333,16 +327,16 @@ function toggleTicket(id) {
 onMounted(async () => {
   try {
     const data = await api.get('/api/clientes')
-    if (data && data.length) clients.value = data
-  } catch { /* fallback to mock */ }
+    if (data) clients.value = data
+  } catch { /* sin datos */ }
 })
 
 async function syncClients() {
   syncing.value = true
   try {
     const data = await api.get('/api/clientes')
-    if (data && data.length) clients.value = data
-  } catch { /* fallback to mock */ }
+    if (data) clients.value = data
+  } catch { /* sin datos */ }
   syncing.value = false
 }
 
