@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 const props = defineProps({
   modelValue: { type: [String, Number], default: '' },
@@ -19,7 +19,14 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'blur', 'focus', 'keydown', 'enter'])
 
+const inputRef = ref(null)
 const inputId = computed(() => props.id || `input-${Math.random().toString(36).slice(2, 9)}`)
+
+function focus() {
+  inputRef.value?.focus()
+}
+
+defineExpose({ focus })
 
 const sizeClass = computed(() => {
   return { sm: 'px-3 py-1.5 text-xs', md: 'px-3.5 py-2.5 text-sm', lg: 'px-4 py-3 text-base' }[props.size]
@@ -48,6 +55,7 @@ function onInput(e) {
         <slot name="prefix" />
       </div>
       <input
+        ref="inputRef"
         :id="inputId"
         :type="type"
         :value="modelValue"
