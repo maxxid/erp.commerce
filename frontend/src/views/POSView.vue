@@ -940,6 +940,9 @@ async function triggerPOSLookup() {
   // 1. Buscar en base local primero
   const local = products.value.find(p => p.codigo_barras === raw)
   if (local) {
+    lookupProduct._loading = false
+    lookupProduct._searched = false
+    lookupProduct.id = null
     addToCart(local)
     posLookupCode.value = ''
     _processingLookup.value = false

@@ -199,7 +199,8 @@
 |--------|----|-------------|
 | **Cargando local** | Spinner + "Buscando en base local..." | Primero busca en la DB local |
 | **Buscando externo** | Borde animado naranja + ícono planeta + badges "Carrefour", "Vea", "Disco" | Busca en fuentes externas |
-| **Encontrado** | Card producto: nombre, marca, precio, cantidad input + precio input + botón "Agregar" | Producto existente |
+| **Encontrado (local)** | Se agrega directo al carrito con `addToCart(local)` | Producto existente en DB local — auto-add, no muestra card |
+| **Encontrado (externo)** | Card producto: nombre, marca, precio, cantidad input + precio input + botón "Agregar" | Producto de fuente externa (no está en DB local) |
 | **No encontrado** | Borde rojo + formulario manual: nombre, precio, cantidad + botón "Agregar al carrito" | Entrada manual (se guarda como `*MANUAL*`) |
 | **Error** | Mensaje de error | Producto no encontrado |
 
@@ -1310,7 +1311,9 @@ Cajero escribe en buscador de texto → Enter
 11. **Ofertas**: Se desactivan automáticamente por fecha o por alcanzar max_unidades.
 12. **Stock sospechoso**: Si un no-admin cambia stock, se registra en auditoría como "stock_sospechoso".
 13. **Stock mínimo**: Si stock_actual <= stock_minimo, se marca como "bajo stock" (alerta visual).
-14. **Barcode lookup en POS**: Auto-trigger a los 13+ caracteres escaneados.
+14. **Barcode lookup en POS**: Auto-trigger a los 13+ caracteres escaneados vía `@input`. Si se dispara `triggerPOSLookup()`, `handlePOSInput()` hace `return` inmediato para no pisar `_searched` / `id` con `false`/`null`.
+15. **Producto local encontrado en POS**: Se agrega directo al carrito con `addToCart()`, se limpia el input y se re-enfoca el `barcodeInput` vía `nextTick`. No se muestra card ni se require click en "Agregar".
+16. **Focus del escáner POS**: Siempre retorna al `barcodeInput` después de: agregar item, finalizar venta, o cerrar TicketModal. `defineExpose({ focus })` en BaseInput.vue expone la función para ser llamada por ref.
 15. **Confirmación de venta**: Si hay ofertas, se incrementa unidades_vendidas y se verifica desactivación.
 16. **Hold/Recall**: Los tickets apartados se guardan en localStorage y no tienen respaldo en servidor. Si se pierde localStorage, se pierden.
 17. **Sospechosos**: Tickets apartados > 2h se consideran sospechosos (posible fraude) y se destacan visualmente.
