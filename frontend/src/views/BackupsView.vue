@@ -158,8 +158,8 @@
     <BaseModal v-model="showR2Config" title="Configuración R2 Cloud" size="md">
       <form @submit.prevent="saveR2Config" class="space-y-4">
         <BaseInput v-model="r2Form.endpoint" label="Endpoint" type="url" required placeholder="https://&lt;account&gt;.r2.cloudflarestorage.com" input-class="font-mono-data" />
-        <BaseInput v-model="r2Form.accessKey" label="Access Key" type="text" required placeholder="xxxxxxxxxxxxxxxx" input-class="font-mono-data" />
-        <BaseInput v-model="r2Form.secretKey" label="Secret Key" type="password" required placeholder="••••••••••••••••" input-class="font-mono-data" />
+        <BaseInput v-model="r2Form.access_key" label="Access Key" type="text" required placeholder="xxxxxxxxxxxxxxxx" input-class="font-mono-data" />
+        <BaseInput v-model="r2Form.secret_key" label="Secret Key" type="password" required placeholder="••••••••••••••••" input-class="font-mono-data" />
         <BaseInput v-model="r2Form.bucket" label="Bucket" type="text" required placeholder="erp-backups" />
         <div class="flex items-center justify-between pt-2">
           <BaseButton type="button" variant="secondary" :loading="testingConnection" @click="testConnection">
@@ -220,8 +220,8 @@ const catalogoStatus = reactive({
 
 const r2Form = reactive({
   endpoint: '',
-  accessKey: '',
-  secretKey: '',
+  access_key: '',
+  secret_key: '',
   bucket: '',
 })
 
@@ -337,7 +337,7 @@ async function uploadBackup(backup) {
     toast.success(resp?.message || `${backup.name} subido a R2`)
     await fetchAll()
   } catch (e) {
-    toast.error(e?.response?.data?.detail || `Error al subir ${backup.name} a R2`)
+    toast.error(e?.data?.detail || e?.message || `Error al subir ${backup.name} a R2`)
   }
   uploadingFile.value[backup.name] = false
 }
@@ -379,7 +379,7 @@ async function deleteBackup(backup) {
     toast.success(resp?.message || `Backup eliminado: ${backup.name}`)
     localBackups.value = localBackups.value.filter(b => b.name !== backup.name)
   } catch (e) {
-    toast.error(e?.response?.data?.detail || `Error al eliminar ${backup.name}`)
+    toast.error(e?.data?.detail || e?.message || `Error al eliminar ${backup.name}`)
   }
   deletingFile.value[backup.name] = false
 }
@@ -392,7 +392,7 @@ async function deleteR2Backup(backup) {
     toast.success(resp?.message || `Backup eliminado de R2: ${backup.name}`)
     r2Backups.value = r2Backups.value.filter(b => b.name !== backup.name)
   } catch (e) {
-    toast.error(e?.response?.data?.detail || `Error al eliminar ${backup.name} de R2`)
+    toast.error(e?.data?.detail || e?.message || `Error al eliminar ${backup.name} de R2`)
   }
   deletingR2File.value[backup.name] = false
 }
@@ -411,7 +411,7 @@ async function exportarCatalogo() {
     toast.success('Catálogo exportado a R2')
     await fetchCatalogoStatus()
   } catch (e) {
-    toast.error(e?.response?.data?.detail || 'Error al exportar catálogo')
+    toast.error(e?.data?.detail || e?.message || 'Error al exportar catálogo')
   }
   exportingCatalogo.value = false
 }
@@ -423,7 +423,7 @@ async function descargarCatalogoCentral() {
     toast.success('Catálogo central descargado')
     await fetchCatalogoStatus()
   } catch (e) {
-    toast.error(e?.response?.data?.detail || 'Error al descargar catálogo central')
+    toast.error(e?.data?.detail || e?.message || 'Error al descargar catálogo central')
   }
   downloadingCatalogoCentral.value = false
 }
@@ -435,7 +435,7 @@ async function recargarCatalogo() {
     toast.success('Catálogo recargado')
     await fetchCatalogoStatus()
   } catch (e) {
-    toast.error(e?.response?.data?.detail || 'Error al recargar catálogo')
+    toast.error(e?.data?.detail || e?.message || 'Error al recargar catálogo')
   }
   reloadingCatalogo.value = false
 }
@@ -452,7 +452,7 @@ async function saveR2Config() {
     showR2Config.value = false
     r2SyncOk.value = true
   } catch (e) {
-    toast.error(e?.response?.data?.detail || 'Error al guardar configuración R2')
+    toast.error(e?.data?.detail || e?.message || 'Error al guardar configuración R2')
   }
 }
 
@@ -463,7 +463,7 @@ async function testConnection() {
     await api.post('/api/backups/test-r2', r2Form)
     connectionResult.value = { success: true, message: 'Conexión exitosa con R2.' }
   } catch (e) {
-    connectionResult.value = { success: false, message: e?.response?.data?.detail || 'Error de conexión' }
+    connectionResult.value = { success: false, message: e?.data?.detail || e?.message || 'Error de conexión' }
   }
   testingConnection.value = false
 }
