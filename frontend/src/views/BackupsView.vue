@@ -24,6 +24,15 @@
       <KpiCard label="Próximo backup automático" value="2026-06-21 03:00" icon="fa-clock" icon-color="warning" :animate="false" />
     </div>
 
+    <div v-if="authError" class="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-4 py-3 flex items-start gap-3">
+      <i class="fa-solid fa-triangle-exclamation text-red-500 mt-0.5"></i>
+      <div class="flex-1">
+        <p class="text-sm font-medium text-red-800 dark:text-red-300">Sesión expirada o no autenticado</p>
+        <p class="text-sm text-red-600 dark:text-red-400 mt-1">Las APIs requieren autenticación. Recargá la página o <a href="/login" class="underline font-medium">iniciá sesión</a> de nuevo.</p>
+      </div>
+      <button @click="authError = false" class="text-red-400 hover:text-red-600 dark:hover:text-red-200 text-sm">×</button>
+    </div>
+
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <BaseCard padding="none">
         <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2.5">
@@ -201,6 +210,7 @@ const downloadingCatalogoCentral = ref(false)
 const reloadingCatalogo = ref(false)
 
 const highlightName = ref('')
+const authError = ref(false)
 
 const catalogoStatus = reactive({
   exportables: 0,
@@ -262,8 +272,9 @@ async function fetchAll() {
     if (estado) {
       r2SyncOk.value = estado.r2_habilitado ?? false
     }
-  } catch {
-    toast.error('Error al cargar backups')
+  } catch (e) {
+    if (e?.status === 401) authError.value = true
+    else toast.error('Error al cargar backups')
   }
   fetchCatalogoStatus()
 }
@@ -280,7 +291,8 @@ async function createBackup() {
       clearHighlight()
     }
   } catch (e) {
-    toast.error(e?.response?.data?.detail || 'Error al crear backup')
+    if (e?.status === 401) authError.value = true
+    else toast.error(e?.message || 'Error al crear backup')
   }
   creatingBackup.value = false
 }
