@@ -160,6 +160,21 @@ def descargar_de_r2(filename: str, db: Session) -> Optional[str]:
         return None
 
 
+def eliminar_backup_r2(filename: str, db: Session) -> bool:
+    cfg = _get_r2_config(db)
+    if not cfg:
+        return False
+    try:
+        from app.services.licencia_service import obtener_machine_id
+        mid = obtener_machine_id()
+        client = _make_r2_client(cfg)
+        key = f"backups/{mid}/{filename}"
+        client.delete_object(Bucket=cfg["bucket"], Key=key)
+        return True
+    except Exception:
+        return False
+
+
 def eliminar_backup_local(filename: str) -> bool:
     filepath = os.path.join(BACKUP_DIR, filename)
     if os.path.exists(filepath):

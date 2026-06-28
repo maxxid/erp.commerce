@@ -92,6 +92,16 @@ def eliminar_backup(filename: str, user: Usuario = Depends(require_role("admin",
     return RespuestaBase(message=f"Backup eliminado: {filename}")
 
 
+@router.delete("/r2/{filename}", response_model=RespuestaBase)
+def eliminar_backup_r2(filename: str, db: Session = Depends(get_db), user: Usuario = Depends(require_role("admin", "encargado"))):
+    if not _r2_ok(db):
+        raise HTTPException(status_code=400, detail="R2 no está configurado")
+    ok = backup_service.eliminar_backup_r2(filename, db)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"No se pudo eliminar de R2: {filename}")
+    return RespuestaBase(message=f"Backup eliminado de R2: {filename}")
+
+
 @router.get("/estado", response_model=RespuestaData)
 def estado_backup(db: Session = Depends(get_db), user: Usuario = Depends(require_role("admin", "encargado"))):
     locales = backup_service.listar_backups_locales()
