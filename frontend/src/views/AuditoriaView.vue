@@ -88,7 +88,7 @@
         <template #user="{ row }">
           <div class="flex items-center gap-2">
             <div class="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-[10px] font-semibold text-slate-500 dark:text-slate-400">
-              {{ row.user.charAt(0) }}
+              {{ row.user?.charAt(0) || '?' }}
             </div>
             <span class="text-slate-700 dark:text-slate-300">{{ row.user }}</span>
           </div>
