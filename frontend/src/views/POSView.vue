@@ -940,14 +940,14 @@ async function triggerPOSLookup() {
   // 1. Buscar en base local primero
   const local = products.value.find(p => p.codigo_barras === raw)
   if (local) {
-    selectProductForLookup(local)
-    lookupProduct._loading = false
-    _processingLookup.value = false
+    addToCart(local)
     posLookupCode.value = ''
+    _processingLookup.value = false
     if (!lookupBadges.value.some(b => b.includes(raw))) {
       lookupBadges.value.unshift(raw)
       if (lookupBadges.value.length > 10) lookupBadges.value.pop()
     }
+    nextTick(() => barcodeInput.value?.focus())
     return
   }
 
