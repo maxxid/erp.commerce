@@ -213,23 +213,29 @@
                     input-class="text-sm"
                   />
                   <div class="grid grid-cols-2 gap-2">
-                    <BaseInput
-                      v-model.number="lookupProduct._manualPrecio"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      placeholder="Precio"
-                      size="sm"
-                      input-class="text-sm font-mono-data text-right"
-                    />
-                    <BaseInput
-                      v-model.number="lookupProduct._manualQty"
-                      type="number"
-                      min="1"
-                      placeholder="Cantidad"
-                      size="sm"
-                      input-class="text-sm font-mono-data text-right"
-                    />
+                    <div class="relative">
+                      <span class="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-400 z-10">$</span>
+                      <BaseInput
+                        v-model.number="lookupProduct._manualPrecio"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="Precio"
+                        size="sm"
+                        input-class="text-sm font-mono-data text-right pl-6"
+                      />
+                    </div>
+                    <div class="relative">
+                      <span class="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-400 z-10">u.</span>
+                      <BaseInput
+                        v-model.number="lookupProduct._manualQty"
+                        type="number"
+                        min="1"
+                        placeholder="Cantidad"
+                        size="sm"
+                        input-class="text-sm font-mono-data text-right pl-6"
+                      />
+                    </div>
                   </div>
                   <BaseButton size="sm" block @click="addManualToCart">
                     <i class="fa-solid fa-plus mr-1"></i> Agregar al carrito
