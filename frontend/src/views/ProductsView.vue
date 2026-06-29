@@ -597,14 +597,28 @@ async function fetchProveedores() {
       <form class="space-y-4" @submit.prevent="saveProduct">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <BaseInput
-              v-model="form.codigo_barras"
-              label="Código de Barras"
-              placeholder="779..."
-              input-class="font-mono-data"
-              required
-              @enter="lookupBarcode"
-            />
+            <div class="flex gap-2">
+              <BaseInput
+                v-model="form.codigo_barras"
+                label="Código de Barras"
+                placeholder="779..."
+                input-class="font-mono-data"
+                required
+                :disabled="lookingUp"
+                :loading="lookingUp"
+                @enter="lookupBarcode"
+              />
+              <BaseButton
+                variant="secondary"
+                size="md"
+                class="self-end mb-1 shrink-0"
+                :disabled="lookingUp"
+                title="Buscar en fuentes externas"
+                @click="lookupBarcode"
+              >
+                <i class="fa-solid fa-magnifying-glass"></i>
+              </BaseButton>
+            </div>
             <p v-if="showBarcodeHint" class="text-[10px] text-brand-600 dark:text-brand-400 font-semibold mt-1.5 flex items-center gap-1">
               <i class="fa-solid fa-circle-info"></i> Código genérico. Si el producto tiene código real, reemplazalo acá.
             </p>
