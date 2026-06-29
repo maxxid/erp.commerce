@@ -840,6 +840,8 @@ const categories = ref([])
 
 const clientes = ref([])
 
+const ofertas = ref([])
+
 const recentTransactions = ref([])
 const editingVentaId = ref(null)
 const showSaleInfoModal = ref(false)
@@ -864,10 +866,11 @@ const filteredPOSProducts = computed(() => {
 onMounted(async () => {
   localStorage.setItem('apex_user', JSON.stringify({ nombre: auth.currentUser?.nombre || auth.currentUser?.username || '' }))
   try {
-    const [prods, cats, clis] = await Promise.all([
+    const [prods, cats, clis, ofs] = await Promise.all([
       api.get('/api/productos').catch(() => null),
       api.get('/api/categorias').catch(() => null),
-      api.get('/api/clientes').catch(() => null)
+      api.get('/api/clientes').catch(() => null),
+      api.get('/api/ofertas?page_size=200').catch(() => null)
     ])
     const prodItems = prods?.data || prods || []
     if (Array.isArray(prodItems)) products.value = prodItems
@@ -875,6 +878,8 @@ onMounted(async () => {
     if (Array.isArray(catItems)) categories.value = catItems
     const cliItems = clis?.data || clis || []
     if (Array.isArray(cliItems)) clientes.value = cliItems
+    const ofsItems = ofs?.data || ofs || []
+    if (Array.isArray(ofsItems)) ofertas.value = ofsItems
   } catch { /* sin datos */ }
 
   fetchPOSStats()
@@ -1097,11 +1102,27 @@ function addManualToCart() {
 }
 
 function addToCart(product, qty = 1, price = null) {
-  const unitPrice = price || product.precio_venta
+  let unitPrice = price || product.precio_venta
+  const isManual = product._pending || (product.codigo_barras && (product.codigo_barras.startsWith('*MANUAL*') || product.codigo_barras.startsWith('GEN-')))
+
+  const oferta = ofertas.value.find(o => o.producto_id === product.id && o.activo)
+  let ofertaInfo = null
+  if (oferta && !isManual) {
+    if (oferta.tipo === 'porcentaje') {
+      const desc = unitPrice * (oferta.valor / 100)
+      unitPrice = Math.max(0, unitPrice - desc)
+      ofertaInfo = { tipo: oferta.tipo, valor: oferta.valor, label: `${oferta.valor}% OFF` }
+    } else if (oferta.tipo === 'monto') {
+      unitPrice = Math.max(0, unitPrice - oferta.valor)
+      ofertaInfo = { tipo: oferta.tipo, valor: oferta.valor, label: `$${oferta.valor} OFF` }
+    } else if (oferta.tipo === '2x1') {
+      ofertaInfo = { tipo: '2x1', valor: 0, label: '2x1' }
+    }
+  }
+
   const existing = cart.items.find(i => i.producto_id === product.id && i.precio_unitario === unitPrice)
 
   const newQty = (existing ? existing.cantidad : 0) + qty
-  const isManual = product._pending || (product.codigo_barras && (product.codigo_barras.startsWith('*MANUAL*') || product.codigo_barras.startsWith('GEN-')))
   if (!isManual && product.stock_actual !== undefined && newQty > product.stock_actual) {
     toast.error(`Stock insuficiente: ${product.stock_actual} disponibles`)
     return
@@ -1109,13 +1130,15 @@ function addToCart(product, qty = 1, price = null) {
 
   if (existing) {
     existing.cantidad += qty
+    if (ofertaInfo) existing.oferta = ofertaInfo
   } else {
     cart.items.push({
       producto_id: product.id,
       nombre: product.nombre,
       codigo_barras: product.codigo_barras,
       precio_unitario: unitPrice,
-      cantidad: qty
+      cantidad: qty,
+      oferta: ofertaInfo
     })
   }
 
@@ -1147,7 +1170,13 @@ function handlePagoKeydown(event) {
 }
 
 function recalcCart() {
-  cart.subtotal = cart.items.reduce((sum, i) => sum + (i.precio_unitario || 0) * (i.cantidad || 0), 0)
+  cart.subtotal = cart.items.reduce((sum, i) => {
+    let lineTotal = (i.precio_unitario || 0) * (i.cantidad || 0)
+    if (i.oferta?.tipo === '2x1' && (i.cantidad || 0) >= 2) {
+      lineTotal = lineTotal / 2
+    }
+    return sum + lineTotal
+  }, 0)
   cart.total = Math.max(0, cart.subtotal - (cart.descuento || 0))
 }
 
