@@ -658,7 +658,7 @@
 
 <script setup>
 import { ref, reactive, computed, watch, onMounted, nextTick } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
 import { formatCurrency as fc } from '@/composables/useUtils'
@@ -682,6 +682,7 @@ const auth = useAuthStore()
 const toast = useToastStore()
 const cajaStore = useCajaStore()
 const route = useRoute()
+const router = useRouter()
 const { playSale } = useSounds()
 const { firstSaleOfDay } = useConfetti()
 
@@ -889,6 +890,10 @@ onMounted(async () => {
   }
   await nextTick()
   barcodeInput.value?.focus()
+  if (route.query.editVentaId) {
+    loadSaleForEditing(Number(route.query.editVentaId))
+    router.replace({ query: {} })
+  }
 })
 
 async function fetchPOSStats() {
@@ -1338,6 +1343,32 @@ async function editSale(t) {
   recalcCart()
   toast.info(`Productos cargados. Editá y confirmá la venta.`)
   nextTick(() => barcodeInput.value?.focus())
+}
+
+async function loadSaleForEditing(ventaId) {
+  try {
+    const res = await api.get(`/api/ventas/${ventaId}`)
+    const v = res?.data || res
+    if (!v || !v.items) return
+    await api.put(`/api/ventas/${ventaId}/anular?edit=true`, {})
+    toast.info('Venta original anulada. Editá el carrito y confirmá.')
+    cart.items = (v.items || []).map(i => ({
+      producto_id: i.producto_id,
+      nombre: i.producto_nombre,
+      codigo_barras: '',
+      precio_unitario: i.precio_unitario,
+      cantidad: i.cantidad
+    }))
+    cart.descuento = v.descuento || 0
+    cart.medio_pago = v.medio_pago || 'efectivo'
+    cart.cliente_id = v.cliente_id || ''
+    editingVentaId.value = ventaId
+    recalcCart()
+    toast.success(`Productos cargados. Editá y confirmá la venta.`)
+    nextTick(() => barcodeInput.value?.focus())
+  } catch {
+    toast.error('No se pudo cargar la venta para edición')
+  }
 }
 </script>
 

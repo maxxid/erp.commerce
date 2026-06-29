@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
 import api from '@/services/api'
@@ -13,6 +14,7 @@ import BaseModal from '@/components/ui/BaseModal.vue'
 
 const auth = useAuthStore()
 const toast = useToastStore()
+const router = useRouter()
 
 const filtroFecha = ref('')
 const expandedRows = ref([])
@@ -219,6 +221,14 @@ async function executeAnular() {
               @click.stop="toggleRow(row.id)"
             >
               <i class="fa-solid fa-eye mr-1"></i> Ver
+            </button>
+            <button
+              v-if="row.estado === 'Completada'"
+              type="button"
+              class="px-2 py-1 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-lg text-[10px] font-bold transition"
+              @click.stop="router.push({ name: 'pos', query: { editVentaId: row.id } })"
+            >
+              <i class="fa-solid fa-pen mr-1"></i> Editar
             </button>
             <button
               v-if="row.estado === 'Completada'"
