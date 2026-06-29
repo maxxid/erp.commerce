@@ -26,9 +26,7 @@ def listar_ajustes(
     user: Usuario = Depends(require_role("admin", "encargado")),
 ):
     """Lista todas las configuraciones del sistema."""
-    configs = db.query(Configuracion).filter(
-        Configuracion.clave.like("afip_%")
-    ).all()
+    configs = db.query(Configuracion).all()
     data = {
         c.clave: {
             "valor": c.valor_texto or c.valor,
@@ -36,16 +34,6 @@ def listar_ajustes(
         }
         for c in configs
     }
-    # Valores por defecto desde env
-    import os
-    defaults = {
-        "afip_mode": os.getenv("AFIP_MODE", "testing"),
-        "afip_cuit": os.getenv("AFIP_CUIT", ""),
-        "afip_pto_vta": os.getenv("AFIP_PTO_VTA", "1"),
-    }
-    for k, v in defaults.items():
-        if k not in data:
-            data[k] = {"valor": v, "descripcion": ""}
     return RespuestaData(data=data)
 
 

@@ -920,12 +920,10 @@ onMounted(async () => {
     if (Array.isArray(cliItems)) clientes.value = cliItems
     const ofsItems = ofs?.data || ofs || []
     if (Array.isArray(ofsItems)) ofertas.value = ofsItems
-    if (cfg) {
-      for (const item of cfg) {
-        if (item.clave === 'banco_nombre') bankConfig.banco_nombre = item.valor || ''
-        if (item.clave === 'banco_titular') bankConfig.banco_titular = item.valor || ''
-        if (item.clave === 'banco_alias') bankConfig.banco_alias = item.valor || ''
-      }
+    if (cfg && typeof cfg === 'object') {
+      if (cfg.banco_nombre) bankConfig.banco_nombre = cfg.banco_nombre.valor || ''
+      if (cfg.banco_titular) bankConfig.banco_titular = cfg.banco_titular.valor || ''
+      if (cfg.banco_alias) bankConfig.banco_alias = cfg.banco_alias.valor || ''
     }
   } catch { /* sin datos */ }
 
