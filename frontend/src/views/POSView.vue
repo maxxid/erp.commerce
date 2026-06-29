@@ -456,6 +456,17 @@
             </div>
           </div>
 
+          <div v-if="cart.medio_pago === 'transferencia' && (bankConfig.banco_nombre || bankConfig.banco_alias)" class="p-3 bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 rounded-xl">
+            <p class="text-[10px] font-bold text-sky-700 dark:text-sky-300 mb-2">
+              <i class="fa-solid fa-building-columns mr-1"></i>Datos para Transferencia
+            </p>
+            <div class="space-y-1 text-[10px] text-slate-600 dark:text-slate-300">
+              <p v-if="bankConfig.banco_nombre"><span class="font-semibold">Banco:</span> {{ bankConfig.banco_nombre }}</p>
+              <p v-if="bankConfig.banco_titular"><span class="font-semibold">Titular:</span> {{ bankConfig.banco_titular }}</p>
+              <p v-if="bankConfig.banco_alias"><span class="font-semibold">Alias:</span> {{ bankConfig.banco_alias }}</p>
+            </div>
+          </div>
+
           <BaseSelect
             v-model="cart.cliente_id"
             label="Cliente"
@@ -873,6 +884,8 @@ const editingVentaId = ref(null)
 const showSaleInfoModal = ref(false)
 const saleInfoTarget = ref(null)
 
+const bankConfig = reactive({ banco_nombre: '', banco_titular: '', banco_alias: '' })
+
 const filteredPOSProducts = computed(() => {
   let list = products.value
   if (selectedPOSCategory.value) {
@@ -892,11 +905,12 @@ const filteredPOSProducts = computed(() => {
 onMounted(async () => {
   localStorage.setItem('apex_user', JSON.stringify({ nombre: auth.currentUser?.nombre || auth.currentUser?.username || '' }))
   try {
-    const [prods, cats, clis, ofs] = await Promise.all([
+    const [prods, cats, clis, ofs, cfg] = await Promise.all([
       api.get('/api/productos').catch(() => null),
       api.get('/api/categorias').catch(() => null),
       api.get('/api/clientes').catch(() => null),
-      api.get('/api/ofertas?page_size=200').catch(() => null)
+      api.get('/api/ofertas?page_size=200').catch(() => null),
+      api.get('/api/config/ajustes').catch(() => null)
     ])
     const prodItems = prods?.data || prods || []
     if (Array.isArray(prodItems)) products.value = prodItems
@@ -906,6 +920,13 @@ onMounted(async () => {
     if (Array.isArray(cliItems)) clientes.value = cliItems
     const ofsItems = ofs?.data || ofs || []
     if (Array.isArray(ofsItems)) ofertas.value = ofsItems
+    if (cfg) {
+      for (const item of cfg) {
+        if (item.clave === 'banco_nombre') bankConfig.banco_nombre = item.valor || ''
+        if (item.clave === 'banco_titular') bankConfig.banco_titular = item.valor || ''
+        if (item.clave === 'banco_alias') bankConfig.banco_alias = item.valor || ''
+      }
+    }
   } catch { /* sin datos */ }
 
   fetchPOSStats()

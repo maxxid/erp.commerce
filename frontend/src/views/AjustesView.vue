@@ -17,6 +17,9 @@ const config = ref({
   afip_pto_vta: '1',
   afip_cert: '',
   afip_key: '',
+  banco_nombre: '',
+  banco_titular: '',
+  banco_alias: '',
 })
 
 async function loadConfig() {
@@ -37,17 +40,20 @@ async function loadConfig() {
 async function saveConfig() {
   saving.value = true
   try {
-    for (const [clave, valor] of Object.entries(config.value)) {
+      for (const [clave, valor] of Object.entries(config.value)) {
       const descs = {
         afip_mode: 'Entorno AFIP: testing | production',
         afip_cuit: 'CUIT del emisor (11 dígitos sin guiones)',
         afip_pto_vta: 'Número de punto de venta habilitado en AFIP',
         afip_cert: 'Certificado X.509 (.crt) en formato PEM',
         afip_key: 'Clave privada RSA (.key) en formato PEM',
+        banco_nombre: 'Nombre del banco para transferencias',
+        banco_titular: 'Nombre del titular de la cuenta',
+        banco_alias: 'Alias de CBU/Alias para transferencias',
       }
       await api.put('/api/config/ajustes', { clave, valor, descripcion: descs[clave] || '' })
     }
-    toast.success('Configuración AFIP guardada')
+    toast.success('Configuración guardada')
   } catch {
     toast.error('Error al guardar configuración')
   }
@@ -97,6 +103,28 @@ onMounted(loadConfig)
           placeholder="-----BEGIN RSA PRIVATE KEY-----&#10;..."
           hint="Pegar la clave privada en formato PEM"
         />
+
+        <div class="flex items-center gap-3 pt-2">
+          <BaseButton variant="primary" :loading="saving" @click="saveConfig">
+            <i class="fa-solid fa-floppy-disk"></i> Guardar
+          </BaseButton>
+          <p class="text-[11px] text-slate-400">Los cambios se aplican inmediatamente</p>
+        </div>
+      </div>
+    </BaseCard>
+
+    <BaseCard v-if="!loading">
+      <h3 class="text-sm font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+        <i class="fa-solid fa-building-columns text-brand-600"></i>
+        Datos Bancarios para Transferencias
+      </h3>
+
+      <div class="space-y-4 max-w-lg">
+        <BaseInput v-model="config.banco_nombre" label="Banco" placeholder="Banco Francés, Galicia, etc." />
+
+        <BaseInput v-model="config.banco_titular" label="Titular" placeholder="Nombre completo del titular" />
+
+        <BaseInput v-model="config.banco_alias" label="Alias" placeholder="alias.cbutransferencia" />
 
         <div class="flex items-center gap-3 pt-2">
           <BaseButton variant="primary" :loading="saving" @click="saveConfig">
