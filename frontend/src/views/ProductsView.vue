@@ -43,6 +43,16 @@ const savingOferta = ref(false)
 const deletingOferta = ref(false)
 const filterEnOferta = ref(false)
 
+const countStockBajo = computed(() => products.value.filter(p => p.stock_actual <= (p.stock_minimo || 5) && p.stock_actual >= 0).length)
+
+const countPrecioDefasado = computed(() => products.value.filter(p => p.precio_venta > 0 && p.precio_costo > 0 && p.precio_venta <= p.precio_costo).length)
+
+const countEnOferta = computed(() => {
+  const ofertasActivas = ofertas.value.filter(o => o.activo)
+  const pids = new Set(ofertasActivas.map(o => o.producto_id))
+  return products.value.filter(p => pids.has(p.id)).length
+})
+
 const showCatQuick = ref(false)
 const newCatNombre = ref('')
 const showProvQuick = ref(false)
@@ -485,6 +495,7 @@ async function fetchProveedores() {
         @click="filterStockBajo = !filterStockBajo; filterPrecioDefasado = false"
       >
         <i class="fa-solid fa-triangle-exclamation"></i> Bajo stock
+        <span v-if="countStockBajo > 0" class="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300 rounded-full">{{ countStockBajo }}</span>
       </button>
       <button
         type="button"
@@ -495,6 +506,7 @@ async function fetchProveedores() {
         @click="filterPrecioDefasado = !filterPrecioDefasado; filterStockBajo = false"
       >
         <i class="fa-solid fa-dollar-sign"></i> Precio ≤ costo
+        <span v-if="countPrecioDefasado > 0" class="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-300 rounded-full">{{ countPrecioDefasado }}</span>
       </button>
       <button
         type="button"
@@ -505,6 +517,7 @@ async function fetchProveedores() {
         @click="filterEnOferta = !filterEnOferta"
       >
         <i class="fa-solid fa-tag"></i> En oferta
+        <span v-if="countEnOferta > 0" class="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-300 rounded-full">{{ countEnOferta }}</span>
       </button>
     </div>
 
