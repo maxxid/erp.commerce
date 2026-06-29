@@ -96,8 +96,8 @@
             placeholder="Escanear o escribir código..."
             input-class="font-mono-data"
             size="lg"
-            @input="handlePOSInput"
-            @enter="triggerPOSLookup"
+          @input="handlePOSInput"
+          @enter="() => { if (!_processingLookup) triggerPOSLookup() }"
           >
             <template #prefix>
               <i class="fa-solid fa-barcode text-slate-400"></i>
