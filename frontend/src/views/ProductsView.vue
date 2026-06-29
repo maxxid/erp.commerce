@@ -609,6 +609,7 @@ async function fetchProveedores() {
                 @enter="lookupBarcode"
               />
               <BaseButton
+                type="button"
                 variant="secondary"
                 size="md"
                 class="self-end mb-1 shrink-0"
