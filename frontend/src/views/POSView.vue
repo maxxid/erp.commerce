@@ -378,6 +378,7 @@
                       @click="updateCartQty(idx, item.cantidad + 1)"
                     >+</button>
                     <span class="text-xs font-mono-data font-bold text-brand-600 dark:text-brand-400 ml-auto">{{ fc(item.precio_unitario * item.cantidad) }}</span>
+                    <BaseBadge v-if="item.oferta" size="xs" variant="warning" class="ml-1">{{ item.oferta.tipo === 'porcentaje' ? item.oferta.valor + '%' : item.oferta.tipo === 'monto_fijo' ? '$' + item.oferta.valor : '2x1' }}</BaseBadge>
                   </div>
                 </div>
                 <button
