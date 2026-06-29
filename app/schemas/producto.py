@@ -35,6 +35,7 @@ class ProductoUpdate(BaseModel):
     nombre: Optional[str] = None
     marca: Optional[str] = None
     descripcion: Optional[str] = None
+    codigo_barras: Optional[str] = None
     precio_referencia: Optional[float] = None
     precio_costo: Optional[float] = None
     precio_venta: Optional[float] = None
