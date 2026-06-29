@@ -435,7 +435,7 @@
             v-model="cart.cliente_id"
             label="Cliente"
             placeholder=""
-            :options="[{ value: null, label: 'Consumidor Final' }, ...clientes.map(c => ({ value: c.id, label: c.nombre }))]"
+            :options="[{ value: '', label: 'Consumidor Final' }, ...clientes.map(c => ({ value: c.id, label: c.nombre }))]"
             option-value="value"
             option-label="label"
             size="sm"
@@ -704,7 +704,7 @@ function recallTicket(id) {
   cart.subtotal = ticket.subtotal
   cart.total = ticket.total
   cart.descuento = ticket.descuento || 0
-  cart.cliente_id = ticket.cliente_id
+  cart.cliente_id = ticket.cliente_id || ''
   cart.medio_pago = ticket.medio_pago || 'efectivo'
   showRecallDropdown.value = false
   toast.info(`Ticket recuperado — ${ticket.itemCount} items`)
@@ -764,7 +764,7 @@ const cart = reactive({
   total: 0,
   descuento: 0,
   medio_pago: 'efectivo',
-  cliente_id: null
+  cliente_id: ''
 })
 
 const stats = reactive({
@@ -1079,7 +1079,7 @@ function vaciarCarrito() {
   cart.items.splice(0, cart.items.length)
   recalcCart()
   cart.descuento = 0
-  cart.cliente_id = null
+  cart.cliente_id = ''
 }
 
 function updateCartQty(idx, qty) {
