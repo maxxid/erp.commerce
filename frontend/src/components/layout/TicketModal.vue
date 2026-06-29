@@ -124,9 +124,56 @@ function printTicket() {
     <!DOCTYPE html><html><head><meta charset="UTF-8"><title>Ticket</title>
     <style>
       * { margin:0; padding:0; box-sizing:border-box; }
-      body { font-family:'Courier New',monospace; font-size:11px; width:${ticketWidth.value}mm; margin:0 auto; padding:4mm; }
+      body {
+        font-family:'Courier New',monospace;
+        font-size:11px;
+        width:${ticketWidth.value}mm;
+        margin:0 auto;
+        padding:4mm;
+        color:#000;
+        background:#fff;
+      }
+      .text-center { text-align:center; }
+      .border-b-2 { border-bottom:2px solid #000; }
+      .border-b { border-bottom:1px dashed #999; }
+      .border-dotted { border-bottom:1px dotted #999; }
+      .border-t { border-top:1px solid #999; }
+      .border-t-2 { border-top:2px solid #000; }
+      .pb-2 { padding-bottom:2px; }
+      .mb-2 { margin-bottom:2px; }
+      .mt-1 { margin-top:1px; }
+      .mt-2 { margin-top:2px; }
+      .mt-3 { margin-top:3px; }
+      .pt-1 { padding-top:1px; }
+      .pt-2 { padding-top:2px; }
+      .space-y-0\\.5 > * + * { margin-top:0.5px; }
+      .flex { display:flex; }
+      .flex-col { flex-direction:column; }
+      .items-center { align-items:center; }
+      .justify-between { justify-content:space-between; }
+      .font-bold { font-weight:bold; }
+      .text-\\[9px\\] { font-size:9px; }
+      .text-\\[10px\\] { font-size:10px; }
+      .text-\\[11px\\] { font-size:11px; }
+      .text-\\[8px\\] { font-size:8px; }
+      .text-sm { font-size:11px; }
+      .text-orange-600 { color:#ea580c; }
+      .text-slate-400 { color:#94a3b8; }
+      .text-slate-500 { color:#64748b; }
+      .text-slate-900 { color:#0f172a; }
+      .w-10 { width:10mm; }
+      .w-20 { width:20mm; }
+      .flex-1 { flex:1; }
+      .truncate { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .text-right { text-align:right; }
+      .font-mono { font-family:'Courier New',monospace; }
+      .font-mono-data { font-family:'Courier New',monospace; }
+      .pb-0\\.5 { padding-bottom:0.5px; }
       @page { size:${ticketWidth.value}mm auto; margin:0; }
-      @media print { body { width:${ticketWidth.value}mm; } }
+      @media print {
+        body { width:${ticketWidth.value}mm; }
+        button { display:none; }
+      }
     </style></head><body>${el.innerHTML}</body></html>
   `)
   win.document.close()
