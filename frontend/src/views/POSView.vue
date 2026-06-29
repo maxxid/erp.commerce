@@ -97,7 +97,7 @@
             input-class="font-mono-data"
             size="lg"
           @input="handlePOSInput"
-          @enter="() => { if (!lookupProduct._searchingExternal && !lookupProduct._loading) triggerPOSLookup() }"
+          @enter="triggerPOSLookup"
           >
             <template #prefix>
               <i class="fa-solid fa-barcode text-slate-400"></i>
@@ -690,7 +690,6 @@ const posLookupCode = ref('')
 const posTextSearch = ref('')
 const selectedPOSCategory = ref(null)
 const confirmando = ref(false)
-const _processingLookup = ref(false)
 const showTicket = ref(false)
 const showStatsPanel = ref(true)
 const showRecallDropdown = ref(false)
@@ -808,6 +807,8 @@ const lookupProduct = reactive({
 })
 
 const lookupBadges = ref([])
+
+const pendingLookups = ref([])
 
 const mediosPago = [
   { value: 'efectivo', label: 'Efectivo', icon: 'fa-money-bill-wave' },
@@ -968,8 +969,7 @@ function selectProductForLookup(product) {
 
 async function triggerPOSLookup() {
   const raw = posLookupCode.value.trim()
-  if (!raw || _processingLookup.value) return
-  _processingLookup.value = true
+  if (!raw) return
 
   if (raw.startsWith('*')) {
     posLookupCode.value = ''
@@ -978,7 +978,6 @@ async function triggerPOSLookup() {
     const precio = parseFloat(parts[2] || '0')
     if (!nombre || precio <= 0) {
       toast.warning('Formato: *Nombre*Precio. Ej: *COCA 1.5L*1500')
-      _processingLookup.value = false
       return
     }
     const seq = products.value.filter(p => p.codigo_barras && (p.codigo_barras.startsWith('GEN-') || p.codigo_barras.startsWith('*MANUAL*'))).length + 1
@@ -993,27 +992,15 @@ async function triggerPOSLookup() {
     products.value.push(tempProd)
     addToCart(tempProd, 1, precio)
     toast.info(`${nombre} → ${cleanCode}. Se creará al confirmar la venta.`)
-    _processingLookup.value = false
+    nextTick(() => barcodeInput.value?.focus())
     return
   }
-
-  // Reset state
-  lookupProduct._loading = true
-  lookupProduct._searched = false
-  lookupProduct._searchingExternal = false
-  lookupProduct._manualEntry = false
-  lookupProduct.id = null
-  lookupProduct._barcode = raw
 
   // 1. Buscar en base local primero
   const local = products.value.find(p => p.codigo_barras === raw)
   if (local) {
-    lookupProduct._loading = false
-    lookupProduct._searched = false
-    lookupProduct.id = null
     addToCart(local)
     posLookupCode.value = ''
-    _processingLookup.value = false
     if (!lookupBadges.value.some(b => b.includes(raw))) {
       lookupBadges.value.unshift(raw)
       if (lookupBadges.value.length > 10) lookupBadges.value.pop()
@@ -1022,44 +1009,92 @@ async function triggerPOSLookup() {
     return
   }
 
-  // 2. No está en local, buscar en API (que busca en fuentes externas)
-  lookupProduct._loading = false
-  lookupProduct._searchingExternal = true
+  // 2. No está en local, buscar en API (que busca en fuentes externas) - NO bloquea
   posLookupCode.value = ''
-  nextTick(() => barcodeInput.value?.focus())
 
   try {
     const resp = await api.post('/api/productos/lookup', { barcode: raw }).catch(() => null)
     if (resp && resp.nombre) {
-      // Encontrado en fuentes externas
-      lookupProduct._searchingExternal = false
-      selectProductForLookup(resp)
-      if (resp.comparacion) {
-        lookupBadges.value = resp.comparacion.map(c => `${c.fuente}: ${fc(c.precio)}`)
-      }
-      toast.success(`Encontrado: ${resp.nombre}`)
+      // Agregar a pendientes y mostrar toast
+      const lookupId = Date.now()
+      pendingLookups.value.push({
+        id: lookupId,
+        barcode: raw,
+        nombre: resp.nombre,
+        marca: resp.marca,
+        precio: resp.precio_referencia || resp.precio_venta || 0,
+        fuente: resp.fuente
+      })
+      if (pendingLookups.value.length > 10) pendingLookups.value.shift()
+      toast.success(`${resp.nombre} encontrado en ${resp.fuente || 'fuente externa'}. Presiona para agregar.`, {
+        action: () => addPendingLookupToCart(lookupId)
+      })
     } else {
-      // No encontrado en ninguna fuente, mostrar manual entry
-      lookupProduct._searchingExternal = false
-      lookupProduct._manualEntry = true
-      lookupProduct._manualNombre = ''
-      lookupProduct._manualPrecio = 0
-      lookupProduct._manualQty = 1
-      toast.warning('No encontrado. Ingresá los datos manualmente.')
+      // No encontrado - crear pendiente manual
+      const lookupId = Date.now()
+      pendingLookups.value.push({
+        id: lookupId,
+        barcode: raw,
+        nombre: '',
+        marca: '',
+        precio: 0,
+        fuente: null
+      })
+      if (pendingLookups.value.length > 10) pendingLookups.value.shift()
+      toast.warning(`Código ${raw} no encontrado. Completá los datos para agregarlo.`, {
+        action: () => showManualEntryForPending(lookupId)
+      })
     }
   } catch {
-    lookupProduct._searchingExternal = false
-    lookupProduct._manualEntry = true
-    lookupProduct._manualNombre = ''
-    lookupProduct._manualPrecio = 0
-    lookupProduct._manualQty = 1
+    toast.error('Error al buscar producto')
   }
 
-  _processingLookup.value = false
+  nextTick(() => barcodeInput.value?.focus())
+}
+
+function addPendingLookupToCart(lookupId) {
+  const lookup = pendingLookups.value.find(l => l.id === lookupId)
+  if (!lookup) return
+  if (!lookup.nombre) {
+    showManualEntryForPending(lookupId)
+    return
+  }
+  const tempProd = {
+    id: Date.now() + Math.random(),
+    codigo_barras: lookup.barcode,
+    nombre: lookup.nombre,
+    marca: lookup.marca,
+    precio_venta: lookup.precio,
+    precio_costo: 0,
+    stock_actual: 0,
+    categoria_id: categories.value[0]?.id || 1,
+    _pending: true
+  }
+  products.value.push(tempProd)
+  addToCart(tempProd, 1, lookup.precio)
+  pendingLookups.value = pendingLookups.value.filter(l => l.id !== lookupId)
+  toast.info(`${lookup.nombre} agregado al carrito.`)
+}
+
+function showManualEntryForPending(lookupId) {
+  const lookup = pendingLookups.value.find(l => l.id === lookupId)
+  if (!lookup) return
+  pendingLookups.value = pendingLookups.value.filter(l => l.id !== lookupId)
+  lookupProduct._manualEntry = true
+  lookupProduct._manualNombre = ''
+  lookupProduct._manualPrecio = lookup.precio || 0
+  lookupProduct._manualQty = 1
+  lookupProduct._barcode = lookup.barcode
+  nextTick(() => barcodeInput.value?.focus())
 }
 
 function handlePOSInput() {
-  if (posLookupCode.value.length >= 13 && !posLookupCode.value.startsWith('*')) {
+  const val = posLookupCode.value.trim()
+  if (val.length >= 13 && !val.startsWith('*')) {
+    triggerPOSLookup()
+    return
+  }
+  if (val.startsWith('*') && val.includes('*', 2)) {
     triggerPOSLookup()
     return
   }
