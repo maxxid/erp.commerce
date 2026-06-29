@@ -97,7 +97,7 @@
             input-class="font-mono-data"
             size="lg"
           @input="handlePOSInput"
-          @enter="() => { if (!_processingLookup) triggerPOSLookup() }"
+          @enter="() => { if (!lookupProduct._searchingExternal && !lookupProduct._loading) triggerPOSLookup() }"
           >
             <template #prefix>
               <i class="fa-solid fa-barcode text-slate-400"></i>
