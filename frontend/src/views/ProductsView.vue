@@ -261,11 +261,11 @@ async function saveProduct() {
   saving.value = true
   try {
     if (editingProduct.value) {
-      await api.put(`/api/productos/${editingProduct.value.id}`, form)
+      const resp = await api.put(`/api/productos/${editingProduct.value.id}`, form)
 
       const idx = products.value.findIndex(p => p.id === editingProduct.value.id)
       if (idx !== -1) {
-        products.value[idx] = { ...products.value[idx], ...form }
+        products.value[idx] = { ...products.value[idx], ...resp }
       }
       toast.success('Producto actualizado')
     } else {
