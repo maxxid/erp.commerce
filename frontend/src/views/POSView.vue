@@ -775,30 +775,13 @@ const stats = reactive({
   saldo_caja: 72000
 })
 
-const products = ref([
-  { id: 1, codigo_barras: '7791234567890', nombre: 'Coca-Cola 2.25L', marca: 'Coca-Cola', precio_venta: 2800, precio_costo: 2100, categoria_id: 1, stock_actual: 45 },
-  { id: 2, codigo_barras: '7799876543210', nombre: 'Arroz Gallo 1kg', marca: 'Gallo', precio_venta: 1500, precio_costo: 1100, categoria_id: 2, stock_actual: 120 },
-  { id: 3, codigo_barras: '7794561237890', nombre: 'Agua Mineral 1.5L', marca: 'Villa del Sur', precio_venta: 950, precio_costo: 600, categoria_id: 1, stock_actual: 80 }
-])
+const products = ref([])
 
-const categories = ref([
-  { id: 1, nombre: 'Bebidas' },
-  { id: 2, nombre: 'Almacén' }
-])
+const categories = ref([])
 
-const clientes = ref([
-  { id: 1, nombre: 'Juan Pérez' },
-  { id: 2, nombre: 'María García' },
-  { id: 3, nombre: 'Carlos López' }
-])
+const clientes = ref([])
 
-const recentTransactions = ref([
-  { id: 1, cliente: 'Juan Pérez', total: 8900, items: 4, medio_pago: 'efectivo', hora: '14:22' },
-  { id: 2, cliente: null, total: 3200, items: 2, medio_pago: 'transferencia', hora: '13:45' },
-  { id: 3, cliente: 'María García', total: 15600, items: 7, medio_pago: 'efectivo', hora: '12:10' },
-  { id: 4, cliente: null, total: 4500, items: 3, medio_pago: 'debito', hora: '11:30' },
-  { id: 5, cliente: 'Carlos López', total: 12000, items: 5, medio_pago: 'credito', hora: '10:55' }
-])
+const recentTransactions = ref([])
 
 const filteredPOSProducts = computed(() => {
   let list = products.value
@@ -824,10 +807,13 @@ onMounted(async () => {
       api.get('/api/categorias').catch(() => null),
       api.get('/api/clientes').catch(() => null)
     ])
-    if (prods && prods.length) products.value = prods
-    if (cats && cats.length) categories.value = cats
-    if (clis && clis.length) clientes.value = clis
-  } catch { /* fallback to mock */ }
+    const prodItems = prods?.data || prods || []
+    if (Array.isArray(prodItems)) products.value = prodItems
+    const catItems = cats?.data || cats || []
+    if (Array.isArray(catItems)) categories.value = catItems
+    const cliItems = clis?.data || clis || []
+    if (Array.isArray(cliItems)) clientes.value = cliItems
+  } catch { /* sin datos */ }
 
   fetchPOSStats()
   fetchRecentTransactions()
@@ -868,8 +854,9 @@ async function fetchPOSStats() {
 async function fetchRecentTransactions() {
   try {
     const ventas = await api.get('/api/ventas?page_size=5').catch(() => null)
-    if (ventas && ventas.length) {
-      recentTransactions.value = ventas.map(v => ({
+    const items = ventas?.data || ventas || []
+    if (Array.isArray(items)) {
+      recentTransactions.value = items.map(v => ({
         id: v.id,
         cliente: v.cliente_nombre || null,
         total: v.total,
