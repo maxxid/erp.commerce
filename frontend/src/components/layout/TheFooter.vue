@@ -3,7 +3,7 @@
     <div class="h-10 bg-slate-950 flex items-center justify-between px-6 cursor-pointer" @click="consoleOpen = !consoleOpen">
       <span class="text-xs font-semibold uppercase tracking-widest text-brand-200 flex items-center gap-2">
         <i class="fa-solid fa-terminal" :class="apiMode === 'real' ? 'text-emerald-400' : 'text-amber-400'"></i>
-        API Network Live Inspector
+        API Network Live Inspector <span class="text-[9px] text-slate-500 font-mono">({{ commitId }})</span>
       </span>
       <div class="flex items-center gap-4">
         <div class="flex items-center gap-1 text-[11px] font-mono-data">
@@ -40,4 +40,5 @@ defineProps({ apiMode: String, logs: Array })
 const consoleOpen = ref(false)
 const apiBaseUrl = ref('')
 const isDev = import.meta.env.DEV
+const commitId = import.meta.env.VITE_GIT_COMMIT || 'local'
 </script>
