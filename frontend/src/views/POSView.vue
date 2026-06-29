@@ -544,9 +544,33 @@
                 </div>
                 <div class="flex-1 min-w-0">
                   <p class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">{{ t.cliente || 'Consumidor Final' }}</p>
-                  <p class="text-[10px] text-slate-400 dark:text-slate-500">{{ t.hora }} · {{ t.items }} productos</p>
+                  <p class="text-[10px] text-slate-400 dark:text-slate-500">{{ t.hora }} · {{ t.itemCount || t.items?.length || 0 }} productos</p>
                 </div>
                 <span class="text-xs font-bold font-mono-data text-slate-800 dark:text-slate-200">{{ fc(t.total) }}</span>
+                <div class="flex items-center gap-1">
+                  <button
+                    class="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition"
+                    title="Ver detalle"
+                    @click="viewSaleInfo(t)"
+                  >
+                    <i class="fa-solid fa-eye text-[10px]"></i>
+                  </button>
+                  <button
+                    class="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition"
+                    title="Reabrir ticket"
+                    @click="reopenTicket(t)"
+                  >
+                    <i class="fa-solid fa-receipt text-[10px]"></i>
+                  </button>
+                  <button
+                    v-if="Date.now() - t.createdAt < 60000"
+                    class="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition"
+                    title="Editar venta"
+                    @click="editSale(t)"
+                  >
+                    <i class="fa-solid fa-pen text-[10px]"></i>
+                  </button>
+                </div>
               </div>
             </TransitionGroup>
             <p v-if="!recentTransactions.length" class="text-xs text-slate-400 dark:text-slate-500 text-center py-6">Sin transacciones hoy</p>
@@ -596,6 +620,40 @@
   />
 
   <TicketModal :show="showTicket" :ticket="ticketData" @close="showTicket = false; nextTick(() => barcodeInput.value?.focus())" />
+
+  <BaseModal v-model="showSaleInfoModal" title="Detalle de venta" size="sm">
+    <div v-if="saleInfoTarget" class="space-y-3">
+      <div class="flex justify-between text-xs text-slate-500 dark:text-slate-400">
+        <span>Ticket #{{ saleInfoTarget.ventaNumero || saleInfoTarget.id }}</span>
+        <span>{{ saleInfoTarget.hora }}</span>
+      </div>
+      <div class="space-y-1">
+        <div v-for="(item, i) in saleInfoTarget.items" :key="i" class="flex justify-between text-xs text-slate-700 dark:text-slate-300">
+          <span class="flex-1 truncate">{{ item.nombre }}</span>
+          <span class="w-16 text-right">{{ item.cantidad }} x {{ fc(item.precio_unitario) }}</span>
+          <span class="w-20 text-right font-bold">{{ fc(item.cantidad * item.precio_unitario) }}</span>
+        </div>
+      </div>
+      <div class="border-t border-slate-200 dark:border-slate-700 pt-2 space-y-1 text-xs">
+        <div v-if="saleInfoTarget.descuento" class="flex justify-between text-slate-500">
+          <span>Descuento</span>
+          <span>- {{ fc(saleInfoTarget.descuento) }}</span>
+        </div>
+        <div class="flex justify-between font-bold text-slate-900 dark:text-white">
+          <span>TOTAL</span>
+          <span>{{ fc(saleInfoTarget.total) }}</span>
+        </div>
+        <div class="flex justify-between text-slate-500">
+          <span>Medio de pago</span>
+          <span class="capitalize">{{ saleInfoTarget.medio_pago }}</span>
+        </div>
+        <div class="flex justify-between text-slate-500">
+          <span>Cliente</span>
+          <span>{{ saleInfoTarget.cliente || 'Consumidor Final' }}</span>
+        </div>
+      </div>
+    </div>
+  </BaseModal>
 </template>
 
 <script setup>
@@ -782,6 +840,9 @@ const categories = ref([])
 const clientes = ref([])
 
 const recentTransactions = ref([])
+const editingVentaId = ref(null)
+const showSaleInfoModal = ref(false)
+const saleInfoTarget = ref(null)
 
 const filteredPOSProducts = computed(() => {
   let list = products.value
@@ -853,19 +914,29 @@ async function fetchPOSStats() {
 
 async function fetchRecentTransactions() {
   try {
-    const ventas = await api.get('/api/ventas?page_size=5').catch(() => null)
+    const ventas = await api.get('/api/ventas?page_size=5&estado=completada').catch(() => null)
     const items = ventas?.data || ventas || []
     if (Array.isArray(items)) {
       recentTransactions.value = items.map(v => ({
         id: v.id,
+        ventaNumero: v.numero,
         cliente: v.cliente_nombre || null,
         total: v.total,
-        items: v.items ? v.items.length : 0,
+        subtotal: v.subtotal,
+        descuento: v.descuento || 0,
         medio_pago: v.medio_pago,
-        hora: v.fecha ? new Date(v.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : ''
+        items: (v.items || []).map(i => ({
+          producto_id: i.producto_id,
+          nombre: i.producto_nombre,
+          cantidad: i.cantidad,
+          precio_unitario: i.precio_unitario
+        })),
+        itemCount: v.items ? v.items.length : 0,
+        hora: v.fecha ? new Date(v.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : '',
+        createdAt: v.created_at ? new Date(v.created_at).getTime() : Date.now()
       }))
     }
-  } catch { /* fallback to mock */ }
+  } catch { /* sin datos */ }
 }
 
 function selectProductForLookup(product) {
@@ -1202,12 +1273,17 @@ async function confirmarVenta() {
   stats.saldo_caja += ventaTotal
 
   recentTransactions.value.unshift({
-    id: Date.now(),
+    id: ventaResp?.id || Date.now(),
+    ventaNumero: ventaNumero || `#${Date.now().toString().slice(-6)}`,
     cliente: clientes.value.find(c => c.id === cart.cliente_id)?.nombre || null,
     total: ventaTotal,
-    items: cart.items.reduce((s, i) => s + i.cantidad, 0),
+    subtotal: cart.subtotal,
+    descuento: cart.descuento || 0,
     medio_pago: cart.medio_pago,
-    hora: new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+    items: cart.items.map(i => ({ ...i })),
+    itemCount: cart.items.length,
+    hora: new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }),
+    createdAt: Date.now()
   })
   if (recentTransactions.value.length > 20) recentTransactions.value.pop()
 
@@ -1222,6 +1298,45 @@ async function confirmarVenta() {
 
   vaciarCarrito()
   confirmando.value = false
+  nextTick(() => barcodeInput.value?.focus())
+}
+
+function viewSaleInfo(t) {
+  saleInfoTarget.value = t
+  showSaleInfoModal.value = true
+}
+
+function reopenTicket(t) {
+  ticketData.numero = t.ventaNumero || `#${t.id}`
+  ticketData.fecha = t.hora || ''
+  ticketData.items = t.items || []
+  ticketData.total = t.total
+  ticketData.descuento = t.descuento || 0
+  ticketData.medio_pago = t.medio_pago
+  ticketData.cliente = t.cliente || ''
+  showTicket.value = true
+}
+
+async function editSale(t) {
+  if (Date.now() - t.createdAt > 60000) {
+    toast.warning('Ya pasó el minuto para editar')
+    return
+  }
+  editingVentaId.value = t.id
+  try {
+    await api.put(`/api/ventas/${t.id}/anular`, {})
+    toast.info('Venta original anulada. Editá el carrito y confirmá.')
+  } catch {
+    toast.error('No se pudo anular la venta original')
+    editingVentaId.value = null
+    return
+  }
+  cart.items = (t.items || []).map(i => ({ ...i }))
+  cart.descuento = t.descuento || 0
+  cart.medio_pago = t.medio_pago || 'efectivo'
+  cart.cliente_id = ''
+  recalcCart()
+  toast.info(`Productos cargados. Editá y confirmá la venta.`)
   nextTick(() => barcodeInput.value?.focus())
 }
 </script>
