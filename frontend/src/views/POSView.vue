@@ -1248,25 +1248,11 @@ function addManualToCart() {
 }
 
 function addToCart(product, qty = 1, price = null) {
-  let unitPrice = price || product.precio_venta
   const isManual = product._pending || (product.codigo_barras && (product.codigo_barras.startsWith('*MANUAL*') || product.codigo_barras.startsWith('GEN-')))
 
   const oferta = ofertas.value.find(o => o.producto_id === product.id && o.activo)
-  let ofertaInfo = null
-  if (oferta && !isManual) {
-    if (oferta.tipo === 'porcentaje') {
-      const desc = unitPrice * (oferta.valor / 100)
-      unitPrice = Math.max(0, unitPrice - desc)
-      ofertaInfo = { tipo: oferta.tipo, valor: oferta.valor, label: `${oferta.valor}% OFF` }
-    } else if (oferta.tipo === 'monto') {
-      unitPrice = Math.max(0, unitPrice - oferta.valor)
-      ofertaInfo = { tipo: oferta.tipo, valor: oferta.valor, label: `$${oferta.valor} OFF` }
-    } else if (oferta.tipo === '2x1') {
-      ofertaInfo = { tipo: '2x1', valor: 0, label: '2x1' }
-    }
-  }
 
-  const existing = cart.items.find(i => i.producto_id === product.id && i.precio_unitario === unitPrice)
+  const existing = cart.items.find(i => i.producto_id === product.id && i.precio_unitario === (price || product.precio_venta))
 
   const newQty = (existing ? existing.cantidad : 0) + qty
   if (!isManual && product.stock_actual !== undefined && newQty > product.stock_actual) {
@@ -1276,15 +1262,15 @@ function addToCart(product, qty = 1, price = null) {
 
   if (existing) {
     existing.cantidad += qty
-    if (ofertaInfo) existing.oferta = ofertaInfo
+    if (oferta && !isManual) existing.oferta = { ...oferta }
   } else {
     cart.items.push({
       producto_id: product.id,
       nombre: product.nombre,
       codigo_barras: product.codigo_barras,
-      precio_unitario: unitPrice,
+      precio_unitario: price || product.precio_venta,
       cantidad: qty,
-      oferta: ofertaInfo
+      oferta: oferta && !isManual ? { ...oferta } : null
     })
   }
 
@@ -1317,10 +1303,27 @@ function handlePagoKeydown(event) {
 
 function recalcCart() {
   cart.subtotal = cart.items.reduce((sum, i) => {
-    let lineTotal = (i.precio_unitario || 0) * (i.cantidad || 0)
-    if (i.oferta?.tipo === '2x1' && (i.cantidad || 0) >= 2) {
-      lineTotal = lineTotal / 2
+    const qty = i.cantidad || 0
+    const unitPrice = i.precio_unitario || 0
+    let lineTotal = unitPrice * qty
+
+    if (i.oferta) {
+      const req = i.oferta.requiere_cantidad || 2
+      if (qty >= req) {
+        if (i.oferta.tipo === 'porcentaje') {
+          const desc = lineTotal * (i.oferta.valor / 100)
+          lineTotal = Math.max(0, lineTotal - desc)
+        } else if (i.oferta.tipo === 'monto_fijo') {
+          const mult = Math.floor(qty / req)
+          const desc = i.oferta.valor * mult
+          lineTotal = Math.max(0, lineTotal - desc)
+        } else if (i.oferta.tipo === '2x1') {
+          const mult = Math.floor(qty / req)
+          lineTotal = unitPrice * (qty - mult)
+        }
+      }
     }
+
     return sum + lineTotal
   }, 0)
   cart.total = Math.max(0, cart.subtotal - (cart.descuento || 0))
