@@ -42,6 +42,9 @@ const deleteOfertaTarget = ref(null)
 const savingOferta = ref(false)
 const deletingOferta = ref(false)
 const filterEnOferta = ref(false)
+const filterSinStock = ref(false)
+const filterSinCodigo = ref(false)
+const filterPendientes = ref(false)
 
 const countStockBajo = computed(() => products.value.filter(p => p.stock_actual <= (p.stock_minimo || 5) && p.stock_actual >= 0).length)
 
@@ -52,6 +55,18 @@ const countEnOferta = computed(() => {
   const pids = new Set(ofertasActivas.map(o => o.producto_id))
   return products.value.filter(p => pids.has(p.id)).length
 })
+
+const countSinStock = computed(() => products.value.filter(p => p.stock_actual === 0).length)
+
+const countSinCodigo = computed(() => products.value.filter(p => {
+  const cb = p.codigo_barras
+  return !cb || cb.trim() === '' || cb.startsWith('GEN-') || cb.startsWith('*MANUAL*')
+}).length)
+
+const countPendientes = computed(() => products.value.filter(p => {
+  const cb = p.codigo_barras
+  return cb && (cb.startsWith('GEN-') || cb.startsWith('*MANUAL*'))
+}).length)
 
 const showCatQuick = ref(false)
 const newCatNombre = ref('')
@@ -128,6 +143,21 @@ const filteredProducts = computed(() => {
     const ofertasActivas = ofertas.value.filter(o => o.activo)
     const pids = new Set(ofertasActivas.map(o => o.producto_id))
     list = list.filter(p => pids.has(p.id))
+  }
+  if (filterSinStock.value) {
+    list = list.filter(p => p.stock_actual === 0)
+  }
+  if (filterSinCodigo.value) {
+    list = list.filter(p => {
+      const cb = p.codigo_barras
+      return !cb || cb.trim() === '' || cb.startsWith('GEN-') || cb.startsWith('*MANUAL*')
+    })
+  }
+  if (filterPendientes.value) {
+    list = list.filter(p => {
+      const cb = p.codigo_barras
+      return cb && (cb.startsWith('GEN-') || cb.startsWith('*MANUAL*'))
+    })
   }
   if (searchQuery.value.trim()) {
     const q = searchQuery.value.toLowerCase()
@@ -518,6 +548,39 @@ async function fetchProveedores() {
       >
         <i class="fa-solid fa-tag"></i> En oferta
         <span v-if="countEnOferta > 0" class="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-300 rounded-full">{{ countEnOferta }}</span>
+      </button>
+      <button
+        type="button"
+        class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 border flex items-center gap-1.5"
+        :class="filterSinStock
+          ? 'bg-slate-600 text-white border-slate-600 shadow-sm shadow-slate-500/20'
+          : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'"
+        @click="filterSinStock = !filterSinStock"
+      >
+        <i class="fa-solid fa-circle-xmark"></i> Sin stock
+        <span v-if="countSinStock > 0" class="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300 rounded-full">{{ countSinStock }}</span>
+      </button>
+      <button
+        type="button"
+        class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 border flex items-center gap-1.5"
+        :class="filterSinCodigo
+          ? 'bg-slate-600 text-white border-slate-600 shadow-sm shadow-slate-500/20'
+          : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'"
+        @click="filterSinCodigo = !filterSinCodigo"
+      >
+        <i class="fa-solid fa-barcode"></i> Sin código
+        <span v-if="countSinCodigo > 0" class="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300 rounded-full">{{ countSinCodigo }}</span>
+      </button>
+      <button
+        type="button"
+        class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 border flex items-center gap-1.5"
+        :class="filterPendientes
+          ? 'bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-500/20'
+          : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'"
+        @click="filterPendientes = !filterPendientes"
+      >
+        <i class="fa-solid fa-clock"></i> Pendientes
+        <span v-if="countPendientes > 0" class="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300 rounded-full">{{ countPendientes }}</span>
       </button>
     </div>
 
