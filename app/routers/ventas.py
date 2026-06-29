@@ -40,6 +40,9 @@ def _venta_to_dict(v: Venta) -> dict:
                 "precio_unitario": i.precio_unitario,
                 "precio_costo": i.precio_costo,
                 "subtotal": i.subtotal,
+                "oferta_tipo": i.oferta_tipo,
+                "oferta_valor": i.oferta_valor,
+                "oferta_info": i.oferta_info,
             }
             for i in (v.items or [])
         ],
@@ -57,6 +60,9 @@ class VentaItemAdd(BaseModel):
     producto_id: int
     cantidad: float = Field(..., gt=0)
     precio_unitario: Optional[float] = None
+    oferta_tipo: Optional[str] = None
+    oferta_valor: Optional[float] = None
+    oferta_info: Optional[str] = None
 
 
 class VentaConfirmar(BaseModel):
@@ -129,7 +135,8 @@ def agregar_item(
         raise HTTPException(status_code=404, detail="Venta no encontrada")
     try:
         item = venta_service.agregar_item(
-            db, venta, data.producto_id, data.cantidad, data.precio_unitario
+            db, venta, data.producto_id, data.cantidad, data.precio_unitario,
+            data.oferta_tipo, data.oferta_valor, data.oferta_info
         )
         db.refresh(venta)
         return RespuestaData(

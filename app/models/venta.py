@@ -53,8 +53,12 @@ class VentaItem(Base):
 
     cantidad = Column(Float, nullable=False)
     precio_unitario = Column(Float, nullable=False)
-    precio_costo = Column(Float, nullable=True)     # Costo al momento de la venta
+    precio_costo = Column(Float, nullable=True)
     subtotal = Column(Float, nullable=False)
+
+    oferta_tipo = Column(String(20), nullable=True)
+    oferta_valor = Column(Float, nullable=True)
+    oferta_info = Column(Text, nullable=True)
 
     # Relaciones
     venta = relationship("Venta", back_populates="items")

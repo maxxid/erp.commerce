@@ -37,11 +37,11 @@
             <div v-for="(item, i) in ticket.items" :key="i" class="flex justify-between text-[10px]">
               <span class="flex-1 truncate">
                 {{ item.nombre }}
-                <span v-if="item.oferta" class="text-[9px] text-orange-600 font-bold">[{{ item.oferta.tipo === 'porcentaje' ? item.oferta.valor + '%' : item.oferta.tipo === 'monto_fijo' ? '$' + item.oferta.valor : '2x1' }}]</span>
+                <span v-if="item.oferta" class="text-[9px] text-orange-600 font-bold">[{{ item.oferta.tipo === 'porcentaje' ? item.oferta.valor + '% OFF' : item.oferta.tipo === 'monto_fijo' ? '$' + item.oferta.valor + ' OFF' : '2x1' }}]</span>
               </span>
               <span class="w-10 text-right">{{ item.cantidad }}</span>
-              <span class="w-20 text-right font-mono-data">{{ fcShort(item.precio_unitario) }}</span>
-              <span class="w-20 text-right font-bold">{{ fcShort(item.precio_unitario * item.cantidad) }}</span>
+              <span class="w-20 text-right font-mono-data">{{ fcShort(item._precio_neto || item.precio_unitario) }}</span>
+              <span class="w-20 text-right font-bold">{{ fcShort((item._precio_neto || item.precio_unitario) * item.cantidad) }}</span>
             </div>
           </div>
 

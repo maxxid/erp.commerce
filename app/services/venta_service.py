@@ -65,6 +65,9 @@ def agregar_item(
     producto_id: int,
     cantidad: float,
     precio_unitario: Optional[float] = None,
+    oferta_tipo: Optional[str] = None,
+    oferta_valor: Optional[float] = None,
+    oferta_info: Optional[str] = None,
 ) -> VentaItem:
     """Agrega un producto a la venta.
 
@@ -92,6 +95,9 @@ def agregar_item(
         precio_unitario=precio_unitario,
         precio_costo=producto.precio_costo,
         subtotal=subtotal,
+        oferta_tipo=oferta_tipo,
+        oferta_valor=oferta_valor,
+        oferta_info=oferta_info,
     )
     db.add(item)
 

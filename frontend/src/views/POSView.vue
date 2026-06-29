@@ -1414,7 +1414,10 @@ async function confirmarVenta() {
         await api.post(`/api/ventas/${ventaId}/items`, {
           producto_id: item.producto_id,
           cantidad: item.cantidad,
-          precio_unitario: item._precio_neto || item.precio_unitario
+          precio_unitario: item._precio_neto || item.precio_unitario,
+          oferta_tipo: item.oferta?.tipo || null,
+          oferta_valor: item.oferta?.valor || null,
+          oferta_info: item.oferta ? `${item.oferta.tipo === 'porcentaje' ? item.oferta.valor + '% OFF' : item.oferta.tipo === 'monto_fijo' ? '$' + item.oferta.valor + ' OFF' : '2x1'}` : null
         })
       }
 
