@@ -34,11 +34,12 @@
 
 <script setup>
 import { ref } from 'vue'
+import { GIT_COMMIT } from '@/version.js'
 
 defineProps({ apiMode: String, logs: Array })
 
 const consoleOpen = ref(false)
 const apiBaseUrl = ref('')
 const isDev = import.meta.env.DEV
-const commitId = import.meta.env.VITE_GIT_COMMIT || 'local'
+const commitId = GIT_COMMIT
 </script>
