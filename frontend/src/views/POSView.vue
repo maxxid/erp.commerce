@@ -168,20 +168,28 @@
                   </button>
                 </div>
                 <div class="flex items-center gap-2 mt-3">
-                  <input
-                    v-model.number="lookupProduct._qty"
-                    type="number"
-                    min="1"
-                    class="w-16 px-2 py-1.5 text-sm text-center font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
-                  >
-                  <input
-                    v-model.number="lookupProduct._price"
-                    type="number"
-                    step="0.01"
-                    class="flex-1 px-2 py-1.5 text-sm text-center font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
-                  >
+                  <div class="relative">
+                    <input
+                      v-model.number="lookupProduct._qty"
+                      type="number"
+                      min="1"
+                      placeholder="1"
+                      class="w-16 pl-6 pr-2 py-1.5 text-sm text-center font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+                    >
+                    <span class="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">u.</span>
+                  </div>
+                  <div class="relative flex-1">
+                    <span class="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-slate-400">$</span>
+                    <input
+                      v-model.number="lookupProduct._price"
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      class="w-full pl-6 pr-2 py-1.5 text-sm text-center font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+                    >
+                  </div>
                   <BaseButton size="sm" @click="addFoundToCart">
-                    <i class="fa-solid fa-plus"></i> Agregar
+                    <i class="fa-solid fa-plus mr-1"></i> {{ lookupProduct.codigo_barras }}
                   </BaseButton>
                 </div>
               </div>
