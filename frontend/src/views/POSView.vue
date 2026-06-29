@@ -149,18 +149,23 @@
               </div>
               <!-- Found externally or locally -->
               <div v-else-if="lookupProduct.id" class="p-3 bg-brand-50 dark:bg-brand-900/20 border border-brand-100 dark:border-brand-800/40 rounded-xl">
-                <div class="flex items-start gap-3">
-                  <div class="w-12 h-12 rounded-xl bg-brand-100 dark:bg-brand-800/40 flex items-center justify-center text-brand-600 dark:text-brand-300 shrink-0">
-                    <i class="fa-solid fa-box text-lg"></i>
-                  </div>
-                  <div class="flex-1 min-w-0">
-                    <p class="text-sm font-bold text-slate-900 dark:text-white truncate">{{ lookupProduct.nombre }}</p>
-                    <p class="text-xs text-slate-500 dark:text-slate-400">{{ lookupProduct.marca }}</p>
-                    <div class="flex items-center gap-3 mt-1.5">
-                      <span class="text-sm font-bold font-mono-data text-brand-600 dark:text-brand-400">{{ fc(lookupProduct.precio_venta) }}</span>
-                      <BaseBadge variant="default" size="xs">Stock: {{ lookupProduct.stock_actual }}</BaseBadge>
+                <div class="flex items-start justify-between">
+                  <div class="flex items-start gap-3">
+                    <div class="w-12 h-12 rounded-xl bg-brand-100 dark:bg-brand-800/40 flex items-center justify-center text-brand-600 dark:text-brand-300 shrink-0">
+                      <i class="fa-solid fa-box text-lg"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <p class="text-sm font-bold text-slate-900 dark:text-white truncate">{{ lookupProduct.nombre }}</p>
+                      <p class="text-xs text-slate-500 dark:text-slate-400">{{ lookupProduct.marca }}</p>
+                      <div class="flex items-center gap-3 mt-1.5">
+                        <span class="text-sm font-bold font-mono-data text-brand-600 dark:text-brand-400">{{ fc(lookupProduct.precio_venta) }}</span>
+                        <BaseBadge variant="default" size="xs">Stock: {{ lookupProduct.stock_actual }}</BaseBadge>
+                      </div>
                     </div>
                   </div>
+                  <button type="button" class="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition" @click="closeLookupPanel">
+                    <i class="fa-solid fa-xmark text-sm"></i>
+                  </button>
                 </div>
                 <div class="flex items-center gap-2 mt-3">
                   <input
@@ -175,16 +180,21 @@
                     step="0.01"
                     class="flex-1 px-2 py-1.5 text-sm text-center font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
                   >
-                  <BaseButton size="sm" @click="addToCart(lookupProduct, lookupProduct._qty, lookupProduct._price)">
+                  <BaseButton size="sm" @click="addFoundToCart">
                     <i class="fa-solid fa-plus"></i> Agregar
                   </BaseButton>
                 </div>
               </div>
               <!-- Manual entry (not found externally) -->
               <div v-else-if="lookupProduct._manualEntry" class="p-3 bg-red-50 dark:bg-red-900/20 border-2 border-red-400 dark:border-red-600 rounded-xl">
-                <div class="flex items-center gap-2 mb-3">
-                  <i class="fa-solid fa-circle-xmark text-red-500"></i>
-                  <p class="text-xs font-bold text-red-700 dark:text-red-300">No encontrado en fuentes externas</p>
+                <div class="flex items-center justify-between mb-3">
+                  <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-circle-xmark text-red-500"></i>
+                    <p class="text-xs font-bold text-red-700 dark:text-red-300">No encontrado en fuentes externas</p>
+                  </div>
+                  <button type="button" class="w-7 h-7 rounded-lg flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-100 dark:hover:bg-red-900/40 transition" @click="closeLookupPanel">
+                    <i class="fa-solid fa-xmark text-sm"></i>
+                  </button>
                 </div>
                 <p class="text-[10px] text-red-600 dark:text-red-400 mb-3">Ingresá los datos manualmente. Se guardará como <strong>*MANUAL*</strong> para revisión posterior.</p>
                 <div class="space-y-2">
@@ -1009,44 +1019,72 @@ async function triggerPOSLookup() {
     return
   }
 
-  // 2. No está en local, buscar en API (que busca en fuentes externas) - NO bloquea
+  // 2. No está en local, buscar en API - mostrar panel con animación
   posLookupCode.value = ''
+  const lookupId = Date.now()
+  lookupProduct._searchingExternal = true
+  lookupProduct._barcode = raw
+  lookupProduct._manualEntry = false
+  lookupProduct.id = null
+  lookupProduct._searched = false
 
   try {
     const resp = await api.post('/api/productos/lookup', { barcode: raw }).catch(() => null)
     if (resp && resp.nombre) {
-      // Agregar a pendientes y mostrar toast
-      const lookupId = Date.now()
+      // Encontrado en fuentes externas - mostrar en panel
+      lookupProduct._searchingExternal = false
+      lookupProduct.id = lookupId
+      lookupProduct.codigo_barras = raw
+      lookupProduct.nombre = resp.nombre
+      lookupProduct.marca = resp.marca || ''
+      lookupProduct.precio_venta = resp.precio_referencia || resp.precio_venta || 0
+      lookupProduct.precio_costo = resp.precio_costo || 0
+      lookupProduct.stock_actual = resp.stock_actual || 0
+      lookupProduct.categoria_id = resp.categoria_id
+      lookupProduct._qty = 1
+      lookupProduct._price = lookupProduct.precio_venta
+      lookupProduct._searched = true
+      if (resp.comparacion) {
+        lookupBadges.value = resp.comparacion.map(c => `${c.fuente}: ${fc(c.precio)}`)
+      }
+      // Guardar en pendientes por si el usuario sigue escaneando
       pendingLookups.value.push({
         id: lookupId,
         barcode: raw,
         nombre: resp.nombre,
-        marca: resp.marca,
-        precio: resp.precio_referencia || resp.precio_venta || 0,
-        fuente: resp.fuente
+        marca: resp.marca || '',
+        precio: lookupProduct.precio_venta,
+        fuente: resp.fuente,
+        type: 'found'
       })
       if (pendingLookups.value.length > 10) pendingLookups.value.shift()
-      toast.success(`${resp.nombre} encontrado en ${resp.fuente || 'fuente externa'}. Presiona para agregar.`, {
-        action: () => addPendingLookupToCart(lookupId)
-      })
     } else {
-      // No encontrado - crear pendiente manual
-      const lookupId = Date.now()
+      // No encontrado - mostrar manual entry en panel
+      lookupProduct._searchingExternal = false
+      lookupProduct._manualEntry = true
+      lookupProduct._manualNombre = ''
+      lookupProduct._manualPrecio = 0
+      lookupProduct._manualQty = 1
+      lookupProduct._barcode = raw
+      // Guardar en pendientes
       pendingLookups.value.push({
         id: lookupId,
         barcode: raw,
         nombre: '',
         marca: '',
         precio: 0,
-        fuente: null
+        fuente: null,
+        type: 'manual'
       })
       if (pendingLookups.value.length > 10) pendingLookups.value.shift()
-      toast.warning(`Código ${raw} no encontrado. Completá los datos para agregarlo.`, {
-        action: () => showManualEntryForPending(lookupId)
-      })
     }
   } catch {
-    toast.error('Error al buscar producto')
+    lookupProduct._searchingExternal = false
+    lookupProduct._manualEntry = true
+    lookupProduct._manualNombre = ''
+    lookupProduct._manualPrecio = 0
+    lookupProduct._manualQty = 1
+    lookupProduct._barcode = raw
   }
 
   nextTick(() => barcodeInput.value?.focus())
@@ -1074,6 +1112,8 @@ function addPendingLookupToCart(lookupId) {
   addToCart(tempProd, 1, lookup.precio)
   pendingLookups.value = pendingLookups.value.filter(l => l.id !== lookupId)
   toast.info(`${lookup.nombre} agregado al carrito.`)
+  // Si hay pendientes, mostrar siguiente en panel
+  showNextPendingInPanel()
 }
 
 function showManualEntryForPending(lookupId) {
@@ -1081,11 +1121,70 @@ function showManualEntryForPending(lookupId) {
   if (!lookup) return
   pendingLookups.value = pendingLookups.value.filter(l => l.id !== lookupId)
   lookupProduct._manualEntry = true
+  lookupProduct._searchingExternal = false
+  lookupProduct._barcode = lookup.barcode
   lookupProduct._manualNombre = ''
   lookupProduct._manualPrecio = lookup.precio || 0
   lookupProduct._manualQty = 1
-  lookupProduct._barcode = lookup.barcode
+  lookupProduct.id = null
+  lookupProduct._searched = false
   nextTick(() => barcodeInput.value?.focus())
+}
+
+function showNextPendingInPanel() {
+  if (pendingLookups.value.length === 0) {
+    closeLookupPanel()
+    return
+  }
+  const next = pendingLookups.value.shift()
+  if (next.type === 'found') {
+    lookupProduct._searchingExternal = false
+    lookupProduct._manualEntry = false
+    lookupProduct.id = next.id
+    lookupProduct.codigo_barras = next.barcode
+    lookupProduct.nombre = next.nombre
+    lookupProduct.marca = next.marca
+    lookupProduct.precio_venta = next.precio
+    lookupProduct._qty = 1
+    lookupProduct._price = next.precio
+    lookupProduct._searched = true
+  } else {
+    lookupProduct._searchingExternal = false
+    lookupProduct._manualEntry = true
+    lookupProduct._barcode = next.barcode
+    lookupProduct._manualNombre = ''
+    lookupProduct._manualPrecio = next.precio || 0
+    lookupProduct._manualQty = 1
+    lookupProduct.id = null
+    lookupProduct._searched = false
+  }
+}
+
+function addFoundToCart() {
+  const tempProd = {
+    id: Date.now() + Math.random(),
+    codigo_barras: lookupProduct.codigo_barras,
+    nombre: lookupProduct.nombre,
+    marca: lookupProduct.marca,
+    precio_venta: lookupProduct._price || lookupProduct.precio_venta,
+    precio_costo: 0,
+    stock_actual: 0,
+    categoria_id: categories.value[0]?.id || 1,
+    _pending: true
+  }
+  products.value.push(tempProd)
+  // Remove from pending
+  pendingLookups.value = pendingLookups.value.filter(l => l.id !== lookupProduct.id)
+  addToCart(tempProd, lookupProduct._qty, lookupProduct._price || lookupProduct.precio_venta)
+  showNextPendingInPanel()
+}
+
+function closeLookupPanel() {
+  lookupProduct._searchingExternal = false
+  lookupProduct._manualEntry = false
+  lookupProduct.id = null
+  lookupProduct._searched = false
+  lookupProduct._barcode = ''
 }
 
 function handlePOSInput() {
@@ -1128,12 +1227,10 @@ function addManualToCart() {
   products.value.push(tempProd)
   addToCart(tempProd, qty, precio)
   toast.info(`${nombre} agregado. Se guardará como *MANUAL* al confirmar venta.`)
-
-  // Reset manual entry state
-  lookupProduct._manualEntry = false
-  lookupProduct._manualNombre = ''
-  lookupProduct._manualPrecio = 0
-  lookupProduct._manualQty = 1
+  // Remove from pending and show next
+  const barcode = lookupProduct._barcode
+  pendingLookups.value = pendingLookups.value.filter(l => l.barcode !== barcode)
+  showNextPendingInPanel()
 }
 
 function addToCart(product, qty = 1, price = null) {
