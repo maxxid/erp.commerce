@@ -377,7 +377,7 @@
                       class="w-6 h-6 rounded-md bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs flex items-center justify-center transition active:scale-95"
                       @click="updateCartQty(idx, item.cantidad + 1)"
                     >+</button>
-                    <span class="text-xs font-mono-data font-bold text-brand-600 dark:text-brand-400 ml-auto">{{ fc(item.precio_unitario * item.cantidad) }}</span>
+                    <span class="text-xs font-mono-data font-bold text-brand-600 dark:text-brand-400 ml-auto">{{ fc((item._precio_neto || item.precio_unitario) * item.cantidad) }}</span>
                     <BaseBadge v-if="item.oferta" size="xs" variant="warning" class="ml-1">{{ item.oferta.tipo === 'porcentaje' ? item.oferta.valor + '%' : item.oferta.tipo === 'monto_fijo' ? '$' + item.oferta.valor : '2x1' }}</BaseBadge>
                   </div>
                 </div>
@@ -1252,8 +1252,9 @@ function addToCart(product, qty = 1, price = null) {
   const isManual = product._pending || (product.codigo_barras && (product.codigo_barras.startsWith('*MANUAL*') || product.codigo_barras.startsWith('GEN-')))
 
   const oferta = ofertas.value.find(o => o.producto_id === product.id && o.activo)
+  const basePrice = price || product.precio_venta
 
-  const existing = cart.items.find(i => i.producto_id === product.id && i.precio_unitario === (price || product.precio_venta))
+  const existing = cart.items.find(i => i.producto_id === product.id)
 
   const newQty = (existing ? existing.cantidad : 0) + qty
   if (!isManual && product.stock_actual !== undefined && newQty > product.stock_actual) {
@@ -1269,7 +1270,7 @@ function addToCart(product, qty = 1, price = null) {
       producto_id: product.id,
       nombre: product.nombre,
       codigo_barras: product.codigo_barras,
-      precio_unitario: price || product.precio_venta,
+      precio_unitario: basePrice,
       cantidad: qty,
       oferta: oferta && !isManual ? { ...oferta } : null
     })
@@ -1324,6 +1325,8 @@ function recalcCart() {
         }
       }
     }
+
+    i._precio_neto = qty > 0 ? lineTotal / qty : unitPrice
 
     return sum + lineTotal
   }, 0)
@@ -1411,7 +1414,7 @@ async function confirmarVenta() {
         await api.post(`/api/ventas/${ventaId}/items`, {
           producto_id: item.producto_id,
           cantidad: item.cantidad,
-          precio_unitario: item.precio_unitario
+          precio_unitario: item._precio_neto || item.precio_unitario
         })
       }
 
