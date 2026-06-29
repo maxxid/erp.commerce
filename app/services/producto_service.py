@@ -81,7 +81,7 @@ def actualizar_producto(db: Session, producto: Producto, data: dict) -> Producto
 
     updatable = [
         "nombre", "marca", "descripcion", "precio_referencia", "precio_costo",
-        "precio_venta", "imagen_url", "sku", "propiedades", "fuente",
+        "precio_venta", "precio_etiqueta", "imagen_url", "sku", "propiedades", "fuente",
         "categoria_id", "stock_minimo", "observaciones", "fecha_vencimiento",
     ]
     for field in updatable:
