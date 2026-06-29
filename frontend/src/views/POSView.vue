@@ -1025,6 +1025,8 @@ async function triggerPOSLookup() {
   // 2. No está en local, buscar en API (que busca en fuentes externas)
   lookupProduct._loading = false
   lookupProduct._searchingExternal = true
+  posLookupCode.value = ''
+  nextTick(() => barcodeInput.value?.focus())
 
   try {
     const resp = await api.post('/api/productos/lookup', { barcode: raw }).catch(() => null)
@@ -1054,8 +1056,6 @@ async function triggerPOSLookup() {
   }
 
   _processingLookup.value = false
-  // Limpiar input pero mantener focus para seguir escaneando
-  posLookupCode.value = ''
 }
 
 function handlePOSInput() {
