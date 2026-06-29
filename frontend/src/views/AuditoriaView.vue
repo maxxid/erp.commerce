@@ -119,6 +119,12 @@
                 <div class="text-slate-400 dark:text-slate-500">{{ row.medio_pago }}</div>
               </div>
             </template>
+            <template v-else-if="row.event === 'venta_editada'">
+              <div class="space-y-0.5">
+                <div>Editada — total original: <span class="font-mono-data font-semibold text-amber-600 dark:text-amber-400">{{ formatCurrency(row.total_anulado) }}</span></div>
+                <div class="text-slate-400 dark:text-slate-500">{{ row.medio_pago }} · Vuelta al carrito para edición</div>
+              </div>
+            </template>
             <template v-else-if="row.event === 'item_quitado'">
               <div class="space-y-0.5">
                 <div>{{ row.producto }} &times; {{ row.qty }} <span class="text-amber-600 dark:text-amber-400 font-mono-data">&minus;{{ formatCurrency(row.subtotal_change) }}</span></div>
@@ -206,7 +212,7 @@ const filters = [
   { key: 'Clientes', label: 'Clientes' },
 ]
 
-const suspiciousEventTypes = ['carrito_abandonado', 'item_quitado', 'venta_anulada']
+const suspiciousEventTypes = ['carrito_abandonado', 'item_quitado', 'venta_anulada', 'venta_editada']
 
 function isSuspicious(log) {
   if (log.suspicious) return true
@@ -240,6 +246,7 @@ function eventEmoji(event) {
     carrito_abandonado: '\u26A0\uFE0F',
     item_quitado: '\u2715',
     venta_anulada: '\u2298',
+    venta_editada: '\u270F\uFE0F',
     venta_confirmada: '\u2713',
   }
   return map[event] || ''
@@ -250,6 +257,7 @@ function eventLabel(log) {
     carrito_abandonado: 'Carrito abandonado',
     item_quitado: 'Item quitado',
     venta_anulada: 'Venta anulada',
+    venta_editada: 'Venta editada',
     carrito_creado: 'Carrito creado',
     venta_confirmada: 'Venta confirmada',
   }
@@ -261,6 +269,7 @@ function eventBadgeClass(log) {
     carrito_abandonado: 'bg-rose-100 text-rose-800',
     item_quitado: 'bg-amber-100 text-amber-800',
     venta_anulada: 'bg-rose-100 text-rose-800',
+    venta_editada: 'bg-amber-100 text-amber-800',
     carrito_creado: 'bg-slate-100 text-slate-700',
     venta_confirmada: 'bg-emerald-100 text-emerald-800',
   }
@@ -278,6 +287,7 @@ function eventBadgeClass(log) {
 
 function rowBgClass(log) {
   if (log.event === 'carrito_abandonado' || log.event === 'venta_anulada') return 'bg-rose-100/60 hover:bg-rose-100'
+  if (log.event === 'venta_editada') return 'bg-amber-100/60 hover:bg-amber-100'
   if (log.event === 'item_quitado') return 'bg-amber-100/60 hover:bg-amber-100'
   if (log.event === 'venta_confirmada') return 'bg-emerald-100/60 hover:bg-emerald-100'
   if (log.suspicious) return 'bg-rose-50/40 hover:bg-rose-50'

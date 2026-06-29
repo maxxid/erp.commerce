@@ -206,8 +206,9 @@ def confirmar(
 @router.put("/{venta_id}/anular", response_model=RespuestaData)
 def anular(
     venta_id: int,
+    edit: bool = Query(False, description="Si es true, se registra como edición en auditoría"),
     db: Session = Depends(get_db),
-    user: Usuario = Depends(require_role("admin", "encargado")),
+    user: Usuario = Depends(require_role("admin", "encargado", "cajero")),
 ):
     """Anula una venta confirmada, revirtiendo stock y caja."""
     venta = venta_service.obtener_venta(db, venta_id)
@@ -215,8 +216,9 @@ def anular(
         raise HTTPException(status_code=404, detail="Venta no encontrada")
     try:
         venta = venta_service.anular_venta(db, venta, user.id)
-        auditoria_service.registrar(db, user.id, "venta_anulada", venta.id, venta.numero,
-                                     {"total_anulado": venta.total, "medio_pago": venta.medio_pago})
+        evento = "venta_editada" if edit else "venta_anulada"
+        auditoria_service.registrar(db, user.id, evento, venta.id, venta.numero,
+                                     {"total_anulado": venta.total, "medio_pago": venta.medio_pago, "edit": edit})
         return RespuestaData(data=_venta_to_dict(venta), message=f"Venta {venta.numero} anulada")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

@@ -1324,7 +1324,7 @@ async function editSale(t) {
   }
   editingVentaId.value = t.id
   try {
-    await api.put(`/api/ventas/${t.id}/anular`, {})
+    await api.put(`/api/ventas/${t.id}/anular?edit=true`, {})
     toast.info('Venta original anulada. Editá el carrito y confirmá.')
   } catch {
     toast.error('No se pudo anular la venta original')
