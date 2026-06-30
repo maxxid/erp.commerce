@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from app.database import get_db
 from app.services import caja_service
 from app.services import catalogo_service
+from app.services import auditoria_service
 from app.schemas.common import RespuestaData, RespuestaLista
 from app.auth.dependencies import get_current_user, require_role
 from app.models.usuario import Usuario
@@ -53,6 +54,8 @@ def apertura(
 ):
     try:
         mov = caja_service.abrir_caja(db, data.monto_inicial, user.id, data.sucursal_id)
+        auditoria_service.registrar(db, user.id, "apertura_caja", None, None,
+                                   {"monto_inicial": data.monto_inicial, "sucursal_id": data.sucursal_id})
         return RespuestaData(
             data={"id": mov.id, "monto": mov.monto, "tipo": mov.tipo},
             message="Caja abierta",
@@ -73,6 +76,9 @@ def cierre_metodo(
             db, data.medio_pago, data.monto_real, user.id,
             data.comentario, data.sucursal_id
         )
+        auditoria_service.registrar(db, user.id, "cierre_caja", None, None,
+                                   {"medio_pago": data.medio_pago, "monto_real": data.monto_real,
+                                    "esperado": esperado, "diferencia": diferencia, "sucursal_id": data.sucursal_id})
         return RespuestaData(
             data={
                 "id": mov.id, "medio_pago": data.medio_pago,
@@ -96,6 +102,8 @@ def cierre_total(
         mov, desglose = caja_service.cerrar_todo(
             db, user.id, data.comentario, data.sucursal_id
         )
+        auditoria_service.registrar(db, user.id, "cierre_total_caja", None, None,
+                                   {"total_ingresos": desglose["total_ingresos"], "comentario": data.comentario, "sucursal_id": data.sucursal_id})
         # Auto-exportar catálogo al cerrar caja
         try:
             catalogo_service.subir_catalogo_a_r2(db)
@@ -125,6 +133,8 @@ def ingreso(
         db, data.monto, data.descripcion or "Ingreso manual", user.id,
         sucursal_id=data.sucursal_id,
     )
+    auditoria_service.registrar(db, user.id, "ingreso_caja", None, None,
+                               {"monto": data.monto, "descripcion": data.descripcion, "sucursal_id": data.sucursal_id})
     return RespuestaData(data={"id": mov.id, "monto": mov.monto}, message="Ingreso registrado")
 
 
@@ -140,6 +150,8 @@ def egreso(
         db, data.monto, data.descripcion or "Egreso manual", user.id,
         sucursal_id=data.sucursal_id,
     )
+    auditoria_service.registrar(db, user.id, "egreso_caja", None, None,
+                               {"monto": data.monto, "descripcion": data.descripcion, "sucursal_id": data.sucursal_id})
     return RespuestaData(data={"id": mov.id, "monto": mov.monto}, message="Egreso registrado")
 
 

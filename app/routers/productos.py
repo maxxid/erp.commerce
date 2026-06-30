@@ -171,6 +171,8 @@ def crear(
             detail=f"Ya existe un producto con código {data.codigo_barras}"
         )
     producto = producto_service.crear_producto(db, data.model_dump())
+    auditoria_service.registrar(db, user.id, "producto_creado", None, None,
+                               {"producto_id": producto.id, "nombre": producto.nombre, "precio_venta": producto.precio_venta})
     return RespuestaData(data=producto, message="Producto creado")
 
 
@@ -212,6 +214,8 @@ def actualizar(
     producto = producto_service.actualizar_producto(
         db, producto, update_data
     )
+    auditoria_service.registrar(db, user.id, "producto_actualizado", None, None,
+                               {"producto_id": producto.id, "nombre": producto.nombre, "campos_actualizados": list(update_data.keys())})
     return RespuestaData(data=producto, message="Producto actualizado")
 
 
@@ -226,6 +230,8 @@ def desactivar(
     if not producto:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
     producto_service.actualizar_producto(db, producto, {"activo": False})
+    auditoria_service.registrar(db, user.id, "producto_desactivado", None, None,
+                               {"producto_id": producto.id, "nombre": producto.nombre})
     return RespuestaData(message="Producto desactivado")
 
 

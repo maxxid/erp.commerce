@@ -1,5 +1,6 @@
 """Router de Ventas: crear, items, confirmar, anular, listar."""
 
+from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -142,6 +143,15 @@ def agregar_item(
             data.por_kilo, data.peso
         )
         db.refresh(venta)
+        auditoria_service.registrar(db, user.id, "item_agregado", venta.id, venta.numero, {
+            "producto_id": data.producto_id,
+            "producto_nombre": item.producto.nombre if item.producto else "?",
+            "cantidad": data.cantidad,
+            "por_kilo": data.por_kilo,
+            "peso": data.peso,
+            "precio_unitario": data.precio_unitario,
+            "subtotal": item.subtotal,
+        })
         return RespuestaData(
             data={"item_id": item.id, "subtotal": item.subtotal, "venta_subtotal": venta.subtotal},
             message="Ítem agregado",
@@ -204,7 +214,10 @@ def confirmar(
             db, venta, data.medio_pago, data.descuento, user.id
         )
         auditoria_service.registrar(db, user.id, "venta_confirmada", venta.id, venta.numero,
-                                     {"medio_pago": data.medio_pago, "total": venta.total, "items": len(venta.items)})
+                                     {"medio_pago": data.medio_pago, "total": venta.total, "items": len(venta.items), "descuento": data.descuento, "hora": datetime.now().strftime("%H:%M")})
+        if data.descuento and data.descuento > 0:
+            auditoria_service.registrar(db, user.id, "descuento_aplicado", venta.id, venta.numero,
+                                         {"monto_descuento": data.descuento, "total_original": venta.subtotal, "total_final": venta.total})
         return RespuestaData(
             data=_venta_to_dict(venta),
             message=f"Venta {venta.numero} confirmada. Total: ${venta.total:,.2f}",
