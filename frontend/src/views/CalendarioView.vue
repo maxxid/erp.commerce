@@ -355,6 +355,13 @@ function setDateFilter(key) {
       selectedDateFrom.value = formatDate(today)
       selectedDateTo.value = formatDate(today)
       break
+    case 'ayer': {
+      const yesterday = new Date(today)
+      yesterday.setDate(today.getDate() - 1)
+      selectedDateFrom.value = formatDate(yesterday)
+      selectedDateTo.value = formatDate(yesterday)
+      break
+    }
     case 'esta_semana': {
       const monday = getMonday(today)
       const sunday = new Date(monday)
@@ -391,6 +398,7 @@ function setDateFilter(key) {
 
 const dateFilters = [
   { key: 'hoy', label: 'Hoy' },
+  { key: 'ayer', label: 'Ayer' },
   { key: 'esta_semana', label: 'Esta Semana' },
   { key: 'ult_2_semanas', label: 'Últ. 2 Semanas' },
   { key: 'este_mes', label: 'Este Mes' },
