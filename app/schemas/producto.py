@@ -7,7 +7,7 @@ from datetime import datetime
 
 class ProductoBase(BaseModel):
     """Campos compartidos por create y update."""
-    codigo_barras: str = Field(..., min_length=1, max_length=50)
+    codigo_barras: Optional[str] = Field(None, max_length=50)
     nombre: str = Field(..., min_length=1, max_length=200)
     marca: Optional[str] = None
     descripcion: Optional[str] = None

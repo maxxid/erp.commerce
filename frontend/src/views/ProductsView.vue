@@ -295,7 +295,7 @@ async function lookupBarcode() {
 
 async function saveProduct() {
   formError.value = ''
-  if (!form.nombre || !form.codigo_barras || !form.categoria_id) {
+  if (!form.nombre || !form.categoria_id) {
     formError.value = 'Completá los campos obligatorios'
     return
   }
@@ -619,7 +619,10 @@ async function fetchProveedores() {
         <span class="text-xs font-mono-data text-slate-600 dark:text-slate-300">{{ fc(row.precio_costo) }}</span>
       </template>
       <template #precio_venta="{ row }">
-        <span class="text-xs font-mono-data font-bold text-brand-600 dark:text-brand-400">{{ fc(row.precio_venta) }}</span>
+        <span class="text-xs font-mono-data font-bold text-brand-600 dark:text-brand-400">
+          {{ fc(row.tipo_venta === 'kilo' ? row.precio_por_kilo : row.precio_venta) }}
+          <span v-if="row.tipo_venta === 'kilo'" class="text-[9px] text-amber-500">/kg</span>
+        </span>
       </template>
       <template #stock_actual="{ row }">
         <BaseBadge

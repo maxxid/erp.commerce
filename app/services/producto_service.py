@@ -63,6 +63,18 @@ def crear_producto(db: Session, data: dict) -> Producto:
     """Crea un producto nuevo con stock inicial."""
     cantidad_inicial = data.pop("cantidad_inicial", 0) or data.pop("stock_actual", 0) or 0
 
+    if not data.get("codigo_barras"):
+        existing = db.query(Producto).filter(
+            Producto.codigo_barras.like("MAN-%")
+        ).order_by(Producto.id.desc()).first()
+        seq = 1
+        if existing and existing.codigo_barras:
+            try:
+                seq = int(existing.codigo_barras.split("-")[1]) + 1
+            except:
+                pass
+        data["codigo_barras"] = f"MAN-{seq:010d}"
+
     producto = Producto(**data)
     producto.stock_actual = cantidad_inicial
     db.add(producto)
