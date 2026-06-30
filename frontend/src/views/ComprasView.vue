@@ -69,6 +69,16 @@
         </template>
         <template #acciones="{ row }">
           <div class="flex items-center justify-center gap-1">
+            <a
+              v-if="row.proveedor_telefono"
+              :href="`https://wa.me/${row.proveedor_telefono.replace(/\D/g,'')}`"
+              target="_blank"
+              rel="noopener"
+              class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white transition-colors"
+              title="WhatsApp"
+            >
+              <i class="fa-brands fa-whatsapp text-sm"></i>
+            </a>
             <BaseButton
               v-if="row.estado === 'pendiente' || row.estado === 'parcial'"
               variant="primary"
@@ -406,6 +416,7 @@ async function fetchCompras() {
           id: c.id,
           numero_orden: c.numero,
           proveedor: c.proveedor_nombre || '',
+          proveedor_telefono: c.proveedor_telefono || '',
           total: c.total || 0,
           estado: c.estado || '',
           fecha: c.fecha ? new Date(c.fecha).toLocaleDateString('es-AR') : '',

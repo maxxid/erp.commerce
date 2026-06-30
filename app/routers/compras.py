@@ -19,6 +19,7 @@ def _compra_to_dict(c: Compra) -> dict:
         "id": c.id, "numero": c.numero,
         "proveedor_id": c.proveedor_id,
         "proveedor_nombre": c.proveedor.nombre if c.proveedor else "",
+        "proveedor_telefono": c.proveedor.telefono if c.proveedor else "",
         "usuario_id": c.usuario_id,
         "sucursal_id": c.sucursal_id,
         "fecha": c.fecha.isoformat() if c.fecha else None,
