@@ -64,6 +64,16 @@
         </template>
         <template #actions="{ row }">
           <div class="flex items-center justify-end gap-2">
+            <a
+              v-if="row.phone"
+              :href="waUrl(row)"
+              target="_blank"
+              rel="noopener"
+              class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white transition-colors"
+              title="WhatsApp"
+            >
+              <i class="fa-brands fa-whatsapp text-base"></i>
+            </a>
             <BaseButton
               variant="ghost"
               size="sm"
@@ -445,6 +455,18 @@ function openEditModal(client) {
   form.phone = client.phone
   form.creditLimit = client.creditLimit
   showModal.value = true
+}
+
+function waUrl(client) {
+  const phone = (client.phone || '').replace(/\D/g, '')
+  if (!phone) return '#'
+  let msg = `Hola ${client.name}, tu saldo actual es ${formatCurrency(client.balance)}.`
+  if (client.balance > 0) {
+    msg += ' ¿Podemos coordinar el pago?'
+  } else {
+    msg += ' Todo al día. ¡Gracias!'
+  }
+  return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`
 }
 
 async function openTicketsModal(client) {
