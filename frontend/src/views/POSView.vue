@@ -268,12 +268,22 @@
           <button
             type="button"
             class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 border"
-            :class="!selectedPOSCategory
+            :class="!selectedPOSCategory && !filterPorKilo
               ? 'bg-brand-600 text-white border-brand-600 shadow-sm shadow-brand-500/20'
               : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'"
-            @click="selectedPOSCategory = null"
+            @click="selectedPOSCategory = null; filterPorKilo = false"
           >
             Todos
+          </button>
+          <button
+            type="button"
+            class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 border"
+            :class="filterPorKilo
+              ? 'bg-amber-500 text-white border-amber-500 shadow-sm shadow-amber-500/20'
+              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'"
+            @click="filterPorKilo = !filterPorKilo; selectedPOSCategory = null"
+          >
+            KG
           </button>
           <button
             v-for="cat in categories"
@@ -755,6 +765,7 @@ const { firstSaleOfDay } = useConfetti()
 const posLookupCode = ref('')
 const posTextSearch = ref('')
 const selectedPOSCategory = ref(null)
+const filterPorKilo = ref(false)
 const confirmando = ref(false)
 const showTicket = ref(false)
 const showStatsPanel = ref(true)
@@ -920,6 +931,9 @@ const filteredPOSProducts = computed(() => {
   let list = products.value
   if (selectedPOSCategory.value) {
     list = list.filter(p => p.categoria_id === selectedPOSCategory.value)
+  }
+  if (filterPorKilo.value) {
+    list = list.filter(p => p.tipo_venta === 'kilo')
   }
   if (posTextSearch.value.trim()) {
     const q = posTextSearch.value.toLowerCase()

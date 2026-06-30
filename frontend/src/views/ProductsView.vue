@@ -112,8 +112,6 @@ const defaultForm = () => ({
   proveedor_id: null,
   observaciones: '',
   tipo_venta: 'unidad',
-  precio_por_kilo: null,
-  precio_por_unidad: null,
 })
 
 const form = reactive(defaultForm())
@@ -254,7 +252,7 @@ function openEditModal(product) {
     codigo_barras: barcode,
     nombre: product.nombre,
     marca: product.marca,
-    precio_venta: product.precio_venta,
+    precio_venta: product.tipo_venta === 'kilo' ? (product.precio_por_kilo || product.precio_venta) : product.precio_venta,
     precio_costo: product.precio_costo,
     categoria_id: product.categoria_id,
     stock_actual: product.stock_actual,
@@ -263,8 +261,6 @@ function openEditModal(product) {
     proveedor_id: product.proveedor_id || null,
     observaciones: product.observaciones || '',
     tipo_venta: product.tipo_venta || 'unidad',
-    precio_por_kilo: product.precio_por_kilo || null,
-    precio_por_unidad: product.precio_por_unidad || null,
   })
   showModal.value = true
 }
@@ -306,8 +302,13 @@ async function saveProduct() {
 
   saving.value = true
   try {
+    const payload = { ...form }
+    if (form.tipo_venta === 'kilo') {
+      payload.precio_por_kilo = form.precio_venta
+      payload.precio_venta = null
+    }
     if (editingProduct.value) {
-      const resp = await api.put(`/api/productos/${editingProduct.value.id}`, form)
+      const resp = await api.put(`/api/productos/${editingProduct.value.id}`, payload)
 
       const idx = products.value.findIndex(p => p.id === editingProduct.value.id)
       if (idx !== -1) {
@@ -315,8 +316,8 @@ async function saveProduct() {
       }
       toast.success('Producto actualizado')
     } else {
-      const resp = await api.post('/api/productos', form)
-      products.value.push({ id: resp.id, ...form })
+      const resp = await api.post('/api/productos', payload)
+      products.value.push({ id: resp.id, ...payload })
       toast.success('Producto creado')
 
       if (form.proveedor_id && resp.id) {
@@ -723,7 +724,7 @@ async function fetchProveedores() {
           />
           <BaseInput
             v-model.number="form.precio_venta"
-            label="Precio Venta"
+            :label="form.tipo_venta === 'kilo' ? 'Precio por kg' : 'Precio Venta'"
             type="number"
             step="0.01"
             min="0"
@@ -800,38 +801,15 @@ async function fetchProveedores() {
         />
 
         <!-- Tipo de venta -->
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div>
-            <label class="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Tipo de Venta</label>
-            <select
-              v-model="form.tipo_venta"
-              class="w-full px-3 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition"
-            >
-              <option value="unidad">Por Unidad</option>
-              <option value="kilo">Por Kilo</option>
-              <option value="ambos">Ambos</option>
-            </select>
-          </div>
-          <BaseInput
-            v-if="form.tipo_venta !== 'unidad'"
-            v-model.number="form.precio_por_kilo"
-            label="Precio por kilo"
-            type="number"
-            step="0.01"
-            min="0"
-            placeholder="0.00"
-            input-class="font-mono-data text-right"
-          />
-          <BaseInput
-            v-if="form.tipo_venta !== 'kilo'"
-            v-model.number="form.precio_por_unidad"
-            label="Precio por unidad"
-            type="number"
-            step="0.01"
-            min="0"
-            placeholder="0.00"
-            input-class="font-mono-data text-right"
-          />
+        <div>
+          <label class="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Tipo de Venta</label>
+          <select
+            v-model="form.tipo_venta"
+            class="w-full px-3 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition"
+          >
+            <option value="unidad">Por Unidad</option>
+            <option value="kilo">Por Kilo</option>
+          </select>
         </div>
 
         <!-- Quick-create Categoria -->
