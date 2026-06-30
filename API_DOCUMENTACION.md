@@ -68,7 +68,10 @@ Response (401):
   Authorization: Bearer {access_token}
 
 2.2 GET /api/auth/me
-─────────────────────
+────────────────────
+Valida el token y devuelve los datos del usuario autenticado.
+Usado por el frontend para auto-login al recargar la página.
+
 Response (200):
   {
     "ok": true,
@@ -80,6 +83,8 @@ Response (200):
       "ultimo_login": "2026-06-12T02:00:00"
     }
   }
+
+Response (401): Token inválido o expirado.
 
 Roles disponibles: "admin", "cajero", "encargado", "repositor"
 
@@ -357,32 +362,76 @@ Error (400):
   { "detail": "Ya hay una caja abierta. Ciérrela primero." }
 
 
-5.3 POST /api/caja/cierre
-──────────────────────────
+5.3 POST /api/caja/cierre-metodo
+────────────────────────────────────
+Cierra un medio de pago específico con su propio arqueo. Requiere rol: admin, cajero.
+
 Request:
   {
-    "monto_real": 72000.0,
+    "medio_pago": "efectivo",
+    "monto_real": 50000.0,
+    "comentario": "Faltante en monedas",
     "sucursal_id": 1
   }
-
-  monto_real: el dinero contado físicamente
 
 Response (200):
   {
     "ok": true,
-    "message": "Caja cerrada. Diferencia: $0.00",
+    "message": "efectivo cerrado. Diferencia: $-200.00",
     "data": {
       "id": 1,
-      "monto_real": 72000.0,
-      "saldo_esperado": 72000.0,
-      "diferencia": 0.0
+      "medio_pago": "efectivo",
+      "monto_real": 50000.0,
+      "saldo_esperado": 50200.0,
+      "diferencia": -200.0
     }
   }
 
-  diferencia: negativo = faltante, positivo = sobrante, 0 = arqueo perfecto
+
+5.4 POST /api/caja/cierre-total
+────────────────────────────────────
+Cierra la caja completamente (todos los métodos). Fin de la sesión.
+Requiere rol: admin, cajero.
+
+Request:
+  {
+    "comentario": "Cierre de jornada",
+    "sucursal_id": 1
+  }
+
+Response (200):
+  {
+    "ok": true,
+    "message": "Caja cerrada totalmente.",
+    "data": {
+      "id": 1,
+      "total_ingresos": 72000.0,
+      "desglose": { "efectivo": 50000.0, "debito": 15000.0, ... }
+    }
+  }
 
 
-5.4 POST /api/caja/ingreso
+5.5 GET /api/caja/resumen
+────────────────────────────
+Devuelve el desglose de ventas por medio de pago y si cada método está cerrado.
+Usado por el modal de cierre de caja.
+
+Response (200):
+  {
+    "ok": true,
+    "data": {
+      "apertura": 50000.0,
+      "efectivo": 30000.0,
+      "debito": 12000.0,
+      "credito": 5000.0,
+      "transferencia": 25000.0,
+      "total_ingresos": 72000.0,
+      "metodos_cerrados": ["debito", "credito"]
+    }
+  }
+
+
+5.6 POST /api/caja/ingreso
 ───────────────────────────
 Registra un ingreso extra (no asociado a venta). Requiere caja abierta.
 
@@ -669,27 +718,35 @@ Response (200): Igual estructura que item de la lista.
 
 
 7.3 POST /api/compras
-──────────────────────
-Crea una compra vacía en estado "pendiente".
+─────────────────────
+Crea una compra en estado "pendiente" con los items incluidos.
 Requiere rol: admin, encargado.
 
 Request:
   {
     "proveedor_id": 1,
     "sucursal_id": 1,
-    "notas": "Compra semanal"
+    "notas": "Compra semanal",
+    "items": [
+      { "codigo_barras": "123456789", "producto": "Nombre del producto", "cantidad": 10.0, "precio": 800.0 }
+    ]
   }
+
+Notes:
+  - "items" es opcional (puede ser array vacío)
+  - Busca producto por codigo_barras primero, luego por nombre (ilike)
+  - Si no encuentra el producto, ignora ese item silenciosamente
 
 Response (200):
   {
     "ok": true,
     "message": "Compra C-00000001 creada",
-    "data": { ...compra con estado "pendiente", items: []... }
+    "data": { ...compra con estado "pendiente" o "parcial"... }
   }
 
 
 7.4 POST /api/compras/{compra_id}/items
-────────────────────────────────────────
+───────────────────────────────────────
 Agrega un producto a la compra.
 
 Request:
@@ -714,7 +771,7 @@ Response (200):
 
 
 7.5 DELETE /api/compras/{compra_id}/items/{item_id}
-────────────────────────────────────────────────────
+───────────────────────────────────────────────────
 Quita un ítem de la compra pendiente.
 
 Response (200):
@@ -722,23 +779,40 @@ Response (200):
 
 
 7.6 PUT /api/compras/{compra_id}/recibir
-─────────────────────────────────────────
+────────────────────────────────────────
 Recibe la mercadería: ingresa stock, actualiza precio_costo del producto.
+Estados: "pendiente" → si se recibe algo → "parcial" o "recibida".
+
+Request (opcional):
+  { "cantidades": { "item_id": cantidad_a_recibir } }
+  Si se omite, recibe el pendiente completo de cada item.
 
 Response (200):
   {
     "ok": true,
-    "message": "Compra C-00000001 recibida. Stock actualizado.",
-    "data": { ...compra con estado "recibida"... }
+    "message": "Compra C-00000001 recibida.",
+    "data": { ...compra con estado "recibida" o "parcial"... }
   }
 
 
 7.7 PUT /api/compras/{compra_id}/anular
-────────────────────────────────────────
-Anula una compra pendiente. No revierte stock (nunca se recibió).
+───────────────────────────────────────
+Anula una compra en estado "pendiente" o "parcial". Revierte stock_transito.
 
 Response (200):
   { "ok": true, "data": { ...compra con estado "anulada"... } }
+
+
+7.8 POST /api/compras/{compra_id}/comentario
+──────────────────────────────────────────────
+Agrega un comentario con fecha y hora a la compra (concatena al campo notas).
+Requiere rol: admin, encargado, cajero.
+
+Request:
+  { "texto": "El proveedor confirmó el envío para mañana" }
+
+Response (200):
+  { "ok": true, "message": "Comentario agregado", "data": { "notas": "..." } }
 
 
 ► FLUJO COMPLETO DE COMPRA:
@@ -843,8 +917,33 @@ Request:
   }
 
 9.3 PUT /api/clientes/{id}
-───────────────────────────
+──────────────────────────
 Request: { "limite_credito": 100000.0 }
+
+
+9.4 POST /api/clientes/{id}/abonar
+────────────────────────────────────
+Registra un pago parcial o total del saldo del cliente (cta. corriente).
+Reduce el saldo de la cuenta corriente.
+
+Request:
+  {
+    "monto": 5000.0,
+    "comentario": "Pago parcial en efectivo"
+  }
+
+Response (200):
+  {
+    "ok": true,
+    "message": "Abono registrado",
+    "data": {
+      "cliente_id": 1,
+      "monto": 5000.0,
+      "saldo_anterior": 22000.0,
+      "saldo_nuevo": 17000.0,
+      "comentario": "Pago parcial en efectivo"
+    }
+  }
 
 
 ═══════════════════════════════════════════════════════════════
@@ -911,7 +1010,8 @@ Response (200):
 - Todos los precios están en ARS (pesos argentinos), como float.
 - Formatear: $ 1.500,00 (es-AR).
 - Los estados de venta son: "pendiente" → "confirmada" → (opcional "anulada").
-- Los estados de compra son: "pendiente" → "recibida" → (opcional "anulada").
+- Los estados de compra son: "pendiente" → "parcial" → "recibida" → (opcional "anulada").
+- Al cerrar caja con cierre-total, el frontend hace logout automático.
 - Una venta pendiente se puede modificar (agregar/quitar items).
   Una vez confirmada o anulada, es inmutable.
 - Al confirmar venta con "cta_corriente", el saldo del cliente aumenta.

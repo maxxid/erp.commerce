@@ -1,5 +1,21 @@
 # Ideas Pendientes — ApexERP
 
+## Completados en esta sesión (30/06/2026)
+
+- Botón WhatsApp en Clientes con mensaje prellenado de deuda
+- Botón WhatsApp en Compras (proveedores)
+- Estado "parcial" en Compras (recepción parcial)
+- Modal de arqueo en Cierre de Caja (montos esperados vs reales)
+- Logout automático tras cierre-total de caja
+- Validación de token con `/api/auth/me` en auto-login
+- Columnas en Compras: Total color brand-600, Canti., Pendiente, icono Comentarios
+- Comentarios en Compras con fecha/hora y autor
+- Fix: items ahora se guardan al crear OC (antes se perdían)
+- Endpoint POST `/api/compras/{id}/comentario`
+- Endpoint POST `/api/clientes/{id}/abonar`
+
+---
+
 ## Dashboard multi-negocio (admin central)
 **Estado:** Idea — para más adelante
 
@@ -56,3 +72,8 @@ Un dueño con varios negocios (cada uno con su machine_id) necesita ver todo cen
 - NSIS o Inno Setup
 - Empaqueta Python + dependencias + la app
 - Un solo .exe, siguiente-siguiente-instalar
+
+### Compras: producto similar o discontinuo
+- Al recibir, poder reemplazar un producto pedido por otro similar
+- Marcar ítems como "no enviado / discontinuo"
+- Registrar qué se recibió en lugar de qué se pidió

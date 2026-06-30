@@ -106,6 +106,12 @@
 3. Si hay licencia válida → muestra formulario de login
 4. Login exitoso → guarda JWT en localStorage → redirige a `/dashboard`
 
+### Auto-Login y Validación de Sesión
+- `checkAutoLogin()` es **async** y valida el token contra `GET /api/auth/me`
+- Si el token es inválido/expirado → limpia localStorage y no loguea
+- Si la caja está cerrada y se ejecuta cierre-total → logout automático y redirige a `/login`
+- El usuario se desloggea automáticamente al cerrar la jornada
+
 ---
 
 ## 3. Dashboard
@@ -433,7 +439,7 @@
 | **Botón "Sincronizar"** | `syncData()` — recarga movimientos y resumen |
 | **Badge estado caja** | Verde "Abierta" / Rojo "Cerrada" |
 | **Botón "Abrir Caja"** | `abrirCaja()` — prompt por monto inicial, POST `/api/caja/apertura` |
-| **Botón "Cerrar Caja"** | `cerrarCaja()` — si hay tickets apartados, muestra confirmación extra: "Hay X ticket(s) apartados en POS. Si cerrás la caja sin recuperarlos se marcarán como huérfanos en la auditoría. ¿Cerrar de todas formas?". Al confirmar: marca como `_orphaned = true` y POST `/api/caja/cierre-total` |
+| **Botón "Cerrar Caja"** | `initCierreCaja()` — verifica tickets apartados, luego abre modal de arqueo |
 
 ### Resumen
 
@@ -448,9 +454,20 @@
 
 | Elemento | Acción |
 |----------|--------|
-| **Botones de método** | Efectivo | Débito | Crédito | Transferencia. `@click` activa formulario de cierre |
+| **Botones de método** | Efectivo \| Débito \| Crédito \| Transferencia. `@click` activa formulario de cierre |
 | **Badge "Cerrado"** | Métodos ya cerrados muestran check verde |
 | **Formulario activo** | Monto Real + Comentario + Cancelar/Cerrar |
+
+### Modal: Cierre de Caja (Arqueo)
+*(visible al hacer "Cerrar Caja")*
+
+| Elemento | Descripción |
+|----------|-------------|
+| **Métodos de pago** | Lista con: Esperado (calculado), Monto Real (input), Diferencia (color verde/rojo) |
+| **Comentario general** | Campo opcional para nota al cierre |
+| **Alerta tickets apartados** | Si hay tickets en hold: confirmación antes de continuar |
+| **Botón "Confirmar Cierre"** | `confirmarCierreCaja()` — cierra cada método + cierre-total + logout automático |
+| **Botón "Cancelar"** | Cierra el modal sin cerrar la caja |
 
 ### Movimientos del Día
 
@@ -477,13 +494,22 @@
 | **Botón "Registrar"** | `registrarMovimiento()` |
 | **Botón "Cancelar"** | `showNuevoMovimiento = false` |
 
+### Flujo de Cierre de Caja
+1. "Cerrar Caja" → `initCierreCaja()` → GET `/api/caja/resumen` → obtiene desglose por método
+2. Si hay tickets apartados → confirmación de huérfanos
+3. Modal muestra montos esperados vs reales por método de pago
+4. Cajero ingresa monto real contado en cada método
+5. Diferencia se calcula y muestra en verde (sobrante) o rojo (faltante)
+6. "Confirmar Cierre" → POST `/api/caja/cierre-metodo` por cada método + POST `/api/caja/cierre-total`
+7. Logout automático → redirige a `/login`
+
 ### API Calls
 - `GET /api/caja/movimientos` — listar movimientos
-- `GET /api/caja/resumen` — resumen por método
+- `GET /api/caja/resumen` — resumen por método (para modal de cierre)
 - `GET /api/caja/estado` — estado actual
 - `POST /api/caja/apertura` — abrir caja
-- `POST /api/caja/cierre-total` — cerrar caja
-- `POST /api/caja/cierre-metodo` — cerrar método
+- `POST /api/caja/cierre-total` — cerrar caja + logout automático
+- `POST /api/caja/cierre-metodo` — cerrar método con monto real y comentario
 - `POST /api/caja/ingreso` — ingreso manual
 - `POST /api/caja/egreso` — egreso manual
 
@@ -566,7 +592,7 @@
 | Teléfono | — |
 | Límite crédito | Monto límite disponible |
 | Saldo | Monto actual. Color rojo cuando >80% usado |
-| Acciones | Editar 🖊, Ver Tickets 🎫 |
+| Acciones | WhatsApp 💬 (si tiene teléfono), Editar 🖊, Ver Tickets 🎫, Cobrar 💰 (si tiene deuda) |
 
 ### Modal: Crear/Editar Cliente
 
@@ -596,9 +622,27 @@
 | **Badge 🔽** | `toggleTicket(id)` — expande detalle del ticket |
 | **Botón "Imprimir resumen"** | `imprimirResumen()` — abre ventana de impresión |
 
+### Modal: Cobrar Deuda
+
+| Elemento | Descripción |
+|----------|-------------|
+| **Deuda actual** | Monto total en rojo |
+| **Monto a cobrar** | Input numérico (0.01 a deuda total) |
+| **Preview diferencia** | Muestra deuda restante tras el cobro |
+| **Botón "Confirmar Cobro"** | `confirmarCobro()` → POST `/api/clientes/{id}/abonar` |
+| **Botón "Cancelar"** | Cierra modal |
+
+### Botón WhatsApp en Clientes
+- Solo visible si el cliente tiene teléfono
+- Enlace `https://wa.me/{numero}?text={mensaje}`
+- Mensaje prellenado:
+  - Con deuda: `"Hola {nombre}, tu saldo actual es ${monto}. ¿Podemos coordinar el pago?"`
+  - Al día: `"Hola {nombre}, tu saldo actual es ${monto}. Todo al día. ¡Gracias!"`
+
 ### API
 - `GET /api/clientes` — listar clientes
 - `GET /api/ventas?cliente_id=X` — tickets del cliente
+- `POST /api/clientes/{id}/abonar` — registrar pago parcial o total de deuda
 
 ---
 
@@ -672,10 +716,13 @@
 |---------|-------------|
 | N° Orden | Número (C-XXXXX) |
 | Proveedor | Nombre del proveedor |
-| Fecha | — |
-| Total | Monto formateado |
-| Estado | Badge: Pendiente, Recibido (verde), Parcial (amarillo), Cancelado (rojo) |
-| Acciones | Recibir 📦 (solo Pendiente/Parcial) |
+| Total | Monto formateado (color brand-600) |
+| Canti. | Total de artículos pedidos |
+| Pendiente | Artículos pendientes de recibir |
+| Estado | Badge: Pendiente (amarillo), Parcial (azul), Recibida (verde), Anulada (rojo) |
+| Fecha | dd/mm/yy HH:mm (fecha y hora) |
+| Comentarios | Icono 💬 solo si hay notas |
+| Acciones | WhatsApp 💬 (si tiene teléfono), Recibir 📦 (Pendiente/Parcial) |
 
 ### Modal: Nueva Compra
 
@@ -700,7 +747,7 @@
 | Elemento | Acción |
 |----------|--------|
 | **Total calculado** | Suma de cantidad × precio de todos los items |
-| **Botón "Guardar"** | `guardarCompra()` → POST `/api/compras` |
+| **Botón "Guardar"** | `guardarCompra()` → POST `/api/compras` (con items incluidos) |
 | **Botón "Cancelar"** | `showModalCompra = false` |
 
 ### Modal: Recibir Mercadería
@@ -718,21 +765,31 @@
 | **Botón "Confirmar"** | `confirmarRecepcion()` → PUT `/api/compras/{id}/recibir` |
 | **Botón "Cancelar"** | `showReceiveModal = false` |
 
+### Modal: Ver/Agregar Comentarios
+
+| Elemento | Descripción |
+|----------|-------------|
+| **Historial** | Muestra todos los comentarios previos con fecha/hora y autor |
+| **Agregar comentario** | Textarea + botón "Agregar" |
+| **Botón "Cerrar"** | Cierra modal |
+
 ### Flujo de Compra
 1. "Nueva Compra" → seleccionar proveedor
 2. Agregar items: escanear código o escribir nombre (datalist con catálogo)
 3. Completar cantidades y precios
-4. "Guardar" → POST `/api/compras` (estado "pendiente")
+4. "Guardar" → POST `/api/compras` con items (estado "pendiente")
 5. Cuando llega la mercadería: "Recibir" → ajustar cantidades recibidas → "Confirmar"
 6. El stock se actualiza: baja stock_transito, sube stock_actual, actualiza precio_costo
+7. Si recepción parcial → estado "parcial"; si completa → "recibida"
 
 ### API
 - `GET /api/compras` — listar
 - `GET /api/proveedores` — listar proveedores
 - `GET /api/productos?page_size=200` — catálogo
 - `POST /api/productos/lookup` — lookup por código
-- `POST /api/compras` — crear orden
+- `POST /api/compras` — crear orden (con items incluidos)
 - `PUT /api/compras/{id}/recibir` — recibir mercadería
+- `POST /api/compras/{id}/comentario` — agregar comentario con fecha/hora
 
 ---
 
@@ -1151,8 +1208,11 @@ Por cada método de pago:
   Sistema calcula diferencia vs esperado
 
 [CIERRE TOTAL]
-"Cerrar Caja" → confirm → POST /api/caja/cierre-total
-  └─ Muestra resumen final
+"Cerrar Caja" → initCierreCaja() → GET /api/caja/resumen
+  ├─ Modal muestra montos esperados vs reales por método
+  ├─ Cajero ingresa monto real de cada método
+  └─ "Confirmar Cierre" → POST /api/caja/cierre-metodo (por método)
+  └─ POST /api/caja/cierre-total → logout automático → /login
 
 [CIERRE AUTOMÁTICO]
 Al iniciar día siguiente: `caja_abierta()` detecta cambio de fecha
@@ -1367,4 +1427,4 @@ Cajero escribe en buscador de texto → Enter
 
 ---
 
-*Documento generado el 28/06/2026 — Refleja el estado actual del sistema con todas las funcionalidades desarrolladas.*
+*Documento actualizado el 30/06/2026 — Refleja el estado actual del sistema con todas las funcionalidades desarrolladas.*
