@@ -97,6 +97,7 @@ def listar_con_carritos_abandonados(
 
     # Detectar carritos abandonados: ventas en estado "pendiente" hace más de 10 min sin confirmar
     # (solo si no estamos filtrando por tipo específico)
+    # Solo se registran si tenían al menos 1 item (carritos vacíos se ignoran)
     if not tipo:
         limite = datetime.now(timezone.utc) - timedelta(minutes=10)
         abandonadas = (
@@ -107,6 +108,8 @@ def listar_con_carritos_abandonados(
         for v in abandonadas:
             from app.models.venta import VentaItem
             items_count = db.query(VentaItem).filter(VentaItem.venta_id == v.id).count()
+            if items_count == 0:
+                continue
             usuario_nombre = v.usuario.nombre if v.usuario else ""
             data.insert(0, {
                 "id": f"abandon_{v.id}",
