@@ -71,8 +71,6 @@ def _evento_to_dict(e: Auditoria) -> dict:
         except (json.JSONDecodeError, TypeError):
             detalle = e.detalle
 
-    es_sospechoso = _es_sospechoso(e, detalle)
-
     return {
         "id": e.id,
         "usuario_id": e.usuario_id,
@@ -81,17 +79,17 @@ def _evento_to_dict(e: Auditoria) -> dict:
         "venta_id": e.venta_id,
         "venta_numero": e.venta_numero,
         "detalle": detalle,
-        "sospechoso": es_sospechoso,
-        "auditado": e.auditado,
+        "estado": e.estado,
         "auditado_por": e.auditado_por,
         "auditado_por_nombre": e.auditado_por.nombre if e.auditado_por else None,
         "auditado_en": e.auditado_en.isoformat() if e.auditado_en else None,
+        "nota": e.nota or "",
         "created_at": e.created_at.isoformat() if e.created_at else None,
     }
 
 
 def _es_sospechoso(e: Auditoria, detalle: dict) -> bool:
-    if e.auditado:
+    if e.estado != "sospechoso":
         return False
     if e.tipo in ("item_quitado", "venta_anulada"):
         return True
@@ -116,6 +114,7 @@ def listar_con_carritos_abandonados(
     db: Session,
     usuario_id: Optional[int] = None,
     tipo: Optional[str] = None,
+    estado: Optional[str] = None,
     page: int = 1,
     page_size: int = 50,
 ) -> tuple:
@@ -123,10 +122,14 @@ def listar_con_carritos_abandonados(
     eventos, total = listar(db, usuario_id=usuario_id, tipo=tipo, page=page, page_size=page_size)
     data = [_evento_to_dict(e) for e in eventos]
 
+    # Si hay filtro de estado, filtrar resultados en memoria
+    if estado:
+        data = [d for d in data if d.get("estado") == estado]
+
     # Detectar carritos abandonados: ventas en estado "pendiente" hace más de 10 min sin confirmar
     # (solo si no estamos filtrando por tipo específico)
     # Solo se registran si tenían al menos 1 item (carritos vacíos se ignoran)
-    if not tipo:
+    if not tipo and not estado:
         limite = datetime.now(timezone.utc) - timedelta(minutes=10)
         abandonadas = (
             db.query(Venta)
@@ -151,7 +154,7 @@ def listar_con_carritos_abandonados(
                     "subtotal": v.subtotal,
                     "abandonado_desde": v.created_at.isoformat() if v.created_at else "",
                 },
-                "sospechoso": True,
+                "estado": "sospechoso",
                 "created_at": v.created_at.isoformat() if v.created_at else None,
             })
             total += 1
@@ -159,15 +162,16 @@ def listar_con_carritos_abandonados(
     return data, total
 
 
-def auditar_evento(db: Session, evento_id: int, auditor_id: int) -> Optional[Auditoria]:
-    """Marca un evento de auditoría como auditado."""
+def cambiar_estado(db: Session, evento_id: int, auditor_id: int, estado: str, nota: Optional[str] = None) -> Optional[Auditoria]:
+    """Cambia el estado de un evento de auditoría."""
     from app.models.auditoria import Auditoria
     evento = db.query(Auditoria).filter(Auditoria.id == evento_id).first()
     if not evento:
         return None
-    evento.auditado = True
+    evento.estado = estado
     evento.auditado_por = auditor_id
     evento.auditado_en = datetime.now(timezone.utc)
+    evento.nota = nota
     db.commit()
     db.refresh(evento)
     return evento

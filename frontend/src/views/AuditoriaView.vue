@@ -37,30 +37,40 @@
     </div>
 
     <BaseCard padding="sm">
-      <div class="flex items-center gap-3 flex-wrap">
-        <span class="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">Filtrar por tipo</span>
-        <div class="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl inline-flex">
-          <BaseButton
-            v-for="filter in filters"
-            :key="filter.key"
-            :variant="activeFilter === filter.key ? 'primary' : 'ghost'"
-            size="xs"
-            @click="activeFilter = filter.key"
-          >
-            {{ filter.label }}
-          </BaseButton>
+      <div class="space-y-3">
+        <div class="flex items-center gap-3 flex-wrap">
+          <span class="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">Estado</span>
+          <div class="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl inline-flex gap-1">
+            <BaseButton
+              v-for="sf in stateFilters"
+              :key="sf.key"
+              :variant="activeState === sf.key ? 'primary' : 'ghost'"
+              size="xs"
+              @click="activeState = sf.key"
+            >
+              {{ sf.label }}
+            </BaseButton>
+          </div>
+          <span class="ml-auto text-xs text-slate-500 dark:text-slate-400">
+            <span class="inline-block w-2 h-2 rounded-full bg-rose-500 mr-1"></span>{{ countByEstado.sospechoso }} pendientes ·
+            <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-1"></span>{{ countByEstado.normal }} normales ·
+            <span class="inline-block w-2 h-2 rounded-full bg-slate-400 mr-1"></span>{{ countByEstado.descartado }} descartados ·
+            <span class="inline-block w-2 h-2 rounded-full bg-orange-500 mr-1"></span>{{ countByEstado.fraude }} fraudes
+          </span>
         </div>
-        <div class="ml-auto flex items-center gap-3">
-          <BaseButton
-            :variant="sinAuditar ? 'danger' : 'ghost'"
-            size="xs"
-            @click="sinAuditar = !sinAuditar"
-          >
-            <i class="fa-solid fa-clipboard-check text-[10px]"></i>
-            Sin auditar
-          </BaseButton>
-          <span class="w-2 h-2 rounded-full bg-rose-500"></span>
-          <span class="text-xs text-slate-500 dark:text-slate-400">Sin auditar: {{ suspiciousCount }}</span>
+        <div class="flex items-center gap-3 flex-wrap">
+          <span class="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">Tipo</span>
+          <div class="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl inline-flex">
+            <BaseButton
+              v-for="filter in filters"
+              :key="filter.key"
+              :variant="activeFilter === filter.key ? 'primary' : 'ghost'"
+              size="xs"
+              @click="activeFilter = filter.key"
+            >
+              {{ filter.label }}
+            </BaseButton>
+          </div>
         </div>
       </div>
     </BaseCard>
@@ -142,33 +152,46 @@
           </div>
         </template>
         <template #alert="{ row }">
-          <div v-if="row.auditado" class="flex flex-col items-center gap-0.5">
-            <BaseBadge variant="success" size="xs">
-              <i class="fa-solid fa-check text-[10px]"></i>
-              Auditado
+          <!-- Badge de estado para eventos ya resueltos -->
+          <div v-if="row.estado !== 'sospechoso'" class="flex flex-col items-center gap-0.5">
+            <BaseBadge :variant="estadoBadgeVariant(row.estado)" size="xs">
+              <i :class="estadoBadgeIcon(row.estado)"></i>
+              {{ estadoLabel(row.estado) }}
             </BaseBadge>
             <span class="text-[9px] text-slate-400 dark:text-slate-500">{{ row.auditado_por_nombre }}</span>
           </div>
-          <button
-            v-else-if="isSuspicious(row) && !String(row.id).startsWith('abandon_')"
-            type="button"
-            :disabled="auditando === row.id"
-            class="px-2 py-1 rounded-md text-[10px] font-bold bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400 hover:bg-rose-200 dark:hover:bg-rose-800/60 transition disabled:opacity-50"
-            @click="auditarEvento(row)"
-          >
-            <i :class="auditando === row.id ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-check'"></i>
-            Auditar
-          </button>
-          <button
-            v-else-if="isSuspicious(row) && String(row.id).startsWith('abandon_')"
-            type="button"
-            class="px-2 py-1 rounded-md text-[10px] font-bold bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600 transition"
-            @click="descartarEvento(row)"
-          >
-            <i class="fa-solid fa-xmark"></i>
-            Descartar
-          </button>
-          <span v-else class="text-slate-300 dark:text-slate-600 text-xs">&mdash;</span>
+          <!-- Acciones para eventos sospechosos -->
+          <div v-else class="flex items-center gap-1">
+            <button
+              v-if="!String(row.id).startsWith('abandon_')"
+              type="button"
+              :disabled="auditando === row.id"
+              class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-800/60 transition disabled:opacity-50"
+              title="Es normal, no pasó nada"
+              @click="setEstado(row, 'normal')"
+            >
+              OK
+            </button>
+            <button
+              type="button"
+              :disabled="auditando === row.id"
+              class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600 transition disabled:opacity-50"
+              title="Descartar, se verificó por cámaras"
+              @click="setEstado(row, 'descartado')"
+            >
+              <i class="fa-solid fa-eye-slash text-[8px]"></i>
+            </button>
+            <button
+              v-if="!String(row.id).startsWith('abandon_')"
+              type="button"
+              :disabled="auditando === row.id"
+              class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-400 hover:bg-orange-200 dark:hover:bg-orange-800/60 transition disabled:opacity-50"
+              title="Confirmar fraude"
+              @click="setEstado(row, 'fraude')"
+            >
+              <i class="fa-solid fa-triangle-exclamation text-[8px]"></i>
+            </button>
+          </div>
         </template>
       </BaseTable>
       <div class="px-5 py-3 border-t border-slate-100 dark:border-slate-800 text-sm text-slate-500 dark:text-slate-400 flex items-center justify-between">
@@ -230,59 +253,69 @@ const filters = [
   { key: 'Clientes', label: 'Clientes' },
 ]
 
-const sinAuditar = ref(false)
+const stateFilters = [
+  { key: 'todo', label: 'Todos' },
+  { key: 'sospechoso', label: 'Pendientes' },
+  { key: 'normal', label: 'Normales' },
+  { key: 'descartado', label: 'Descartados' },
+  { key: 'fraude', label: 'Fraudes' },
+]
+
+const activeState = ref('todo')
 const auditando = ref(null)
 
-function isSuspicious(log) {
-  if (log.auditado) return false
-  if (log.suspicious) return true
-  return false
-}
-
-const suspiciousCount = computed(() => logs.value.filter(l => isSuspicious(l)).length)
-
-async function auditarEvento(log) {
-  if (auditando.value === log.id) return
-  auditando.value = log.id
-  try {
-    await api.patch(`/api/auditoria/${log.id}/auditar`)
-    const idx = logs.value.findIndex(l => l.id === log.id)
-    if (idx !== -1) {
-      logs.value[idx] = { ...logs.value[idx], auditado: true }
-    }
-    toast.success('Evento auditado')
-  } catch (e) {
-    toast.error(e.message || 'Error al auditar')
-  }
-  auditando.value = null
-}
-
-function descartarEvento(log) {
-  const idx = logs.value.findIndex(l => l.id === log.id)
-  if (idx !== -1) {
-    logs.value[idx] = { ...logs.value[idx], suspicious: false }
-  }
-  toast.info('Descartado')
-}
-
-const suspiciousToday = computed(() => {
-  const today = new Date().toISOString().slice(0, 10)
-  return logs.value.filter(l => {
-    const eventDate = l.timestamp?.slice(0, 10)
-    return eventDate === today && isSuspicious(l)
-  }).length
-})
+const countByEstado = computed(() => ({
+  sospechoso: logs.value.filter(l => l.estado === 'sospechoso').length,
+  normal: logs.value.filter(l => l.estado === 'normal').length,
+  descartado: logs.value.filter(l => l.estado === 'descartado').length,
+  fraude: logs.value.filter(l => l.estado === 'fraude').length,
+}))
 
 const filteredLogs = computed(() => {
   let result = logs.value
   if (activeFilter.value !== 'todo') {
     result = result.filter(l => l.type === activeFilter.value)
   }
-  if (sinAuditar.value) {
-    result = result.filter(l => isSuspicious(l) || (!l.auditado && l.suspicious))
+  if (activeState.value !== 'todo') {
+    result = result.filter(l => l.estado === activeState.value)
   }
   return result
 })
+
+async function setEstado(log, estado) {
+  if (auditando.value === log.id) return
+  if (String(log.id).startsWith('abandon_')) {
+    const idx = logs.value.findIndex(l => l.id === log.id)
+    if (idx !== -1) logs.value[idx] = { ...logs.value[idx], estado }
+    toast.success('Estado actualizado')
+    return
+  }
+  auditando.value = log.id
+  try {
+    await api.patch(`/api/auditoria/${log.id}/estado`, { estado })
+    const idx = logs.value.findIndex(l => l.id === log.id)
+    if (idx !== -1) logs.value[idx] = { ...logs.value[idx], estado }
+    toast.success('Estado actualizado')
+  } catch (e) {
+    toast.error(e.message || 'Error al actualizar')
+  }
+  auditando.value = null
+}
+
+function estadoBadgeVariant(estado) {
+  const map = { normal: 'success', descartado: 'default', fraude: 'danger' }
+  return map[estado] || 'default'
+}
+
+function estadoBadgeIcon(estado) {
+  const map = { normal: 'fa-solid fa-check', descartado: 'fa-solid fa-eye-slash', fraude: 'fa-solid fa-triangle-exclamation' }
+  return map[estado] || 'fa-solid fa-question'
+}
+
+function estadoLabel(estado) {
+  const map = { normal: 'Normal', descartado: 'Descartado', fraude: 'Fraude' }
+  return map[estado] || estado
+}
 
 function eventEmoji(event) {
   const map = {
@@ -329,11 +362,8 @@ function eventBadgeClass(log) {
 }
 
 function rowBgClass(log) {
-  if (log.event === 'carrito_abandonado' || log.event === 'venta_anulada') return 'bg-rose-100/60 hover:bg-rose-100'
-  if (log.event === 'venta_editada') return 'bg-amber-100/60 hover:bg-amber-100'
-  if (log.event === 'item_quitado') return 'bg-amber-100/60 hover:bg-amber-100'
-  if (log.event === 'venta_confirmada') return 'bg-emerald-100/60 hover:bg-emerald-100'
-  if (log.suspicious) return 'bg-rose-50/40 hover:bg-rose-50'
+  if (log.estado === 'fraude') return 'bg-orange-50/60 hover:bg-orange-100'
+  if (log.estado === 'sospechoso') return 'bg-rose-50/40 hover:bg-rose-50'
   return 'hover:bg-slate-50'
 }
 
@@ -363,8 +393,7 @@ async function refreshLogs() {
         event: e.tipo,
         action: e.venta_numero ? `Ticket #${e.venta_numero}` : e.tipo,
         description: typeof e.detalle === 'object' ? JSON.stringify(e.detalle) : (e.detalle || ''),
-        suspicious: e.sospechoso || false,
-        auditado: e.auditado || false,
+        estado: e.estado || 'sospechoso',
         auditado_por_nombre: e.auditado_por_nombre || '',
         // carrito abandonado
         items_count: e.detalle?.items || 0,

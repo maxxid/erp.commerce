@@ -1,6 +1,6 @@
 """Modelo Auditoria: registro de acciones en POS para detección de fraude."""
 
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from app.database import Base
@@ -16,13 +16,14 @@ class Auditoria(Base):
     venta_numero = Column(String(20), nullable=True)
     detalle = Column(Text, nullable=True)
     creado_por = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
-    auditado = Column(Boolean, default=False, nullable=False)
+    estado = Column(String(20), default="sospechoso", nullable=False)  # sospechoso | normal | descartado | fraude
     auditado_por = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
     auditado_en = Column(DateTime, nullable=True)
+    nota = Column(Text, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
     usuario = relationship("Usuario", foreign_keys=[usuario_id])
     auditor_por = relationship("Usuario", foreign_keys=[auditado_por])
 
     def __repr__(self):
-        return f"<Auditoria(id={self.id}, tipo='{self.tipo}', user={self.usuario_id})>"
+        return f"<Auditoria(id={self.id}, tipo='{self.tipo}', estado='{self.estado}')>"
