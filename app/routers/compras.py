@@ -10,6 +10,7 @@ from app.schemas.common import RespuestaData, RespuestaLista
 from app.auth.dependencies import get_current_user, require_role
 from app.models.usuario import Usuario
 from app.models.compra import Compra
+from app.models.producto import Producto
 
 router = APIRouter(prefix="/api/compras", tags=["Compras"])
 
