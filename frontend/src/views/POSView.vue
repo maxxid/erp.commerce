@@ -374,8 +374,13 @@
                   <i class="fa-solid fa-box text-xs"></i>
                 </div>
                 <div class="flex-1 min-w-0">
-                  <p class="text-xs font-bold text-slate-900 dark:text-white truncate">{{ item.nombre }}</p>
-                  <p class="text-[10px] text-slate-400 dark:text-slate-500 font-mono-data">{{ item.codigo_barras }}</p>
+                  <div class="flex items-start justify-between gap-2">
+                    <div>
+                      <p class="text-xs font-bold text-slate-900 dark:text-white truncate">{{ item.nombre }}</p>
+                      <p class="text-[10px] text-slate-400 dark:text-slate-500 font-mono-data">{{ item.codigo_barras }}</p>
+                    </div>
+                    <span class="text-sm font-bold font-mono-data text-brand-600 dark:text-brand-400 shrink-0">{{ fc((item._precio_neto || item.precio_unitario) * (item.por_kilo ? (item.peso || 0) : item.cantidad)) }}</span>
+                  </div>
                   <!-- Toggle kilo/unidad para productos tipo ambos -->
                   <div v-if="item.tipo_venta === 'ambos'" class="flex items-center gap-2 mt-1">
                     <button
@@ -391,7 +396,7 @@
                   </div>
                   <!-- Peso input para venta por kilo -->
                   <div v-if="item.por_kilo" class="flex items-center gap-2 mt-1.5">
-                    <span class="text-[10px] text-slate-400">Peso (kg):</span>
+                    <span class="text-[10px] text-slate-400">Peso:</span>
                     <input
                       type="number"
                       min="0.01"
@@ -401,7 +406,7 @@
                       class="w-16 px-2 py-1 text-xs font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-right focus:border-brand-500 outline-none"
                       placeholder="0,00"
                     />
-                    <span class="text-[10px] text-slate-400">× {{ fc(item.precio_kilo) }}/kg</span>
+                    <span class="text-[10px] text-slate-400">kg × {{ fc(item.precio_kilo) }}/kg</span>
                   </div>
                   <!-- Cantidad para venta por unidad -->
                   <div v-if="!item.por_kilo" class="flex items-center gap-2 mt-1.5">
@@ -411,17 +416,18 @@
                       class="w-6 h-6 rounded-md bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs flex items-center justify-center transition active:scale-95"
                       @click="updateCartQty(idx, item.cantidad - 1)"
                     >&minus;</button>
-                    <span class="text-xs font-mono-data font-bold text-slate-700 dark:text-slate-200 w-6 text-center">{{ item.cantidad }}</span>
+                    <span class="text-xs font-mono-data font-bold text-slate-700 dark:text-slate-200 w-6 text-center">{{ item.cantidad }}u.</span>
                     <button
                       type="button"
                       aria-label="Aumentar cantidad"
                       class="w-6 h-6 rounded-md bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs flex items-center justify-center transition active:scale-95"
                       @click="updateCartQty(idx, item.cantidad + 1)"
                     >+</button>
-                  </div>
-                  <div class="flex items-center gap-2 mt-1">
-                    <span class="text-xs font-mono-data font-bold text-brand-600 dark:text-brand-400 ml-auto">{{ fc((item._precio_neto || item.precio_unitario) * (item.por_kilo ? item.peso : item.cantidad)) }}</span>
                     <BaseBadge v-if="item.oferta" size="xs" variant="warning" class="ml-1">{{ item.oferta.tipo === 'porcentaje' ? item.oferta.valor + '%' : item.oferta.tipo === 'monto_fijo' ? '$' + item.oferta.valor : '2x1' }}</BaseBadge>
+                  </div>
+                  <!-- Oferta badge para kilo (afuera del div de cantidad) -->
+                  <div v-if="item.por_kilo && item.oferta" class="flex items-center gap-2 mt-1">
+                    <BaseBadge size="xs" variant="warning">{{ item.oferta.tipo === 'porcentaje' ? item.oferta.valor + '%' : item.oferta.tipo === 'monto_fijo' ? '$' + item.oferta.valor : '2x1' }}</BaseBadge>
                   </div>
                 </div>
                 <button
@@ -1318,7 +1324,7 @@ function addToCart(product, qty = 1, price = null) {
   const isManual = product._pending || (product.codigo_barras && (product.codigo_barras.startsWith('*MANUAL*') || product.codigo_barras.startsWith('GEN-')))
 
   const oferta = ofertas.value.find(o => o.producto_id === product.id && o.activo)
-  const basePrice = price || product.precio_venta
+  const basePrice = price || product.precio_por_kilo || product.precio_venta || 0
 
   const existing = cart.items.find(i => i.producto_id === product.id)
 
