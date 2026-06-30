@@ -18,6 +18,10 @@ const toast = useToastStore()
 const router = useRouter()
 
 const filtroFecha = ref('')
+const filtroEstado = ref('')
+const filtroMedioPago = ref('')
+const filtroFactura = ref('')
+const filtroSearch = ref('')
 const expandedRows = ref([])
 const syncing = ref(false)
 const anullingId = ref(null)
@@ -43,9 +47,66 @@ const tableColumns = [
   { key: 'acciones', label: '', align: 'right' }
 ]
 
+const estadoOptions = [
+  { value: '', label: 'Todos' },
+  { value: 'Completada', label: 'Completadas' },
+  { value: 'Pendiente', label: 'Pendientes' },
+  { value: 'Anulada', label: 'Anuladas' },
+]
+
+const medioPagoOptions = [
+  { value: '', label: 'Todos' },
+  { value: 'efectivo', label: 'Efectivo' },
+  { value: 'debito', label: 'Débito' },
+  { value: 'credito', label: 'Crédito' },
+  { value: 'transferencia', label: 'Transferencia' },
+  { value: 'cta_corriente', label: 'Cta. Cte.' },
+]
+
+const facturaOptions = [
+  { value: '', label: 'Todas' },
+  { value: 'sin_factura', label: 'Sin Factura' },
+  { value: 'pendiente', label: 'Pendiente' },
+  { value: 'emitida', label: 'Emitida' },
+]
+
 const filteredSales = computed(() => {
-  if (!filtroFecha.value) return sales.value
-  return sales.value.filter(s => s.fecha.startsWith(filtroFecha.value))
+  let result = sales.value
+
+  if (filtroFecha.value) {
+    result = result.filter(s => s.fecha && s.fecha.startsWith(filtroFecha.value))
+  }
+
+  if (filtroEstado.value) {
+    result = result.filter(s => s.estado === filtroEstado.value)
+  }
+
+  if (filtroMedioPago.value) {
+    result = result.filter(s => s.medio_pago === filtroMedioPago.value)
+  }
+
+  if (filtroFactura.value) {
+    if (filtroFactura.value === 'sin_factura') {
+      result = result.filter(s => !facturasMap.value[s.id])
+    } else if (filtroFactura.value === 'pendiente') {
+      result = result.filter(s => facturasMap.value[s.id] && facturasMap.value[s.id].estado !== 'emitida')
+    } else if (filtroFactura.value === 'emitida') {
+      result = result.filter(s => facturasMap.value[s.id] && facturasMap.value[s.id].estado === 'emitida')
+    }
+  }
+
+  if (filtroSearch.value) {
+    const q = filtroSearch.value.toLowerCase()
+    result = result.filter(s =>
+      (s.numero || '').toLowerCase().includes(q) ||
+      (s.cliente_nombre || '').toLowerCase().includes(q) ||
+      (s.medio_pago || '').toLowerCase().includes(q) ||
+      String(s.total).includes(q) ||
+      String(s.id).includes(q)
+    )
+  }
+
+  return result
 })
 
 const tableRows = computed(() => filteredSales.value)
@@ -168,15 +229,48 @@ async function executeAnular() {
         <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Historial de tickets de venta</p>
       </div>
       <div class="flex items-center gap-2">
-        <BaseInput v-model="filtroFecha" type="date" size="sm" class="w-44">
-          <template #prefix>
-            <i class="fa-solid fa-calendar text-slate-400 text-xs"></i>
-          </template>
-        </BaseInput>
         <BaseButton variant="secondary" size="sm" :loading="syncing" @click="syncData">
           <i :class="syncing ? 'fa-solid fa-circle-notch fa-spin' : 'fa-solid fa-arrows-rotate'"></i>
           {{ syncing ? 'Sincronizando...' : 'Sincronizar' }}
         </BaseButton>
+      </div>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-3">
+      <div class="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
+        <button
+          v-for="est in estadoOptions"
+          :key="est.value"
+          type="button"
+          class="px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all"
+          :class="filtroEstado === est.value ? 'bg-white dark:bg-slate-700 text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'"
+          @click="filtroEstado = est.value"
+        >
+          {{ est.label }}
+        </button>
+      </div>
+
+      <BaseSelect v-model="filtroMedioPago" :options="medioPagoOptions" placeholder="Medio de Pago" size="sm" class="w-36" />
+
+      <BaseSelect v-model="filtroFactura" :options="facturaOptions" placeholder="Factura" size="sm" class="w-36" />
+
+      <div class="relative">
+        <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+        <input
+          v-model="filtroSearch"
+          type="text"
+          placeholder="Buscar..."
+          class="pl-8 pr-3 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 w-48"
+        >
+      </div>
+
+      <div class="flex items-center gap-2 ml-auto">
+        <span class="text-[10px] text-slate-400">Desde</span>
+        <input
+          v-model="filtroFecha"
+          type="date"
+          class="px-2 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 focus:border-brand-500"
+        >
       </div>
     </div>
 
