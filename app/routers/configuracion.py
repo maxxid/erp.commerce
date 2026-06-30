@@ -45,4 +45,4 @@ def actualizar_ajuste(
 ):
     """Actualiza un valor de configuración."""
     set_config(db, data.clave, data.valor, data.descripcion)
-    return RespuestaData(message=f"Configuración '{data.clave}' actualizada")
+    return RespuestaData(data={"clave": data.clave, "valor": data.valor}, message=f"Configuración '{data.clave}' actualizada")
