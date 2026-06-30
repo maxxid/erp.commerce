@@ -70,7 +70,7 @@
         <template #acciones="{ row }">
           <div class="flex items-center justify-center gap-1">
             <BaseButton
-              v-if="row.estado === 'pendiente'"
+              v-if="row.estado === 'pendiente' || row.estado === 'parcial'"
               variant="primary"
               size="xs"
               :disabled="receiving"
@@ -449,6 +449,7 @@ async function syncData() {
 function estadoCompraClass(estado) {
   const map = {
     'pendiente': 'bg-amber-50 text-amber-700',
+    'parcial': 'bg-blue-50 text-blue-700',
     'recibida': 'bg-emerald-50 text-emerald-700',
     'anulada': 'bg-rose-50 text-rose-700',
   }
@@ -458,6 +459,7 @@ function estadoCompraClass(estado) {
 function estadoBadgeVariant(estado) {
   const map = {
     'pendiente': 'warning',
+    'parcial': 'info',
     'recibida': 'success',
     'anulada': 'danger',
   }
@@ -694,7 +696,7 @@ async function confirmarRecepcion() {
       receiveTarget.value.estado = 'recibida'
       toast.success(`${receiveTarget.value.numero_orden} recibida completamente`)
     } else {
-      receiveTarget.value.estado = 'recibida'
+      receiveTarget.value.estado = 'parcial'
       toast.success(`Recepción parcial de ${receiveTarget.value.numero_orden} registrada`)
     }
 

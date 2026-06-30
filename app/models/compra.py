@@ -27,7 +27,7 @@ class Compra(Base):
     iva = Column(Float, nullable=False, default=0.0)
     total = Column(Float, nullable=False, default=0.0)
 
-    estado = Column(String(20), nullable=False, default="pendiente")  # pendiente | recibida | anulada
+    estado = Column(String(20), nullable=False, default="pendiente")  # pendiente | parcial | recibida | anulada
     notas = Column(Text, nullable=True)
 
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

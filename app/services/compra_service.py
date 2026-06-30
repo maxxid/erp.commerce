@@ -117,6 +117,7 @@ def recibir_compra(
 
     uid = usuario_id or compra.usuario_id
     todos_recibidos = True
+    algun_recibido = False
 
     for item in compra.items:
         pendiente = item.pendiente_recibir
@@ -131,6 +132,9 @@ def recibir_compra(
                     f"Cantidad inválida para item {item.id}: a recibir={qty}, pendiente={pendiente}"
                 )
             cantidad_recibir = qty
+
+        if cantidad_recibir > 0:
+            algun_recibido = True
 
         item.cantidad_recibida = (item.cantidad_recibida or 0) + cantidad_recibir
         item.subtotal = item.cantidad_recibida * item.precio_unitario
@@ -152,6 +156,8 @@ def recibir_compra(
 
     if todos_recibidos:
         compra.estado = "recibida"
+    elif algun_recibido:
+        compra.estado = "parcial"
     _recalcular_totales(db, compra)
     db.commit()
     db.refresh(compra)
@@ -159,10 +165,9 @@ def recibir_compra(
 
 
 def anular_compra(db: Session, compra: Compra) -> Compra:
-    """Anula una compra pendiente. Revierte stock en tránsito."""
-    if compra.estado != "pendiente":
-        raise ValueError("Solo se pueden anular compras pendientes")
-    # Revertir stock en tránsito (solo lo pendiente de recibir)
+    """Anula una compra pendiente o parcialmente recibida. Revierte stock en tránsito."""
+    if compra.estado not in ("pendiente", "parcial"):
+        raise ValueError("Solo se pueden anular compras pendientes o parcialmente recibidas")
     for item in compra.items:
         pendiente = item.pendiente_recibir
         if pendiente > 0:
