@@ -1,5 +1,7 @@
 """Router de Caja: apertura, cierre por método, cierre total."""
 
+from datetime import datetime
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
@@ -7,6 +9,7 @@ from app.database import get_db
 from app.services import caja_service
 from app.services import catalogo_service
 from app.services import auditoria_service
+from app.services import config_service
 from app.schemas.common import RespuestaData, RespuestaLista
 from app.auth.dependencies import get_current_user, require_role
 from app.models.usuario import Usuario
@@ -34,6 +37,15 @@ class CierreTotalRequest(BaseModel):
 class MovimientoRequest(BaseModel):
     monto: float = Field(..., gt=0)
     descripcion: str = ""
+    sucursal_id: int = 1
+
+
+class EgresoEspecialRequest(BaseModel):
+    monto: float = Field(..., gt=0)
+    descripcion: str = ""
+    egreso_tipo: str = Field(..., description="Tipo: 'proveedor' o 'dueño'")
+    proveedor_id: Optional[int] = Field(None, description="ID del proveedor si egreso_tipo='proveedor'")
+    proveedor_nombre: Optional[str] = Field(None, description="Nombre del proveedor o beneficiario")
     sucursal_id: int = 1
 
 
@@ -153,6 +165,53 @@ def egreso(
     auditoria_service.registrar(db, user.id, "egreso_caja", None, None,
                                {"monto": data.monto, "descripcion": data.descripcion, "sucursal_id": data.sucursal_id})
     return RespuestaData(data={"id": mov.id, "monto": mov.monto}, message="Egreso registrado")
+
+
+@router.post("/egreso-especial", response_model=RespuestaData)
+def egreso_especial(
+    data: EgresoEspecialRequest,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "cajero")),
+):
+    """Registra un egreso especial (pago a proveedor o extracción del dueño) con notificación WhatsApp."""
+    if not caja_service.caja_abierta(db):
+        raise HTTPException(status_code=400, detail="La caja no está abierta")
+    if data.egreso_tipo not in ("proveedor", "dueño"):
+        raise HTTPException(status_code=400, detail="egreso_tipo debe ser 'proveedor' o 'dueño'")
+
+    descripcion_completa = f"[{data.egreso_tipo.upper()}] {data.descripcion}"
+    if data.proveedor_nombre:
+        descripcion_completa = f"[{data.egreso_tipo.upper()}] {data.proveedor_nombre}: {data.descripcion}"
+
+    mov = caja_service.registrar_egreso(
+        db, data.monto, descripcion_completa, user.id,
+        referencia_tipo=f"egreso_{data.egreso_tipo}",
+        referencia_id=data.proveedor_id,
+        sucursal_id=data.sucursal_id,
+    )
+    auditoria_service.registrar(db, user.id, "egreso_especial", None, None, {
+        "monto": data.monto,
+        "descripcion": descripcion_completa,
+        "egreso_tipo": data.egreso_tipo,
+        "proveedor_id": data.proveedor_id,
+        "proveedor_nombre": data.proveedor_nombre,
+        "sucursal_id": data.sucursal_id,
+    })
+
+    telefono_dueño = config_service.get_config(db, "telefono_dueño")
+    whatsapp_url = None
+    if telefono_dueño:
+        mensaje = f"Pago registrado:%0A%0A*Tipo:* {data.egreso_tipo.upper()}%0A*Monto:* ${data.monto:,.2f}%0A*Descripción:* {data.descripcion}%0A*Cajero:* {user.nombre}%0A*Hora:* {datetime.now().strftime('%H:%M')}"
+        whatsapp_url = f"https://wa.me/{telefono_dueño.replace('+','').replace(' ','').replace('-','')}?text={mensaje}"
+
+    return RespuestaData(
+        data={
+            "id": mov.id,
+            "monto": mov.monto,
+            "whatsapp_url": whatsapp_url,
+        },
+        message=f"Egreso especial registrado. {'Notificación WhatsApp lista.' if whatsapp_url else 'Sin número de dueño configurado.'}",
+    )
 
 
 @router.get("/movimientos", response_model=RespuestaLista)

@@ -218,9 +218,20 @@ def confirmar(
         if data.descuento and data.descuento > 0:
             auditoria_service.registrar(db, user.id, "descuento_aplicado", venta.id, venta.numero,
                                          {"monto_descuento": data.descuento, "total_original": venta.subtotal, "total_final": venta.total})
+
+        whatsapp_url = None
+        if venta.cliente_id and venta.cliente and venta.cliente.telefono:
+            telefono = venta.cliente.telefono.replace('+','').replace(' ','').replace('-','')
+            items_detalle = ", ".join([f"{i.cantidad}x {i.producto.nombre if i.producto else '?'}" for i in venta.items][:5])
+            mensaje = f"*Ticket #{venta.numero}*%0A%0A*Total:* ${venta.total:,.2f}%0A*Medio:* {data.medio_pago}%0A*Items:* {items_detalle}%0A*Fecha:* {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+            whatsapp_url = f"https://wa.me/{telefono}?text={mensaje}"
+
+        respuesta_data = _venta_to_dict(venta)
+        if whatsapp_url:
+            respuesta_data["whatsapp_url"] = whatsapp_url
         return RespuestaData(
-            data=_venta_to_dict(venta),
-            message=f"Venta {venta.numero} confirmada. Total: ${venta.total:,.2f}",
+            data=respuesta_data,
+            message=f"Venta {venta.numero} confirmada. Total: ${venta.total:,.2f}" + (" Enviando WhatsApp..." if whatsapp_url else ""),
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

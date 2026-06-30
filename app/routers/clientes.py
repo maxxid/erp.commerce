@@ -9,6 +9,7 @@ from app.models.cliente import Cliente
 from app.schemas.common import RespuestaData, RespuestaLista
 from app.auth.dependencies import get_current_user, require_role
 from app.models.usuario import Usuario
+from app.services import auditoria_service
 
 router = APIRouter(prefix="/api/clientes", tags=["Clientes"])
 
@@ -109,6 +110,13 @@ def crear(
     db.add(cliente)
     db.commit()
     db.refresh(cliente)
+    auditoria_service.registrar(db, user.id, "cliente_creado", None, None, {
+        "cliente_id": cliente.id,
+        "nombre": cliente.nombre,
+        "telefono": cliente.telefono,
+        "tipo_documento": cliente.tipo_documento,
+        "numero_documento": cliente.numero_documento,
+    })
     return RespuestaData(data=_cli_to_dict(cliente), message="Cliente creado")
 
 
@@ -124,10 +132,40 @@ def actualizar(
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
     update = data.model_dump(exclude_unset=True)
+
+    telefono_anterior = cliente.telefono
+    cambios = {}
     for k, v in update.items():
+        valor_anterior = getattr(cliente, k)
+        if valor_anterior != v:
+            cambios[k] = {"anterior": valor_anterior, "nuevo": v}
         setattr(cliente, k, v)
+
     db.commit()
     db.refresh(cliente)
+
+    if telefono_anterior != cliente.telefono and cliente.telefono:
+        auditoria_service.registrar(db, user.id, "cliente_telefono_editado", None, None, {
+            "cliente_id": cliente.id,
+            "nombre": cliente.nombre,
+            "telefono_anterior": telefono_anterior,
+            "telefono_nuevo": cliente.telefono,
+        })
+
+    if cambios:
+        auditoria_service.registrar(db, user.id, "cliente_actualizado", None, None, {
+            "cliente_id": cliente.id,
+            "nombre": cliente.nombre,
+            "campos": list(update.keys()),
+            "detalle_cambios": cambios,
+        })
+
+    if "activo" in update and update["activo"] is False and cliente.activo is False:
+        auditoria_service.registrar(db, user.id, "cliente_desactivado", None, None, {
+            "cliente_id": cliente.id,
+            "nombre": cliente.nombre,
+        })
+
     return RespuestaData(data=_cli_to_dict(cliente), message="Cliente actualizado")
 
 
