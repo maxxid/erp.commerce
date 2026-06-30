@@ -325,7 +325,10 @@
               </div>
               <p class="text-[10px] text-slate-400 dark:text-slate-500 truncate">{{ p.marca }}</p>
               <div class="flex items-center justify-between mt-2">
-                <span class="text-sm font-bold font-mono-data text-brand-600 dark:text-brand-400">{{ fc(p.precio_venta) }}</span>
+                <span class="text-sm font-bold font-mono-data text-brand-600 dark:text-brand-400">
+                  {{ fc(p.tipo_venta === 'kilo' ? p.precio_por_kilo : p.precio_venta) }}
+                  <span v-if="p.tipo_venta === 'kilo'" class="text-[9px] text-amber-500">/kg</span>
+                </span>
                 <BaseBadge
                   :variant="p.stock_actual <= 5 ? 'danger' : 'default'"
                   size="xs"
