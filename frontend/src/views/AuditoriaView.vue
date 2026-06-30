@@ -150,7 +150,7 @@
             <span class="text-[9px] text-slate-400 dark:text-slate-500">{{ row.auditado_por_nombre }}</span>
           </div>
           <button
-            v-else-if="isSuspicious(row)"
+            v-else-if="isSuspicious(row) && !String(row.id).startsWith('abandon_')"
             type="button"
             :disabled="auditando === row.id"
             class="px-2 py-1 rounded-md text-[10px] font-bold bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400 hover:bg-rose-200 dark:hover:bg-rose-800/60 transition disabled:opacity-50"
