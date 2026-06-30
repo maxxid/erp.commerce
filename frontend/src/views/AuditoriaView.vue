@@ -311,7 +311,30 @@ async function refreshLogs() {
   syncing.value = true
   try {
     const data = await api.get('/api/auditoria')
-    if (data && data.length) logs.value = data
+    if (data && data.length) {
+      logs.value = data.map(e => ({
+        id: e.id,
+        timestamp: e.created_at ? new Date(e.created_at).toLocaleString('sv') : '',
+        user: e.usuario_nombre || e.user || 'Sistema',
+        type: e.tipo,
+        event: e.tipo,
+        action: e.venta_numero ? `Ticket #${e.venta_numero}` : e.tipo,
+        description: typeof e.detalle === 'object' ? JSON.stringify(e.detalle) : (e.detalle || ''),
+        suspicious: e.sospechoso || false,
+        // carrito abandonado
+        items_count: e.detalle?.items || 0,
+        subtotal: e.detalle?.subtotal || 0,
+        abandoned_min: e.detalle?.abandonado_desde ? Math.floor((Date.now() - new Date(e.detalle.abandonado_desde)) / 60000) : 0,
+        // venta
+        total: e.detalle?.total || e.detalle?.subtotal || 0,
+        medio_pago: e.detalle?.medio_pago || '',
+        total_anulado: e.detalle?.total_anulado || 0,
+        // item quitado
+        producto: e.detalle?.producto || '',
+        qty: e.detalle?.qty || 0,
+        subtotal_change: e.detalle?.subtotal_change || 0,
+      }))
+    }
   } catch { /* fallback to mock */ }
   lastRefresh.value = new Date().toLocaleTimeString()
   syncing.value = false
