@@ -1,6 +1,6 @@
 """Router de Compras: crear, items, recibir, anular, listar."""
 
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
@@ -44,6 +44,7 @@ class CompraCreate(BaseModel):
     proveedor_id: int
     sucursal_id: int = 1
     notas: Optional[str] = None
+    items: Optional[List[dict]] = Field(default_factory=list, description="Lista de items: {codigo_barras, cantidad, precio}")
 
 
 class CompraItemAdd(BaseModel):
@@ -84,6 +85,43 @@ def crear(
     user: Usuario = Depends(require_role("admin", "encargado")),
 ):
     c = compra_service.crear_compra(db, user.id, data.proveedor_id, data.sucursal_id, data.notas)
+
+    from app.models.compra import CompraItem
+    from app.services.compra_service import _recalcular_totales
+
+    for item_data in (data.items or []):
+        codigo = item_data.get("codigo_barras", "") or ""
+        nombre_prod = item_data.get("producto", "") or ""
+        cantidad = float(item_data.get("cantidad", 1) or 1)
+        precio = float(item_data.get("precio", 0) or 0)
+
+        producto_id = None
+        prod = None
+        if codigo:
+            prod = db.query(Producto).filter(Producto.codigo_barras == codigo).first()
+        if not prod and nombre_prod:
+            prod = db.query(Producto).filter(Producto.nombre.ilike(nombre_prod)).first()
+        if prod:
+            producto_id = prod.id
+
+        if producto_id and cantidad > 0 and precio > 0:
+            subtotal = cantidad * precio
+            item = CompraItem(
+                compra_id=c.id,
+                producto_id=producto_id,
+                cantidad=cantidad,
+                cantidad_recibida=0.0,
+                precio_unitario=precio,
+                subtotal=subtotal,
+            )
+            db.add(item)
+            prod.stock_transito = (prod.stock_transito or 0) + cantidad
+
+    db.flush()
+    _recalcular_totales(db, c)
+    db.commit()
+    db.refresh(c)
+
     return RespuestaData(data=_compra_to_dict(c), message=f"Compra {c.numero} creada")
 
 
