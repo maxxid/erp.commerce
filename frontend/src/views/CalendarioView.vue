@@ -75,18 +75,26 @@
         </div>
       </div>
 
-      <div class="grid grid-cols-3 gap-4">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <BaseCard padding="md" class="text-center bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800">
+          <p class="text-[10px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-semibold">Confirmadas</p>
+          <p class="text-lg font-mono-data font-bold text-emerald-700 dark:text-emerald-300">{{ salesConfirmadas.length }}</p>
+          <p class="text-xs font-mono-data text-emerald-600 dark:text-emerald-400">{{ formatCurrency(salesConfirmadasTotal) }}</p>
+        </BaseCard>
+        <BaseCard padding="md" class="text-center bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800">
+          <p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400 font-semibold">Pendientes</p>
+          <p class="text-lg font-mono-data font-bold text-amber-700 dark:text-amber-300">{{ salesPendientes.length }}</p>
+          <p class="text-xs font-mono-data text-amber-600 dark:text-amber-400">{{ formatCurrency(salesPendientesTotal) }}</p>
+        </BaseCard>
+        <BaseCard padding="md" class="text-center bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
+          <p class="text-[10px] uppercase tracking-wider text-red-600 dark:text-red-400 font-semibold">Anuladas</p>
+          <p class="text-lg font-mono-data font-bold text-red-700 dark:text-red-300">{{ salesAnuladas.length }}</p>
+          <p class="text-xs font-mono-data text-red-600 dark:text-red-400">{{ formatCurrency(salesAnuladasTotal) }}</p>
+        </BaseCard>
         <BaseCard padding="md" class="text-center bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800">
-          <p class="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">Tickets</p>
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">Total</p>
           <p class="text-lg font-mono-data font-bold text-slate-900 dark:text-white">{{ dailySales.length }}</p>
-        </BaseCard>
-        <BaseCard padding="md" class="text-center bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800">
-          <p class="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">Promedio</p>
-          <p class="text-lg font-mono-data font-bold text-slate-900 dark:text-white">{{ formatCurrency(dailySalesAvg) }}</p>
-        </BaseCard>
-        <BaseCard padding="md" class="text-center bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800">
-          <p class="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">Productos vendidos</p>
-          <p class="text-lg font-mono-data font-bold text-slate-900 dark:text-white">{{ totalItemsSold }}</p>
+          <p class="text-xs font-mono-data text-slate-600 dark:text-slate-400">{{ formatCurrency(dailySalesTotal) }}</p>
         </BaseCard>
       </div>
 
@@ -106,6 +114,14 @@
           >
             <template #id="{ row }">
               <span class="text-slate-700 dark:text-slate-300 font-mono-data">Ticket #{{ String(row.id).padStart(6, '0') }}</span>
+            </template>
+            <template #estado="{ row }">
+              <BaseBadge :variant="row.estado === 'confirmada' ? 'success' : row.estado === 'pendiente' ? 'warning' : 'danger'" size="xs">
+                {{ row.estado }}
+              </BaseBadge>
+            </template>
+            <template #medio_pago="{ row }">
+              <span class="text-slate-600 dark:text-slate-400 capitalize">{{ row.medio_pago || '-' }}</span>
             </template>
             <template #total="{ row }">
               <span class="font-mono-data font-medium text-slate-900 dark:text-white">{{ formatCurrency(row.total) }}</span>
@@ -417,7 +433,8 @@ const tabs = [
 const salesColumns = [
   { key: 'id', label: 'Ticket' },
   { key: 'time', label: 'Hora' },
-  { key: 'paymentMethod', label: 'Método' },
+  { key: 'estado', label: 'Estado' },
+  { key: 'medio_pago', label: 'Método' },
   { key: 'total', label: 'Total', align: 'right' },
 ]
 
@@ -464,10 +481,12 @@ async function syncCalendario() {
       if (d.ventas) {
         dailySales.value = (d.ventas.items || []).map(v => ({
           id: v.id,
+          numero: v.numero,
           time: v.fecha ? new Date(v.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }) : '',
-          paymentMethod: v.medio_pago || '',
-          total: v.total || 0,
+          estado: v.estado || '',
           medio_pago: v.medio_pago || '',
+          total: v.total || 0,
+          items: v.items || [],
         }))
       }
       if (d.caja) {
@@ -483,6 +502,7 @@ async function syncCalendario() {
       if (d.compras) {
         purchases.value = (d.compras.items || []).map(c => ({
           id: c.id,
+          numero: c.numero,
           supplier: c.proveedor_nombre || '',
           time: c.fecha ? new Date(c.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }) : '',
           items: c.items ? c.items.reduce((s, i) => s + (i.cantidad || 0), 0) : 0,
@@ -509,13 +529,14 @@ async function syncCalendario() {
         }))
       }
     }
-  } catch {
+  } catch (e) {
     dailySales.value = []
     cashMovements.value = []
     purchases.value = []
     newProducts.value = []
     modifiedProducts.value = []
     newClients.value = []
+    toast.add({ type: 'error', message: 'Error al cargar datos del calendario: ' + (e.message || 'Error desconocido') })
   }
   syncing.value = false
 }
@@ -532,8 +553,15 @@ function exportData() {
 
   let csv = ''
 
-  csv += 'RESUMEN DE VENTAS POR MEDIO DE PAGO\n'
+  csv += 'RESUMEN DE VENTAS POR ESTADO\n'
   csv += `Fecha: ${dateRangeLabel.value}\n\n`
+  csv += 'Estado;Cantidad;Total\n'
+  csv += `Confirmadas;${salesConfirmadas.value.length};${salesConfirmadasTotal.value}\n`
+  csv += `Pendientes;${salesPendientes.value.length};${salesPendientesTotal.value}\n`
+  csv += `Anuladas;${salesAnuladas.value.length};${salesAnuladasTotal.value}\n`
+  csv += `TOTAL;${dailySales.value.length};${dailySalesTotal.value}\n`
+
+  csv += '\nRESUMEN DE VENTAS POR MEDIO DE PAGO\n'
   csv += 'Medio de Pago;Cantidad;Total\n'
   mediosPago.forEach(mp => {
     const filtered = dailySales.value.filter(s => s.medio_pago === mp)
@@ -546,9 +574,9 @@ function exportData() {
   csv += `TOTAL;${dailySales.value.length};${dailySalesTotal.value}\n`
 
   csv += '\nDETALLE DE VENTAS\n'
-  csv += 'Ticket;Hora;Medio de Pago;Total\n'
+  csv += 'Ticket;Hora;Estado;Medio de Pago;Total\n'
   dailySales.value.forEach(v => {
-    csv += `Ticket #${String(v.id).padStart(6, '0')};${v.time};${medioLabels[v.medio_pago] || v.medio_pago || '-'};${v.total}\n`
+    csv += `Ticket #${String(v.id).padStart(6, '0')};${v.time};${v.estado};${medioLabels[v.medio_pago] || v.medio_pago || '-'};${v.total}\n`
   })
 
   csv += '\nRESUMEN DE CAJA POR MEDIO DE PAGO\n'
@@ -587,55 +615,31 @@ function exportData() {
   URL.revokeObjectURL(url)
 }
 
-const dailySales = ref([
-  { id: 1102, time: '08:15', paymentMethod: 'Efectivo', total: 12500 },
-  { id: 1103, time: '09:30', paymentMethod: 'Transferencia', total: 34200 },
-  { id: 1104, time: '10:45', paymentMethod: 'Efectivo', total: 8750 },
-  { id: 1105, time: '12:00', paymentMethod: 'Crédito', total: 56300 },
-  { id: 1106, time: '14:20', paymentMethod: 'Efectivo', total: 19200 },
-  { id: 1107, time: '16:10', paymentMethod: 'Débito', total: 41000 },
-  { id: 1108, time: '18:45', paymentMethod: 'Transferencia', total: 28900 },
-])
+const dailySales = ref([])
 
 const dailySalesTotal = computed(() => dailySales.value.reduce((sum, s) => sum + s.total, 0))
 const dailySalesAvg = computed(() => dailySales.value.length ? Math.round(dailySalesTotal.value / dailySales.value.length) : 0)
-const totalItemsSold = computed(() => dailySales.value.length * 8)
+const totalItemsSold = computed(() => dailySales.value.reduce((sum, s) => sum + (s.items?.length || 0), 0))
 
-const cashMovements = ref([
-  { id: 1, type: 'ingreso', description: 'Apertura de caja', time: '08:00', amount: 50000 },
-  { id: 2, type: 'egreso', description: 'Pago a proveedor', time: '09:15', amount: 32000 },
-  { id: 3, type: 'ingreso', description: 'Ventas efectivo mañana', time: '12:00', amount: 48750 },
-  { id: 4, type: 'egreso', description: 'Servicio de limpieza', time: '14:00', amount: 8500 },
-  { id: 5, type: 'ingreso', description: 'Ventas efectivo tarde', time: '18:00', amount: 61200 },
-  { id: 6, type: 'ingreso', description: 'Recarga sube', time: '19:30', amount: 3000 },
-])
+const salesConfirmadas = computed(() => dailySales.value.filter(s => s.estado === 'confirmada'))
+const salesPendientes = computed(() => dailySales.value.filter(s => s.estado === 'pendiente'))
+const salesAnuladas = computed(() => dailySales.value.filter(s => s.estado === 'anulada'))
+const salesConfirmadasTotal = computed(() => salesConfirmadas.value.reduce((s, v) => s + v.total, 0))
+const salesPendientesTotal = computed(() => salesPendientes.value.reduce((s, v) => s + v.total, 0))
+const salesAnuladasTotal = computed(() => salesAnuladas.value.reduce((s, v) => s + v.total, 0))
+
+const cashMovements = ref([])
 
 const cashInTotal = computed(() => cashMovements.value.filter(m => m.type === 'ingreso').reduce((s, m) => s + m.amount, 0))
 const cashOutTotal = computed(() => cashMovements.value.filter(m => m.type === 'egreso').reduce((s, m) => s + m.amount, 0))
 const cashBalance = computed(() => cashInTotal.value - cashOutTotal.value)
 
-const purchases = ref([
-  { id: 1, supplier: 'Frigorífico Las Pampas', time: '07:30', items: 34, total: 156800 },
-  { id: 2, supplier: 'Lácteos Santa Rosa', time: '10:00', items: 18, total: 43200 },
-  { id: 3, supplier: 'Panificadora El Trigo', time: '15:00', items: 45, total: 28750 },
-])
+const purchases = ref([])
 
-const purchasesTotal = computed(() => purchases.value.reduce((s, p) => s + p.total, 0))
-const totalItemsPurchased = computed(() => purchases.value.reduce((s, p) => s + p.items, 0))
+const purchasesTotal = computed(() => purchases.value.reduce((s, p) => s + (p.total || 0), 0))
+const totalItemsPurchased = computed(() => purchases.value.reduce((s, p) => s + (p.items || 0), 0))
 
-const newProducts = ref([
-  { id: 1, name: 'Queso crema light 200g', code: 'PROD-8921', price: 2450 },
-  { id: 2, name: 'Yerba mate orgánica 1kg', code: 'PROD-8922', price: 3890 },
-  { id: 3, name: 'Galletitas integrales sésamo', code: 'PROD-8923', price: 1680 },
-])
-
-const modifiedProducts = ref([
-  { id: 4, name: 'Leche entera 1L', change: 'Precio +8%' },
-  { id: 5, name: 'Pan lactal 500g', change: 'Stock ajustado' },
-])
-
-const newClients = ref([
-  { id: 1, name: 'Comercio La Amistad', docType: 'CUIT', docNumber: '30-11223344-5', time: '11:30' },
-  { id: 2, name: 'Juan Carlos Ríos', docType: 'DNI', docNumber: '31.223.445', time: '16:45' },
-])
+const newProducts = ref([])
+const modifiedProducts = ref([])
+const newClients = ref([])
 </script>
