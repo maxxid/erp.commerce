@@ -159,6 +159,15 @@
             <i :class="auditando === row.id ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-check'"></i>
             Auditar
           </button>
+          <button
+            v-else-if="isSuspicious(row) && String(row.id).startsWith('abandon_')"
+            type="button"
+            class="px-2 py-1 rounded-md text-[10px] font-bold bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600 transition"
+            @click="descartarEvento(row)"
+          >
+            <i class="fa-solid fa-xmark"></i>
+            Descartar
+          </button>
           <span v-else class="text-slate-300 dark:text-slate-600 text-xs">&mdash;</span>
         </template>
       </BaseTable>
@@ -246,6 +255,14 @@ async function auditarEvento(log) {
     toast.error(e.message || 'Error al auditar')
   }
   auditando.value = null
+}
+
+function descartarEvento(log) {
+  const idx = logs.value.findIndex(l => l.id === log.id)
+  if (idx !== -1) {
+    logs.value[idx] = { ...logs.value[idx], suspicious: false }
+  }
+  toast.info('Descartado')
 }
 
 const suspiciousToday = computed(() => {
