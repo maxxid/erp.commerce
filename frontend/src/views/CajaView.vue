@@ -13,7 +13,7 @@
         <BaseBadge :variant="cajaStore.abierta ? 'success' : 'danger'" size="sm" dot>
           {{ cajaStore.abierta ? 'Caja Abierta' : 'Caja Cerrada' }}
         </BaseBadge>
-        <BaseButton v-if="cajaStore.abierta" :loading="closing" :disabled="closing" variant="danger" size="sm" @click="cerrarCaja">
+        <BaseButton v-if="cajaStore.abierta" :loading="closing" :disabled="closing" variant="danger" size="sm" @click="initCierreCaja">
           <i :class="closing ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-lock'"></i>
           {{ closing ? 'Cerrando...' : 'Cerrar Caja' }}
         </BaseButton>
@@ -120,6 +120,117 @@
         </div>
       </div>
     </BaseModal>
+
+    <!-- Modal Cierre de Caja -->
+    <BaseModal v-model="showCierreModal" title="Cierre de Caja" size="lg" :hide-footer="true">
+      <div class="space-y-5">
+        <div class="bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800 rounded-xl p-4">
+          <div class="flex items-center gap-2 mb-2">
+            <i class="fa-solid fa-triangle-exclamation text-brand-500"></i>
+            <span class="font-semibold text-brand-700 dark:text-brand-300 text-sm">Confrontá los montos</span>
+          </div>
+          <p class="text-xs text-brand-600 dark:text-brand-400">
+            Ingresá el monto real contado en cada método de pago. El sistema calculará la diferencia automáticamente.
+          </p>
+        </div>
+
+        <div class="space-y-3">
+          <div v-for="metodo in metodosArqueo" :key="metodo.valor" class="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full" :class="metodo.colorClass"></span>
+                <span class="font-semibold text-slate-900 dark:text-white text-sm">{{ metodo.label }}</span>
+                <span v-if="metodo.cerrado" class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 font-bold">CERRADO</span>
+              </div>
+              <div class="text-right">
+                <p class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Esperado</p>
+                <p class="font-mono-data font-bold text-slate-900 dark:text-white">{{ fc(metodo.esperado) }}</p>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block mb-1">Monto Real Contado</label>
+                <input
+                  v-model.number="metodo.montoReal"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  class="w-full px-3 py-2 text-sm font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition"
+                  :disabled="metodo.cerrado || closing"
+                />
+              </div>
+              <div>
+                <label class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block mb-1">Diferencia</label>
+                <div class="h-[38px] px-3 py-2 flex items-center rounded-lg border border-slate-200 dark:border-slate-700"
+                  :class="{
+                    'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800': (metodo.montoReal || 0) - metodo.esperado > 0,
+                    'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800': (metodo.montoReal || 0) - metodo.esperado < 0,
+                    'bg-slate-50 dark:bg-slate-800': (metodo.montoReal || 0) - metodo.esperado === 0 || !metodo.montoReal
+                  }"
+                >
+                  <span v-if="!metodo.montoReal" class="text-xs text-slate-400">—</span>
+                  <span v-else-if="(metodo.montoReal || 0) - metodo.esperado > 0" class="font-mono-data font-bold text-emerald-600 dark:text-emerald-400">+{{ fc((metodo.montoReal || 0) - metodo.esperado) }}</span>
+                  <span v-else-if="(metodo.montoReal || 0) - metodo.esperado < 0" class="font-mono-data font-bold text-red-600 dark:text-red-400">{{ fc((metodo.montoReal || 0) - metodo.esperado) }}</span>
+                  <span v-else class="font-mono-data font-bold text-slate-500">OK</span>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="metodo.montoReal && (metodo.montoReal || 0) - metodo.esperado !== 0" class="mt-2">
+              <input
+                v-model="metodo.comentario"
+                type="text"
+                placeholder="Comentario por diferencia (ej: faltante por robo, sobrante por error de precio)"
+                class="w-full px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none transition"
+                :disabled="closing"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Resumen Total -->
+        <div class="bg-slate-100 dark:bg-slate-800 rounded-xl p-4">
+          <div class="flex items-center justify-between">
+            <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Total Ingresos Esperado</span>
+            <span class="font-mono-data font-bold text-lg text-slate-900 dark:text-white">{{ fc(totalEsperado) }}</span>
+          </div>
+          <div class="flex items-center justify-between mt-2">
+            <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Total Real Contado</span>
+            <span class="font-mono-data font-bold text-lg" :class="totalReal === totalEsperado ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'">{{ fc(totalReal) }}</span>
+          </div>
+          <div v-if="totalReal !== totalEsperado" class="flex items-center justify-between mt-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+            <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Diferencia Total</span>
+            <span class="font-mono-data font-bold text-lg" :class="diferenciaTotal >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'">
+              {{ diferenciaTotal >= 0 ? '+' : '' }}{{ fc(diferenciaTotal) }}
+            </span>
+          </div>
+        </div>
+
+        <!-- Comentario General -->
+        <div>
+          <label class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block mb-1">Observaciones del Cierre</label>
+          <input
+            v-model="cierreComentario"
+            type="text"
+            placeholder="Observaciones generales del cierre de caja..."
+            class="w-full px-3 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition"
+            :disabled="closing"
+          />
+        </div>
+
+        <div class="flex gap-3 pt-2">
+          <BaseButton variant="secondary" class="flex-1" :disabled="closing" @click="showCierreModal = false">
+            Cancelar
+          </BaseButton>
+          <BaseButton variant="danger" class="flex-1" :loading="closing" :disabled="closing" @click="confirmarCierreCaja">
+            <i :class="closing ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-lock'"></i>
+            {{ closing ? 'Cerrando...' : 'Confirmar Cierre de Caja' }}
+          </BaseButton>
+        </div>
+      </div>
+    </BaseModal>
   </div>
 </template>
 
@@ -163,7 +274,21 @@ const saving = ref(false)
 const cerrandoMetodo = ref(false)
 
 const showNuevoMovimiento = ref(false)
+const showCierreModal = ref(false)
+const cierreComentario = ref('')
+
+const metodosArqueo = reactive([
+  { label: 'Efectivo', valor: 'efectivo', esperado: 0, montoReal: 0, comentario: '', cerrado: false, colorClass: 'bg-emerald-500' },
+  { label: 'Débito', valor: 'debito', esperado: 0, montoReal: 0, comentario: '', cerrado: false, colorClass: 'bg-blue-500' },
+  { label: 'Crédito', valor: 'credito', esperado: 0, montoReal: 0, comentario: '', cerrado: false, colorClass: 'bg-purple-500' },
+  { label: 'Transferencia', valor: 'transferencia', esperado: 0, montoReal: 0, comentario: '', cerrado: false, colorClass: 'bg-amber-500' },
+])
+
 const nuevoMovimiento = reactive({ tipo: 'Ingreso', monto: 0, metodo: 'Efectivo', comentario: '' })
+
+const totalEsperado = computed(() => metodosArqueo.reduce((sum, m) => sum + m.esperado, 0))
+const totalReal = computed(() => metodosArqueo.reduce((sum, m) => sum + (m.montoReal || 0), 0))
+const diferenciaTotal = computed(() => totalReal.value - totalEsperado.value)
 
 const ingresosHoy = computed(() => movements.value.filter(m => m.tipo === 'Ingreso').reduce((sum, m) => sum + m.monto, 0))
 const egresosHoy = computed(() => movements.value.filter(m => m.tipo === 'Egreso').reduce((sum, m) => sum + m.monto, 0))
@@ -237,25 +362,61 @@ async function abrirCaja() {
   }
 }
 
-async function cerrarCaja() {
-  const { heldCount, deleteHeldTicket, getHeldAuditLog } = useHeldTickets()
+async function initCierreCaja() {
+  const { heldCount } = useHeldTickets()
   if (heldCount.value > 0) {
     if (!confirm(`Hay ${heldCount.value} ticket(s) apartados en POS. Si cerrás la caja sin recuperarlos se marcarán como huérfanos en la auditoría. ¿Cerrar de todas formas?`)) return
-    // mark all current held as orphaned
     const held = JSON.parse(localStorage.getItem('apex-pos-held') || '[]')
     held.forEach(t => { t._orphaned = true })
     localStorage.setItem('apex-pos-held', JSON.stringify(held))
   }
-  if (!confirm('¿Cerrar la caja y finalizar la jornada?')) return
+
+  try {
+    const data = await api.get('/api/caja/resumen')
+    if (data) {
+      const desglose = data.desglose || {}
+      const apertura = data.apertura || 0
+      metodosArqueo.forEach(m => {
+        if (m.valor === 'efectivo') {
+          m.esperado = (desglose[m.valor] || 0) + apertura
+        } else {
+          m.esperado = desglose[m.valor] || 0
+        }
+        m.montoReal = 0
+        m.comentario = ''
+        m.cerrado = data.metodos_cerrados?.includes(m.valor)
+      })
+    }
+    cierreComentario.value = ''
+    showCierreModal.value = true
+  } catch (e) {
+    toast.error('Error al obtener resumen de caja')
+  }
+}
+
+async function confirmarCierreCaja() {
   closing.value = true
   try {
-    await api.post('/api/caja/cierre-total', { comentario: '' })
+    for (const metodo of metodosArqueo) {
+      if (metodo.cerrado) continue
+      if (!metodo.montoReal || metodo.montoReal <= 0) continue
+
+      const comentarioFinal = metodo.comentario || cierreComentario.value || ''
+      await api.post('/api/caja/cierre-metodo', {
+        medio_pago: metodo.valor,
+        monto_real: metodo.montoReal,
+        comentario: comentarioFinal,
+      })
+    }
+
+    await api.post('/api/caja/cierre-total', { comentario: cierreComentario.value || '' })
     await cajaStore.fetchEstado()
     await fetchMovimientos()
+    showCierreModal.value = false
     toast.success('Jornada finalizada. Caja cerrada.')
     playCloseCash()
   } catch (e) {
-    toast.error('Error al cerrar caja: ' + (e.message || ''))
+    toast.error('Error al cerrar caja: ' + (e?.data?.detail || e?.message || ''))
   } finally {
     closing.value = false
   }
