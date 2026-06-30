@@ -18,6 +18,7 @@ const toast = useToastStore()
 const router = useRouter()
 
 const filtroFecha = ref('')
+const filtroFechaHasta = ref('')
 const filtroEstado = ref('')
 const filtroMedioPago = ref('')
 const filtroFactura = ref('')
@@ -74,7 +75,16 @@ const filteredSales = computed(() => {
   let result = sales.value
 
   if (filtroFecha.value) {
-    result = result.filter(s => s.fecha && s.fecha.startsWith(filtroFecha.value))
+    const desde = filtroFecha.value
+    const hasta = filtroFechaHasta.value
+    result = result.filter(s => {
+      if (!s.fecha) return false
+      const fecha = s.fecha.substring(0, 10)
+      if (hasta) {
+        return fecha >= desde && fecha <= hasta
+      }
+      return fecha.startsWith(desde)
+    })
   }
 
   if (filtroEstado.value) {
@@ -250,17 +260,35 @@ async function executeAnular() {
         </button>
       </div>
 
-      <BaseSelect v-model="filtroMedioPago" :options="medioPagoOptions" placeholder="Medio de Pago" size="sm" class="w-36" />
+      <select
+        v-model="filtroMedioPago"
+        class="px-3 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 w-36"
+      >
+        <option value="">Medio de Pago</option>
+        <option value="efectivo">Efectivo</option>
+        <option value="debito">Débito</option>
+        <option value="credito">Crédito</option>
+        <option value="transferencia">Transferencia</option>
+        <option value="cta_corriente">Cta. Cte.</option>
+      </select>
 
-      <BaseSelect v-model="filtroFactura" :options="facturaOptions" placeholder="Factura" size="sm" class="w-36" />
+      <select
+        v-model="filtroFactura"
+        class="px-3 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 w-36"
+      >
+        <option value="">Factura</option>
+        <option value="sin_factura">Sin Factura</option>
+        <option value="pendiente">Pendiente</option>
+        <option value="emitida">Emitida</option>
+      </select>
 
-      <div class="relative">
+      <div class="relative flex-1 min-w-[200px] max-w-xs">
         <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
         <input
           v-model="filtroSearch"
           type="text"
-          placeholder="Buscar..."
-          class="pl-8 pr-3 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 w-48"
+          placeholder="Buscar ticket, cliente..."
+          class="pl-8 pr-3 py-1.5 text-xs w-full border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20"
         >
       </div>
 
@@ -268,6 +296,12 @@ async function executeAnular() {
         <span class="text-[10px] text-slate-400">Desde</span>
         <input
           v-model="filtroFecha"
+          type="date"
+          class="px-2 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 focus:border-brand-500"
+        >
+        <span class="text-[10px] text-slate-400">Hasta</span>
+        <input
+          v-model="filtroFechaHasta"
           type="date"
           class="px-2 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 focus:border-brand-500"
         >
