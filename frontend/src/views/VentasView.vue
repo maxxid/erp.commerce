@@ -71,6 +71,19 @@ const facturaOptions = [
   { value: 'emitida', label: 'Emitida' },
 ]
 
+const hasActiveFilters = computed(() => {
+  return filtroFecha.value || filtroFechaHasta.value || filtroEstado.value || filtroMedioPago.value || filtroFactura.value || filtroSearch.value
+})
+
+function clearFilters() {
+  filtroFecha.value = ''
+  filtroFechaHasta.value = ''
+  filtroEstado.value = ''
+  filtroMedioPago.value = ''
+  filtroFactura.value = ''
+  filtroSearch.value = ''
+}
+
 const filteredSales = computed(() => {
   let result = sales.value
 
@@ -242,6 +255,9 @@ async function executeAnular() {
         <BaseButton variant="secondary" size="sm" :loading="syncing" @click="syncData">
           <i :class="syncing ? 'fa-solid fa-circle-notch fa-spin' : 'fa-solid fa-arrows-rotate'"></i>
           {{ syncing ? 'Sincronizando...' : 'Sincronizar' }}
+        </BaseButton>
+        <BaseButton v-if="hasActiveFilters" variant="ghost" size="sm" @click="clearFilters">
+          <i class="fa-solid fa-times mr-1"></i> Limpiar Filtros
         </BaseButton>
       </div>
     </div>
