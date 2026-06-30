@@ -24,6 +24,7 @@ def registrar(
     venta_id: Optional[int] = None,
     venta_numero: Optional[str] = None,
     detalle: Optional[dict] = None,
+    creado_por: Optional[int] = None,
 ):
     """Registra un evento de auditoría."""
     entry = Auditoria(
@@ -32,6 +33,7 @@ def registrar(
         venta_id=venta_id,
         venta_numero=venta_numero,
         detalle=json.dumps(detalle, ensure_ascii=False, default=str) if detalle else None,
+        creado_por=creado_por or usuario_id,
     )
     db.add(entry)
     db.commit()
@@ -69,7 +71,7 @@ def _evento_to_dict(e: Auditoria) -> dict:
         except (json.JSONDecodeError, TypeError):
             detalle = e.detalle
 
-    es_sospechoso = e.tipo in ("item_quitado", "venta_anulada")
+    es_sospechoso = _es_sospechoso(e, detalle)
 
     return {
         "id": e.id,
@@ -80,8 +82,34 @@ def _evento_to_dict(e: Auditoria) -> dict:
         "venta_numero": e.venta_numero,
         "detalle": detalle,
         "sospechoso": es_sospechoso,
+        "auditado": e.auditado,
+        "auditado_por": e.auditado_por,
+        "auditado_por_nombre": e.auditado_por.nombre if e.auditado_por else None,
+        "auditado_en": e.auditado_en.isoformat() if e.auditado_en else None,
         "created_at": e.created_at.isoformat() if e.created_at else None,
     }
+
+
+def _es_sospechoso(e: Auditoria, detalle: dict) -> bool:
+    if e.auditado:
+        return False
+    if e.tipo in ("item_quitado", "venta_anulada"):
+        return True
+    if e.tipo == "cierre_caja":
+        return True
+    if e.tipo == "venta_confirmada":
+        if detalle and isinstance(detalle, dict):
+            hora = detalle.get("hora")
+            if hora:
+                try:
+                    h = int(hora.split(":")[0])
+                    if h < 7 or h > 22:
+                        return True
+                except:
+                    pass
+    if e.tipo == "descuento":
+        return True
+    return False
 
 
 def listar_con_carritos_abandonados(
@@ -129,3 +157,17 @@ def listar_con_carritos_abandonados(
             total += 1
 
     return data, total
+
+
+def auditar_evento(db: Session, evento_id: int, auditor_id: int) -> Optional[Auditoria]:
+    """Marca un evento de auditoría como auditado."""
+    from app.models.auditoria import Auditoria
+    evento = db.query(Auditoria).filter(Auditoria.id == evento_id).first()
+    if not evento:
+        return None
+    evento.auditado = True
+    evento.auditado_por = auditor_id
+    evento.auditado_en = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(evento)
+    return evento

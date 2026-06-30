@@ -52,15 +52,15 @@
         </div>
         <div class="ml-auto flex items-center gap-3">
           <BaseButton
-            :variant="soloSospechosos ? 'danger' : 'ghost'"
+            :variant="sinAuditar ? 'danger' : 'ghost'"
             size="xs"
-            @click="soloSospechosos = !soloSospechosos"
+            @click="sinAuditar = !sinAuditar"
           >
-            <i class="fa-solid fa-triangle-exclamation text-[10px]"></i>
-            Solo sospechosos
+            <i class="fa-solid fa-clipboard-check text-[10px]"></i>
+            Sin auditar
           </BaseButton>
           <span class="w-2 h-2 rounded-full bg-rose-500"></span>
-          <span class="text-xs text-slate-500 dark:text-slate-400">Actividad sospechosa: {{ suspiciousCount }}</span>
+          <span class="text-xs text-slate-500 dark:text-slate-400">Sin auditar: {{ suspiciousCount }}</span>
         </div>
       </div>
     </BaseCard>
@@ -142,14 +142,23 @@
           </div>
         </template>
         <template #alert="{ row }">
-          <BaseBadge
-            v-if="isSuspicious(row)"
-            variant="danger"
-            size="xs"
+          <div v-if="row.auditado" class="flex flex-col items-center gap-0.5">
+            <BaseBadge variant="success" size="xs">
+              <i class="fa-solid fa-check text-[10px]"></i>
+              Auditado
+            </BaseBadge>
+            <span class="text-[9px] text-slate-400 dark:text-slate-500">{{ row.auditado_por_nombre }}</span>
+          </div>
+          <button
+            v-else-if="isSuspicious(row)"
+            type="button"
+            :disabled="auditando === row.id"
+            class="px-2 py-1 rounded-md text-[10px] font-bold bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400 hover:bg-rose-200 dark:hover:bg-rose-800/60 transition disabled:opacity-50"
+            @click="auditarEvento(row)"
           >
-            <i class="fa-solid fa-triangle-exclamation text-[10px]"></i>
-            Sospechoso
-          </BaseBadge>
+            <i :class="auditando === row.id ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-check'"></i>
+            Auditar
+          </button>
           <span v-else class="text-slate-300 dark:text-slate-600 text-xs">&mdash;</span>
         </template>
       </BaseTable>
@@ -212,15 +221,32 @@ const filters = [
   { key: 'Clientes', label: 'Clientes' },
 ]
 
-const suspiciousEventTypes = ['carrito_abandonado', 'item_quitado', 'venta_anulada', 'venta_editada']
+const sinAuditar = ref(false)
+const auditando = ref(null)
 
 function isSuspicious(log) {
+  if (log.auditado) return false
   if (log.suspicious) return true
-  if (suspiciousEventTypes.includes(log.event)) return true
   return false
 }
 
 const suspiciousCount = computed(() => logs.value.filter(l => isSuspicious(l)).length)
+
+async function auditarEvento(log) {
+  if (auditando.value === log.id) return
+  auditando.value = log.id
+  try {
+    await api.patch(`/api/auditoria/${log.id}/auditar`)
+    const idx = logs.value.findIndex(l => l.id === log.id)
+    if (idx !== -1) {
+      logs.value[idx] = { ...logs.value[idx], auditado: true }
+    }
+    toast.success('Evento auditado')
+  } catch (e) {
+    toast.error(e.message || 'Error al auditar')
+  }
+  auditando.value = null
+}
 
 const suspiciousToday = computed(() => {
   const today = new Date().toISOString().slice(0, 10)
@@ -235,8 +261,8 @@ const filteredLogs = computed(() => {
   if (activeFilter.value !== 'todo') {
     result = result.filter(l => l.type === activeFilter.value)
   }
-  if (soloSospechosos.value) {
-    result = result.filter(l => isSuspicious(l))
+  if (sinAuditar.value) {
+    result = result.filter(l => isSuspicious(l) || (!l.auditado && l.suspicious))
   }
   return result
 })
@@ -321,6 +347,8 @@ async function refreshLogs() {
         action: e.venta_numero ? `Ticket #${e.venta_numero}` : e.tipo,
         description: typeof e.detalle === 'object' ? JSON.stringify(e.detalle) : (e.detalle || ''),
         suspicious: e.sospechoso || false,
+        auditado: e.auditado || false,
+        auditado_por_nombre: e.auditado_por_nombre || '',
         // carrito abandonado
         items_count: e.detalle?.items || 0,
         subtotal: e.detalle?.subtotal || 0,

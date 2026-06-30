@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.auth.dependencies import require_role
 from app.models.usuario import Usuario
-from app.schemas.common import RespuestaLista
+from app.schemas.common import RespuestaLista, RespuestaData
 from app.services import auditoria_service
 
 router = APIRouter(prefix="/api/auditoria", tags=["Auditoría"])
@@ -26,3 +26,16 @@ def listar(
         db, usuario_id=usuario_id, tipo=tipo, page=page, page_size=page_size
     )
     return RespuestaLista(data=data, total=total, page=page, page_size=page_size, message=f"{total} evento(s)")
+
+
+@router.patch("/{evento_id}/auditar", response_model=RespuestaData)
+def auditar_evento(
+    evento_id: int,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin")),
+):
+    """Marca un evento como auditado."""
+    evento = auditoria_service.auditar_evento(db, evento_id, user.id)
+    if not evento:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+    return RespuestaData(message="Evento auditado")
