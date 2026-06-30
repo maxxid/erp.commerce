@@ -49,7 +49,7 @@
         <template #acciones="{ row }">
           <div class="flex items-center justify-center gap-1">
             <BaseButton
-              v-if="row.estado === 'Pendiente' || row.estado === 'Parcial'"
+              v-if="row.estado === 'pendiente'"
               variant="primary"
               size="xs"
               :disabled="receiving"
@@ -57,7 +57,15 @@
             >
               <i class="fa-solid fa-boxes-packing"></i> Recibir
             </BaseButton>
-            <span v-else class="text-[10px] text-slate-300">—</span>
+            <BaseButton
+              v-else-if="row.estado === 'anulada'"
+              variant="ghost"
+              size="xs"
+              disabled
+            >
+              <i class="fa-solid fa-ban"></i>
+            </BaseButton>
+            <span v-else class="text-[10px] text-emerald-600 font-medium">Recibida</span>
           </div>
         </template>
       </BaseTable>
@@ -330,7 +338,24 @@ onMounted(async () => {
 async function fetchCompras() {
   try {
     const data = await api.get('/api/compras')
-    if (data && data.length) compras.value = data
+    if (data && data.length) {
+      compras.value = data.map(c => ({
+        id: c.id,
+        numero_orden: c.numero,
+        proveedor: c.proveedor_nombre || '',
+        total: c.total || 0,
+        estado: c.estado || '',
+        fecha: c.fecha ? new Date(c.fecha).toLocaleDateString('es-AR') : '',
+        items: (c.items || []).map(i => ({
+          id: i.id,
+          producto: i.producto_nombre || '',
+          cantidad: i.cantidad || 0,
+          cantidad_recibida: i.cantidad_recibida || 0,
+          precio: i.precio_unitario || 0,
+          subtotal: i.subtotal || 0,
+        })),
+      }))
+    }
   } catch { /* fallback to mock */ }
 }
 
@@ -362,20 +387,18 @@ async function syncData() {
 
 function estadoCompraClass(estado) {
   const map = {
-    'Pendiente': 'bg-amber-50 text-amber-700',
-    'Recibido': 'bg-emerald-50 text-emerald-700',
-    'Parcial': 'bg-blue-50 text-blue-700',
-    'Cancelado': 'bg-rose-50 text-rose-700',
+    'pendiente': 'bg-amber-50 text-amber-700',
+    'recibida': 'bg-emerald-50 text-emerald-700',
+    'anulada': 'bg-rose-50 text-rose-700',
   }
   return map[estado] || 'bg-slate-50 text-slate-600'
 }
 
 function estadoBadgeVariant(estado) {
   const map = {
-    'Pendiente': 'warning',
-    'Recibido': 'success',
-    'Parcial': 'info',
-    'Cancelado': 'danger',
+    'pendiente': 'warning',
+    'recibida': 'success',
+    'anulada': 'danger',
   }
   return map[estado] || 'default'
 }
@@ -548,7 +571,7 @@ async function guardarCompra() {
         numero_orden: 'OC-' + String(compras.value.length + 1).padStart(3, '0'),
         proveedor: proveedor ? proveedor.nombre : '—',
         total: totalCompra.value,
-        estado: 'Pendiente',
+        estado: 'pendiente',
         fecha: new Date().toISOString().slice(0, 10),
         items: itemsValidos.map(i => ({
           id: Date.now() + Math.random(),
@@ -603,10 +626,10 @@ async function confirmarRecepcion() {
     const totalAcumulado = totalPrevio + totalRecibido
 
     if (totalAcumulado >= totalPedido) {
-      receiveTarget.value.estado = 'Recibido'
+      receiveTarget.value.estado = 'recibida'
       toast.success(`${receiveTarget.value.numero_orden} recibida completamente`)
     } else {
-      receiveTarget.value.estado = 'Parcial'
+      receiveTarget.value.estado = 'recibida'
       toast.success(`Recepción parcial de ${receiveTarget.value.numero_orden} registrada`)
     }
 
