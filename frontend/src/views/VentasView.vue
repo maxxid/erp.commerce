@@ -300,9 +300,12 @@ async function executeAnular() {
               </thead>
               <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
                 <tr v-for="(item, idx) in row.items" :key="idx">
-                  <td class="py-1.5 text-slate-700 dark:text-slate-200">{{ item.producto_nombre || item.producto }}</td>
+                  <td class="py-1.5 text-slate-700 dark:text-slate-200">
+                    {{ item.producto_nombre || item.nombre || '—' }}
+                    <span v-if="item.oferta_info" class="ml-1 text-[9px] text-orange-500 font-bold">[{{ item.oferta_info }}]</span>
+                  </td>
                   <td class="py-1.5 text-slate-600 dark:text-slate-400 text-center">{{ item.cantidad }}</td>
-                  <td class="py-1.5 text-slate-600 dark:text-slate-400 text-right font-mono-data">{{ fc(item.precio) }}</td>
+                  <td class="py-1.5 text-slate-600 dark:text-slate-400 text-right font-mono-data">{{ fc(item.precio_unitario) }}</td>
                   <td class="py-1.5 text-slate-800 dark:text-slate-100 text-right font-mono-data font-bold">{{ fc(item.subtotal) }}</td>
                 </tr>
               </tbody>
@@ -313,13 +316,13 @@ async function executeAnular() {
               <span class="text-[10px] font-bold text-slate-400 uppercase">Total</span>
               <span class="text-sm font-mono-data font-bold text-brand-700 dark:text-brand-400">{{ fc(row.total) }}</span>
             </div>
-            <div class="flex items-center gap-2">
+            <div v-if="row.descuento > 0" class="flex items-center gap-2">
               <span class="text-[10px] font-bold text-slate-400 uppercase">Descuento</span>
-              <span class="text-sm font-mono-data font-bold text-red-600 dark:text-red-400">{{ fc(row.descuento || 0) }}</span>
+              <span class="text-sm font-mono-data font-bold text-red-600 dark:text-red-400">{{ fc(row.descuento) }}</span>
             </div>
             <div class="flex items-center gap-2">
               <span class="text-[10px] font-bold text-slate-400 uppercase">Medio de Pago</span>
-              <span class="text-xs font-bold text-slate-700 dark:text-slate-200">{{ row.metodo_pago }}</span>
+              <span class="text-xs font-bold text-slate-700 dark:text-slate-200 capitalize">{{ row.medio_pago || '—' }}</span>
             </div>
           </div>
         </template>
