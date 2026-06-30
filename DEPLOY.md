@@ -14,18 +14,19 @@ cd /opt/erp-comercio && sudo -u erp git pull origin master && sudo systemctl res
 
 ## Migraciones de Base de Datos (SQLite)
 
-Cuando se agregan columnas nuevas a modelos SQLAlchemy:
+**IMPORTANTE:** La base de datos real está en `/data/erp/erp_comercio.db` (configurado en el servicio systemd).
+El `settings.DATABASE_URL` puede mostrar un path relativo que no es el real en producción.
 
-1. Identificar el path de la DB:
+1. Verificar el path real de la DB:
 ```bash
-cd /opt/erp-comercio && sudo -u erp bash -c 'source venv/bin/activate && python -c "from app.config import settings; print(settings.DATABASE_URL)"'
+sudo cat /etc/systemd/system/erp-comercio.service | grep DATABASE_URL
 ```
 
 2. Crear script de migración (ejemplo para agregar 3 columnas):
 ```bash
 cd /opt/erp-comercio && sudo -u erp bash -c 'cat > /tmp/migrate.py << EOF
 import sqlite3
-conn = sqlite3.connect("erp_comercio.db")
+conn = sqlite3.connect("/data/erp/erp_comercio.db")
 conn.execute("ALTER TABLE venta_items ADD COLUMN oferta_tipo VARCHAR(20)")
 conn.execute("ALTER TABLE venta_items ADD COLUMN oferta_valor FLOAT")
 conn.execute("ALTER TABLE venta_items ADD COLUMN oferta_info TEXT")
