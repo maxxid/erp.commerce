@@ -475,59 +475,56 @@ async function syncCalendario() {
   syncing.value = true
   try {
     let url = `/api/calendario/dia?fecha_desde=${selectedDateFrom.value}&fecha_hasta=${selectedDateTo.value}`
-    const data = await api.get(url)
-    if (data && data.data) {
-      const d = data.data
-      if (d.ventas) {
-        dailySales.value = (d.ventas.items || []).map(v => ({
-          id: v.id,
-          numero: v.numero,
-          time: v.fecha ? new Date(v.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }) : '',
-          estado: v.estado || '',
-          medio_pago: v.medio_pago || '',
-          total: v.total || 0,
-          items: v.items || [],
-        }))
-      }
-      if (d.caja) {
-        cashMovements.value = (d.caja.movimientos || []).map(m => ({
-          id: m.id,
-          type: m.tipo || m.type || '',
-          description: m.descripcion || '',
-          time: m.created_at ? new Date(m.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }) : '',
-          amount: m.monto || 0,
-          medio_pago: m.medio_pago || '',
-        }))
-      }
-      if (d.compras) {
-        purchases.value = (d.compras.items || []).map(c => ({
-          id: c.id,
-          numero: c.numero,
-          supplier: c.proveedor_nombre || '',
-          time: c.fecha ? new Date(c.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }) : '',
-          items: c.items ? c.items.reduce((s, i) => s + (i.cantidad || 0), 0) : 0,
-          total: c.total || 0,
-        }))
-      }
-      if (d.productos) {
-        newProducts.value = (d.productos.nuevos_lista || []).map(p => ({
-          id: p.id,
-          name: p.nombre || '',
-          code: p.codigo_barras || '',
-        }))
-        modifiedProducts.value = (d.productos.modificados_lista || []).map(p => ({
-          id: p.id,
-          name: p.nombre || '',
-          code: p.codigo_barras || '',
-        }))
-      }
-      if (d.clientes) {
-        newClients.value = (d.clientes.lista || []).map(c => ({
-          id: c.id,
-          name: c.nombre || '',
-          telefono: c.telefono || '',
-        }))
-      }
+    const d = await api.get(url)
+    if (d && d.ventas) {
+      dailySales.value = (d.ventas.items || []).map(v => ({
+        id: v.id,
+        numero: v.numero,
+        time: v.fecha ? new Date(v.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }) : '',
+        estado: v.estado || '',
+        medio_pago: v.medio_pago || '',
+        total: v.total || 0,
+        items: v.items || [],
+      }))
+    }
+    if (d && d.caja) {
+      cashMovements.value = (d.caja.movimientos || []).map(m => ({
+        id: m.id,
+        type: m.tipo || m.type || '',
+        description: m.descripcion || '',
+        time: m.created_at ? new Date(m.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }) : '',
+        amount: m.monto || 0,
+        medio_pago: m.medio_pago || '',
+      }))
+    }
+    if (d && d.compras) {
+      purchases.value = (d.compras.items || []).map(c => ({
+        id: c.id,
+        numero: c.numero,
+        supplier: c.proveedor_nombre || '',
+        time: c.fecha ? new Date(c.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }) : '',
+        items: c.items ? c.items.reduce((s, i) => s + (i.cantidad || 0), 0) : 0,
+        total: c.total || 0,
+      }))
+    }
+    if (d && d.productos) {
+      newProducts.value = (d.productos.nuevos_lista || []).map(p => ({
+        id: p.id,
+        name: p.nombre || '',
+        code: p.codigo_barras || '',
+      }))
+      modifiedProducts.value = (d.productos.modificados_lista || []).map(p => ({
+        id: p.id,
+        name: p.nombre || '',
+        code: p.codigo_barras || '',
+      }))
+    }
+    if (d && d.clientes) {
+      newClients.value = (d.clientes.lista || []).map(c => ({
+        id: c.id,
+        name: c.nombre || '',
+        telefono: c.telefono || '',
+      }))
     }
   } catch (e) {
     dailySales.value = []
