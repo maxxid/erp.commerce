@@ -24,23 +24,35 @@
     </div>
 
     <BaseCard padding="md">
-      <div class="flex flex-col sm:flex-row sm:items-center gap-4">
-        <div class="w-full sm:w-44">
-          <BaseInput
-            v-model="selectedDate"
-            label="Fecha"
-            type="date"
-          />
-        </div>
-        <div class="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl inline-flex ml-auto">
+      <div class="flex flex-col lg:flex-row lg:items-end gap-4">
+        <div class="flex flex-wrap gap-2">
           <BaseButton
-            v-for="tab in tabs"
-            :key="tab.key"
-            :variant="activeTab === tab.key ? 'primary' : 'ghost'"
+            v-for="f in dateFilters"
+            :key="f.key"
+            :variant="activeDateFilter === f.key ? 'primary' : 'secondary'"
             size="sm"
-            @click="activeTab = tab.key"
+            @click="setDateFilter(f.key)"
           >
-            {{ tab.label }}
+            {{ f.label }}
+          </BaseButton>
+        </div>
+        <div class="flex items-center gap-2 lg:ml-auto">
+          <div class="w-36">
+            <BaseInput
+              v-model="selectedDateFrom"
+              label="Desde"
+              type="date"
+            />
+          </div>
+          <div class="w-36">
+            <BaseInput
+              v-model="selectedDateTo"
+              label="Hasta"
+              type="date"
+            />
+          </div>
+          <BaseButton variant="secondary" size="md" :loading="syncing" :disabled="syncing" @click="syncCalendario">
+            <i class="fa-solid fa-arrows-rotate"></i>
           </BaseButton>
         </div>
       </div>
@@ -54,7 +66,7 @@
           </div>
           <div>
             <h3 class="font-semibold text-slate-900 dark:text-white">Ventas del día</h3>
-            <p class="text-xs text-slate-500 dark:text-slate-400">{{ selectedDate }}</p>
+            <p class="text-xs text-slate-500 dark:text-slate-400">{{ dateRangeLabel }}</p>
           </div>
         </div>
         <div class="text-right">
@@ -111,7 +123,7 @@
           </div>
           <div>
             <h3 class="font-semibold text-slate-900 dark:text-white">Movimientos de caja</h3>
-            <p class="text-xs text-slate-500 dark:text-slate-400">{{ selectedDate }}</p>
+            <p class="text-xs text-slate-500 dark:text-slate-400">{{ dateRangeLabel }}</p>
           </div>
         </div>
         <div class="text-right">
@@ -169,7 +181,7 @@
           </div>
           <div>
             <h3 class="font-semibold text-slate-900 dark:text-white">Compras recibidas</h3>
-            <p class="text-xs text-slate-500 dark:text-slate-400">{{ selectedDate }}</p>
+            <p class="text-xs text-slate-500 dark:text-slate-400">{{ dateRangeLabel }}</p>
           </div>
         </div>
         <div class="text-right">
@@ -219,7 +231,7 @@
           </div>
           <div>
             <h3 class="font-semibold text-slate-900 dark:text-white">Productos nuevos / modificados</h3>
-            <p class="text-xs text-slate-500 dark:text-slate-400">{{ selectedDate }}</p>
+            <p class="text-xs text-slate-500 dark:text-slate-400">{{ dateRangeLabel }}</p>
           </div>
         </div>
         <div class="flex items-center gap-2">
@@ -270,7 +282,7 @@
           </div>
           <div>
             <h3 class="font-semibold text-slate-900 dark:text-white">Nuevos clientes</h3>
-            <p class="text-xs text-slate-500 dark:text-slate-400">{{ selectedDate }}</p>
+            <p class="text-xs text-slate-500 dark:text-slate-400">{{ dateRangeLabel }}</p>
           </div>
         </div>
         <BaseBadge variant="info" size="sm">{{ newClients.length }} registrados</BaseBadge>
@@ -284,8 +296,8 @@
         empty-title="Sin nuevos clientes"
         empty-text="No hay nuevos clientes registrados para esta fecha."
       >
-        <template #doc="{ row }">
-          <span class="text-slate-500 dark:text-slate-400">{{ row.docType }} {{ row.docNumber }}</span>
+        <template #telefono="{ row }">
+          <span class="text-slate-500 dark:text-slate-400">{{ row.telefono || '-' }}</span>
         </template>
       </BaseTable>
     </BaseCard>
@@ -307,11 +319,83 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 const toast = useToastStore()
 
 const syncing = ref(false)
-const selectedDate = ref('2026-06-20')
+const activeDateFilter = ref('hoy')
+const selectedDateFrom = ref('')
+const selectedDateTo = ref('')
 const activeTab = ref('todo')
 const showSalesDetail = ref(false)
 const showCashDetail = ref(false)
 const showPurchasesDetail = ref(false)
+
+const dateRangeLabel = computed(() => {
+  if (selectedDateFrom.value === selectedDateTo.value) {
+    return selectedDateFrom.value
+  }
+  return `${selectedDateFrom.value} a ${selectedDateTo.value}`
+})
+
+function getMonday(d) {
+  d = new Date(d)
+  const day = d.getDay()
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1)
+  return new Date(d.setDate(diff))
+}
+
+function formatDate(date) {
+  return date.toISOString().split('T')[0]
+}
+
+function setDateFilter(key) {
+  activeDateFilter.value = key
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  switch (key) {
+    case 'hoy':
+      selectedDateFrom.value = formatDate(today)
+      selectedDateTo.value = formatDate(today)
+      break
+    case 'esta_semana': {
+      const monday = getMonday(today)
+      const sunday = new Date(monday)
+      sunday.setDate(monday.getDate() + 6)
+      selectedDateFrom.value = formatDate(monday)
+      selectedDateTo.value = formatDate(sunday)
+      break
+    }
+    case 'ult_2_semanas': {
+      const twoWeeksAgo = new Date(today)
+      twoWeeksAgo.setDate(today.getDate() - 14)
+      selectedDateFrom.value = formatDate(twoWeeksAgo)
+      selectedDateTo.value = formatDate(today)
+      break
+    }
+    case 'este_mes': {
+      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1)
+      selectedDateFrom.value = formatDate(firstDay)
+      selectedDateTo.value = formatDate(today)
+      break
+    }
+    case 'mes_anterior': {
+      const firstDayThisMonth = new Date(today.getFullYear(), today.getMonth(), 1)
+      const lastDayPrevMonth = new Date(firstDayThisMonth)
+      lastDayPrevMonth.setDate(lastDayPrevMonth.getDate() - 1)
+      const firstDayPrevMonth = new Date(lastDayPrevMonth.getFullYear(), lastDayPrevMonth.getMonth(), 1)
+      selectedDateFrom.value = formatDate(firstDayPrevMonth)
+      selectedDateTo.value = formatDate(lastDayPrevMonth)
+      break
+    }
+  }
+  syncCalendario()
+}
+
+const dateFilters = [
+  { key: 'hoy', label: 'Hoy' },
+  { key: 'esta_semana', label: 'Esta Semana' },
+  { key: 'ult_2_semanas', label: 'Últ. 2 Semanas' },
+  { key: 'este_mes', label: 'Este Mes' },
+  { key: 'mes_anterior', label: 'Mes Anterior' },
+]
 
 const tabs = [
   { key: 'todo', label: 'Todo' },
@@ -355,37 +439,74 @@ const modifiedProductColumns = [
 
 const clientColumns = [
   { key: 'name', label: 'Nombre' },
-  { key: 'doc', label: 'Documento' },
-  { key: 'time', label: 'Hora', align: 'right' },
+  { key: 'telefono', label: 'Teléfono' },
 ]
 
 onMounted(async () => {
-  try {
-    const data = await api.get(`/api/calendario/dia?fecha=${selectedDate.value}`)
-    if (data) {
-      if (data.dailySales) dailySales.value = data.dailySales
-      if (data.cashMovements) cashMovements.value = data.cashMovements
-      if (data.purchases) purchases.value = data.purchases
-      if (data.newProducts) newProducts.value = data.newProducts
-      if (data.modifiedProducts) modifiedProducts.value = data.modifiedProducts
-      if (data.newClients) newClients.value = data.newClients
-    }
-  } catch { /* fallback to mock */ }
+  setDateFilter('hoy')
 })
 
 async function syncCalendario() {
   syncing.value = true
   try {
-    const data = await api.get(`/api/calendario/dia?fecha=${selectedDate.value}`)
-    if (data) {
-      if (data.dailySales) dailySales.value = data.dailySales
-      if (data.cashMovements) cashMovements.value = data.cashMovements
-      if (data.purchases) purchases.value = data.purchases
-      if (data.newProducts) newProducts.value = data.newProducts
-      if (data.modifiedProducts) modifiedProducts.value = data.modifiedProducts
-      if (data.newClients) newClients.value = data.newClients
+    let url = `/api/calendario/dia?fecha_desde=${selectedDateFrom.value}&fecha_hasta=${selectedDateTo.value}`
+    const data = await api.get(url)
+    if (data && data.data) {
+      const d = data.data
+      if (d.ventas) {
+        dailySales.value = (d.ventas.items || []).map(v => ({
+          id: v.id,
+          time: v.fecha ? new Date(v.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }) : '',
+          paymentMethod: v.medio_pago || '',
+          total: v.total || 0,
+        }))
+      }
+      if (d.caja) {
+        cashMovements.value = (d.caja.movimientos || []).map(m => ({
+          id: m.id,
+          type: m.tipo || m.type || '',
+          description: m.descripcion || '',
+          time: m.created_at ? new Date(m.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }) : '',
+          amount: m.monto || 0,
+        }))
+      }
+      if (d.compras) {
+        purchases.value = (d.compras.items || []).map(c => ({
+          id: c.id,
+          supplier: c.proveedor_nombre || '',
+          time: c.fecha ? new Date(c.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }) : '',
+          items: c.items ? c.items.reduce((s, i) => s + (i.cantidad || 0), 0) : 0,
+          total: c.total || 0,
+        }))
+      }
+      if (d.productos) {
+        newProducts.value = (d.productos.nuevos_lista || []).map(p => ({
+          id: p.id,
+          name: p.nombre || '',
+          code: p.codigo_barras || '',
+        }))
+        modifiedProducts.value = (d.productos.modificados_lista || []).map(p => ({
+          id: p.id,
+          name: p.nombre || '',
+          code: p.codigo_barras || '',
+        }))
+      }
+      if (d.clientes) {
+        newClients.value = (d.clientes.lista || []).map(c => ({
+          id: c.id,
+          name: c.nombre || '',
+          telefono: c.telefono || '',
+        }))
+      }
     }
-  } catch { /* fallback to mock */ }
+  } catch {
+    dailySales.value = []
+    cashMovements.value = []
+    purchases.value = []
+    newProducts.value = []
+    modifiedProducts.value = []
+    newClients.value = []
+  }
   syncing.value = false
 }
 

@@ -19,12 +19,25 @@ router = APIRouter(prefix="/api/calendario", tags=["Calendario"])
 @router.get("/dia", response_model=RespuestaData)
 def actividad_dia(
     fecha: str = Query(None),
+    fecha_desde: str = Query(None, description="Fecha inicio para rango (YYYY-MM-DD)"),
+    fecha_hasta: str = Query(None, description="Fecha fin para rango (YYYY-MM-DD)"),
     db: Session = Depends(get_db),
     user: Usuario = Depends(get_current_user),
 ):
     """Devuelve toda la actividad de un día específico (formato YYYY-MM-DD).
-    Si no se pasa fecha, usa la de hoy.
+    Si se pasa fecha_desde y fecha_hasta, devuelve la actividad en ese rango.
     """
+    if fecha_desde and fecha_hasta:
+        try:
+            desde = datetime.strptime(fecha_desde, "%Y-%m-%d")
+            hasta = datetime.strptime(fecha_hasta, "%Y-%m-%d")
+        except ValueError:
+            desde = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+            hasta = desde + timedelta(days=1)
+        inicio = desde.replace(hour=0, minute=0, second=0, microsecond=0)
+        fin = (hasta.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1))
+        return _actividad_rango(inicio, fin, f"{fecha_desde} a {fecha_hasta}", db)
+
     try:
         dia = datetime.strptime(fecha, "%Y-%m-%d") if fecha else datetime.now(timezone.utc)
     except ValueError:
@@ -32,6 +45,12 @@ def actividad_dia(
 
     inicio = dia.replace(hour=0, minute=0, second=0, microsecond=0)
     fin = inicio + timedelta(days=1)
+
+    return _actividad_rango(inicio, fin, fecha or inicio.strftime("%Y-%m-%d"), db)
+
+
+def _actividad_rango(inicio: datetime, fin: datetime, label: str, db: Session) -> RespuestaData:
+    """Helper que devuelve toda la actividad en un rango de fechas."""
 
     # Ventas del día
     ventas = (
@@ -120,7 +139,9 @@ def actividad_dia(
     )
 
     return RespuestaData(data={
-        "fecha": inicio.strftime("%Y-%m-%d"),
+        "fecha": label,
+        "fecha_desde": inicio.strftime("%Y-%m-%d"),
+        "fecha_hasta": (fin - timedelta(days=1)).strftime("%Y-%m-%d"),
         "ventas": {
             "total_dia": sum(v.total for v in ventas if v.estado == "confirmada"),
             "cantidad": len([v for v in ventas if v.estado == "confirmada"]),
