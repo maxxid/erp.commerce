@@ -50,9 +50,9 @@ const tableColumns = [
 
 const estadoOptions = [
   { value: '', label: 'Todos' },
-  { value: 'Completada', label: 'Completadas' },
-  { value: 'Pendiente', label: 'Pendientes' },
-  { value: 'Anulada', label: 'Anuladas' },
+  { value: 'confirmada', label: 'Completadas' },
+  { value: 'pendiente', label: 'Pendientes' },
+  { value: 'anulada', label: 'Anuladas' },
 ]
 
 const medioPagoOptions = [
