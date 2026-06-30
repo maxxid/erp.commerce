@@ -3,7 +3,7 @@
     <div class="flex items-center justify-between">
       <div class="flex items-center gap-3">
         <div>
-          <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Auditoría</h1>
+          <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Auditoría ERP</h1>
           <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Registro de actividad y cambios en el sistema</p>
         </div>
         <BaseBadge
