@@ -22,8 +22,11 @@
           { key: 'numero_orden', label: 'N° Orden' },
           { key: 'proveedor', label: 'Proveedor' },
           { key: 'total', label: 'Total', align: 'right' },
+          { key: 'cantidad', label: 'Canti.', align: 'right' },
+          { key: 'pendiente', label: 'Pendiente', align: 'right' },
           { key: 'estado', label: 'Estado', align: 'center' },
           { key: 'fecha', label: 'Fecha' },
+          { key: 'comentarios', label: '', align: 'center', skeleton: false },
           { key: 'acciones', label: 'Acciones', align: 'center' }
         ]"
         :rows="compras"
@@ -38,13 +41,31 @@
           <span class="text-xs text-slate-600">{{ row.proveedor }}</span>
         </template>
         <template #total="{ row }">
-          <span class="text-xs font-mono-data font-bold text-slate-800">{{ fc(row.total) }}</span>
+          <span class="text-xs font-mono-data font-bold text-brand-600">{{ fc(row.total) }}</span>
+        </template>
+        <template #cantidad="{ row }">
+          <span class="text-xs font-mono-data text-slate-700">{{ row.total_cantidad || 0 }}</span>
+        </template>
+        <template #pendiente="{ row }">
+          <span class="text-xs font-mono-data font-bold" :class="row.total_pendiente > 0 ? 'text-amber-600' : 'text-slate-400'">
+            {{ row.total_pendiente || 0 }}
+          </span>
         </template>
         <template #estado="{ row }">
           <BaseBadge :variant="estadoBadgeVariant(row.estado)" size="xs">{{ row.estado }}</BaseBadge>
         </template>
         <template #fecha="{ row }">
-          <span class="text-xs text-slate-600">{{ row.fecha }}</span>
+          <span class="text-xs text-slate-600">{{ row.fecha_hora }}</span>
+        </template>
+        <template #comentarios="{ row }">
+          <button
+            v-if="row.notas"
+            class="text-brand-500 hover:text-brand-700 transition-colors p-1"
+            title="Ver comentarios"
+            @click="openVerComentario(row)"
+          >
+            <i class="fa-solid fa-comment-dots text-sm"></i>
+          </button>
         </template>
         <template #acciones="{ row }">
           <div class="flex items-center justify-center gap-1">
@@ -272,6 +293,33 @@
         </div>
       </div>
     </BaseModal>
+
+    <!-- Modal Ver/Agregar Comentarios -->
+    <BaseModal v-model="showVerComentario" :title="`Comentarios — ${verComentarioTarget?.numero_orden || ''}`" size="md">
+      <div class="space-y-4">
+        <div v-if="verComentarioTarget?.notas" class="bg-slate-50 dark:bg-slate-800 rounded-lg p-3 text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap max-h-48 overflow-y-auto border border-slate-200 dark:border-slate-700">
+          {{ verComentarioTarget.notas }}
+        </div>
+        <p v-else class="text-sm text-slate-400 text-center py-4">Sin comentarios</p>
+        <hr class="border-slate-200 dark:border-slate-700" />
+        <div class="space-y-2">
+          <label class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Agregar comentario</label>
+          <textarea
+            v-model="comentarioTexto"
+            rows="3"
+            placeholder="Escribí un comentario..."
+            class="w-full px-3 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none resize-none transition"
+          ></textarea>
+        </div>
+        <div class="flex gap-2">
+          <BaseButton variant="secondary" class="flex-1" @click="showVerComentario = false">Cerrar</BaseButton>
+          <BaseButton variant="primary" class="flex-1" :disabled="savingComentario || !comentarioTexto.trim()" @click="guardarComentario">
+            <i :class="savingComentario ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-paper-plane'"></i>
+            {{ savingComentario ? 'Guardando...' : 'Agregar' }}
+          </BaseButton>
+        </div>
+      </div>
+    </BaseModal>
   </div>
 </template>
 
@@ -306,6 +354,10 @@ const receiving = ref(false)
 const saving = ref(false)
 const receiveTarget = ref(null)
 const receiveCantidades = reactive({})
+const showVerComentario = ref(false)
+const verComentarioTarget = ref(null)
+const comentarioTexto = ref('')
+const savingComentario = ref(false)
 
 const nuevaCompra = reactive({
   proveedor_id: null,
@@ -339,22 +391,31 @@ async function fetchCompras() {
   try {
     const data = await api.get('/api/compras')
     if (data && data.length) {
-      compras.value = data.map(c => ({
-        id: c.id,
-        numero_orden: c.numero,
-        proveedor: c.proveedor_nombre || '',
-        total: c.total || 0,
-        estado: c.estado || '',
-        fecha: c.fecha ? new Date(c.fecha).toLocaleDateString('es-AR') : '',
-        items: (c.items || []).map(i => ({
+      compras.value = data.map(c => {
+        const items = (c.items || []).map(i => ({
           id: i.id,
           producto: i.producto_nombre || '',
           cantidad: i.cantidad || 0,
           cantidad_recibida: i.cantidad_recibida || 0,
           precio: i.precio_unitario || 0,
           subtotal: i.subtotal || 0,
-        })),
-      }))
+        }))
+        const total_cantidad = items.reduce((s, i) => s + i.cantidad, 0)
+        const total_pendiente = items.reduce((s, i) => s + Math.max(0, i.cantidad - (i.cantidad_recibida || 0)), 0)
+        return {
+          id: c.id,
+          numero_orden: c.numero,
+          proveedor: c.proveedor_nombre || '',
+          total: c.total || 0,
+          estado: c.estado || '',
+          fecha: c.fecha ? new Date(c.fecha).toLocaleDateString('es-AR') : '',
+          fecha_hora: c.fecha ? new Date(c.fecha).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '',
+          notas: c.notas || '',
+          total_cantidad,
+          total_pendiente,
+          items,
+        }
+      })
     }
   } catch { /* fallback to mock */ }
 }
@@ -572,7 +633,11 @@ async function guardarCompra() {
         proveedor: proveedor ? proveedor.nombre : '—',
         total: totalCompra.value,
         estado: 'pendiente',
-        fecha: new Date().toISOString().slice(0, 10),
+        fecha: new Date().toLocaleDateString('es-AR'),
+        fecha_hora: new Date().toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }),
+        notas: '',
+        total_cantidad: itemsValidos.reduce((s, i) => s + i.cantidad, 0),
+        total_pendiente: itemsValidos.reduce((s, i) => s + i.cantidad, 0),
         items: itemsValidos.map(i => ({
           id: Date.now() + Math.random(),
           producto: i.producto,
@@ -639,6 +704,31 @@ async function confirmarRecepcion() {
     toast.error('Error al confirmar recepción')
   } finally {
     receiving.value = false
+  }
+}
+
+function openVerComentario(row) {
+  verComentarioTarget.value = row
+  comentarioTexto.value = ''
+  showVerComentario.value = true
+}
+
+async function guardarComentario() {
+  if (!comentarioTexto.value.trim() || !verComentarioTarget.value) return
+  savingComentario.value = true
+  try {
+    const resp = await api.post(`/api/compras/${verComentarioTarget.value.id}/comentario`, { texto: comentarioTexto.value.trim() })
+    if (resp && resp.notas) {
+      verComentarioTarget.value.notas = resp.notas
+      const compra = compras.value.find(c => c.id === verComentarioTarget.value.id)
+      if (compra) compra.notas = resp.notas
+    }
+    comentarioTexto.value = ''
+    toast.success('Comentario agregado')
+  } catch {
+    toast.error('Error al guardar comentario')
+  } finally {
+    savingComentario.value = false
   }
 }
 </script>

@@ -154,3 +154,29 @@ def anular(
         return RespuestaData(data=_compra_to_dict(c), message=f"Compra {c.numero} anulada")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+class ComentarioRequest(BaseModel):
+    texto: str = Field(..., min_length=1, max_length=500)
+
+
+@router.post("/{compra_id}/comentario", response_model=RespuestaData)
+def agregar_comentario(
+    compra_id: int,
+    data: ComentarioRequest,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "encargado", "cajero")),
+):
+    """Agrega un comentario con fecha/hora a la compra. Se concatena al historial."""
+    c = compra_service.obtener_compra(db, compra_id)
+    if not c: raise HTTPException(status_code=404, detail="Compra no encontrada")
+    from datetime import datetime, timezone
+    ahora = datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M")
+    entrada = f"[{ahora}] {user.nombre}: {data.texto}"
+    if c.notas:
+        c.notas = c.notas + "\n" + entrada
+    else:
+        c.notas = entrada
+    db.commit()
+    db.refresh(c)
+    return RespuestaData(data={"notas": c.notas}, message="Comentario agregado")
