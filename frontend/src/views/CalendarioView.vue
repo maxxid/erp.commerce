@@ -16,7 +16,7 @@
           <i class="fa-solid fa-arrows-rotate"></i>
           {{ syncing ? 'Actualizando...' : 'Actualizar' }}
         </BaseButton>
-        <BaseButton variant="primary" size="md">
+        <BaseButton variant="primary" size="md" @click="exportData">
           <i class="fa-solid fa-download text-sm"></i>
           Exportar
         </BaseButton>
@@ -467,6 +467,7 @@ async function syncCalendario() {
           time: v.fecha ? new Date(v.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }) : '',
           paymentMethod: v.medio_pago || '',
           total: v.total || 0,
+          medio_pago: v.medio_pago || '',
         }))
       }
       if (d.caja) {
@@ -476,6 +477,7 @@ async function syncCalendario() {
           description: m.descripcion || '',
           time: m.created_at ? new Date(m.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }) : '',
           amount: m.monto || 0,
+          medio_pago: m.medio_pago || '',
         }))
       }
       if (d.compras) {
@@ -516,6 +518,73 @@ async function syncCalendario() {
     newClients.value = []
   }
   syncing.value = false
+}
+
+function exportData() {
+  const mediosPago = ['efectivo', 'debito', 'credito', 'transferencia', 'cta_corriente']
+  const medioLabels = {
+    efectivo: 'Efectivo',
+    debito: 'Débito',
+    credito: 'Crédito',
+    transferencia: 'Transferencia',
+    cta_corriente: 'Cta. Cte.',
+  }
+
+  let csv = ''
+
+  csv += 'RESUMEN DE VENTAS POR MEDIO DE PAGO\n'
+  csv += `Fecha: ${dateRangeLabel.value}\n\n`
+  csv += 'Medio de Pago;Cantidad;Total\n'
+  mediosPago.forEach(mp => {
+    const filtered = dailySales.value.filter(s => s.medio_pago === mp)
+    const count = filtered.length
+    const total = filtered.reduce((s, v) => s + v.total, 0)
+    if (count > 0) {
+      csv += `${medioLabels[mp] || mp};${count};${total}\n`
+    }
+  })
+  csv += `TOTAL;${dailySales.value.length};${dailySalesTotal.value}\n`
+
+  csv += '\nDETALLE DE VENTAS\n'
+  csv += 'Ticket;Hora;Medio de Pago;Total\n'
+  dailySales.value.forEach(v => {
+    csv += `Ticket #${String(v.id).padStart(6, '0')};${v.time};${medioLabels[v.medio_pago] || v.medio_pago || '-'};${v.total}\n`
+  })
+
+  csv += '\nRESUMEN DE CAJA POR MEDIO DE PAGO\n'
+  csv += 'Tipo;Medio de Pago;Descripción;Monto\n'
+  mediosPago.forEach(mp => {
+    const filtered = cashMovements.value.filter(m => m.medio_pago === mp)
+    if (filtered.length > 0) {
+      filtered.forEach(m => {
+        csv += `${m.type === 'ingreso' ? 'Ingreso' : 'Egreso'};${medioLabels[mp] || mp || '-'};${m.description};${m.amount}\n`
+      })
+    }
+  })
+  const sinMedio = cashMovements.value.filter(m => !m.medio_pago)
+  sinMedio.forEach(m => {
+    csv += `${m.type === 'ingreso' ? 'Ingreso' : 'Egreso'};Sin especificar;${m.description};${m.amount}\n`
+  })
+
+  csv += `\nRESUMEN CAJA\n`
+  csv += `Total Ingresos;${cashInTotal.value}\n`
+  csv += `Total Egresos;${cashOutTotal.value}\n`
+  csv += `Balance;${cashBalance.value}\n`
+
+  csv += '\nCOMPRAS\n'
+  csv += 'Proveedor;Hora;Ítems;Total\n'
+  purchases.value.forEach(c => {
+    csv += `${c.supplier};${c.time};${c.items};${c.total}\n`
+  })
+  csv += `Total Compras;${purchasesTotal.value}\n`
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `calendario_${selectedDateFrom.value}_${selectedDateTo.value}.csv`
+  link.click()
+  URL.revokeObjectURL(url)
 }
 
 const dailySales = ref([
