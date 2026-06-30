@@ -110,7 +110,10 @@ const defaultForm = () => ({
   stock_minimo: 0,
   fecha_vencimiento: null,
   proveedor_id: null,
-  observaciones: ''
+  observaciones: '',
+  tipo_venta: 'unidad',
+  precio_por_kilo: null,
+  precio_por_unidad: null,
 })
 
 const form = reactive(defaultForm())
@@ -247,7 +250,7 @@ function openEditModal(product) {
     showBarcodeHint.value = true
     setTimeout(() => { showBarcodeHint.value = false }, 5000)
   }
-  Object.assign(form, {
+    Object.assign(form, {
     codigo_barras: barcode,
     nombre: product.nombre,
     marca: product.marca,
@@ -258,7 +261,10 @@ function openEditModal(product) {
     stock_minimo: product.stock_minimo || 0,
     fecha_vencimiento: product.fecha_vencimiento ? product.fecha_vencimiento.slice(0, 10) : null,
     proveedor_id: product.proveedor_id || null,
-    observaciones: product.observaciones || ''
+    observaciones: product.observaciones || '',
+    tipo_venta: product.tipo_venta || 'unidad',
+    precio_por_kilo: product.precio_por_kilo || null,
+    precio_por_unidad: product.precio_por_unidad || null,
   })
   showModal.value = true
 }
@@ -792,6 +798,41 @@ async function fetchProveedores() {
           label="Observaciones (opcional)"
           placeholder="Notas internas sobre este producto..."
         />
+
+        <!-- Tipo de venta -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Tipo de Venta</label>
+            <select
+              v-model="form.tipo_venta"
+              class="w-full px-3 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition"
+            >
+              <option value="unidad">Por Unidad</option>
+              <option value="kilo">Por Kilo</option>
+              <option value="ambos">Ambos</option>
+            </select>
+          </div>
+          <BaseInput
+            v-if="form.tipo_venta !== 'unidad'"
+            v-model.number="form.precio_por_kilo"
+            label="Precio por kilo"
+            type="number"
+            step="0.01"
+            min="0"
+            placeholder="0.00"
+            input-class="font-mono-data text-right"
+          />
+          <BaseInput
+            v-if="form.tipo_venta !== 'kilo'"
+            v-model.number="form.precio_por_unidad"
+            label="Precio por unidad"
+            type="number"
+            step="0.01"
+            min="0"
+            placeholder="0.00"
+            input-class="font-mono-data text-right"
+          />
+        </div>
 
         <!-- Quick-create Categoria -->
         <div v-if="showCatQuick" class="p-3 bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800/40 rounded-xl flex items-center gap-2">

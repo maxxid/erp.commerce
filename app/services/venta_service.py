@@ -68,6 +68,8 @@ def agregar_item(
     oferta_tipo: Optional[str] = None,
     oferta_valor: Optional[float] = None,
     oferta_info: Optional[str] = None,
+    por_kilo: bool = False,
+    peso: Optional[float] = None,
 ) -> VentaItem:
     """Agrega un producto a la venta.
 
@@ -84,9 +86,13 @@ def agregar_item(
         raise ValueError(f"Producto {producto_id} no encontrado")
 
     if precio_unitario is None:
-        precio_unitario = producto.precio_venta or producto.precio_referencia or 0
+        if por_kilo and producto.precio_por_kilo:
+            precio_unitario = producto.precio_por_kilo
+        else:
+            precio_unitario = producto.precio_venta or producto.precio_referencia or 0
 
-    subtotal = cantidad * precio_unitario
+    cantidad_final = peso if por_kilo else cantidad
+    subtotal = cantidad_final * precio_unitario
 
     item = VentaItem(
         venta_id=venta.id,
@@ -98,6 +104,8 @@ def agregar_item(
         oferta_tipo=oferta_tipo,
         oferta_valor=oferta_valor,
         oferta_info=oferta_info,
+        por_kilo=por_kilo,
+        peso=peso if por_kilo else None,
     )
     db.add(item)
 
@@ -154,10 +162,11 @@ def confirmar_venta(
         producto = db.query(Producto).filter(Producto.id == item.producto_id).first()
         if not producto:
             raise ValueError(f"Producto {item.producto_id} no encontrado")
-        if producto.stock_actual < item.cantidad:
+        cantidad_a_descontar = item.peso if item.por_kilo else item.cantidad
+        if producto.stock_actual < cantidad_a_descontar:
             raise ValueError(
                 f"Stock insuficiente para '{producto.nombre}': "
-                f"disponible={producto.stock_actual}, requerido={item.cantidad}"
+                f"disponible={producto.stock_actual}, requerido={cantidad_a_descontar}"
             )
 
     # Verificar caja abierta
@@ -180,10 +189,11 @@ def confirmar_venta(
 
     # Descontar stock
     for item in venta.items:
+        cantidad_a_descontar = item.peso if item.por_kilo else item.cantidad
         stock_service.ajustar_stock(
             db,
             producto_id=item.producto_id,
-            cantidad=-item.cantidad,
+            cantidad=-cantidad_a_descontar,
             tipo="salida",
             usuario_id=uid,
             referencia_tipo="venta",

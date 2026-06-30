@@ -63,6 +63,8 @@ class VentaItemAdd(BaseModel):
     oferta_tipo: Optional[str] = None
     oferta_valor: Optional[float] = None
     oferta_info: Optional[str] = None
+    por_kilo: Optional[bool] = False
+    peso: Optional[float] = None
 
 
 class VentaConfirmar(BaseModel):
@@ -136,7 +138,8 @@ def agregar_item(
     try:
         item = venta_service.agregar_item(
             db, venta, data.producto_id, data.cantidad, data.precio_unitario,
-            data.oferta_tipo, data.oferta_valor, data.oferta_info
+            data.oferta_tipo, data.oferta_valor, data.oferta_info,
+            data.por_kilo, data.peso
         )
         db.refresh(venta)
         return RespuestaData(

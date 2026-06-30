@@ -7,7 +7,7 @@ Guarda el precio al momento de la venta para integridad histórica.
 """
 
 from sqlalchemy import (
-    Column, Integer, String, Float, DateTime, ForeignKey, Text,
+    Column, Integer, String, Float, DateTime, ForeignKey, Text, Boolean,
 )
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
@@ -59,6 +59,9 @@ class VentaItem(Base):
     oferta_tipo = Column(String(20), nullable=True)
     oferta_valor = Column(Float, nullable=True)
     oferta_info = Column(Text, nullable=True)
+
+    por_kilo = Column(Boolean, default=False, nullable=True)
+    peso = Column(Float, nullable=True)
 
     # Relaciones
     venta = relationship("Venta", back_populates="items")

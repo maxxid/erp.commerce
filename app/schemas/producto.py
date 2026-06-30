@@ -23,6 +23,9 @@ class ProductoBase(BaseModel):
     stock_minimo: Optional[float] = 0.0
     stock_actual: Optional[float] = 0.0
     fecha_vencimiento: Optional[datetime] = None
+    tipo_venta: Optional[str] = "unidad"
+    precio_por_kilo: Optional[float] = None
+    precio_por_unidad: Optional[float] = None
 
 
 class ProductoCreate(ProductoBase):
@@ -50,6 +53,9 @@ class ProductoUpdate(BaseModel):
     observaciones: Optional[str] = None
     fecha_vencimiento: Optional[datetime] = None
     activo: Optional[bool] = None
+    tipo_venta: Optional[str] = None
+    precio_por_kilo: Optional[float] = None
+    precio_por_unidad: Optional[float] = None
 
 
 class ProductoOut(ProductoBase):

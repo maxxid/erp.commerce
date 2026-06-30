@@ -37,6 +37,10 @@ class Producto(Base):
     precio_venta = Column(Float, nullable=True)
     precio_etiqueta = Column(Float, nullable=True)   # último precio impreso en etiqueta. Si != precio_venta, necesita re-etiquetado.
 
+    tipo_venta = Column(String(20), default="unidad", nullable=False)  # "unidad" | "kilo" | "ambos"
+    precio_por_kilo = Column(Float, nullable=True)
+    precio_por_unidad = Column(Float, nullable=True)
+
     imagen_url = Column(String(500), nullable=True)
     sku = Column(String(50), nullable=True)
     propiedades = Column(JSON, nullable=True)
