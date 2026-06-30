@@ -9,7 +9,8 @@ from app.schemas.common import RespuestaData
 from app.auth.dependencies import get_current_user, require_role
 from app.models.usuario import Usuario
 from app.models.configuracion import Configuracion
-from app.services.config_service import set_config
+from app.services.config_service import set_config, get_config
+from app.services import auditoria_service
 
 router = APIRouter(prefix="/api/config", tags=["Configuración"])
 
@@ -44,5 +45,14 @@ def actualizar_ajuste(
     user: Usuario = Depends(require_role("admin")),
 ):
     """Actualiza un valor de configuración."""
+    valor_anterior = get_config(db, data.clave)
     set_config(db, data.clave, data.valor, data.descripcion)
+
+    if data.clave == "telefono_dueño" and valor_anterior != data.valor:
+        auditoria_service.registrar(db, user.id, "telefono_dueño_editado", None, None, {
+            "clave": data.clave,
+            "valor_anterior": valor_anterior,
+            "valor_nuevo": data.valor,
+        })
+
     return RespuestaData(data={"clave": data.clave, "valor": data.valor}, message=f"Configuración '{data.clave}' actualizada")

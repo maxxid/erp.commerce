@@ -27,6 +27,7 @@ def registrar(
     creado_por: Optional[int] = None,
 ):
     """Registra un evento de auditoría."""
+    riesgo = _evaluar_riesgo(tipo, detalle)
     entry = Auditoria(
         usuario_id=usuario_id,
         tipo=tipo,
@@ -34,6 +35,7 @@ def registrar(
         venta_numero=venta_numero,
         detalle=json.dumps(detalle, ensure_ascii=False, default=str) if detalle else None,
         creado_por=creado_por or usuario_id,
+        estado=riesgo,
     )
     db.add(entry)
     db.commit()
@@ -88,26 +90,63 @@ def _evento_to_dict(e: Auditoria) -> dict:
     }
 
 
+def _evaluar_riesgo(tipo: str, detalle: dict, medio_pago: str = None) -> str:
+    """Evalúa el nivel de riesgo de un evento según el manual de auditoría.
+
+    Returns:
+        "normal" - No requiere atención
+        "sospechoso" - Requiere revisión
+        "muy_sospechoso" - Requiere atención inmediata
+    """
+    riesgo_alto = ["multiples_cancelaciones", "secuencia_venta_pequena", "fecha_hora_alterada",
+                    "venta_modificada_post_efectivo", "venta_anulada_post_efectivo",
+                    "carrito_vaciado", "descuento_100pct"]
+
+    riesgo_sospechoso = [
+        "item_quitado", "item_modificado", "descuento_manual", "precio_manual",
+        "cliente_telefono_editado", "telefono_dueño_editado",
+        "venta_cliente_sin_verificar", "venta_empleado_particular",
+        "modo_entrenamiento_produccion", "cajon_abierto_fuera_venta",
+        "venta_pausada", "multiples_cancelaciones_turno",
+        "venta_modificada_post_tarjeta", "abono_cliente",
+    ]
+
+    if tipo in riesgo_alto:
+        return "sospechoso"
+
+    if tipo in riesgo_sospechoso:
+        return "sospechoso"
+
+    if tipo == "descuento_aplicado" and detalle:
+        monto_desc = detalle.get("monto_descuento", 0)
+        total_orig = detalle.get("total_original", 0)
+        tipo_desc = detalle.get("tipo", "manual")
+        if tipo_desc == "automatico":
+            return "normal"
+        if total_orig > 0 and monto_desc / total_orig >= 0.99:
+            return "sospechoso"
+        return "sospechoso"
+
+    if tipo == "venta_confirmada" and detalle:
+        h = detalle.get("hora")
+        if h:
+            try:
+                hora = int(h.split(":")[0])
+                if hora < 7 or hora > 22:
+                    return "sospechoso"
+            except:
+                pass
+
+    if tipo == "cierre_caja":
+        return "sospechoso"
+
+    return "normal"
+
+
 def _es_sospechoso(e: Auditoria, detalle: dict) -> bool:
     if e.estado != "sospechoso":
         return False
-    if e.tipo in ("item_quitado", "venta_anulada"):
-        return True
-    if e.tipo == "cierre_caja":
-        return True
-    if e.tipo == "venta_confirmada":
-        if detalle and isinstance(detalle, dict):
-            hora = detalle.get("hora")
-            if hora:
-                try:
-                    h = int(hora.split(":")[0])
-                    if h < 7 or h > 22:
-                        return True
-                except:
-                    pass
-    if e.tipo == "descuento":
-        return True
-    return False
+    return True
 
 
 def listar_con_carritos_abandonados(

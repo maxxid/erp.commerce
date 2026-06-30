@@ -71,6 +71,7 @@ class VentaItemAdd(BaseModel):
 class VentaConfirmar(BaseModel):
     medio_pago: str = "efectivo"
     descuento: float = 0.0
+    descuento_tipo: Optional[str] = Field(None, description="Tipo de descuento: 'manual' o 'automatico'")
     cliente_id: Optional[int] = None
 
 
@@ -184,11 +185,17 @@ def quitar_item(
                 "venta_subtotal_antes": venta.subtotal,
                 "venta_total_antes": venta.total,
             }
+        items_antes = len(venta.items)
         venta_service.quitar_item(db, venta, item_id)
         db.refresh(venta)
         if detalle:
             detalle["venta_subtotal_despues"] = venta.subtotal
         auditoria_service.registrar(db, user.id, "item_quitado", venta.id, venta.numero, detalle)
+        if items_antes == 1:
+            auditoria_service.registrar(db, user.id, "carrito_vaciado", venta.id, venta.numero, {
+                "ultimo_item": detalle,
+                "subtotal_final": 0,
+            })
         return RespuestaData(data={"venta_subtotal": venta.subtotal}, message="Ítem quitado")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -216,8 +223,14 @@ def confirmar(
         auditoria_service.registrar(db, user.id, "venta_confirmada", venta.id, venta.numero,
                                      {"medio_pago": data.medio_pago, "total": venta.total, "items": len(venta.items), "descuento": data.descuento, "hora": datetime.now().strftime("%H:%M")})
         if data.descuento and data.descuento > 0:
-            auditoria_service.registrar(db, user.id, "descuento_aplicado", venta.id, venta.numero,
-                                         {"monto_descuento": data.descuento, "total_original": venta.subtotal, "total_final": venta.total})
+            tipo_desc = data.descuento_tipo or "manual"
+            if venta.subtotal > 0 and data.descuento >= venta.subtotal:
+                evento_desc = "descuento_100pct"
+            else:
+                evento_desc = f"descuento_{tipo_desc}"
+            auditoria_service.registrar(db, user.id, evento_desc, venta.id, venta.numero,
+                                         {"monto_descuento": data.descuento, "total_original": venta.subtotal,
+                                          "total_final": venta.total, "tipo": tipo_desc})
 
         whatsapp_url = None
         if venta.cliente_id and venta.cliente and venta.cliente.telefono:
