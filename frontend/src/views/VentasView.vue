@@ -31,8 +31,9 @@ const tableColumns = [
   { key: 'expand', label: '', width: 'w-10' },
   { key: 'id', label: 'Ticket' },
   { key: 'fecha', label: 'Fecha' },
-  { key: 'cliente', label: 'Cliente' },
-  { key: 'metodo_pago', label: 'Medio de Pago' },
+  { key: 'cliente_nombre', label: 'Cliente' },
+  { key: 'medio_pago', label: 'Medio de Pago' },
+  { key: 'descuento', label: 'Descuento', align: 'right' },
   { key: 'total', label: 'Total', align: 'right' },
   { key: 'estado', label: 'Estado' },
   { key: 'factura', label: 'Factura' },
@@ -180,11 +181,14 @@ async function executeAnular() {
         <template #fecha="{ row }">
           <span class="text-xs text-slate-600 dark:text-slate-400">{{ row.fecha }}</span>
         </template>
-        <template #cliente="{ row }">
-          <span class="text-xs text-slate-600 dark:text-slate-300">{{ row.cliente }}</span>
+        <template #cliente_nombre="{ row }">
+          <span class="text-xs text-slate-600 dark:text-slate-300">{{ row.cliente_nombre || '—' }}</span>
         </template>
-        <template #metodo_pago="{ row }">
-          <span class="text-xs text-slate-600 dark:text-slate-300 capitalize">{{ row.metodo_pago }}</span>
+        <template #medio_pago="{ row }">
+          <span class="text-xs text-slate-600 dark:text-slate-300 capitalize">{{ row.medio_pago || '—' }}</span>
+        </template>
+        <template #descuento="{ row }">
+          <span class="text-xs font-mono-data text-red-500">{{ row.descuento > 0 ? fc(row.descuento) : '—' }}</span>
         </template>
         <template #total="{ row }">
           <span class="text-xs font-mono-data font-bold text-slate-800 dark:text-slate-100">{{ fc(row.total) }}</span>
