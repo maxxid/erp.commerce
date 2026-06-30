@@ -32,15 +32,28 @@ export const useAuthStore = defineStore('auth', () => {
     }
     licenseChecked.value = true
     if (hasLicense.value && licenseValid.value) {
-      checkAutoLogin()
+      await checkAutoLogin()
     }
   }
 
-  function checkAutoLogin() {
+  async function checkAutoLogin() {
     const savedToken = api.getToken()
-    if (savedToken) {
-      authenticated.value = true
-      currentUser.value = { id: 1, username: 'admin', nombre: 'Administrador', rol: 'admin' }
+    if (!savedToken) return
+    try {
+      const userData = await api.get('/api/auth/me')
+      if (userData) {
+        authenticated.value = true
+        currentUser.value = {
+          id: userData.id,
+          username: userData.username,
+          nombre: userData.nombre,
+          rol: userData.rol,
+        }
+      }
+    } catch {
+      api.clearToken()
+      authenticated.value = false
+      currentUser.value = null
     }
   }
 

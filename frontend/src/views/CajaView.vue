@@ -239,6 +239,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
 import { useCajaStore } from '@/stores/caja'
+import router from '@/router'
 import api from '@/services/api'
 import { formatCurrency as fc } from '@/composables/useUtils'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -410,11 +411,11 @@ async function confirmarCierreCaja() {
     }
 
     await api.post('/api/caja/cierre-total', { comentario: cierreComentario.value || '' })
-    await cajaStore.fetchEstado()
-    await fetchMovimientos()
     showCierreModal.value = false
-    toast.success('Jornada finalizada. Caja cerrada.')
+    toast.success('Jornada finalizada. Hasta luego.')
     playCloseCash()
+    auth.logout()
+    router.push('/login')
   } catch (e) {
     toast.error('Error al cerrar caja: ' + (e?.data?.detail || e?.message || ''))
   } finally {
