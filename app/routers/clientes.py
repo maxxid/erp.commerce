@@ -50,6 +50,11 @@ class ClienteUpdate(BaseModel):
     activo: Optional[bool] = None
 
 
+class AbonoCreate(BaseModel):
+    monto: float = Field(..., gt=0)
+    notas: Optional[str] = None
+
+
 @router.get("", response_model=RespuestaLista)
 def listar(
     search: Optional[str] = Query(None),
@@ -124,3 +129,28 @@ def actualizar(
     db.commit()
     db.refresh(cliente)
     return RespuestaData(data=_cli_to_dict(cliente), message="Cliente actualizado")
+
+
+@router.post("/{cliente_id}/abonar", response_model=RespuestaData)
+def abonar(
+    cliente_id: int,
+    data: AbonoCreate,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """Registra un pago/abono a cuenta corriente del cliente. Reduce su deuda."""
+    cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    if data.monto > cliente.saldo_cta_corriente:
+        raise HTTPException(
+            status_code=400,
+            detail=f"El monto ({data.monto}) no puede superar el saldo deuda ({cliente.saldo_cta_corriente})"
+        )
+    cliente.saldo_cta_corriente = round(cliente.saldo_cta_corriente - data.monto, 2)
+    db.commit()
+    db.refresh(cliente)
+    return RespuestaData(
+        data=_cli_to_dict(cliente),
+        message=f"Abono de {data.monto} registrado. Nuevo saldo: {cliente.saldo_cta_corriente}"
+    )

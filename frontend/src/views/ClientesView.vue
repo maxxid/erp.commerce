@@ -84,6 +84,17 @@
             >
               <i class="fa-solid fa-ticket"></i>
             </BaseButton>
+            <BaseButton
+              v-if="row.balance > 0"
+              variant="warning"
+              size="sm"
+              icon-only
+              title="Cobrar deuda"
+              aria-label="Cobrar deuda"
+              @click="openCobroModal(row)"
+            >
+              <i class="fa-solid fa-hand-holding-dollar"></i>
+            </BaseButton>
           </div>
         </template>
       </BaseTable>
@@ -257,6 +268,49 @@
         </BaseButton>
       </div>
     </BaseModal>
+
+    <BaseModal v-model="showCobroModal" :title="`Cobrar Deuda — ${cobroTarget?.name}`" size="md">
+      <div class="space-y-4">
+        <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 text-center">
+          <p class="text-xs uppercase tracking-wider text-red-500 font-semibold mb-1">Deuda actual</p>
+          <p class="text-2xl font-mono-data font-bold text-red-600 dark:text-red-400">{{ formatCurrency(cobroTarget?.balance || 0) }}</p>
+        </div>
+
+        <BaseInput
+          v-model="cobroMonto"
+          label="Monto a cobrar"
+          type="number"
+          step="0.01"
+          :min="0.01"
+          :max="cobroTarget?.balance"
+          placeholder="0.00"
+        />
+        <p class="text-xs text-slate-500 -mt-2">
+          El monto no puede superar la deuda. Podés cobrar en partes.
+        </p>
+
+        <BaseInput
+          v-model="cobroNotas"
+          label="Notas (opcional)"
+          placeholder="Ej: Pago parcial, Pago total..."
+        />
+
+        <div v-if="cobroMonto > 0 && cobroMonto <= (cobroTarget?.balance || 0)" class="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-4 text-center">
+          <p class="text-xs uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-semibold mb-1">Quedará debiendo</p>
+          <p class="text-xl font-mono-data font-bold text-emerald-600 dark:text-emerald-400">{{ formatCurrency((cobroTarget?.balance || 0) - cobroMonto) }}</p>
+        </div>
+
+        <div class="flex gap-2 pt-2">
+          <BaseButton variant="secondary" class="flex-1" @click="showCobroModal = false">
+            Cancelar
+          </BaseButton>
+          <BaseButton variant="primary" class="flex-1" :disabled="cobrando || !cobroMonto" @click="confirmarCobro">
+            <i :class="cobrando ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-check'"></i>
+            {{ cobrando ? 'Cobrando...' : 'Confirmar Cobro' }}
+          </BaseButton>
+        </div>
+      </div>
+    </BaseModal>
   </div>
 </template>
 
@@ -313,8 +367,13 @@ const expandedTickets = ref(new Set())
 
 const showModal = ref(false)
 const showTicketsModal = ref(false)
+const showCobroModal = ref(false)
 const editingClient = ref(null)
 const selectedClient = ref(null)
+const cobroTarget = ref(null)
+const cobroMonto = ref(0)
+const cobroNotas = ref('')
+const cobrando = ref(false)
 
 const form = reactive({
   name: '',
@@ -401,6 +460,42 @@ async function openTicketsModal(client) {
     toast.error('Error al cargar el historial de tickets')
   } finally {
     loadingTickets.value = false
+  }
+}
+
+function openCobroModal(client) {
+  cobroTarget.value = client
+  cobroMonto.value = 0
+  cobroNotas.value = ''
+  showCobroModal.value = true
+}
+
+async function confirmarCobro() {
+  if (!cobroMonto.value || cobroMonto.value <= 0) {
+    toast.warning('Ingresá un monto válido')
+    return
+  }
+  if (cobroMonto.value > (cobroTarget.value?.balance || 0)) {
+    toast.warning('El monto no puede superar la deuda')
+    return
+  }
+  cobrando.value = true
+  try {
+    const resp = await api.post(`/api/clientes/${cobroTarget.value.id}/abonar`, {
+      monto: parseFloat(cobroMonto.value),
+      notas: cobroNotas.value || null,
+    })
+    const updatedClient = apiToClient(resp?.data || resp)
+    const idx = clients.value.findIndex(c => c.id === cobroTarget.value.id)
+    if (idx !== -1) {
+      clients.value[idx] = { ...clients.value[idx], ...updatedClient }
+    }
+    toast.success(`Cobro registrado: ${formatCurrency(cobroMonto.value)}`)
+    showCobroModal.value = false
+  } catch (e) {
+    toast.error(e.message || 'Error al registrar el cobro')
+  } finally {
+    cobrando.value = false
   }
 }
 
