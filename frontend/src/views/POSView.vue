@@ -1515,7 +1515,9 @@ async function confirmarVenta() {
           precio_unitario: item._precio_neto || item.precio_unitario,
           oferta_tipo: item.oferta?.tipo || null,
           oferta_valor: item.oferta?.valor || null,
-          oferta_info: item.oferta ? `${item.oferta.tipo === 'porcentaje' ? item.oferta.valor + '% OFF' : item.oferta.tipo === 'monto_fijo' ? '$' + item.oferta.valor + ' OFF' : '2x1'}` : null
+          oferta_info: item.oferta ? `${item.oferta.tipo === 'porcentaje' ? item.oferta.valor + '% OFF' : item.oferta.tipo === 'monto_fijo' ? '$' + item.oferta.valor + ' OFF' : '2x1'}` : null,
+          por_kilo: item.por_kilo || false,
+          peso: item.peso || null,
         })
       }
 
