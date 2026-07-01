@@ -60,7 +60,7 @@ def _dump_xml(obj, filename):
 
 
 def _autenticar_zeep(db: Session) -> tuple[str, str]:
-    """Autentica contra WSAA usando zeep y devuelve (token, sign)."""
+    """Autentica contra WSAA usando OpenSSL para crear el CMS signed request."""
     global _token_cache
 
     now = datetime.utcnow()
@@ -69,14 +69,10 @@ def _autenticar_zeep(db: Session) -> tuple[str, str]:
 
     cfg = _get_afip_config(db)
 
-    from zeep import Client
-    from zeep.transports import Transport
-    from requests import Session
     import tempfile
-
-    session = Session()
-    transport = Transport(session=session)
-    client = Client(wsdl=_get_wsaa_wsdl(cfg["mode"]), transport=transport)
+    import subprocess
+    import uuid
+    from requests import Session
 
     cert_val = cfg.get("cert", "") or os.getenv("AFIP_CERT", "")
     key_val = cfg.get("key", "") or os.getenv("AFIP_KEY", "")
@@ -98,27 +94,77 @@ def _autenticar_zeep(db: Session) -> tuple[str, str]:
     if not key_path:
         raise ValueError("AFIP clave privada no configurada. Configurarla en Ajustes > AFIP.")
 
+    unique_id = int(datetime.now().timestamp())
+    gen_time = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    exp_time = (datetime.now() + timedelta(hours=12)).strftime("%Y-%m-%dT%H:%M:%S")
+
+    tra = f"""<?xml version="1.0" encoding="UTF-8"?>
+<loginTicketRequest>
+  <header>
+    <uniqueId>{unique_id}</uniqueId>
+    <generationTime>{gen_time}</generationTime>
+    <expirationTime>{exp_time}</expirationTime>
+  </header>
+  <service>wsfe</service>
+</loginTicketRequest>"""
+
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.xml', delete=False) as f:
+        f.write(tra)
+        tra_path = f.name
+
+    with tempfile.NamedTemporaryFile(mode='wb', suffix='.cms', delete=False) as f:
+        cms_path = f.name
+
+    try:
+        result = subprocess.run(
+            ['openssl', 'cms', '-sign', '-nodetach', '-outform', 'DER',
+             '-inkey', key_path, '-signer', cert_path,
+             '-in', tra_path, '-out', cms_path],
+            capture_output=True, text=True, check=True
+        )
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"Error firmando TRA con OpenSSL: {e.stderr}")
+
+    with open(cms_path, 'rb') as f:
+        cms_data = f.read()
+
+    wsaa_url = _get_wsaa_url(cfg["mode"])
+
+    session = Session()
     session.cert = cert_path
 
     try:
-        result = client.service.loginCms(
-            open(cert_path).read(),
-            open(key_path).read(),
-            '',
-            'wsfe'
+        response = session.post(
+            wsaa_url,
+            data=cms_data,
+            headers={'Content-Type': 'application/octet-stream'},
+            verify=True
         )
-        token = result.get('token', '')
-        sign = result.get('sign', '')
-        if not token or not sign:
-            raise RuntimeError(f"WSAA no retornó token/sign: {result}")
+        if response.status_code != 200:
+            raise RuntimeError(f"WSAA respondió {response.status_code}: {response.text[:500]}")
+        login_ticket = response.text.strip()
     except Exception as e:
-        raise RuntimeError(f"Error en WSAA loginCms: {e}")
+        raise RuntimeError(f"Error conectando a WSAA: {e}")
+
+    import xml.etree.ElementTree as ET
+    try:
+        root = ET.fromstring(login_ticket)
+        token = root.find('.//token').text
+        sign = root.find('.//sign').text
+    except Exception as e:
+        raise RuntimeError(f"Error parseando login ticket: {e}\nRespuesta: {login_ticket[:500]}")
+
+    if not token or not sign:
+        raise RuntimeError(f"WSAA no retornó token/sign completos. token={bool(token)}, sign={bool(sign)}")
+
+    os.unlink(tra_path)
+    os.unlink(cms_path)
 
     _token_cache["token"] = token
     _token_cache["sign"] = sign
     _token_cache["expires"] = now + timedelta(hours=11)
 
-    logger.info("AFIP WSAA autenticado exitosamente (zeep)")
+    logger.info("AFIP WSAA autenticado exitosamente")
     return token, sign
 
 
