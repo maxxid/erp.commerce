@@ -77,3 +77,9 @@ Un dueño con varios negocios (cada uno con su machine_id) necesita ver todo cen
 - Al recibir, poder reemplazar un producto pedido por otro similar
 - Marcar ítems como "no enviado / discontinuo"
 - Registrar qué se recibió en lugar de qué se pidió
+
+### Seguridad: clave privada AFIP
+- La clave privada AFIP está encriptada en la DB con una key hardcodeada ("erp-afip-key-encryption-v1")
+- Si alguien accede a la DB + código fuente, puede descifrarla
+- Solución: no guardar clave privada en la DB — solo descargar y que el usuario la guarde localmente
+- Alternativa: usar un secrets manager (AWS Secrets Manager, etc.)
