@@ -140,6 +140,23 @@ function descargarCsr() {
   URL.revokeObjectURL(url)
 }
 
+async function descargarKey() {
+  try {
+    const resp = await api.get('/api/facturacion/afip/descargar-clave')
+    const content = resp.clave_pem
+    const blob = new Blob([content], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `afip_key_${config.value.afip_cuit}.key`
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success('Clave privada descargada')
+  } catch {
+    toast.error('No hay clave para descargar')
+  }
+}
+
 async function subirCertificado() {
   if (!certUpload.value.trim()) {
     toast.warning('Pegá el contenido del certificado .crt')
@@ -268,6 +285,18 @@ onMounted(loadConfig)
         </div>
 
         <div v-if="csrGenerado">
+          <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded p-3 mb-3">
+            <p class="text-xs text-red-700 dark:text-red-300">
+              <i class="fa-solid fa-triangle-exclamation mr-1"></i>
+              <strong>Antes de continuar, bajá la clave privada (.key)</strong> — sin ella no vas a poder facturar.
+            </p>
+          </div>
+          <div class="flex gap-2 mb-4">
+            <BaseButton variant="danger" @click="descargarKey">
+              <i class="fa-solid fa-key"></i> Descargar .key
+            </BaseButton>
+          </div>
+
           <div class="flex items-start justify-between mb-2">
             <p class="text-xs font-semibold text-slate-700 dark:text-slate-300">CSR</p>
             <button class="text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 underline" @click="csrGenerado = false">
@@ -275,7 +304,7 @@ onMounted(loadConfig)
             </button>
           </div>
           <p class="text-[11px] text-slate-500 dark:text-slate-400 mb-2">
-            Descargá el CSR y subilo a ARCA. Cuando te devuelvan el certificado .crt, cargalo abajo o pegalo.
+            Subí este CSR a ARCA. Cuando te devuelvan el certificado .crt, cargalo abajo.
           </p>
           <div class="bg-slate-100 dark:bg-slate-800 rounded p-3 mb-3">
             <pre class="text-[10px] text-slate-600 dark:text-slate-300 whitespace-pre-wrap break-all font-mono">{{ displayCsr() }}</pre>
