@@ -78,20 +78,27 @@ async function loadCertInfo() {
   }
 }
 
-async function saveConfig() {
+const AFIP_BASIC_KEYS = ['afip_mode', 'afip_cuit', 'afip_pto_vta']
+const BANCOS_KEYS = ['banco_nombre', 'banco_titular', 'banco_alias']
+
+const descs = {
+  afip_mode: 'Entorno AFIP: testing | production',
+  afip_cuit: 'CUIT del emisor (11 dígitos sin guiones)',
+  afip_pto_vta: 'Número de punto de venta habilitado en AFIP',
+  afip_cert: 'Certificado X.509 (.crt) en formato PEM',
+  afip_key: 'Clave privada RSA (.key) en formato PEM',
+  banco_nombre: 'Nombre del banco para transferencias',
+  banco_titular: 'Nombre del titular de la cuenta',
+  banco_alias: 'Alias de CBU/Alias para transferencias',
+}
+
+async function saveConfig(keys = null) {
   saving.value = true
   try {
-    for (const [clave, valor] of Object.entries(config.value)) {
-      const descs = {
-        afip_mode: 'Entorno AFIP: testing | production',
-        afip_cuit: 'CUIT del emisor (11 dígitos sin guiones)',
-        afip_pto_vta: 'Número de punto de venta habilitado en AFIP',
-        afip_cert: 'Certificado X.509 (.crt) en formato PEM',
-        afip_key: 'Clave privada RSA (.key) en formato PEM',
-        banco_nombre: 'Nombre del banco para transferencias',
-        banco_titular: 'Nombre del titular de la cuenta',
-        banco_alias: 'Alias de CBU/Alias para transferencias',
-      }
+    const entries = keys
+      ? Object.entries(config.value).filter(([k]) => keys.includes(k))
+      : Object.entries(config.value)
+    for (const [clave, valor] of entries) {
       await api.put('/api/config/ajustes', { clave, valor, descripcion: descs[clave] || '' })
     }
     toast.success('Configuración guardada')
@@ -232,7 +239,7 @@ onMounted(loadConfig)
           <BaseInput v-model="config.afip_pto_vta" label="Punto de Venta" placeholder="1" maxlength="4" hint="Número habilitado en AFIP" />
 
           <div class="flex items-center gap-3 pt-2">
-            <BaseButton variant="primary" :loading="saving" @click="saveConfig">
+            <BaseButton variant="primary" :loading="saving" @click="saveConfig(AFIP_BASIC_KEYS)">
               <i class="fa-solid fa-floppy-disk"></i> Guardar
             </BaseButton>
             <p class="text-[11px] text-slate-400">Los cambios se aplican inmediatamente</p>
@@ -368,7 +375,7 @@ onMounted(loadConfig)
         <BaseInput v-model="config.banco_alias" label="Alias" placeholder="alias.cbutransferencia" />
 
         <div class="flex items-center gap-3 pt-2">
-          <BaseButton variant="primary" :loading="saving" @click="saveConfig">
+          <BaseButton variant="primary" :loading="saving" @click="saveConfig(BANCOS_KEYS)">
             <i class="fa-solid fa-floppy-disk"></i> Guardar
           </BaseButton>
           <p class="text-[11px] text-slate-400">Los cambios se aplican inmediatamente</p>
