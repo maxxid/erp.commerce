@@ -97,6 +97,7 @@
           v-model="form.password"
           label="Contraseña"
           type="password"
+          autocomplete="new-password"
           :placeholder="editingUser ? 'Dejar vacío para mantener' : 'Ingresar contraseña'"
         />
         <BaseSelect

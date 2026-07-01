@@ -168,7 +168,7 @@
         </div>
         <BaseInput v-model="r2Form.endpoint" label="Endpoint" type="url" required placeholder="https://&lt;account&gt;.r2.cloudflarestorage.com" input-class="font-mono-data" />
         <BaseInput v-model="r2Form.access_key" label="Access Key" type="text" required placeholder="xxxxxxxxxxxxxxxx" input-class="font-mono-data" />
-        <BaseInput v-model="r2Form.secret_key" label="Secret Key" type="password" required placeholder="••••••••••••••••" input-class="font-mono-data" />
+        <BaseInput v-model="r2Form.secret_key" label="Secret Key" type="password" required placeholder="••••••••••••••••" input-class="font-mono-data" autocomplete="off" />
         <BaseInput v-model="r2Form.bucket" label="Bucket" type="text" required placeholder="erp-backups" />
         <div class="flex items-center justify-between pt-2">
           <BaseButton type="button" variant="secondary" :loading="testingConnection" @click="testConnection">
