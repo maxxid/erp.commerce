@@ -174,6 +174,8 @@ def _autenticar_zeep(db: Session) -> tuple[str, str]:
             headers={'Content-Type': 'application/octet-stream'},
             verify=True
         )
+        logger.info(f"WSAA response status: {response.status_code}, headers: {dict(response.headers)}")
+        logger.info(f"WSAA response body (first 500): {response.text[:500]}")
         if response.status_code != 200:
             raise RuntimeError(f"WSAA respondió {response.status_code}: {response.text[:500]}")
         login_ticket = response.text.strip()
