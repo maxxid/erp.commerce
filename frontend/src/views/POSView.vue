@@ -1677,7 +1677,10 @@ async function emitirFactura(t) {
   emitiendoFactura[t.id] = true
   try {
     const resp = await api.post(`/api/facturacion/facturas/${t.id}/emitir`)
-    if (resp && resp.cae) {
+    if (resp && resp.estado === 'rechazada') {
+      toast.error(`Factura rechazada: ${resp.error_message || 'verificar cert/key AFIP'}`)
+      facturaEmitida[t.id] = false
+    } else if (resp && resp.cae) {
       facturaEmitida[t.id] = true
       toast.success(`Factura emitida con CAE: ${resp.cae}`)
     } else if (resp && resp.error_message) {

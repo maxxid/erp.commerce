@@ -164,7 +164,10 @@ async function emitirFactura(ventaId) {
   facturandoId.value = ventaId
   try {
     const res = await api.post(`/api/facturacion/facturas/${ventaId}/emitir`, {})
-    if (res && res.id) {
+    if (res && res.estado === 'rechazada') {
+      facturasMap.value[ventaId] = res
+      toast.error(`Factura rechazada: ${res.error_message || 'verificar cert/key AFIP'}`)
+    } else if (res && res.id) {
       facturasMap.value[ventaId] = res
       toast.success(res.cae ? `Factura emitida CAE: ${res.cae}` : 'Factura pendiente')
     }

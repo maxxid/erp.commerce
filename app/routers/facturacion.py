@@ -108,6 +108,14 @@ def emitir_factura(
 
     try:
         fe = afip_service.emitir_factura(db, venta, data.afip_cuit or None)
+        if fe.estado == 'rechazada':
+            return RespuestaData(data={
+                "id": fe.id,
+                "cae": fe.cae,
+                "numero_fiscal": fe.numero_fiscal,
+                "estado": fe.estado,
+                "error_message": fe.error_message,
+            }, message=f"Factura rechazada: {fe.error_message or 'verificar cert/key AFIP'}")
         return RespuestaData(data={
             "id": fe.id,
             "cae": fe.cae,

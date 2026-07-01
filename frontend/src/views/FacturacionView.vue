@@ -40,7 +40,11 @@ async function emitirFactura() {
   try {
     const resp = await api.post(`/api/facturacion/facturas/${selectedVentaId.value}/emitir`)
     emitResult.value = resp
-    toast.success('Factura emitida exitosamente')
+    if (resp.estado === 'rechazada' || resp.error_message) {
+      toast.error(`Factura rechazada: ${resp.error_message || resp.estado}`)
+    } else {
+      toast.success('Factura emitida exitosamente')
+    }
     fetchFacturas()
   } catch (e) {
     emitResult.value = { error: e.data?.detail || e.message || 'Error al emitir' }
