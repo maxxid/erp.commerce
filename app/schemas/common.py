@@ -14,7 +14,7 @@ class RespuestaBase(BaseModel):
 
 class RespuestaData(RespuestaBase, Generic[T]):
     """Respuesta con datos."""
-    data: T
+    data: Optional[T] = None
 
 
 class RespuestaLista(RespuestaBase, Generic[T]):
