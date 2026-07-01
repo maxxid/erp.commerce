@@ -90,7 +90,7 @@ def _evento_to_dict(e: Auditoria) -> dict:
     }
 
 
-def _evaluar_riesgo(tipo: str, detalle: dict, medio_pago: str = None) -> str:
+def _evaluar_riesgo(tipo: str, detalle: Optional[dict] = None, medio_pago: str = None) -> str:
     """Evalúa el nivel de riesgo de un evento según el manual de auditoría.
 
     Returns:
