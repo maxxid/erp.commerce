@@ -101,6 +101,19 @@ def _autenticar_zeep(db: Session) -> tuple[str, str]:
     if not key_path:
         raise ValueError("AFIP clave privada no configurada. Configurarla en Ajustes > AFIP.")
 
+    result_modulus = subprocess.run(
+        ['/usr/bin/openssl', 'x509', '-noout', '-modulus', '-in', cert_path],
+        capture_output=True, text=True
+    )
+    key_modulus = subprocess.run(
+        ['/usr/bin/openssl', 'rsa', '-noout', '-modulus', '-in', key_path],
+        capture_output=True, text=True
+    )
+    if result_modulus.stdout.strip() != key_modulus.stdout.strip():
+        logger.error(f"Cert modulus: {result_modulus.stdout.strip()[:64]}...")
+        logger.error(f"Key modulus: {key_modulus.stdout.strip()[:64]}...")
+        raise ValueError("AFIP cert y key no corresponden. Regenerar CSR y obtener nuevo cert.")
+
     unique_id = int(datetime.now().timestamp())
     gen_time = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     exp_time = (datetime.now() + timedelta(hours=12)).strftime("%Y-%m-%dT%H:%M:%S")
