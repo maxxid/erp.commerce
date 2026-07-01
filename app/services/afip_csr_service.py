@@ -97,7 +97,7 @@ def generar_csr(db: Session, cuit: str, pto_vta: int, razon_social: str = "") ->
     set_config(db, "afip_key", encrypted_key, "Clave privada AFIP (encriptada)")
 
     return {
-        "csr_pem": csr_pem,
+        "csr_pem": csr_pem.replace("\n", "\\n"),
         "clave_privada_descargable": True,
         "mensaje": (
             "CSR generado. Descargá el archivo .csr y subilo a ARCA. "
