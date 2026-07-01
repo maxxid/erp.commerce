@@ -49,7 +49,7 @@ def descargar(db: Session = Depends(get_db), user: Usuario = Depends(require_rol
     """Descarga el catálogo central desde R2 (catalogo/{machine_id}/productos.json)."""
     path = catalogo_service.descargar_catalogo_central(db)
     if not path:
-        raise HTTPException(status_code=404, detail="No se pudo descargar el catálogo central")
+        return RespuestaData(data=None, message="No se encontró catálogo en R2 para este dispositivo. Ejecutá 'Exportar Catálogo' primero.")
     return RespuestaData(data={"path": path}, message="Catálogo central descargado")
 
 
