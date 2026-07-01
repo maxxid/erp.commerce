@@ -129,8 +129,9 @@ def _autenticar_zeep(db: Session) -> tuple[str, str]:
         raise ValueError("AFIP cert y key no corresponden. Regenerar CSR y obtener nuevo cert.")
 
     unique_id = int(datetime.now().timestamp())
-    gen_time = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-    exp_time = (datetime.now() + timedelta(hours=12)).strftime("%Y-%m-%dT%H:%M:%S")
+    now_arg = datetime.now(timezone(timedelta(hours=-3)))
+    gen_time = now_arg.strftime("%Y-%m-%dT%H:%M:%S-03:00")
+    exp_time = (now_arg + timedelta(hours=12)).strftime("%Y-%m-%dT%H:%M:%S-03:00")
 
     tra = f"""<?xml version="1.0" encoding="UTF-8"?>
 <loginTicketRequest>
