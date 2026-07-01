@@ -212,5 +212,4 @@ def cambiar_estado(db: Session, evento_id: int, auditor_id: int, estado: str, no
     evento.auditado_en = datetime.now(timezone.utc)
     evento.nota = nota
     db.commit()
-    db.refresh(evento)
     return evento
