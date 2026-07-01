@@ -6,6 +6,9 @@
         <div class="flex items-center justify-between p-4 border-b border-slate-100">
           <h3 class="font-bold text-slate-900 text-sm">Ticket de Venta</h3>
           <div class="flex items-center gap-2">
+            <button v-if="ticket.venta_id" @click="$emit('emitir-factura', ticket.venta_id)" class="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1">
+              <i class="fa-solid fa-file-invoice"></i> FE
+            </button>
             <button @click="printTicket" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1">
               <i class="fa-solid fa-print"></i> Imprimir
             </button>
@@ -95,7 +98,7 @@ defineProps({
   show: Boolean,
   ticket: { type: Object, default: () => ({ items: [] }) }
 })
-defineEmits(['close'])
+defineEmits(['close', 'emitir-factura'])
 
 const ticketWidth = computed(() => {
   try {

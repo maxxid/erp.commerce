@@ -735,7 +735,7 @@
     @created="onProductCreated"
   />
 
-  <TicketModal :show="showTicket" :ticket="ticketData" @close="showTicket = false; nextTick(() => barcodeInput.value?.focus())" />
+  <TicketModal :show="showTicket" :ticket="ticketData" @close="showTicket = false; nextTick(() => barcodeInput.value?.focus())" @emitir-factura="onEmitirFactura" />
 
   <BaseModal v-model="showSaleInfoModal" title="Detalle de venta" size="sm">
     <div v-if="saleInfoTarget" class="space-y-3">
@@ -829,7 +829,7 @@ const confirmando = ref(false)
 const showTicket = ref(false)
 const showStatsPanel = ref(true)
 const showRecallDropdown = ref(false)
-const ticketData = reactive({ items: [], numero: '', fecha: '', total: 0, descuento: 0, medio_pago: '', cliente: '', sucursal: '' })
+const ticketData = reactive({ items: [], numero: '', fecha: '', total: 0, descuento: 0, medio_pago: '', cliente: '', sucursal: '', venta_id: null })
 
 const {
   heldTickets, heldCount, suspiciousTickets,
@@ -1655,6 +1655,7 @@ async function confirmarVenta() {
   ticketData.descuento = cart.descuento
   ticketData.medio_pago = cart.medio_pago
   ticketData.cliente = clientes.value.find(c => c.id === cart.cliente_id)?.nombre || ''
+  ticketData.venta_id = ventaResp?.id || null
   showTicket.value = true
 
   vaciarCarrito()
@@ -1699,7 +1700,25 @@ function reopenTicket(t) {
   ticketData.descuento = t.descuento || 0
   ticketData.medio_pago = t.medio_pago
   ticketData.cliente = t.cliente || ''
+  ticketData.venta_id = t.id || null
   showTicket.value = true
+}
+
+async function onEmitirFactura(ventaId) {
+  if (!ventaId) return
+  try {
+    const resp = await api.post(`/api/facturacion/facturas/${ventaId}/emitir`)
+    if (resp && resp.estado === 'rechazada') {
+      toast.error(`Factura rechazada: ${resp.error_message || 'verificar AFIP'}`)
+    } else if (resp && resp.cae) {
+      toast.success(`CAE: ${resp.cae}`)
+      ticketData.factura = `CAE: ${resp.cae}`
+    } else {
+      toast.info('Factura procesada')
+    }
+  } catch (e) {
+    toast.error('Error al emitir factura')
+  }
 }
 
 async function editSale(t) {
