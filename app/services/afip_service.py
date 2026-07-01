@@ -98,6 +98,11 @@ def _autenticar_zeep(db: Session) -> tuple[str, str]:
             f.write(decrypted_key.decode())
             key_path = f.name
         logger.info(f"Temp key written to {key_path}, size={len(decrypted_key)}")
+        key_verify = subprocess.run(
+            ['/usr/bin/openssl', 'rsa', '-in', key_path, '-check', '-noout'],
+            capture_output=True, text=True
+        )
+        logger.info(f"openssl rsa verify: rc={key_verify.returncode}, stderr={key_verify.stderr.strip()[:200]}")
 
     result_verify = subprocess.run(
         ['/usr/bin/openssl', 'x509', '-noout', '-in', cert_path],
@@ -160,7 +165,7 @@ def _autenticar_zeep(db: Session) -> tuple[str, str]:
     wsaa_url = _get_wsaa_url(cfg["mode"])
 
     session = Session()
-    session.cert = cert_path
+    session.cert = (cert_path, key_path)
 
     try:
         response = session.post(
