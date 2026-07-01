@@ -64,6 +64,11 @@ function estadoBadge(tipo) {
   return map[tipo] || 'default'
 }
 
+async function reemitirFactura(ventaId) {
+  selectedVentaId.value = ventaId
+  await emitirFactura()
+}
+
 onMounted(fetchFacturas)
 </script>
 
@@ -96,12 +101,12 @@ onMounted(fetchFacturas)
           </thead>
           <tbody>
             <tr v-if="loading">
-              <td colspan="8" class="py-8 text-center text-slate-400">
+              <td colspan="9" class="py-8 text-center text-slate-400">
                 <i class="fa-solid fa-circle-notch animate-spin text-2xl"></i>
               </td>
             </tr>
             <tr v-else-if="facturas.length === 0">
-              <td colspan="8" class="py-8 text-center text-slate-400">
+              <td colspan="9" class="py-8 text-center text-slate-400">
                 No hay facturas emitidas
               </td>
             </tr>
@@ -127,6 +132,17 @@ onMounted(fetchFacturas)
               <td class="py-3 px-4 text-slate-500 text-xs">{{ formatoFecha(f.created_at) }}</td>
               <td class="py-3 px-4 text-red-500 text-xs max-w-[200px] truncate">
                 {{ f.error_message || f.resultado === 'R' ? 'Rechazada' : '' }}
+              </td>
+              <td class="py-3 px-4">
+                <BaseButton
+                  v-if="f.estado === 'rechazada'"
+                  variant="danger"
+                  size="xs"
+                  :loading="emitiendo && selectedVentaId === f.venta_id"
+                  @click="reemitirFactura(f.venta_id)"
+                >
+                  <i class="fa-solid fa-repeat mr-1"></i>Re-emitir
+                </BaseButton>
               </td>
             </tr>
           </tbody>
