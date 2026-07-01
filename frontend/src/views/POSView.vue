@@ -737,6 +737,23 @@
           <span>{{ saleInfoTarget.cliente || 'Consumidor Final' }}</span>
         </div>
       </div>
+      <div v-if="saleInfoTarget.id && !isNaN(saleInfoTarget.id)" class="pt-2 border-t border-slate-200 dark:border-slate-700">
+        <button
+          v-if="!facturaEmitida[ saleInfoTarget.id]"
+          type="button"
+          class="w-full py-2 px-3 text-xs font-medium rounded-lg transition-colors"
+          :class="emitiendoFactura[ saleInfoTarget.id] ? 'bg-slate-100 text-slate-400 cursor-wait' : 'bg-brand-50 text-brand-700 hover:bg-brand-100 dark:bg-brand-900/20 dark:text-brand-300 dark:hover:bg-brand-900/30'"
+          :disabled="emitiendoFactura[ saleInfoTarget.id]"
+          @click="emitirFactura(saleInfoTarget)"
+        >
+          <i :class="emitiendoFactura[ saleInfoTarget.id] ? 'fa-solid fa-circle-notch fa-spin mr-1' : 'fa-solid fa-file-invoice mr-1'"></i>
+          {{ emitiendoFactura[ saleInfoTarget.id] ? 'Emitiendo...' : 'Emitir Factura' }}
+        </button>
+        <div v-else class="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+          <i class="fa-solid fa-check-circle"></i>
+          Factura emitida
+        </div>
+      </div>
     </div>
   </BaseModal>
 </template>
@@ -935,6 +952,8 @@ const recentTransactions = ref([])
 const editingVentaId = ref(null)
 const showSaleInfoModal = ref(false)
 const saleInfoTarget = ref(null)
+const emitiendoFactura = reactive({})
+const facturaEmitida = reactive({})
 
 const bankConfig = reactive({ banco_nombre: '', banco_titular: '', banco_alias: '' })
 
@@ -1618,6 +1637,27 @@ async function confirmarVenta() {
 function viewSaleInfo(t) {
   saleInfoTarget.value = t
   showSaleInfoModal.value = true
+}
+
+async function emitirFactura(t) {
+  if (!t.id || isNaN(t.id)) return
+  emitiendoFactura[t.id] = true
+  try {
+    const resp = await api.post(`/api/facturacion/facturas/${t.id}/emitir`)
+    if (resp && resp.cae) {
+      facturaEmitida[t.id] = true
+      toast.success(`Factura emitida con CAE: ${resp.cae}`)
+    } else if (resp && resp.error_message) {
+      toast.warning(`Factura: ${resp.error_message}`)
+      facturaEmitida[t.id] = true
+    } else {
+      toast.info('Factura procesada')
+      facturaEmitida[t.id] = true
+    }
+  } catch (e) {
+    toast.error(e.data?.detail || 'Error al emitir factura')
+  }
+  emitiendoFactura[t.id] = false
 }
 
 function reopenTicket(t) {
