@@ -1,8 +1,10 @@
 """Router de Facturación Electrónica AFIP."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
+from io import BytesIO
 
 from app.database import get_db
 from app.schemas.common import RespuestaData, RespuestaLista
@@ -11,6 +13,8 @@ from app.models.usuario import Usuario
 from app.models.factura_electronica import FacturaElectronica
 from app.services.venta_service import obtener_venta
 from app.services import afip_service
+from app.services import afip_csr_service
+from app.services.config_service import get_config
 
 router = APIRouter(prefix="/api/facturacion", tags=["Facturación Electrónica"])
 
@@ -113,3 +117,72 @@ def emitir_factura(
         }, message=f"Factura {fe.estado}: CAE={fe.cae or 'pendiente'}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class GenerarCsrRequest(BaseModel):
+    cuit: str
+    pto_vta: int
+    razon_social: str = ""
+
+
+@router.post("/afip/generar-csr", response_model=RespuestaData)
+def generar_csr(
+    data: GenerarCsrRequest,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin")),
+):
+    """Genera una nueva clave privada RSA y un CSR para subir a ARCA."""
+    try:
+        result = afip_csr_service.generar_csr(
+            db,
+            cuit=data.cuit,
+            pto_vta=data.pto_vta,
+            razon_social=data.razon_social,
+        )
+        return RespuestaData(data=result)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/afip/descargar-clave", response_model=RespuestaData)
+def descargar_clave(
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin")),
+):
+    """Descarga la clave privada RSA generada (para guardar enbackup seguro)."""
+    try:
+        clave = afip_csr_service.descargar_clave_privada(db)
+        return RespuestaData(data={"clave_pem": clave})
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/afip/certificado-info", response_model=RespuestaData)
+def certificado_info(
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """Devuelve información del certificado guardado, o None si no hay."""
+    cert_pem = get_config(db, "afip_cert")
+    if not cert_pem:
+        return RespuestaData(data=None)
+    info = afip_csr_service.get_cert_info(db)
+    return RespuestaData(data=info)
+
+
+class SubirCertificadoRequest(BaseModel):
+    cert_pem: str
+
+
+@router.post("/afip/subir-certificado", response_model=RespuestaData)
+def subir_certificado(
+    data: SubirCertificadoRequest,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin")),
+):
+    """Guarda el certificado .crt devuelto por ARCA."""
+    try:
+        result = afip_csr_service.guardar_certificado(db, data.cert_pem)
+        return RespuestaData(data=result, message=result["mensaje"])
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
