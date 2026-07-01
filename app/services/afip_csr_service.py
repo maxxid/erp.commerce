@@ -126,9 +126,13 @@ def guardar_certificado(db: Session, cert_pem: str) -> dict:
     Returns:
         dict con info del certificado (subject, expiry, etc.)
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"guardar_certificado: cert_pem_len={len(cert_pem)}, starts_with={cert_pem[:50]}")
     try:
         cert = x509.load_pem_x509_certificate(cert_pem.encode(), default_backend())
     except Exception as e:
+        logger.error(f"guardar_certificado: parse error: {e}")
         raise ValueError(f"Certificado inválido: {e}")
 
     subject_cn = ""
@@ -139,7 +143,9 @@ def guardar_certificado(db: Session, cert_pem: str) -> dict:
     expiry = cert.not_valid_after_utc
     days_left = (expiry - datetime.now(timezone.utc)).days
 
+    logger.info(f"guardar_certificado: parsed OK, CN={subject_cn}, saving...")
     set_config(db, "afip_cert", cert_pem, f"Certificado AFIP (subject: {subject_cn})")
+    logger.info(f"guardar_certificado: set_config done")
 
     return {
         "subject": subject_cn,

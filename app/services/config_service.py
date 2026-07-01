@@ -30,6 +30,9 @@ def get_config_int(db: Session, clave: str, default: int = 0) -> int:
 
 def set_config(db: Session, clave: str, valor: str, descripcion: str = ""):
     """Escribe o actualiza un valor de configuración."""
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"set_config: clave={clave}, valor_len={len(valor)}, descripcion={descripcion[:50] if descripcion else ''}")
     cfg = db.query(Configuracion).filter(Configuracion.clave == clave).first()
     if cfg:
         if len(valor) > 450:
@@ -46,7 +49,9 @@ def set_config(db: Session, clave: str, valor: str, descripcion: str = ""):
         else:
             cfg = Configuracion(clave=clave, valor=valor, descripcion=descripcion)
         db.add(cfg)
+    db.flush()
     db.commit()
+    logger.info(f"set_config: committed OK, id={cfg.id if cfg else 'N/A'}")
 
 
 def get_afip_config(db: Session) -> dict:
