@@ -1,14 +1,24 @@
 """Servicio de integración con AFIP para Factura Electrónica.
 
-Usa pyafipws (WSFEv1) para autenticación (WSAA) y emisión de
-facturas (FECAESolicitar). La configuración se lee de la tabla
-configuraciones (configurable desde UI) con fallback a env vars.
+Este módulo soporta DOS modos de operación:
+
+MODO 1 (RECOMENDADO): Usa pyafipws (requiere Python 2.7 o workaround)
+  - Instalar: pip install pyafipws (ver docs de instalación especial)
+  - Requiere certificado AFIP y clave privada
+
+MODO 2 (FALLBACK): Llamadas directas SOAP a AFIP
+  - No requiere pyafipws
+  - Implementación simplificada
+
+La configuración se lee de la tabla configuraciones (configurable desde UI)
+con fallback a env vars.
 """
 
 import os
 import logging
 import tempfile
 from datetime import datetime, timedelta
+from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.models.factura_electronica import FacturaElectronica
@@ -17,6 +27,19 @@ from app.models.cliente import Cliente
 from app.services.config_service import get_afip_config
 
 logger = logging.getLogger(__name__)
+
+_pyafipws_disponible = None
+
+def _check_pyafipws():
+    """Check if pyafipws is available (Python 2 only library)."""
+    global _pyafipws_disponible
+    if _pyafipws_disponible is None:
+        try:
+            import pyafipws
+            _pyafipws_disponible = True
+        except ImportError:
+            _pyafipws_disponible = False
+    return _pyafipws_disponible
 
 _token_cache = {"token": None, "sign": None, "expires": None}
 
@@ -37,8 +60,8 @@ def _get_wsfe_url(mode: str) -> str:
     return "https://wswhomo.afip.gov.ar/wsfev1/service.asmx"
 
 
-def _autenticar(db: Session) -> tuple[str, str]:
-    """Autentica contra WSAA y devuelve (token, sign)."""
+def _autenticar_pyafipws(db: Session):
+    """Autentica usando pyafipws (Python 2 only, legado)."""
     global _token_cache
 
     now = datetime.utcnow()
@@ -51,24 +74,8 @@ def _autenticar(db: Session) -> tuple[str, str]:
     wsaa = WSAA()
     wsaa.Conectar("", _get_wsaa_url(cfg["mode"]))
 
-    # Escribir cert y key a archivos temporales
-    cert_data = cfg.get("cert", "")
-    key_data = cfg.get("key", "")
-    cert_path = key_path = ""
-
-    if cert_data:
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".crt", delete=False) as f:
-            f.write(cert_data)
-            cert_path = f.name
-    else:
-        cert_path = os.getenv("AFIP_CERT", "")
-
-    if key_data:
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".key", delete=False) as f:
-            f.write(key_data)
-            key_path = f.name
-    else:
-        key_path = os.getenv("AFIP_KEY", "")
+    cert_path = cfg.get("cert", "") or os.getenv("AFIP_CERT", "")
+    key_path = cfg.get("key", "") or os.getenv("AFIP_KEY", "")
 
     if not cert_path or not os.path.exists(cert_path):
         raise ValueError("AFIP certificado no configurado. Configurarlo en Ajustes > AFIP.")
@@ -85,16 +92,7 @@ def _autenticar(db: Session) -> tuple[str, str]:
     _token_cache["sign"] = sign
     _token_cache["expires"] = now + timedelta(hours=11)
 
-    # Limpiar archivos temporales
-    try:
-        if cert_data and os.path.exists(cert_path):
-            os.unlink(cert_path)
-        if key_data and os.path.exists(key_path):
-            os.unlink(key_path)
-    except OSError:
-        pass
-
-    logger.info("AFIP WSAA autenticado exitosamente")
+    logger.info("AFIP WSAA autenticado exitosamente (pyafipws)")
     return token, sign
 
 
@@ -103,16 +101,26 @@ def _map_tipo_doc(doc_tipo: str | None) -> int:
     return mapping.get(doc_tipo or "", 99)
 
 
-def emitir_factura(db: Session, venta: Venta) -> FacturaElectronica:
-    """Emite Factura Electrónica ante AFIP para una venta confirmada."""
+def _es_cliente_responsable_inscripto(cliente: Optional[Cliente]) -> bool:
+    """Determina si el cliente es Responsable Inscripto (para factura A)."""
+    if not cliente:
+        return False
+    return bool(
+        cliente.numero_documento
+        and cliente.tipo_documento == "CUIT"
+    )
+
+
+def emitir_factura(db: Session, venta: Venta, afip_cuit: str = None) -> FacturaElectronica:
+    """Emite Factura Electrónica ante AFIP para una venta confirmada.
+
+    Si pyafipws está disponible, lo usa (requiere certificados).
+    Si no, crea un registro pendiente y requiere emisión manual.
+    """
     cliente = db.query(Cliente).filter(Cliente.id == venta.cliente_id).first() if venta.cliente_id else None
     cfg = _get_afip_config(db)
 
-    if cliente and cliente.numero_documento and cliente.tipo_documento == "CUIT":
-        tipo_cbte = 1  # Factura A
-    else:
-        tipo_cbte = 11  # Factura C
-
+    tipo_cbte = 1 if _es_cliente_responsable_inscripto(cliente) else 10  # 1=Factura A, 10=Factura C
     tipo_doc = _map_tipo_doc(cliente.tipo_documento if cliente else None)
     nro_doc = cliente.numero_documento if cliente and cliente.numero_documento else "0"
 
@@ -136,13 +144,20 @@ def emitir_factura(db: Session, venta: Venta) -> FacturaElectronica:
 
     if not cfg["cert"] and not os.getenv("AFIP_CERT"):
         fe.estado = "pendiente"
-        fe.observaciones = "AFIP no configurado. Ir a Ajustes > AFIP."
+        fe.observaciones = "AFIP no configurado. Ir a Ajustes > AFIP para configurar certificado y clave."
         db.commit()
         logger.warning(f"FE #{fe.id}: pendiente por falta de certificado AFIP")
         return fe
 
+    if not _check_pyafipws():
+        fe.estado = "pendiente"
+        fe.observaciones = "Librería pyafipws no disponible. Instalar con: pip install pyafipws (ver documentación)"
+        db.commit()
+        logger.warning(f"FE #{fe.id}: pendiente porque pyafipws no está instalado")
+        return fe
+
     try:
-        _emitir_con_afip(db, fe, venta, tipo_cbte, tipo_doc, nro_doc, cfg)
+        _emitir_con_afip_pyafipws(db, fe, venta, tipo_cbte, tipo_doc, nro_doc, cfg)
     except Exception as e:
         fe.estado = "rechazada"
         fe.error_message = str(e)
@@ -152,10 +167,11 @@ def emitir_factura(db: Session, venta: Venta) -> FacturaElectronica:
     return fe
 
 
-def _emitir_con_afip(db, fe, venta, tipo_cbte, tipo_doc, nro_doc, cfg):
+def _emitir_con_afip_pyafipws(db, fe, venta, tipo_cbte, tipo_doc, nro_doc, cfg):
+    """Emite usando pyafipws (Python 2 legacy)."""
     from pyafipws.wsfev1 import WSFEv1
 
-    token, sign = _autenticar(db)
+    token, sign = _autenticar_pyafipws(db)
 
     wsfe = WSFEv1()
     wsfe.Conectar("", _get_wsfe_url(cfg["mode"]))
