@@ -72,9 +72,9 @@ def generar_csr(db: Session, cuit: str, pto_vta: int, razon_social: str = "") ->
         x509.Name([
             x509.NameAttribute(NameOID.COUNTRY_NAME, "AR"),
             x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, "ARGENTINA"),
-            x509.NameAttribute(NameOID.BUSINESS_CATEGORY, "VENTAS"),
-            x509.NameAttribute(NameOID.COMMON_NAME, f"CUIT {cuit}"),
-            x509.NameAttribute(NameOID.ORGANIZATION_NAME, razon_social),
+            x509.NameAttribute(NameOID.LOCALITY_NAME, "BUENOS AIRES"),
+            x509.NameAttribute(NameOID.ORGANIZATION_NAME, razon_social or "Sin Nombre"),
+            x509.NameAttribute(NameOID.COMMON_NAME, razon_social or "Sin Nombre"),
         ])
     )
     csr_builder = csr_builder.add_extension(
