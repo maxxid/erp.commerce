@@ -8,6 +8,7 @@ Instalación: pip install zeep
 """
 
 import os
+import base64
 import logging
 import tempfile
 from datetime import datetime, timedelta, timezone
@@ -165,18 +166,30 @@ def _autenticar_zeep(db: Session) -> tuple[str, str]:
 
     wsaa_url = _get_wsaa_url(cfg["mode"])
 
+    soap_envelope = f"""<?xml version="1.0" encoding="UTF-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <loginCms xmlns="http://wsaa.view.sua.dvadac.desein.afip.gov">
+      <in0>{base64.b64encode(cms_data).decode()}</in0>
+    </loginCms>
+  </soap:Body>
+</soap:Envelope>"""
+
     session = Session()
     session.cert = (cert_path, key_path)
 
     try:
         response = session.post(
             wsaa_url,
-            data=cms_data,
-            headers={'Content-Type': 'application/octet-stream'},
+            data=soap_envelope.encode('utf-8'),
+            headers={
+                'Content-Type': 'text/xml; charset=utf-8',
+                'SOAPAction': 'loginCms'
+            },
             verify=True
         )
-        logger.info(f"WSAA response status: {response.status_code}, headers: {dict(response.headers)}")
-        logger.info(f"WSAA response body (first 500): {response.text[:500]}")
+        logger.info(f"WSAA response status: {response.status_code}")
+        logger.info(f"WSAA response body (first 1000): {response.text[:1000]}")
         if response.status_code != 200:
             raise RuntimeError(f"WSAA respondió {response.status_code}: {response.text[:500]}")
         login_ticket = response.text.strip()
