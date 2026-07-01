@@ -117,7 +117,7 @@ def _autenticar_zeep(db: Session) -> tuple[str, str]:
 
     try:
         result = subprocess.run(
-            ['openssl', 'cms', '-sign', '-nodetach', '-outform', 'DER',
+            ['/usr/bin/openssl', 'cms', '-sign', '-nodetach', '-outform', 'DER',
              '-inkey', key_path, '-signer', cert_path,
              '-in', tra_path, '-out', cms_path],
             capture_output=True, text=True, check=True
