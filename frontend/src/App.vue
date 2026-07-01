@@ -138,7 +138,15 @@ onUnmounted(() => {
       leave-to-class="opacity-0 scale-[0.98]"
       mode="out-in"
     >
-      <div v-if="!auth.authenticated" key="login" class="fixed inset-0 bg-slate-950 z-50 flex items-center justify-center p-4">
+      <!-- Loading inicial mientras verifica licencia -->
+      <div v-if="auth.initializing" key="loading" class="fixed inset-0 bg-slate-950 z-50 flex items-center justify-center">
+        <div class="flex flex-col items-center gap-4">
+          <i class="fa-solid fa-cubes-stacked text-brand-500 text-4xl animate-pulse"></i>
+          <span class="text-slate-400 text-sm">Verificando...</span>
+        </div>
+      </div>
+
+      <div v-else-if="!auth.authenticated" key="login" class="fixed inset-0 bg-slate-950 z-50 flex items-center justify-center p-4">
         <router-view v-slot="{ Component }">
           <component :is="Component" />
         </router-view>

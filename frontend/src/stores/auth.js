@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import api from '@/services/api'
 
 export const useAuthStore = defineStore('auth', () => {
+  const initializing = ref(true)
   const authenticated = ref(false)
   const currentUser = ref(null)
   const loginForm = ref({ username: '', password: '' })
@@ -34,6 +35,7 @@ export const useAuthStore = defineStore('auth', () => {
     if (hasLicense.value && licenseValid.value) {
       await checkAutoLogin()
     }
+    initializing.value = false
   }
 
   async function checkAutoLogin() {
