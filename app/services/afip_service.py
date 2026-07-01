@@ -100,15 +100,13 @@ def _autenticar_zeep(db: Session) -> tuple[str, str]:
 
     session.cert = cert_path
 
-    params = {
-        'in0': open(cert_path).read(),
-        'in1': open(key_path).read(),
-        'in2': '',
-        'in3': 'wsfe',
-    }
-
     try:
-        result = client.service.loginCms(**params)
+        result = client.service.loginCms(
+            open(cert_path).read(),
+            open(key_path).read(),
+            '',
+            'wsfe'
+        )
         token = result.get('token', '')
         sign = result.get('sign', '')
         if not token or not sign:
