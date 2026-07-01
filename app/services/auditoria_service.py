@@ -83,7 +83,7 @@ def _evento_to_dict(e: Auditoria) -> dict:
         "detalle": detalle,
         "estado": e.estado,
         "auditado_por": e.auditado_por,
-        "auditado_por_nombre": e.auditado_por.nombre if e.auditado_por else None,
+        "auditado_por_nombre": e.auditor_por.nombre if e.auditor_por else None,
         "auditado_en": e.auditado_en.isoformat() if e.auditado_en else None,
         "nota": e.nota or "",
         "created_at": e.created_at.isoformat() if e.created_at else None,
