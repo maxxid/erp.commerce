@@ -72,23 +72,33 @@ def _autenticar_zeep(db: Session) -> tuple[str, str]:
     from zeep import Client
     from zeep.transports import Transport
     from requests import Session
+    import tempfile
 
     session = Session()
     transport = Transport(session=session)
     client = Client(wsdl=_get_wsaa_wsdl(cfg["mode"]), transport=transport)
 
-    cert_path = cfg.get("cert", "") or os.getenv("AFIP_CERT", "")
-    key_path = cfg.get("key", "") or os.getenv("AFIP_KEY", "")
+    cert_val = cfg.get("cert", "") or os.getenv("AFIP_CERT", "")
+    key_val = cfg.get("key", "") or os.getenv("AFIP_KEY", "")
 
-    if cert_path and os.path.exists(cert_path):
-        session.cert = cert_path
-    if key_path and os.path.exists(key_path):
-        pass
+    cert_path = cert_val if os.path.exists(cert_val) else None
+    key_path = key_val if os.path.exists(key_val) else None
 
-    if not cert_path or not os.path.exists(cert_path):
+    if not cert_path and cert_val:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.crt', delete=False) as f:
+            f.write(cert_val)
+            cert_path = f.name
+    if not key_path and key_val:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.key', delete=False) as f:
+            f.write(key_val)
+            key_path = f.name
+
+    if not cert_path:
         raise ValueError("AFIP certificado no configurado. Configurarlo en Ajustes > AFIP.")
-    if not key_path or not os.path.exists(key_path):
+    if not key_path:
         raise ValueError("AFIP clave privada no configurada. Configurarla en Ajustes > AFIP.")
+
+    session.cert = cert_path
 
     params = {
         'in0': open(cert_path).read(),
@@ -272,8 +282,22 @@ def emitir_factura(db: Session, venta: Venta, afip_cuit: str = None) -> FacturaE
     db.add(fe)
     db.flush()
 
-    cert_path = cfg.get("cert", "") or os.getenv("AFIP_CERT", "")
-    key_path = cfg.get("key", "") or os.getenv("AFIP_KEY", "")
+    cert_val = cfg.get("cert", "") or os.getenv("AFIP_CERT", "")
+    key_val = cfg.get("key", "") or os.getenv("AFIP_KEY", "")
+
+    cert_path = cert_val if os.path.exists(cert_val) else None
+    key_path = key_val if os.path.exists(key_val) else None
+
+    if not cert_path and cert_val:
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.crt', delete=False) as f:
+            f.write(cert_val)
+            cert_path = f.name
+    if not key_path and key_val:
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.key', delete=False) as f:
+            f.write(key_val)
+            key_path = f.name
 
     if not cert_path or not os.path.exists(cert_path):
         fe.estado = "pendiente"
@@ -281,6 +305,9 @@ def emitir_factura(db: Session, venta: Venta, afip_cuit: str = None) -> FacturaE
         db.commit()
         logger.warning(f"FE #{fe.id}: pendiente por falta de certificado AFIP")
         return fe
+
+    cfg["cert"] = cert_path
+    cfg["key"] = key_path
 
     try:
         _emitir_factura_zeep(db, fe, venta, tipo_cbte, cfg)
