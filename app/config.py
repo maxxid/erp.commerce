@@ -9,10 +9,11 @@ import os
 class Settings:
     """Configuración global accesible como settings.DATABASE_URL, etc."""
 
-    # Base de datos
+    # Base de datos - DEFAULT_ABSOLUTE para evitar fallback a ruta relativa
+    # En producción usar variable DATABASE_URL en systemd
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL",
-        "sqlite:///erp_comercio.db",
+        "sqlite:////data/erp/erp_comercio.db",
     )
 
     # JWT
