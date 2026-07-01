@@ -74,6 +74,9 @@ def _autenticar_zeep(db: Session) -> tuple[str, str]:
     import uuid
     from requests import Session
 
+    from app.services.afip_csr_service import _decrypt_key
+    _encryption_secret = "erp-afip-key-encryption-v1"
+
     cert_val = cfg.get("cert", "") or os.getenv("AFIP_CERT", "")
     key_val = cfg.get("key", "") or os.getenv("AFIP_KEY", "")
 
@@ -85,8 +88,12 @@ def _autenticar_zeep(db: Session) -> tuple[str, str]:
             f.write(cert_val)
             cert_path = f.name
     if not key_path and key_val:
+        try:
+            decrypted_key = _decrypt_key(key_val, _encryption_secret)
+        except Exception:
+            decrypted_key = key_val.encode()
         with tempfile.NamedTemporaryFile(mode='w', suffix='.key', delete=False) as f:
-            f.write(key_val)
+            f.write(decrypted_key.decode())
             key_path = f.name
 
     if not cert_path:
