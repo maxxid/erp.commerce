@@ -198,6 +198,22 @@ class SubirCertificadoRequest(BaseModel):
     cert_pem: str
 
 
+class CargarCsrRequest(BaseModel):
+    csr_pem: str
+
+
+@router.post("/afip/cargar-csr", response_model=RespuestaData)
+def cargar_csr(
+    data: CargarCsrRequest,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin")),
+):
+    """Guarda un CSR cargado desde archivo (para persistencia entre refrescos)."""
+    afip_csr_service.guardar_csr(db, data.csr_pem)
+    return RespuestaData(message="CSR guardado correctamente")
+    cert_pem: str
+
+
 @router.post("/afip/subir-certificado", response_model=RespuestaData)
 def subir_certificado(
     data: SubirCertificadoRequest,
