@@ -73,6 +73,7 @@ class VentaConfirmar(BaseModel):
     descuento: float = 0.0
     descuento_tipo: Optional[str] = Field(None, description="Tipo de descuento: 'manual' o 'automatico'")
     cliente_id: Optional[int] = None
+    comprador_cuit: Optional[str] = None
 
 
 @router.get("", response_model=RespuestaLista)
@@ -215,6 +216,9 @@ def confirmar(
     # Si se especificó cliente_id, asignarlo antes de confirmar
     if data.cliente_id and not venta.cliente_id:
         venta.cliente_id = data.cliente_id
+        db.commit()
+    if data.comprador_cuit:
+        venta.comprador_cuit = data.comprador_cuit
         db.commit()
     try:
         venta = venta_service.confirmar_venta(

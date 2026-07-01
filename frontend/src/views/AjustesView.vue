@@ -19,6 +19,9 @@ const claveContent = ref('')
 const certInfo = ref(null)
 const certUpload = ref('')
 const showGuide = ref(false)
+const certContent = ref('')
+const afipExpanded = ref(false)
+const bancariosExpanded = ref(false)
 
 const config = ref({
   afip_mode: 'testing',
@@ -29,6 +32,7 @@ const config = ref({
   banco_nombre: '',
   banco_titular: '',
   banco_alias: '',
+  empresa_nombre: '',
 })
 
 async function loadConfig() {
@@ -50,9 +54,27 @@ async function loadConfig() {
 async function loadCertInfo() {
   try {
     const resp = await api.get('/api/facturacion/afip/certificado-info')
-    certInfo.value = resp.data || null
+    certInfo.value = (resp && resp !== null) ? resp : null
   } catch {
     certInfo.value = null
+  }
+  try {
+    const pemResp = await api.get('/api/facturacion/afip/certificado-pem')
+    if (pemResp && pemResp.cert_pem) {
+      certUpload.value = pemResp.cert_pem
+      certContent.value = pemResp.cert_pem
+    }
+  } catch {
+    // no saved cert
+  }
+  try {
+    const csrResp = await api.get('/api/facturacion/afip/csr-guardado')
+    if (csrResp && csrResp.csr_pem) {
+      csrContent.value = csrResp.csr_pem
+      csrGenerado.value = true
+    }
+  } catch {
+    // no saved CSR
   }
 }
 
@@ -91,7 +113,7 @@ async function generarCsr() {
       pto_vta: parseInt(config.value.afip_pto_vta) || 1,
       razon_social: '',
     })
-    csrContent.value = resp.data.csr_pem
+    csrContent.value = resp.csr_pem
     csrGenerado.value = true
     toast.success('CSR generado. Descargalo y subilo a ARCA.')
   } catch (e) {
@@ -101,7 +123,8 @@ async function generarCsr() {
 }
 
 function descargarCsr() {
-  const blob = new Blob([csrContent.value], { type: 'text/plain' })
+  const content = csrContent.value.replace(/\\n/g, '\n')
+  const blob = new Blob([content], { type: 'text/plain' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -120,18 +143,52 @@ async function subirCertificado() {
     const resp = await api.post('/api/facturacion/afip/subir-certificado', {
       cert_pem: certUpload.value,
     })
-    certInfo.value = resp.data
+    certInfo.value = resp
+    certContent.value = certUpload.value
     certUpload.value = ''
-    toast.success(resp.data.mensaje)
+    toast.success(resp.message || resp.mensaje || 'Certificado guardado')
   } catch (e) {
     toast.error(e.response?.data?.detail || 'Error al subir certificado')
   }
   subiendo.value = false
 }
 
+function cargarCsrDesdeArchivo(event) {
+  const file = event.target.files[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = async (e) => {
+    const content = e.target.result
+    csrContent.value = content.replace(/\n/g, '\\n')
+    csrGenerado.value = true
+    try {
+      await api.post('/api/facturacion/afip/cargar-csr', { csr_pem: content })
+    } catch {
+      // guardar igual en memoria aunque falle el sync
+    }
+    toast.success('CSR cargado. Ahora subilo a ARCA para obtener el certificado.')
+  }
+  reader.readAsText(file)
+}
+
+function cargarCertDesdeArchivo(event) {
+  const file = event.target.files[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    certUpload.value = e.target.result
+    toast.success('Certificado cargado. Click en Guardar para guardarlo.')
+  }
+  reader.readAsText(file)
+}
+
 function copiarCsr() {
-  navigator.clipboard.writeText(csrContent.value)
+  navigator.clipboard.writeText(csrContent.value.replace(/\\n/g, '\n'))
   toast.success('CSR copiado al portapapeles')
+}
+
+function displayCsr() {
+  return csrContent.value.replace(/\\n/g, '\n')
 }
 
 onMounted(loadConfig)
@@ -145,99 +202,107 @@ onMounted(loadConfig)
     </div>
 
     <BaseCard v-if="!loading">
-      <h3 class="text-sm font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-        <i class="fa-regular fa-file-lines text-brand-600"></i>
-        Factura Electrónica AFIP / ARCA
-      </h3>
-
-      <div class="space-y-4 max-w-lg">
-        <BaseSelect v-model="config.afip_mode" label="Entorno">
-          <option value="testing">Testing (Homologación)</option>
-          <option value="production">Producción</option>
-        </BaseSelect>
-
-        <BaseInput v-model="config.afip_cuit" label="CUIT" placeholder="20123456789" maxlength="11" hint="11 dígitos sin guiones" />
-
-        <BaseInput v-model="config.afip_pto_vta" label="Punto de Venta" placeholder="1" maxlength="4" hint="Número habilitado en AFIP" />
-
-        <div class="border-t border-slate-200 dark:border-slate-700 pt-4 mt-4">
-          <p class="text-xs text-slate-500 dark:text-slate-400 mb-3">
-            <i class="fa-solid fa-shield-halved text-green-500 mr-1"></i>
-            Certificado: <span v-if="certInfo" class="text-green-600 font-medium">
-              {{ certInfo.subject }} — válido hasta {{ certInfo.valido_hasta }} ({{ certInfo.dias_restantes }} días)
+      <button class="w-full text-left" @click="afipExpanded = !afipExpanded">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <i class="fa-regular fa-file-lines text-brand-600"></i>
+            Factura Electrónica AFIP / ARCA
+          </h3>
+          <div class="flex items-center gap-3">
+            <span v-if="certInfo" class="text-xs text-green-600 dark:text-green-400">
+              <i class="fa-solid fa-check-circle mr-1"></i>{{ certInfo.subject }} — {{ certInfo.valido_hasta }}
             </span>
-            <span v-else class="text-amber-500">No configurado</span>
+            <span v-else class="text-xs text-amber-500">
+              <i class="fa-solid fa-circle-xmark mr-1"></i>No configurado
+            </span>
+            <i :class="['fa-solid fa-chevron-down text-xs transition-transform', afipExpanded ? 'rotate-180' : '']"></i>
+          </div>
+        </div>
+      </button>
+
+      <div v-if="afipExpanded" class="mt-4 space-y-4">
+        <div class="space-y-4 max-w-lg">
+          <BaseSelect v-model="config.afip_mode" label="Entorno">
+            <option value="testing">Testing (Homologación)</option>
+            <option value="production">Producción</option>
+          </BaseSelect>
+
+          <BaseInput v-model="config.afip_cuit" label="CUIT" placeholder="20123456789" maxlength="11" hint="11 dígitos sin guiones" />
+
+          <BaseInput v-model="config.afip_pto_vta" label="Punto de Venta" placeholder="1" maxlength="4" hint="Número habilitado en AFIP" />
+
+          <div class="flex items-center gap-3 pt-2">
+            <BaseButton variant="primary" :loading="saving" @click="saveConfig">
+              <i class="fa-solid fa-floppy-disk"></i> Guardar
+            </BaseButton>
+            <p class="text-[11px] text-slate-400">Los cambios se aplican inmediatamente</p>
+          </div>
+        </div>
+
+        <hr class="border-slate-200 dark:border-slate-700" />
+
+        <div v-if="!csrGenerado">
+          <p class="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">Clave RSA y CSR</p>
+          <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded p-3 mb-3">
+            <p class="text-xs text-amber-700 dark:text-amber-300">
+              <i class="fa-solid fa-triangle-exclamation mr-1"></i>
+              <strong>Importante:</strong> Al generar se descarga la clave privada automáticamente. Guardala en lugar seguro. Si la perdés, revocá el certificado en AFIP y generá uno nuevo.
+            </p>
+          </div>
+          <div class="flex gap-3 flex-wrap">
+            <BaseButton variant="secondary" :loading="generando" @click="generarCsr">
+              <i class="fa-solid fa-wand-magic-sparkles"></i> Generar CSR
+            </BaseButton>
+            <label class="cursor-pointer inline-flex items-center gap-2 px-4 py-2 border border-slate-300 dark:border-slate-600 rounded text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800">
+              <i class="fa-solid fa-upload"></i> Cargar CSR existente
+              <input type="file" accept=".csr,.pem,.txt" class="hidden" @change="cargarCsrDesdeArchivo" />
+            </label>
+          </div>
+        </div>
+
+        <div v-if="csrGenerado">
+          <div class="flex items-start justify-between mb-2">
+            <p class="text-xs font-semibold text-slate-700 dark:text-slate-300">CSR</p>
+            <button class="text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 underline" @click="csrGenerado = false">
+              Generar nuevo
+            </button>
+          </div>
+          <p class="text-[11px] text-slate-500 dark:text-slate-400 mb-2">
+            Descargá el CSR y subilo a ARCA. Cuando te devuelvan el certificado .crt, cargalo abajo o pegalo.
           </p>
+          <div class="bg-slate-100 dark:bg-slate-800 rounded p-3 mb-3">
+            <pre class="text-[10px] text-slate-600 dark:text-slate-300 whitespace-pre-wrap break-all font-mono">{{ displayCsr() }}</pre>
+          </div>
+          <div class="flex gap-2 mb-4">
+            <BaseButton variant="secondary" @click="copiarCsr">
+              <i class="fa-regular fa-copy"></i> Copiar
+            </BaseButton>
+            <BaseButton variant="secondary" @click="descargarCsr">
+              <i class="fa-solid fa-download"></i> Descargar .csr
+            </BaseButton>
+          </div>
+
+          <hr class="border-slate-200 dark:border-slate-700 mb-4" />
+
+          <p class="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">Certificado de ARCA</p>
+          <div class="flex items-center gap-3 mb-3">
+            <label class="cursor-pointer inline-flex items-center gap-2 px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800">
+              <i class="fa-solid fa-upload"></i> Cargar .crt desde archivo
+              <input type="file" accept=".crt,.pem,.txt" class="hidden" @change="cargarCertDesdeArchivo" />
+            </label>
+          </div>
+          <textarea
+            v-model="certUpload"
+            class="w-full border border-slate-300 dark:border-slate-600 rounded px-3 py-2 text-xs font-mono bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+            rows="5"
+            placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
+          />
+          <div class="mt-3">
+            <BaseButton variant="primary" :loading="subiendo" @click="subirCertificado">
+              <i class="fa-solid fa-floppy-disk"></i> Guardar Certificado
+            </BaseButton>
+          </div>
         </div>
-
-        <div class="flex items-center gap-3 pt-2">
-          <BaseButton variant="primary" :loading="saving" @click="saveConfig">
-            <i class="fa-solid fa-floppy-disk"></i> Guardar
-          </BaseButton>
-          <p class="text-[11px] text-slate-400">Los cambios se aplican inmediatamente</p>
-        </div>
-      </div>
-    </BaseCard>
-
-    <BaseCard v-if="!loading && !csrGenerado">
-      <h3 class="text-sm font-bold text-slate-900 dark:text-white mb-2 flex items-center gap-2">
-        <i class="fa-solid fa-key text-brand-600"></i>
-        Generar clave y CSR desde el sistema
-      </h3>
-      <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
-        El sistema genera la clave privada RSA y el CSR. Descargá el CSR, subilo a ARCA, y cuando te den el certificado .crt, volvé acá y pegalo.
-      </p>
-
-      <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded p-3 mb-4">
-        <p class="text-xs text-amber-700 dark:text-amber-300">
-          <i class="fa-solid fa-triangle-exclamation mr-1"></i>
-          <strong>Importante:</strong> Al generar la clave privada se descargará automáticamente. Guardala en un lugar seguro. Si la perdés, debés revocar el certificado en AFIP y generar uno nuevo.
-        </p>
-      </div>
-
-      <BaseButton variant="secondary" :loading="generando" @click="generarCsr">
-        <i class="fa-solid fa-wand-magic-sparkles"></i> Generar CSR
-      </BaseButton>
-    </BaseCard>
-
-    <BaseCard v-if="!loading && csrGenerado">
-      <h3 class="text-sm font-bold text-slate-900 dark:text-white mb-2 flex items-center gap-2">
-        <i class="fa-solid fa-file-signature text-brand-600"></i>
-        CSR generado — Paso 3 de la guía
-      </h3>
-      <p class="text-xs text-slate-500 dark:text-slate-400 mb-3">
-        Descargá el CSR y subilo a ARCA. Cuando te devuelvan el certificado .crt, pegalo abajo.
-      </p>
-
-      <div class="bg-slate-100 dark:bg-slate-800 rounded p-3 mb-3">
-        <pre class="text-[10px] text-slate-600 dark:text-slate-300 whitespace-pre-wrap break-all font-mono">{{ csrContent }}</pre>
-      </div>
-
-      <div class="flex gap-2 mb-4">
-        <BaseButton variant="secondary" @click="copiarCsr">
-          <i class="fa-regular fa-copy"></i> Copiar CSR
-        </BaseButton>
-        <BaseButton variant="secondary" @click="descargarCsr">
-          <i class="fa-solid fa-download"></i> Descargar .csr
-        </BaseButton>
-      </div>
-
-      <hr class="border-slate-200 dark:border-slate-700 mb-4" />
-
-      <h4 class="text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">Subir certificado de ARCA</h4>
-      <p class="text-[11px] text-slate-500 dark:text-slate-400 mb-3">
-        Pegá acá el contenido del archivo <code>.crt</code> que te generó ARCA:
-      </p>
-      <textarea
-        v-model="certUpload"
-        class="w-full border border-slate-300 dark:border-slate-600 rounded px-3 py-2 text-xs font-mono bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-        rows="5"
-        placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
-      />
-      <div class="mt-3">
-        <BaseButton variant="primary" :loading="subiendo" @click="subirCertificado">
-          <i class="fa-solid fa-upload"></i> Guardar Certificado
-        </BaseButton>
       </div>
     </BaseCard>
 
@@ -252,8 +317,8 @@ onMounted(loadConfig)
 
       <div v-if="showGuide" class="mt-4 text-xs text-slate-600 dark:text-slate-400 space-y-4">
         <div>
-          <p class="font-semibold text-slate-700 dark:text-slate-300 mb-1">Paso 1: Generar CSR desde el sistema</p>
-          <p>Click en el botón <strong>"Generar CSR"</strong> más arriba. Se descargará automáticamente la clave privada RSA. Guardala muy bien.</p>
+          <p class="font-semibold text-slate-700 dark:text-slate-300 mb-1">Paso 1: Generar CSR</p>
+          <p>Expandí la sección <strong>"Factura Electrónica AFIP / ARCA"</strong> arriba, completá CUIT y Pto. Venta, guardá, y click en <strong>"Generar CSR"</strong>. Se descarga automáticamente la clave privada RSA — guardala muy bien.</p>
         </div>
         <div>
           <p class="font-semibold text-slate-700 dark:text-slate-300 mb-1">Paso 2: Subir CSR a ARCA</p>
@@ -268,7 +333,7 @@ onMounted(loadConfig)
         </div>
         <div>
           <p class="font-semibold text-slate-700 dark:text-slate-300 mb-1">Paso 3: Volver al sistema</p>
-          <p>Subir el archivo <code>.crt</code> en el campo de arriba. El sistema queda listo para facturar.</p>
+          <p>En la misma sección expandida, cargá o pegá el <code>.crt</code> y guardá. El sistema queda listo para facturar.</p>
         </div>
         <div class="border-t border-slate-200 dark:border-slate-700 pt-2">
           <p class="text-[10px] text-slate-400"><i class="fa-solid fa-triangle-exclamation text-amber-500 mr-1"></i> Guardá la clave privada en un lugar seguro. Sin ella no se puede usar el certificado.</p>
@@ -277,12 +342,25 @@ onMounted(loadConfig)
     </BaseCard>
 
     <BaseCard v-if="!loading">
-      <h3 class="text-sm font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-        <i class="fa-solid fa-building-columns text-brand-600"></i>
-        Datos Bancarios para Transferencias
-      </h3>
+      <button class="w-full text-left" @click="bancariosExpanded = !bancariosExpanded">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <i class="fa-solid fa-building-columns text-brand-600"></i>
+            Datos Bancarios para Transferencias
+          </h3>
+          <div class="flex items-center gap-3">
+            <span v-if="config.banco_nombre" class="text-xs text-green-600 dark:text-green-400">
+              <i class="fa-solid fa-check-circle mr-1"></i>{{ config.banco_nombre }}
+            </span>
+            <span v-else class="text-xs text-amber-500">
+              <i class="fa-solid fa-circle-xmark mr-1"></i>No configurado
+            </span>
+            <i :class="['fa-solid fa-chevron-down text-xs transition-transform', bancariosExpanded ? 'rotate-180' : '']"></i>
+          </div>
+        </div>
+      </button>
 
-      <div class="space-y-4 max-w-lg">
+      <div v-if="bancariosExpanded" class="mt-4 space-y-4 max-w-lg">
         <BaseInput v-model="config.banco_nombre" label="Banco" placeholder="Banco Francés, Galicia, etc." />
 
         <BaseInput v-model="config.banco_titular" label="Titular" placeholder="Nombre completo del titular" />

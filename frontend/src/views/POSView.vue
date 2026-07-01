@@ -526,6 +526,20 @@
             size="sm"
           />
 
+          <div class="flex items-center gap-2">
+            <BaseInput
+              v-model="cart.comprador_cuit"
+              label="CUIT/CUIL comprador"
+              placeholder="XX-XXXXXXXX-X"
+              size="sm"
+              class="flex-1"
+            />
+            <p v-if="cart.comprador_cuit" class="text-[10px] text-green-600 dark:text-green-400 mt-5">
+              <i class="fa-solid fa-check-circle mr-0.5"></i>
+              Factura con datos
+            </p>
+          </div>
+
           <BaseButton
             variant="primary"
             block
@@ -639,6 +653,23 @@
                     @click="viewSaleInfo(t)"
                   >
                     <i class="fa-solid fa-eye text-[10px]"></i>
+                  </button>
+                  <button
+                    v-if="!facturaEmitida[t.id]"
+                    class="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition"
+                    :class="emitiendoFactura[t.id] ? 'cursor-wait' : ''"
+                    title="Emitir Factura"
+                    :disabled="emitiendoFactura[t.id]"
+                    @click="emitirFactura(t)"
+                  >
+                    <i :class="emitiendoFactura[t.id] ? 'fa-solid fa-circle-notch fa-spin text-[10px]' : 'fa-solid fa-file-invoice text-[10px]'"></i>
+                  </button>
+                  <button
+                    v-else
+                    class="w-6 h-6 rounded flex items-center justify-center text-emerald-500 cursor-default"
+                    title="Factura emitida"
+                  >
+                    <i class="fa-solid fa-check-circle text-[10px]"></i>
                   </button>
                   <button
                     class="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition"
@@ -923,14 +954,15 @@ const mediosPago = [
   { value: 'cta_corriente', label: 'Cta. Cte.', icon: 'fa-file-invoice-dollar' }
 ]
 
-const cart = reactive({
-  items: [],
-  subtotal: 0,
-  total: 0,
-  descuento: 0,
-  medio_pago: 'efectivo',
-  cliente_id: ''
-})
+ const cart = reactive({
+   items: [],
+   subtotal: 0,
+   total: 0,
+   descuento: 0,
+   medio_pago: 'efectivo',
+   cliente_id: '',
+   comprador_cuit: ''
+ })
 
 const stats = reactive({
   ventas_hoy: 84500,
@@ -1551,7 +1583,8 @@ async function confirmarVenta() {
       const confirmResp = await api.put(`/api/ventas/${ventaId}/confirmar`, {
         medio_pago: cart.medio_pago,
         descuento: cart.descuento || 0,
-        cliente_id: cart.cliente_id || undefined
+        cliente_id: cart.cliente_id || undefined,
+        comprador_cuit: cart.comprador_cuit || undefined
       })
       if (confirmResp && confirmResp.total) {
         ventaTotal = confirmResp.total

@@ -20,7 +20,7 @@ async function fetchFacturas() {
   loading.value = true
   try {
     const data = await api.get('/api/facturacion/facturas')
-    facturas.value = data.data || []
+    facturas.value = data || []
   } catch (e) {
     toast.error('Error al cargar facturas')
   }
@@ -155,7 +155,7 @@ onMounted(fetchFacturas)
         </div>
         <div class="flex items-center gap-2">
           <i class="fa-solid fa-circle text-emerald-500"></i>
-          <span class="text-slate-600 dark:text-slate-300">Integración AFIP (pyafipws) lista</span>
+          <span class="text-slate-600 dark:text-slate-300">Integración AFIP (zeep SOAP) lista</span>
         </div>
         <p class="text-xs text-slate-400 mt-2">Para emitir facturas, configurá AFIP en Ajustes y luego usá el botón "Emitir Factura" en cada venta confirmada.</p>
       </div>

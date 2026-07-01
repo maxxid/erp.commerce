@@ -162,7 +162,7 @@ def _emitir_factura_zeep(db: Session, fe: FacturaElectronica, venta: Venta, tipo
     fecha = venta.fecha.strftime("%Y%m%d") if venta.fecha else datetime.now().strftime("%Y%m%d")
 
     tipo_doc = _map_tipo_doc(venta.cliente.tipo_documento if venta.cliente else None)
-    nro_doc = venta.cliente.numero_documento if venta.cliente and venta.cliente.numero_documento else "0"
+    nro_doc = venta.comprador_cuit or (venta.cliente.numero_documento if venta.cliente and venta.cliente.numero_documento else "0")
 
     iva_id = 5 if tipo_cbte == 1 else 10
 
@@ -252,7 +252,7 @@ def emitir_factura(db: Session, venta: Venta, afip_cuit: str = None) -> FacturaE
 
     tipo_cbte = 1 if _es_cliente_responsable_inscripto(cliente) else 10
     tipo_doc = _map_tipo_doc(cliente.tipo_documento if cliente else None)
-    nro_doc = cliente.numero_documento if cliente and cliente.numero_documento else "0"
+    nro_doc = venta.comprador_cuit or (cliente.numero_documento if cliente and cliente.numero_documento else "0")
 
     neto = round(venta.total / 1.21, 2)
     iva = round(venta.total - neto, 2)

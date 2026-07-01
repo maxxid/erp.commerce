@@ -31,6 +31,7 @@ class Venta(Base):
     medio_pago = Column(String(30), nullable=True, default="efectivo")
     estado = Column(String(20), nullable=False, default="pendiente")  # pendiente | confirmada | anulada
     notas = Column(Text, nullable=True)
+    comprador_cuit = Column(String(20), nullable=True)
 
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
