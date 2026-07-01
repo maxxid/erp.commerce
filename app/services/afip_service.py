@@ -62,6 +62,8 @@ def _dump_xml(obj, filename):
 def _autenticar_zeep(db: Session) -> tuple[str, str]:
     """Autentica contra WSAA usando OpenSSL para crear el CMS signed request."""
     global _token_cache
+    import logging
+    logger = logging.getLogger(__name__)
 
     now = datetime.utcnow()
     if _token_cache["token"] and _token_cache["expires"] and now < _token_cache["expires"]:
@@ -71,7 +73,6 @@ def _autenticar_zeep(db: Session) -> tuple[str, str]:
 
     import tempfile
     import subprocess
-    import uuid
     from requests import Session
 
     from app.services.afip_csr_service import _decrypt_key
@@ -87,6 +88,7 @@ def _autenticar_zeep(db: Session) -> tuple[str, str]:
         with tempfile.NamedTemporaryFile(mode='w', suffix='.crt', delete=False) as f:
             f.write(cert_val)
             cert_path = f.name
+        logger.info(f"Temp cert written to {cert_path}, size={len(cert_val)}")
     if not key_path and key_val:
         try:
             decrypted_key = _decrypt_key(key_val, _encryption_secret)
@@ -95,6 +97,13 @@ def _autenticar_zeep(db: Session) -> tuple[str, str]:
         with tempfile.NamedTemporaryFile(mode='w', suffix='.key', delete=False) as f:
             f.write(decrypted_key.decode())
             key_path = f.name
+        logger.info(f"Temp key written to {key_path}, size={len(decrypted_key)}")
+
+    result_verify = subprocess.run(
+        ['/usr/bin/openssl', 'x509', '-noout', '-in', cert_path],
+        capture_output=True, text=True
+    )
+    logger.info(f"openssl x509 verify cert: rc={result_verify.returncode}, stdout={result_verify.stdout.strip()}, stderr={result_verify.stderr.strip()[:200]}")
 
     if not cert_path:
         raise ValueError("AFIP certificado no configurado. Configurarlo en Ajustes > AFIP.")
