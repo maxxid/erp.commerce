@@ -40,7 +40,7 @@ def cambiar_estado(
     user: Usuario = Depends(require_role("admin")),
 ):
     """Cambia el estado de un evento: normal | descartado | fraude."""
-    evento = auditoria_service.cambiar_estado(db, evento_id, user.id, estado, nota)
-    if not evento:
+    resultado = auditoria_service.cambiar_estado(db, evento_id, user.id, estado, nota)
+    if not resultado or not resultado.get("actualizado"):
         raise HTTPException(status_code=404, detail="Evento no encontrado")
     return RespuestaData(message=f"Estado cambiado a {estado}")

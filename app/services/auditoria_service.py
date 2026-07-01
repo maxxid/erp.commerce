@@ -201,15 +201,14 @@ def listar_con_carritos_abandonados(
     return data, total
 
 
-def cambiar_estado(db: Session, evento_id: int, auditor_id: int, estado: str, nota: Optional[str] = None) -> Optional[Auditoria]:
-    """Cambia el estado de un evento de auditoría."""
+def cambiar_estado(db: Session, evento_id: int, auditor_id: int, estado: str, nota: Optional[str] = None) -> dict:
+    """Cambia el estado de un evento de auditoría. Retorna dict simple."""
     from app.models.auditoria import Auditoria
-    evento = db.query(Auditoria).filter(Auditoria.id == evento_id).first()
-    if not evento:
-        return None
-    evento.estado = estado
-    evento.auditado_por = auditor_id
-    evento.auditado_en = datetime.now(timezone.utc)
-    evento.nota = nota
+    resultado = db.query(Auditoria).filter(Auditoria.id == evento_id).update({
+        "estado": estado,
+        "auditado_por": auditor_id,
+        "auditado_en": datetime.now(timezone.utc),
+        "nota": nota,
+    })
     db.commit()
-    return evento
+    return {"id": evento_id, "actualizado": resultado > 0}
