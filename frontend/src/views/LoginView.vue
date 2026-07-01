@@ -115,7 +115,7 @@ function copyMachineId() {
         </div>
 
         <!-- Login Form -->
-        <div v-if="auth.licenseChecked && auth.hasLicense && auth.licenseValid" class="space-y-5">
+        <form v-if="auth.licenseChecked && auth.hasLicense && auth.licenseValid" class="space-y-5" @submit.prevent="doLogin()">
           <BaseInput
             v-model="auth.loginForm.username"
             label="Usuario"
@@ -138,7 +138,6 @@ function copyMachineId() {
               placeholder="••••••••"
               size="lg"
               autocomplete="current-password"
-              @enter="doLogin()"
             />
             <button
               type="button"
@@ -159,8 +158,8 @@ function copyMachineId() {
             variant="primary"
             block
             size="lg"
+            type="submit"
             :loading="auth.loggingIn"
-            @click="doLogin()"
           >
             <span>{{ auth.loggingIn ? 'Conectando...' : 'Conectar' }}</span>
             <i class="fa-solid" :class="auth.loggingIn ? 'fa-circle-notch fa-spin' : 'fa-arrow-right'"></i>
@@ -169,7 +168,7 @@ function copyMachineId() {
           <p class="text-center text-xs text-slate-400 dark:text-slate-500">
             Presioná <kbd class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono-data">Enter</kbd> para ingresar
           </p>
-        </div>
+        </form>
       </div>
     </Transition>
   </div>
