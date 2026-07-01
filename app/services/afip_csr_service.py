@@ -95,6 +95,7 @@ def generar_csr(db: Session, cuit: str, pto_vta: int, razon_social: str = "") ->
     _encryption_secret = "erp-afip-key-encryption-v1"
     encrypted_key = _encrypt_key(private_key_pem, _encryption_secret)
     set_config(db, "afip_key", encrypted_key, "Clave privada AFIP (encriptada)")
+    guardar_csr(db, csr_pem)
 
     return {
         "csr_pem": csr_pem.replace("\n", "\\n"),
@@ -146,6 +147,14 @@ def guardar_certificado(db: Session, cert_pem: str) -> dict:
         "dias_restantes": days_left,
         "mensaje": f"Certificado guardado. Válido hasta {expiry.strftime('%d/%m/%Y')} ({days_left} días).",
     }
+
+
+def guardar_csr(db: Session, csr_pem: str):
+    set_config(db, "afip_csr", csr_pem, "CSR AFIP generado (PEM)")
+
+
+def get_csr_guardado(db: Session) -> str | None:
+    return get_config(db, "afip_csr")
 
 
 def get_cert_info(db: Session) -> dict | None:

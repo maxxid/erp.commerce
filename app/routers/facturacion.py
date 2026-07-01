@@ -170,6 +170,18 @@ def certificado_info(
     return RespuestaData(data=info)
 
 
+@router.get("/afip/csr-guardado", response_model=RespuestaData)
+def csr_guardado(
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """Devuelve el CSR guardado en la DB, o None si no hay."""
+    csr = afip_csr_service.get_csr_guardado(db)
+    if not csr:
+        return RespuestaData(data=None)
+    return RespuestaData(data={"csr_pem": csr})
+
+
 class SubirCertificadoRequest(BaseModel):
     cert_pem: str
 
