@@ -246,10 +246,16 @@ onMounted(loadConfig)
 
       <div v-if="afipExpanded" class="mt-4 space-y-4">
         <div class="space-y-4 max-w-lg">
-          <BaseSelect v-model="config.afip_mode" label="Entorno">
-            <option value="testing">Testing (Homologación)</option>
-            <option value="production">Producción</option>
-          </BaseSelect>
+          <BaseSelect
+            v-model="config.afip_mode"
+            label="Entorno"
+            :options="[
+              { value: 'testing', label: 'Testing (Homologación)' },
+              { value: 'production', label: 'Producción' }
+            ]"
+            option-value="value"
+            option-label="label"
+          />
 
           <BaseInput v-model="config.afip_cuit" label="CUIT" placeholder="20123456789" maxlength="11" hint="11 dígitos sin guiones" />
 
