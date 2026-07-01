@@ -34,6 +34,7 @@ const mainLinks = [
 
 const adminLinks = [
   { to: '/backups', icon: 'fa-cloud-arrow-up', label: 'Respaldos', roles: ['admin', 'encargado'] },
+  { to: '/facturacion', icon: 'fa-file-invoice', label: 'Facturación', roles: ['admin', 'encargado'] },
   { to: '/usuarios', icon: 'fa-users-gear', label: 'Usuarios', roles: ['admin'] },
   { to: '/reportes', icon: 'fa-chart-line', label: 'Reportes', roles: ['admin', 'encargado'] },
   { to: '/licencias', icon: 'fa-key', label: 'Licencias', roles: ['admin'] },

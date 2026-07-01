@@ -22,6 +22,7 @@ const routes = [
   { path: '/licencias', name: 'licencias', component: () => import('@/views/LicenciasView.vue'), meta: { roles: ['admin'] } },
   { path: '/auditoria', name: 'auditoria', component: () => import('@/views/AuditoriaView.vue'), meta: { roles: ['admin'] } },
   { path: '/backups', name: 'backups', component: () => import('@/views/BackupsView.vue'), meta: { roles: ['admin', 'encargado'] } },
+  { path: '/facturacion', name: 'facturacion', component: () => import('@/views/FacturacionView.vue'), meta: { roles: ['admin', 'encargado'] } },
   { path: '/ajustes', name: 'ajustes', component: () => import('@/views/AjustesView.vue'), meta: { roles: ['admin'] } },
 ]
 
