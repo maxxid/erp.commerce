@@ -762,11 +762,13 @@ import QuickCreateModal from '@/components/pos/QuickCreateModal.vue'
 import { useSounds } from '@/composables/useSounds'
 import { useConfetti } from '@/composables/useConfetti'
 import { useHeldTickets } from '@/composables/useHeldTickets'
+import { useOfflineSales } from '@/composables/useOfflineSales'
 
 const auth = useAuthStore()
 const toast = useToastStore()
 const cajaStore = useCajaStore()
 const route = useRoute()
+const { addPendingSale, syncPendingSales } = useOfflineSales()
 const router = useRouter()
 const { playSale } = useSounds()
 const { firstSaleOfDay } = useConfetti()
@@ -983,6 +985,12 @@ onMounted(async () => {
   fetchPOSStats()
   fetchRecentTransactions()
   cajaStore.fetchEstado()
+  // Sync ventas offline pendientes
+  syncPendingSales().then(result => {
+    if (result.synced > 0) {
+      toast.success(`${result.synced} venta(s) sincronizada(s) exitosamente.`)
+    }
+  })
   // Auto-sync catálogo si pasó >1h desde última descarga
   const lastSync = localStorage.getItem('catalogo_last_sync')
   const hour = 60 * 60 * 1000
@@ -1542,7 +1550,23 @@ async function confirmarVenta() {
     }
   } catch (e) {
     if (!ventaResp) {
-      toast.success('Venta registrada (modo local)')
+      const saleData = {
+        cliente_id: cart.cliente_id || undefined,
+        items: cart.items.map(item => ({
+          producto_id: item.producto_id,
+          cantidad: item.cantidad,
+          precio_unitario: item._precio_neto || item.precio_unitario,
+          oferta_tipo: item.oferta?.tipo || null,
+          oferta_valor: item.oferta?.valor || null,
+          por_kilo: item.por_kilo || false,
+          peso: item.peso || null,
+        })),
+        medio_pago: cart.medio_pago,
+        descuento: cart.descuento || 0,
+      }
+      addPendingSale(saleData)
+      window.dispatchEvent(new Event('apex-pending-sales-updated'))
+      toast.warning('Sin conexión. Venta guardada para sincronizar después.')
       for (const item of cart.items) {
         const prod = products.value.find(p => p.id === item.producto_id)
         if (prod && !prod._pending) {
