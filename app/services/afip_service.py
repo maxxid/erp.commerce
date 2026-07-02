@@ -277,12 +277,17 @@ def _emitir_factura_zeep(db: DbSession, fe: FacturaElectronica, venta: Venta, ti
             decrypted_key = _decrypt_key(key_val, _encryption_secret)
         except Exception:
             decrypted_key = key_val.encode()
+        logger.info(f"DEBUG cert starts: {cert_val[:60]!r}")
+        logger.info(f"DEBUG key starts: {decrypted_key[:60]!r}")
         with tempfile.NamedTemporaryFile(mode='w', suffix='.crt', delete=False) as f:
             f.write(cert_val)
             cert_path = f.name
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.key', delete=False) as f:
-            f.write(decrypted_key.decode())
+        with tempfile.NamedTemporaryFile(mode='wb', suffix='.key', delete=False) as f:
+            f.write(decrypted_key)
             key_path = f.name
+        logger.info(f"DEBUG cert file: {cert_path}")
+        with open(cert_path) as f:
+            logger.info(f"DEBUG cert file content: {f.read()[:80]!r}")
 
     last_fe = db.query(FacturaElectronica).filter(
         FacturaElectronica.punto_venta == cfg["pto_vta"],
