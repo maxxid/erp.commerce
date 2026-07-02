@@ -286,29 +286,28 @@ def _emitir_factura_zeep(db: Session, fe: FacturaElectronica, venta: Venta, tipo
             f.write(decrypted_key.decode())
             key_path = f.name
 
-    import urllib.request
-    import ssl
+    import subprocess
     wsdl_url = _get_wsfe_wsdl(cfg["mode"])
     wsdl_local = "/tmp/wsfe_production.wsdl"
-    ctx = ssl._create_unverified_context()
-    ctx.check_hostname = False
-    ctx.set_ciphers('DEFAULT@SECLEVEL=0')
-    wsdl_req = urllib.request.Request(wsdl_url, headers={'User-Agent': 'Python'})
-    with urllib.request.urlopen(wsdl_req, context=ctx) as response:
-        with open(wsdl_local, 'wb') as f:
-            f.write(response.read())
+    try:
+        result = subprocess.run(
+            ['/usr/bin/curl', '-sk', '-o', wsdl_local, wsdl_url],
+            capture_output=True, text=True, check=True
+        )
+    except Exception as e:
+        logger.warning(f"Could not download WSDL with curl: {e}")
+        import urllib.request
+        import ssl
+        ctx = ssl._create_unverified_context()
+        ctx.set_ciphers('DEFAULT@SECLEVEL=0')
+        with urllib.request.urlopen(wsdl_url, context=ctx) as response:
+            with open(wsdl_local, 'wb') as f:
+                f.write(response.read())
 
     session = Session()
     if cert_path and key_path:
         session.cert = (cert_path, key_path)
     session.verify = False
-    from requests.adapters import HTTPAdapter
-    ctx2 = ssl._create_unverified_context()
-    ctx2.check_hostname = False
-    ctx2.set_ciphers('DEFAULT@SECLEVEL=0')
-    adapter = HTTPAdapter(ssl_context=ctx2)
-    session.mount('https://', adapter)
-    session.mount('http://', adapter)
     transport = Transport(session=session, timeout=30)
     client = Client(f"file://{wsdl_local}", transport=transport)
 
