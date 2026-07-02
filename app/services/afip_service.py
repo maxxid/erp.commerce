@@ -291,18 +291,11 @@ def _emitir_factura_zeep(db: Session, fe: FacturaElectronica, venta: Venta, tipo
     wsdl_local = "/tmp/wsfe_production.wsdl"
     try:
         result = subprocess.run(
-            ['/usr/bin/curl', '-sk', '-o', wsdl_local, wsdl_url],
+            ['/usr/bin/curl', '-skL', '--tlsv1.2', '-o', wsdl_local, wsdl_url],
             capture_output=True, text=True, check=True
         )
     except Exception as e:
         logger.warning(f"Could not download WSDL with curl: {e}")
-        import urllib.request
-        import ssl
-        ctx = ssl._create_unverified_context()
-        ctx.set_ciphers('DEFAULT@SECLEVEL=0')
-        with urllib.request.urlopen(wsdl_url, context=ctx) as response:
-            with open(wsdl_local, 'wb') as f:
-                f.write(response.read())
 
     session = Session()
     if cert_path and key_path:
@@ -343,11 +336,13 @@ def _emitir_factura_zeep(db: Session, fe: FacturaElectronica, venta: Venta, tipo
                 'CbteFch': fecha,
                 'ImpTotal': round(fe.total, 2),
                 'ImpTotConc': 0,
-                'ImpNeto': round(fe.neto, 2) if tipo_cbte != 10 else round(fe.total, 2),
-                'ImpIva': round(fe.iva, 2) if tipo_cbte != 10 else 0,
+                'ImpNeto': round(fe.neto, 2),
+                'ImpOpEx': 0,
                 'ImpTrib': 0,
+                'ImpIVA': round(fe.iva, 2),
                 'MonId': 'PES',
                 'MonCotiz': 1,
+                'CondicionIVAReceptorId': 5,
             }
         }]
     }
