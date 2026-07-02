@@ -289,7 +289,7 @@ def _emitir_factura_zeep(db: Session, fe: FacturaElectronica, venta: Venta, tipo
     session = Session()
     if cert_path and key_path:
         session.cert = (cert_path, key_path)
-    transport = Transport(session=session)
+    transport = Transport(session=session, verify=False)
     client = Client(wsdl=_get_wsfe_wsdl(cfg["mode"]), transport=transport)
 
     ultimo = _obtener_ultimo_comprobante(db, client, tipo_cbte, cfg)
