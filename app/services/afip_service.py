@@ -379,37 +379,39 @@ def _emitir_factura_zeep(db: DbSession, fe: FacturaElectronica, venta: Venta, ti
         raise RuntimeError(f"Error conectando a WSFE: {e}")
 
     root = ET.fromstring(soap_response)
-    ns = {'soap': 'http://schemas.xmlsoap.org/soap/envelope/', 'fev1': 'http://ar.gov.afip.dif.FEV1/'}
-    body = root.find('soap:Body', ns)
-    if body is None:
-        body = root.find('.//Body') or root
 
-    fecae_resp = body.find('.//FECAESolicitarResponse', ns) or body.find('.//fev1:FECAESolicitarResponse', ns)
+    def find_elem(parent, local_name):
+        return parent.find(f'.//{local_name}') or parent.find(f'.//*[local-name()="{local_name}"]')
 
+    def find_all(parent, local_name):
+        return parent.findall(f'.//{local_name}') or parent.findall(f'.//*[local-name()="{local_name}"]')
+
+    fecae_resp = find_elem(root, 'FECAESolicitarResponse')
     if fecae_resp is None:
+        body = find_elem(root, 'Body') or root
         errores = []
-        for err in body.findall('.//Errors') + body.findall('.//fev1:Errors'):
-            code = (err.find('Code') or err.find('fev1:Code') or err).text
-            msg = (err.find('Msg') or err.find('fev1:Msg') or err).text
+        for err in find_all(body, 'Errors'):
+            code = (err.find('Code') or err).text
+            msg = (err.find('Msg') or err).text
             errores.append(f"{code}: {msg}")
         raise RuntimeError(f"AFIP Fault: {'; '.join(errores)}")
 
-    result = fecae_resp.find('FECAESolicitarResult', ns) or fecae_resp.find('fev1:FECAESolicitarResult', ns)
+    result = find_elem(fecae_resp, 'FECAESolicitarResult')
     if result is None:
         raise RuntimeError(f"AFIP no retornó FECAESolicitarResult")
 
-    fe_cab = result.find('FeCabResp', ns) or result.find('fev1:FeCabResp', ns)
-    fe_det = result.find('FeDetResp', ns) or result.find('fev1:FeDetResp', ns)
+    fe_cab = find_elem(result, 'FeCabResp')
+    fe_det = find_elem(result, 'FeDetResp')
 
     if fe_det is not None:
-        det = fe_det.find('FECAEDetResponse', ns) or fe_det.find('fev1:FECAEDetResponse', ns)
+        det = find_elem(fe_det, 'FECAEDetResponse')
         if det is not None:
-            cae_el = det.find('CAE', ns) or det.find('fev1:CAE', ns)
+            cae_el = find_elem(det, 'CAE')
             fe.cae = cae_el.text if cae_el is not None else ''
-            cbte_desde = det.find('CbteDesde', ns) or det.find('fev1:CbteDesde', ns)
+            cbte_desde = find_elem(det, 'CbteDesde')
             if cbte_desde is not None:
                 fe.numero_fiscal = int(cbte_desde.text)
-            cae_fch = det.find('CAEFchVto', ns) or det.find('fev1:CAEFchVto', ns)
+            cae_fch = find_elem(det, 'CAEFchVto')
             if cae_fch is not None and cae_fch.text:
                 try:
                     fe.vencimiento_cae = datetime.strptime(cae_fch.text.strip(), "%Y%m%d")
@@ -417,25 +419,25 @@ def _emitir_factura_zeep(db: DbSession, fe: FacturaElectronica, venta: Venta, ti
                     pass
 
     if fe_cab is not None:
-        resultado = (fe_cab.find('Resultado', ns) or fe_cab.find('fev1:Resultado', ns) or fe_cab).text
+        resultado = (fe_cab.find('Resultado') or fe_cab.find('Result') or fe_cab).text
         fe.resultado = resultado or 'R'
         fe.estado = "emitida" if resultado == 'A' else "rechazada"
 
         if resultado != 'A':
             errores = []
-            for err in (result.find('Errors', ns) or result.find('fev1:Errors', ns) or []):
-                code = (err.find('Code') or err.find('fev1:Code') or err).text
-                msg = (err.find('Msg') or err.find('fev1:Msg') or err).text
+            for err in find_all(result, 'Errors'):
+                code = (err.find('Code') or err).text
+                msg = (err.find('Msg') or err).text
                 errores.append(f"{code}: {msg}")
             fe.error_message = "; ".join(errores) if errores else "Rechazada por AFIP"
 
     if fe.error_message and result is not None:
-        obs_list = result.find('Observaciones', ns) or result.find('fev1:Observaciones', ns)
+        obs_list = find_elem(result, 'Observaciones')
         if obs_list is not None:
             obs = []
-            for o in obs_list:
-                code = (o.find('Code') or o.find('fev1:Code') or o).text
-                msg = (o.find('Msg') or o.find('fev1:Msg') or o).text
+            for o in find_all(obs_list, 'Obs'):
+                code = (o.find('Code') or o).text
+                msg = (o.find('Msg') or o).text
                 obs.append(f"{code}: {msg}")
             fe.error_message += " | Obs: " + "; ".join(obs)
 
