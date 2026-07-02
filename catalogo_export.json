@@ -1,0 +1,59 @@
+{
+  "machine_id": "1eb4dec3ddca6243",
+  "fecha": "2026-06-28T19:17:18.292687+00:00",
+  "total_productos": 4,
+  "productos": [
+    {
+      "codigo_barras": "7791234567890",
+      "nombre": "Yerba Mate Playadito 1kg",
+      "marca": "Playadito",
+      "descripcion": "",
+      "precio_referencia": null,
+      "precio_venta": 3200.0,
+      "imagen_url": "",
+      "sku": "77912345",
+      "propiedades": null,
+      "fuente": "demo",
+      "categoria_nombre": "Almacén"
+    },
+    {
+      "codigo_barras": "7795555444333",
+      "nombre": "Aceite de Girasol Natura 1.5L",
+      "marca": "Natura",
+      "descripcion": "",
+      "precio_referencia": null,
+      "precio_venta": 3800.0,
+      "imagen_url": "",
+      "sku": "77955554",
+      "propiedades": null,
+      "fuente": "demo",
+      "categoria_nombre": "Almacén"
+    },
+    {
+      "codigo_barras": "7794001234567",
+      "nombre": "Arroz Gallo Oro 1kg",
+      "marca": "Gallo Oro",
+      "descripcion": "",
+      "precio_referencia": null,
+      "precio_venta": 1800.0,
+      "imagen_url": "",
+      "sku": "77940012",
+      "propiedades": null,
+      "fuente": "demo",
+      "categoria_nombre": "Almacén"
+    },
+    {
+      "codigo_barras": "7891191003740",
+      "nombre": "Resma A4 - 75gr",
+      "marca": "Report",
+      "descripcion": "",
+      "precio_referencia": null,
+      "precio_venta": 6000.0,
+      "imagen_url": "",
+      "sku": "",
+      "propiedades": null,
+      "fuente": "manual",
+      "categoria_nombre": "Perfumería"
+    }
+  ]
+}

@@ -27,10 +27,12 @@ const bancariosExpanded = ref(false)
 
 const config = ref({
   afip_mode: 'testing',
+  facturacion_provider: 's360',
   afip_cuit: '',
   afip_pto_vta: '1',
   afip_cert: '',
   afip_key: '',
+  facturacion_s360_token: '',
   banco_nombre: '',
   banco_titular: '',
   banco_alias: '',
@@ -80,11 +82,12 @@ async function loadCertInfo() {
   }
 }
 
-const AFIP_BASIC_KEYS = ['afip_mode', 'afip_cuit', 'afip_pto_vta']
+const AFIP_BASIC_KEYS = ['afip_mode', 'facturacion_provider', 'afip_cuit', 'afip_pto_vta']
 const BANCOS_KEYS = ['banco_nombre', 'banco_titular', 'banco_alias']
 
 const descs = {
   afip_mode: 'Entorno AFIP: testing | production',
+  facturacion_provider: 'Proveedor: s360 (recomendado) o afip (directo)',
   afip_cuit: 'CUIT del emisor (11 dígitos sin guiones)',
   afip_pto_vta: 'Número de punto de venta habilitado en AFIP',
   afip_cert: 'Certificado X.509 (.crt) en formato PEM',
@@ -287,6 +290,17 @@ onMounted(loadConfig)
             :options="[
               { value: 'testing', label: 'Testing (Homologación)' },
               { value: 'production', label: 'Producción' }
+            ]"
+            option-value="value"
+            option-label="label"
+          />
+
+          <BaseSelect
+            v-model="config.facturacion_provider"
+            label="Proveedor"
+            :options="[
+              { value: 's360', label: 'Sistemas360 (recomendado - sin certs)' },
+              { value: 'afip', label: 'AFIP directo (requiere cert de producción)' }
             ]"
             option-value="value"
             option-label="label"

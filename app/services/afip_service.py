@@ -21,7 +21,7 @@ import urllib.request, urllib.error
 from app.models.factura_electronica import FacturaElectronica
 from app.models.venta import Venta
 from app.models.cliente import Cliente
-from app.services.config_service import get_afip_config
+from app.services.config_service import get_afip_config, get_config
 
 logger = logging.getLogger(__name__)
 
@@ -471,6 +471,9 @@ def emitir_factura(db: DbSession, venta: Venta, afip_cuit: str = None) -> Factur
     cliente = db.query(Cliente).filter(Cliente.id == venta.cliente_id).first() if venta.cliente_id else None
     cfg = _get_afip_config(db)
 
+
+
+
     tipo_cbte = 1 if _es_cliente_responsable_inscripto(cliente) else 11
     tipo_doc = _map_tipo_doc(cliente.tipo_documento if cliente else None)
     nro_doc = venta.comprador_cuit or (cliente.numero_documento if cliente and cliente.numero_documento else "0")
@@ -492,6 +495,12 @@ def emitir_factura(db: DbSession, venta: Venta, afip_cuit: str = None) -> Factur
     )
     db.add(fe)
     db.flush()
+
+    # Toggle provider: s360 o afip
+    provider = get_config(db, "facturacion_provider") or "s360"
+    if provider == "s360":
+        from app.services.s360_service import emitir_factura_s360
+        return emitir_factura_s360(db, venta, fe)
 
     cert_val = cfg.get("cert", "") or os.getenv("AFIP_CERT", "")
     key_val = cfg.get("key", "") or os.getenv("AFIP_KEY", "")
