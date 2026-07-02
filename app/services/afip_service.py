@@ -192,6 +192,9 @@ def _autenticar_zeep(db: DbSession) -> tuple[str, str]:
         logger.info(f"WSAA response status: {response.status_code}")
         logger.info(f"WSAA response body (first 1500): {response.text[:1500]}")
         if response.status_code != 200:
+            if 'alreadyAuthenticated' in response.text or 'coe.alreadyAuthenticated' in response.text:
+                logger.info("WSAA ya autenticado, usando token cacheado")
+                return _token_cache["token"], _token_cache["sign"]
             raise RuntimeError(f"WSAA respondió {response.status_code}: {response.text[:500]}")
         soap_response = response.text.strip()
     except Exception as e:
