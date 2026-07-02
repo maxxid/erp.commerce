@@ -292,6 +292,7 @@ def _emitir_factura_zeep(db: Session, fe: FacturaElectronica, venta: Venta, tipo
     ssl_context = __import__('ssl').create_default_context()
     ssl_context.check_hostname = False
     ssl_context.verify_mode = __import__('ssl').CERT_NONE
+    ssl_context.set_ciphers('DEFAULT@SECLEVEL=0')
     wsdl_req = urllib.request.Request(wsdl_url, headers={'User-Agent': 'Python'})
     with urllib.request.urlopen(wsdl_req, context=ssl_context) as response:
         with open(wsdl_local, 'wb') as f:
@@ -301,8 +302,15 @@ def _emitir_factura_zeep(db: Session, fe: FacturaElectronica, venta: Venta, tipo
     if cert_path and key_path:
         session.cert = (cert_path, key_path)
     session.verify = False
-    transport = Transport(session=session)
+    transport = Transport(session=session, timeout=30)
     client = Client(f"file://{wsdl_local}", transport=transport)
+
+    ciphers = 'ECDHE+AESGCM:ECDHE+CHACHA20:DHE+AESGCM:DHE+CHACHA20:!aNULL:!MD5:!DSS'
+    try:
+        import urllib3
+        urllib3.util.ssl_.DEFAULT_CIPHERS = ciphers
+    except Exception:
+        pass
 
     ultimo = _obtener_ultimo_comprobante(db, client, tipo_cbte, cfg)
     numero_fiscal = (ultimo or 0) + 1
