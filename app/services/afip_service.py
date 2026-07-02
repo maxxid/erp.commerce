@@ -289,7 +289,6 @@ def _emitir_factura_zeep(db: DbSession, fe: FacturaElectronica, venta: Venta, ti
             f.write(decrypted_key)
             key_path = f.name
         logger.info(f"DEBUG cert_path={cert_path} cert_bytes={len(cert_bytes)}")
-        import subprocess
         r = subprocess.run(['openssl', 'x509', '-in', cert_path, '-noout', '-subject'],
                          capture_output=True, text=True)
         logger.info(f"DEBUG openssl x509: {r.stdout.strip() or r.stderr.strip()}")
