@@ -390,10 +390,17 @@ def _emitir_factura_zeep(db: DbSession, fe: FacturaElectronica, venta: Venta, ti
     root = ET.fromstring(soap_response)
 
     def find_elem(parent, local_name):
-        return parent.find(f'.//{local_name}') or parent.find(f'.//*[local-name()="{local_name}"]')
+        for elem in parent.iter():
+            if elem.tag == local_name or (elem.tag.endswith('}' + local_name) or '}' + local_name + '}' in elem.tag):
+                return elem
+        return None
 
     def find_all(parent, local_name):
-        return parent.findall(f'.//{local_name}') or parent.findall(f'.//*[local-name()="{local_name}"]')
+        results = []
+        for elem in parent.iter():
+            if elem.tag == local_name or (elem.tag.endswith('}' + local_name) or '}' + local_name + '}' in elem.tag):
+                results.append(elem)
+        return results
 
     fecae_resp = find_elem(root, 'FECAESolicitarResponse')
     if fecae_resp is None:
@@ -428,7 +435,8 @@ def _emitir_factura_zeep(db: DbSession, fe: FacturaElectronica, venta: Venta, ti
                     pass
 
     if fe_cab is not None:
-        resultado = (fe_cab.find('Resultado') or fe_cab.find('Result') or fe_cab).text
+        resultado = (find_elem(fe_cab, 'Resultado') or find_elem(fe_cab, 'Result'))
+        resultado = resultado.text if resultado is not None else None
         fe.resultado = resultado or 'R'
         fe.estado = "emitida" if resultado == 'A' else "rechazada"
 
