@@ -75,6 +75,7 @@ def generar_csr(db: Session, cuit: str, pto_vta: int, razon_social: str = "") ->
             x509.NameAttribute(NameOID.LOCALITY_NAME, "BUENOS AIRES"),
             x509.NameAttribute(NameOID.ORGANIZATION_NAME, razon_social or "Sin Nombre"),
             x509.NameAttribute(NameOID.COMMON_NAME, razon_social or "Sin Nombre"),
+            x509.NameAttribute(x509.oid.ObjectIdentifier("2.5.4.5"), f"CUIT {cuit}"),
         ])
     )
     csr_builder = csr_builder.add_extension(
