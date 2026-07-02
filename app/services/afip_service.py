@@ -173,7 +173,10 @@ def _autenticar_zeep(db: Session) -> tuple[str, str]:
         response = session.post(
             wsaa_url,
             data=cms_data,
-            headers={'Content-Type': 'application/octet-stream'},
+            headers={
+                'Content-Type': 'application/octet-stream',
+                'SOAPAction': 'loginCms'
+            },
             verify=True
         )
         logger.info(f"WSAA response status: {response.status_code}")
