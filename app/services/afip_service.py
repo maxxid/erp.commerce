@@ -320,6 +320,14 @@ def _emitir_factura_zeep(db: Session, fe: FacturaElectronica, venta: Venta, tipo
 
     iva_id = 5 if tipo_cbte == 1 else 10
 
+    iva_list = []
+    if tipo_cbte == 1:
+        iva_list.append({
+            'BaseImp': round(fe.neto, 2),
+            'Id': iva_id,
+            'Importe': round(fe.iva, 2),
+        })
+
     request = {
         'FeCabReq': {
             'CantReg': 1,
@@ -335,19 +343,17 @@ def _emitir_factura_zeep(db: Session, fe: FacturaElectronica, venta: Venta, tipo
                 'CbteFch': fecha,
                 'ImpTotal': round(fe.total, 2),
                 'ImpTotConc': 0,
-                'ImpNeto': round(fe.neto, 2),
-                'ImpIva': round(fe.iva, 2),
+                'ImpNeto': round(fe.neto, 2) if tipo_cbte != 10 else round(fe.total, 2),
+                'ImpIva': round(fe.iva, 2) if tipo_cbte != 10 else 0,
                 'ImpTrib': 0,
                 'MonId': 'PES',
                 'MonCotiz': 1,
-                'Iva': [{
-                    'BaseImp': round(fe.neto, 2),
-                    'Id': iva_id,
-                    'Importe': round(fe.iva, 2),
-                }],
             }
         }]
     }
+
+    if iva_list:
+        request['FeDetReq'][0]['FECAEDetRequest']['Iva'] = iva_list
 
     try:
         result = client.service.FECAESolicitar(
@@ -404,7 +410,7 @@ def emitir_factura(db: Session, venta: Venta, afip_cuit: str = None) -> FacturaE
     cliente = db.query(Cliente).filter(Cliente.id == venta.cliente_id).first() if venta.cliente_id else None
     cfg = _get_afip_config(db)
 
-    tipo_cbte = 1 if _es_cliente_responsable_inscripto(cliente) else 10
+    tipo_cbte = 1 if _es_cliente_responsable_inscripto(cliente) else 11
     tipo_doc = _map_tipo_doc(cliente.tipo_documento if cliente else None)
     nro_doc = venta.comprador_cuit or (cliente.numero_documento if cliente and cliente.numero_documento else "0")
 
