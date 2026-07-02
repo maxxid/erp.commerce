@@ -11,6 +11,7 @@ import os
 import base64
 import logging
 import tempfile
+import subprocess
 import requests
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -362,23 +363,35 @@ def _emitir_factura_zeep(db: DbSession, fe: FacturaElectronica, venta: Venta, ti
 </soapenv:Envelope>"""
 
     wsfe_url = _get_wsfe_url(cfg["mode"])
+    xml_path = f"/tmp/wsfev1_req_{os.getpid()}.xml"
+    resp_path = f"/tmp/wsfev1_resp_{os.getpid()}.xml"
+
+    with open(xml_path, 'w') as f:
+        f.write(fe_xml)
 
     try:
-        response = requests.post(
-            wsfe_url,
-            data=fe_xml.encode('utf-8'),
-            headers={'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': 'FECAESolicitar'},
-            cert=(cert_path, key_path),
-            verify=True,
-            timeout=30
+        result = subprocess.run(
+            ['curl', '-skL', '--tlsv1.0', '--sslv3',
+             '-E', f'{cert_path}', '--key', f'{key_path}',
+             '-X', 'POST', '-H', 'Content-Type: text/xml; charset=utf-8',
+             '-H', 'SOAPAction: FECAESolicitar',
+             '-d', f'@{xml_path}',
+             '-o', resp_path,
+             wsfe_url],
+            capture_output=True, text=True, check=True, timeout=30
         )
-        logger.info(f"WSFE response status: {response.status_code}")
-        response_text = response.text
-        logger.info(f"WSFE response (first 2000): {response_text[:2000]}")
+        with open(resp_path) as f:
+            soap_response = f.read()
+        logger.info(f"WSFE curl resp: {len(soap_response)} bytes")
+        logger.info(f"WSFE response (first 2000): {soap_response[:2000]}")
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"curl WSFE falló (rc={e.returncode}): {e.stderr[:500]}")
+    except FileNotFoundError:
+        raise RuntimeError("curl no disponible en este servidor")
     except Exception as e:
         raise RuntimeError(f"Error conectando a WSFE: {e}")
 
-    root = ET.fromstring(response_text)
+    root = ET.fromstring(soap_response)
     ns = {'soap': 'http://schemas.xmlsoap.org/soap/envelope/', 'fev1': 'http://ar.gov.afip.dif.FEV1/'}
     body = root.find('soap:Body', ns)
     if body is None:
