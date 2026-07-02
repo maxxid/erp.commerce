@@ -11,9 +11,10 @@ import os
 import base64
 import logging
 import tempfile
+import requests
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session as DbSession
 from urllib.request import urlretrieve
 
 from app.models.factura_electronica import FacturaElectronica
@@ -26,7 +27,7 @@ logger = logging.getLogger(__name__)
 _token_cache = {"token": None, "sign": None, "expires": None}
 
 
-def _get_afip_config(db: Session) -> dict:
+def _get_afip_config(db: DbSession) -> dict:
     return get_afip_config(db)
 
 
@@ -60,7 +61,7 @@ def _dump_xml(obj, filename):
         f.write(str(obj))
 
 
-def _autenticar_zeep(db: Session) -> tuple[str, str]:
+def _autenticar_zeep(db: DbSession) -> tuple[str, str]:
     """Autentica contra WSAA usando OpenSSL para crear el CMS signed request."""
     global _token_cache
     import logging
@@ -74,7 +75,6 @@ def _autenticar_zeep(db: Session) -> tuple[str, str]:
 
     import tempfile
     import subprocess
-    from requests import Session
 
     from app.services.afip_csr_service import _decrypt_key
     _encryption_secret = "erp-afip-key-encryption-v1"
@@ -175,7 +175,7 @@ def _autenticar_zeep(db: Session) -> tuple[str, str]:
   </SOAP-ENV:Body>
 </SOAP-ENV:Envelope>"""
 
-    session = Session()
+    session = requests.Session()
     session.cert = (cert_path, key_path)
 
     try:
@@ -243,7 +243,7 @@ def _es_cliente_responsable_inscripto(cliente: Optional[Cliente]) -> bool:
     )
 
 
-def _obtener_ultimo_comprobante(db: Session, wsfe_client, tipo_cbte: int, cfg: dict) -> int:
+def _obtener_ultimo_comprobante(db: DbSession, wsfe_client, tipo_cbte: int, cfg: dict) -> int:
     """Obtiene el último número de comprobante autorizado."""
     try:
         result = wsfe_client.service.FECompUltimoAuthorize(
@@ -258,7 +258,7 @@ def _obtener_ultimo_comprobante(db: Session, wsfe_client, tipo_cbte: int, cfg: d
         return 0
 
 
-def _emitir_factura_zeep(db: Session, fe: FacturaElectronica, venta: Venta, tipo_cbte: int, cfg: dict):
+def _emitir_factura_zeep(db: DbSession, fe: FacturaElectronica, venta: Venta, tipo_cbte: int, cfg: dict):
     """Emite la factura usando SOAP manual con requests (sin zeep/WSDL)."""
     from app.services.afip_csr_service import _decrypt_key
     global _encryption_secret
@@ -344,7 +344,7 @@ def _emitir_factura_zeep(db: Session, fe: FacturaElectronica, venta: Venta, tipo
   </soapenv:Body>
 </soapenv:Envelope>"""
 
-    session = Session()
+    session = requests.Session()
     if cert_path and key_path:
         session.cert = (cert_path, key_path)
     session.verify = False
@@ -429,7 +429,7 @@ def _emitir_factura_zeep(db: Session, fe: FacturaElectronica, venta: Venta, tipo
     logger.info(f"FE #{fe.id}: resultado={fe.resultado} CAE={fe.cae}")
 
 
-def emitir_factura(db: Session, venta: Venta, afip_cuit: str = None) -> FacturaElectronica:
+def emitir_factura(db: DbSession, venta: Venta, afip_cuit: str = None) -> FacturaElectronica:
     """Emite Factura Electrónica ante AFIP para una venta confirmada."""
     cliente = db.query(Cliente).filter(Cliente.id == venta.cliente_id).first() if venta.cliente_id else None
     cfg = _get_afip_config(db)
