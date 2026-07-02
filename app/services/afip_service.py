@@ -214,9 +214,15 @@ def _autenticar_zeep(db: DbSession) -> tuple[str, str]:
         token = inner_root.find('.//token').text if inner_root.find('.//token') is not None else ''
         sign = inner_root.find('.//sign').text if inner_root.find('.//sign') is not None else ''
     except Exception as e:
+        if 'alreadyAuthenticated' in soap_response or 'coe.alreadyAuthenticated' in soap_response:
+            logger.info("WSAA ya autenticado, usando token cacheado")
+            return _token_cache["token"], _token_cache["sign"]
         raise RuntimeError(f"Error parseando login ticket: {e}\nRespuesta: {soap_response[:500]}")
 
     if not token or not sign:
+        if 'alreadyAuthenticated' in soap_response or 'coe.alreadyAuthenticated' in soap_response:
+            logger.info("WSAA ya autenticado, usando token cacheado")
+            return _token_cache["token"], _token_cache["sign"]
         raise RuntimeError(f"WSAA no retornó token/sign completos. token={bool(token)}, sign={bool(sign)}")
 
     os.unlink(tra_path)
