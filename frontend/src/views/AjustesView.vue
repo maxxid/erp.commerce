@@ -20,6 +20,8 @@ const certInfo = ref(null)
 const certUpload = ref('')
 const showGuide = ref(false)
 const certContent = ref('')
+const keyUpload = ref('')
+const pemUpload = ref('')
 const afipExpanded = ref(false)
 const bancariosExpanded = ref(false)
 
@@ -206,6 +208,39 @@ function cargarCertDesdeArchivo(event) {
   reader.readAsText(file)
 }
 
+function cargarKeyDesdeArchivo(event) {
+  const file = event.target.files[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = async (e) => {
+    keyUpload.value = e.target.result
+    try {
+      await api.post('/api/facturacion/afip/subir-key', { key_pem: e.target.result })
+      toast.success('Clave privada .key guardada')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Error al guardar clave')
+    }
+  }
+  reader.readAsText(file)
+}
+
+function cargarPemDesdeArchivo(event) {
+  const file = event.target.files[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = async (e) => {
+    pemUpload.value = e.target.result
+    try {
+      await api.post('/api/facturacion/afip/subir-pem', { contenido: e.target.result })
+      toast.success('Archivo .pem guardado')
+      await loadCertInfo()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Error al guardar .pem')
+    }
+  }
+  reader.readAsText(file)
+}
+
 function copiarCsr() {
   navigator.clipboard.writeText(csrContent.value.replace(/\\n/g, '\n'))
   toast.success('CSR copiado al portapapeles')
@@ -329,8 +364,20 @@ onMounted(loadConfig)
           <p class="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">Certificado de ARCA</p>
           <div class="flex items-center gap-3 mb-3">
             <label class="cursor-pointer inline-flex items-center gap-2 px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800">
-              <i class="fa-solid fa-upload"></i> Cargar .crt desde archivo
+              <i class="fa-solid fa-upload"></i> Cargar .crt
               <input type="file" accept=".crt,.pem,.txt" class="hidden" @change="cargarCertDesdeArchivo" />
+            </label>
+            <label class="cursor-pointer inline-flex items-center gap-2 px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800">
+              <i class="fa-solid fa-key"></i> Cargar .key
+              <input type="file" accept=".key,.pem,.txt" class="hidden" @change="cargarKeyDesdeArchivo" />
+            </label>
+            <label class="cursor-pointer inline-flex items-center gap-2 px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800">
+              <i class="fa-solid fa-file-code"></i> Cargar .pem
+              <input type="file" accept=".pem,.txt" class="hidden" @change="cargarPemDesdeArchivo" />
+            </label>
+            <label class="cursor-pointer inline-flex items-center gap-2 px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800">
+              <i class="fa-solid fa-file-lines"></i> Cargar .csr
+              <input type="file" accept=".csr,.pem,.txt" class="hidden" @change="cargarCsrDesdeArchivo" />
             </label>
           </div>
           <textarea

@@ -206,6 +206,14 @@ class SubirCertificadoRequest(BaseModel):
     cert_pem: str
 
 
+class SubirKeyRequest(BaseModel):
+    key_pem: str
+
+
+class SubirPemRequest(BaseModel):
+    contenido: str
+
+
 class CargarCsrRequest(BaseModel):
     csr_pem: str
 
@@ -219,7 +227,37 @@ def cargar_csr(
     """Guarda un CSR cargado desde archivo (para persistencia entre refrescos)."""
     afip_csr_service.guardar_csr(db, data.csr_pem)
     return RespuestaData(message="CSR guardado correctamente")
-    cert_pem: str
+
+
+@router.post("/afip/subir-key", response_model=RespuestaData)
+def subir_key(
+    data: SubirKeyRequest,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin")),
+):
+    """Guarda la clave privada .key en la configuracion."""
+    from app.services.config_service import set_config
+    set_config(db, "afip_key", data.key_pem, "Clave privada AFIP (PEM)")
+    return RespuestaData(message="Clave privada guardada correctamente")
+
+
+@router.post("/afip/subir-pem", response_model=RespuestaData)
+def subir_pem(
+    data: SubirPemRequest,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin")),
+):
+    """Guarda contenido .pem (certificado o clave) en la configuracion."""
+    from app.services.config_service import set_config
+    contenido = data.contenido
+    if "CERTIFICATE" in contenido:
+        set_config(db, "afip_cert", contenido, "Certificado AFIP (PEM)")
+        return RespuestaData(message="Certificado PEM guardado correctamente")
+    elif "PRIVATE KEY" in contenido or "RSA PRIVATE KEY" in contenido:
+        set_config(db, "afip_key", contenido, "Clave privada AFIP (PEM)")
+        return RespuestaData(message="Clave privada PEM guardada correctamente")
+    else:
+        raise HTTPException(status_code=400, detail="El archivo PEM no parece ser un certificado ni una clave privada")
 
 
 @router.post("/afip/subir-certificado", response_model=RespuestaData)
