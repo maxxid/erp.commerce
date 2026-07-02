@@ -290,11 +290,9 @@ def _emitir_factura_zeep(db: Session, fe: FacturaElectronica, venta: Venta, tipo
     import ssl
     wsdl_url = _get_wsfe_wsdl(cfg["mode"])
     wsdl_local = "/tmp/wsfe_production.wsdl"
-    ctx = ssl.create_default_context()
+    ctx = ssl._create_unverified_context()
     ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
     ctx.set_ciphers('DEFAULT@SECLEVEL=0')
-    ctx.options |= ssl.OP_LEGACY_SERVER_CONNECT
     wsdl_req = urllib.request.Request(wsdl_url, headers={'User-Agent': 'Python'})
     with urllib.request.urlopen(wsdl_req, context=ctx) as response:
         with open(wsdl_local, 'wb') as f:
@@ -304,14 +302,11 @@ def _emitir_factura_zeep(db: Session, fe: FacturaElectronica, venta: Venta, tipo
     if cert_path and key_path:
         session.cert = (cert_path, key_path)
     session.verify = False
-    import ssl
     from requests.adapters import HTTPAdapter
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-    ctx.set_ciphers('DEFAULT@SECLEVEL=0')
-    ctx.options |= ssl.OP_LEGACY_SERVER_CONNECT
-    adapter = HTTPAdapter(ssl_context=ctx)
+    ctx2 = ssl._create_unverified_context()
+    ctx2.check_hostname = False
+    ctx2.set_ciphers('DEFAULT@SECLEVEL=0')
+    adapter = HTTPAdapter(ssl_context=ctx2)
     session.mount('https://', adapter)
     session.mount('http://', adapter)
     transport = Transport(session=session, timeout=30)
