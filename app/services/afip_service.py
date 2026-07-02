@@ -287,14 +287,16 @@ def _emitir_factura_zeep(db: Session, fe: FacturaElectronica, venta: Venta, tipo
             key_path = f.name
 
     import urllib.request
+    import ssl
     wsdl_url = _get_wsfe_wsdl(cfg["mode"])
     wsdl_local = "/tmp/wsfe_production.wsdl"
-    ssl_context = __import__('ssl').create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = __import__('ssl').CERT_NONE
-    ssl_context.set_ciphers('DEFAULT@SECLEVEL=0')
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    ctx.set_ciphers('DEFAULT@SECLEVEL=0')
+    ctx.options |= ssl.OP_LEGACY_SERVER_CONNECT
     wsdl_req = urllib.request.Request(wsdl_url, headers={'User-Agent': 'Python'})
-    with urllib.request.urlopen(wsdl_req, context=ssl_context) as response:
+    with urllib.request.urlopen(wsdl_req, context=ctx) as response:
         with open(wsdl_local, 'wb') as f:
             f.write(response.read())
 
@@ -303,21 +305,17 @@ def _emitir_factura_zeep(db: Session, fe: FacturaElectronica, venta: Venta, tipo
         session.cert = (cert_path, key_path)
     session.verify = False
     import ssl
+    from requests.adapters import HTTPAdapter
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
     ctx.set_ciphers('DEFAULT@SECLEVEL=0')
     ctx.options |= ssl.OP_LEGACY_SERVER_CONNECT
-    session._sslcontext = ctx
+    adapter = HTTPAdapter(ssl_context=ctx)
+    session.mount('https://', adapter)
+    session.mount('http://', adapter)
     transport = Transport(session=session, timeout=30)
     client = Client(f"file://{wsdl_local}", transport=transport)
-
-    ciphers = 'ECDHE+AESGCM:ECDHE+CHACHA20:DHE+AESGCM:DHE+CHACHA20:!aNULL:!MD5:!DSS'
-    try:
-        import urllib3
-        urllib3.util.ssl_.DEFAULT_CIPHERS = ciphers
-    except Exception:
-        pass
 
     ultimo = _obtener_ultimo_comprobante(db, client, tipo_cbte, cfg)
     numero_fiscal = (ultimo or 0) + 1
