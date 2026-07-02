@@ -286,20 +286,23 @@ def _emitir_factura_zeep(db: Session, fe: FacturaElectronica, venta: Venta, tipo
             f.write(decrypted_key.decode())
             key_path = f.name
 
-    import subprocess
     import os
+    import ssl
+    import urllib.request
     wsdl_url = _get_wsfe_wsdl(cfg["mode"])
-    wsdl_local = "/tmp/wsfe_production.wsdl"
+    wsdl_local = "/tmp/wsfev1.wsdl"
     if os.path.exists(wsdl_local):
         os.unlink(wsdl_local)
+    ctx = ssl._create_unverified_context()
+    ctx.set_ciphers('DEFAULT@SECLEVEL=0')
     try:
-        result = subprocess.run(
-            ['/usr/bin/curl', '-skL', '--tlsv1.0', '--sslv3', '-o', wsdl_local, wsdl_url],
-            capture_output=True, text=True, check=True
-        )
-        logger.info(f"WSDL download rc={result.returncode}")
+        with urllib.request.urlopen(wsdl_url, context=ctx, timeout=15) as resp:
+            with open(wsdl_local, 'wb') as f:
+                f.write(resp.read())
+        logger.info(f"WSDL downloaded: {os.path.getsize(wsdl_local)} bytes")
     except Exception as e:
-        logger.warning(f"Could not download WSDL with curl: {e}")
+        logger.error(f"WSDL download failed: {e}")
+        raise
 
     session = Session()
     if cert_path and key_path:
