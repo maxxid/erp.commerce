@@ -391,26 +391,29 @@ def _emitir_factura_zeep(db: DbSession, fe: FacturaElectronica, venta: Venta, ti
 
     def find_elem(parent, local_name):
         for elem in parent.iter():
-            if elem.tag == local_name or (elem.tag.endswith('}' + local_name) or '}' + local_name + '}' in elem.tag):
+            if elem.tag == local_name or elem.tag.endswith('}' + local_name):
                 return elem
         return None
 
     def find_all(parent, local_name):
         results = []
         for elem in parent.iter():
-            if elem.tag == local_name or (elem.tag.endswith('}' + local_name) or '}' + local_name + '}' in elem.tag):
+            if elem.tag == local_name or elem.tag.endswith('}' + local_name):
                 results.append(elem)
         return results
 
     fecae_resp = find_elem(root, 'FECAESolicitarResponse')
     if fecae_resp is None:
+        logger.error(f"WSFE response (no FECAESolicitarResponse): {soap_response[:3000]}")
         body = find_elem(root, 'Body') or root
         errores = []
         for err in find_all(body, 'Errors'):
             code = (err.find('Code') or err).text
             msg = (err.find('Msg') or err).text
             errores.append(f"{code}: {msg}")
-        raise RuntimeError(f"AFIP Fault: {'; '.join(errores)}")
+        for elem in body.iter():
+            logger.info(f"Body elem tag: {elem.tag}, text: {str(elem.text)[:100] if elem.text else ''}")
+        raise RuntimeError(f"AFIP Fault: {'; '.join(errores) if errores else 'ver logs'}")
 
     result = find_elem(fecae_resp, 'FECAESolicitarResult')
     if result is None:
