@@ -302,6 +302,13 @@ def _emitir_factura_zeep(db: Session, fe: FacturaElectronica, venta: Venta, tipo
     if cert_path and key_path:
         session.cert = (cert_path, key_path)
     session.verify = False
+    import ssl
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    ctx.set_ciphers('DEFAULT@SECLEVEL=0')
+    ctx.options |= ssl.OP_LEGACY_SERVER_CONNECT
+    session._sslcontext = ctx
     transport = Transport(session=session, timeout=30)
     client = Client(f"file://{wsdl_local}", transport=transport)
 
