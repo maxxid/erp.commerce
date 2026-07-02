@@ -259,12 +259,10 @@ def _obtener_ultimo_comprobante(db: Session, wsfe_client, tipo_cbte: int, cfg: d
 
 
 def _emitir_factura_zeep(db: Session, fe: FacturaElectronica, venta: Venta, tipo_cbte: int, cfg: dict):
-    """Emite la factura usando zeep directamente."""
-    from zeep import Client
-    from zeep.transports import Transport
-    from requests import Session
+    """Emite la factura usando SOAP manual con requests (sin zeep/WSDL)."""
     from app.services.afip_csr_service import _decrypt_key
     global _encryption_secret
+    import xml.etree.ElementTree as ET
 
     token, sign = _autenticar_zeep(db)
 
@@ -286,121 +284,145 @@ def _emitir_factura_zeep(db: Session, fe: FacturaElectronica, venta: Venta, tipo
             f.write(decrypted_key.decode())
             key_path = f.name
 
-    import os
-    import ssl
-    import urllib.request
-    wsdl_url = _get_wsfe_wsdl(cfg["mode"])
-    wsdl_local = "/tmp/wsfev1.wsdl"
-    if os.path.exists(wsdl_local):
-        os.unlink(wsdl_local)
-    ctx = ssl._create_unverified_context()
-    ctx.set_ciphers('DEFAULT@SECLEVEL=0')
-    try:
-        with urllib.request.urlopen(wsdl_url, context=ctx, timeout=15) as resp:
-            with open(wsdl_local, 'wb') as f:
-                f.write(resp.read())
-        logger.info(f"WSDL downloaded: {os.path.getsize(wsdl_local)} bytes")
-    except Exception as e:
-        logger.error(f"WSDL download failed: {e}")
-        raise
+    last_fe = db.query(FacturaElectronica).filter(
+        FacturaElectronica.punto_venta == cfg["pto_vta"],
+        FacturaElectronica.tipo == str(tipo_cbte),
+        FacturaElectronica.resultado == 'A'
+    ).order_by(FacturaElectronica.numero_fiscal.desc()).first()
+
+    numero_fiscal = (last_fe.numero_fiscal + 1) if last_fe and last_fe.numero_fiscal else 1
+    fecha = venta.fecha.strftime("%Y%m%d") if venta.fecha else datetime.now().strftime("%Y%m%d")
+    tipo_doc = _map_tipo_doc(venta.cliente.tipo_documento if venta.cliente else None)
+    nro_doc = venta.comprador_cuit or (venta.cliente.numero_documento if venta.cliente and venta.cliente.numero_documento else "0")
+    iva_id = 5 if tipo_cbte == 1 else 10
+
+    iva_xml = ""
+    if tipo_cbte == 1:
+        iva_xml = f"""<Iva>
+          <AlicIva>
+            <BaseImp>{round(fe.neto, 2)}</BaseImp>
+            <Id>{iva_id}</Id>
+            <Importe>{round(fe.iva, 2)}</Importe>
+          </AlicIva>
+        </Iva>"""
+
+    fe_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:fev1="http://ar.gov.afip.dif.FEV1/">
+  <soapenv:Body>
+    <fev1:FECAESolicitar>
+      <fev1:Auth>
+        <fev1:Token>{token}</fev1:Token>
+        <fev1:Sign>{sign}</fev1:Sign>
+        <fev1:Cuit>{cfg["cuit"]}</fev1:Cuit>
+      </fev1:Auth>
+      <fev1:FeCAEReq>
+        <fev1:FeCabReq>
+          <fev1:CantReg>1</fev1:CantReg>
+          <fev1:PtoVta>{cfg["pto_vta"]}</fev1:PtoVta>
+          <fev1:CbteTipo>{tipo_cbte}</fev1:CbteTipo>
+        </fev1:FeCabReq>
+        <fev1:FeDetReq>
+          <fev1:FECAEDetRequest>
+            <fev1:DocNro>{nro_doc}</fev1:DocNro>
+            <fev1:DocTipo>{tipo_doc}</fev1:DocTipo>
+            <fev1:CbteDesde>{numero_fiscal}</fev1:CbteDesde>
+            <fev1:CbteHasta>{numero_fiscal}</fev1:CbteHasta>
+            <fev1:CbteFch>{fecha}</fev1:CbteFch>
+            <fev1:ImpTotal>{round(fe.total, 2)}</fev1:ImpTotal>
+            <fev1:ImpTotConc>0</fev1:ImpTotConc>
+            <fev1:ImpNeto>{round(fe.neto, 2)}</fev1:ImpNeto>
+            <fev1:ImpOpEx>0</fev1:ImpOpEx>
+            <fev1:ImpTrib>0</fev1:ImpTrib>
+            <fev1:ImpIVA>{round(fe.iva, 2)}</fev1:ImpIVA>
+            <fev1:MonId>PES</fev1:MonId>
+            <fev1:MonCotiz>1</fev1:MonCotiz>
+            {iva_xml}
+          </fev1:FECAEDetRequest>
+        </fev1:FeDetReq>
+      </fev1:FeCAEReq>
+    </fev1:FECAESolicitar>
+  </soapenv:Body>
+</soapenv:Envelope>"""
 
     session = Session()
     if cert_path and key_path:
         session.cert = (cert_path, key_path)
     session.verify = False
-    transport = Transport(session=session, timeout=30)
-    client = Client(f"file://{wsdl_local}", transport=transport)
-
-    ultimo = _obtener_ultimo_comprobante(db, client, tipo_cbte, cfg)
-    numero_fiscal = (ultimo or 0) + 1
-    fecha = venta.fecha.strftime("%Y%m%d") if venta.fecha else datetime.now().strftime("%Y%m%d")
-
-    tipo_doc = _map_tipo_doc(venta.cliente.tipo_documento if venta.cliente else None)
-    nro_doc = venta.comprador_cuit or (venta.cliente.numero_documento if venta.cliente and venta.cliente.numero_documento else "0")
-
-    iva_id = 5 if tipo_cbte == 1 else 10
-
-    iva_list = []
-    if tipo_cbte == 1:
-        iva_list.append({
-            'BaseImp': round(fe.neto, 2),
-            'Id': iva_id,
-            'Importe': round(fe.iva, 2),
-        })
-
-    request = {
-        'FeCabReq': {
-            'CantReg': 1,
-            'PtoVta': cfg["pto_vta"],
-            'CbteTipo': tipo_cbte,
-        },
-        'FeDetReq': [{
-            'FECAEDetRequest': {
-                'DocNro': nro_doc,
-                'DocTipo': tipo_doc,
-                'CbteDesde': numero_fiscal,
-                'CbteHasta': numero_fiscal,
-                'CbteFch': fecha,
-                'ImpTotal': round(fe.total, 2),
-                'ImpTotConc': 0,
-                'ImpNeto': round(fe.neto, 2),
-                'ImpOpEx': 0,
-                'ImpTrib': 0,
-                'ImpIVA': round(fe.iva, 2),
-                'MonId': 'PES',
-                'MonCotiz': 1,
-                'CondicionIVAReceptorId': 5,
-            }
-        }]
-    }
-
-    if iva_list:
-        request['FeDetReq'][0]['FECAEDetRequest']['Iva'] = iva_list
+    wsfe_url = _get_wsfe_url(cfg["mode"])
 
     try:
-        result = client.service.FECAESolicitar(
-            Auth={'Token': token, 'Sign': sign, 'Cuit': cfg["cuit"]},
-            FeCAEReq=request
+        response = session.post(
+            wsfe_url,
+            data=fe_xml.encode('utf-8'),
+            headers={'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': 'FECAESolicitar'},
+            verify=False,
+            timeout=30
         )
+        logger.info(f"WSFE response status: {response.status_code}")
+        logger.info(f"WSFE response (first 2000): {response.text[:2000]}")
     except Exception as e:
-        raise RuntimeError(f"Error en FECAESolicitar: {e}")
+        raise RuntimeError(f"Error conectando a WSFE: {e}")
 
-    if hasattr(result, 'FeDetResp') and result.FeDetResp:
-        det = result.FeDetResp[0].FECAEDetResponse
-        fe.cae = str(det.get('CAE', ''))
-        fe.numero_fiscal = det.get('CbteDesde', numero_fiscal)
-        if hasattr(det, 'CAEFchVto') and det.CAEFchVto:
-            try:
-                fe.vencimiento_cae = datetime.strptime(str(det.CAEFchVto), "%Y%m%d")
-            except:
-                pass
+    root = ET.fromstring(response.text)
+    ns = {'soap': 'http://schemas.xmlsoap.org/soap/envelope/', 'fev1': 'http://ar.gov.afip.dif.FEV1/'}
+    body = root.find('soap:Body', ns)
+    if body is None:
+        body = root.find('.//Body') or root
 
-    if hasattr(result, 'FeCabResp'):
-        cab = result.FeCabResp
-        fe.resultado = cab.get('Resultado', 'R')
-        fe.estado = "emitida" if cab.get('Resultado') == 'A' else "rechazada"
+    fecae_resp = body.find('.//FECAESolicitarResponse', ns) or body.find('.//fev1:FECAESolicitarResponse', ns)
 
-        if cab.get('Resultado') != 'A':
+    if fecae_resp is None:
+        errores = []
+        for err in body.findall('.//Errors') + body.findall('.//fev1:Errors'):
+            code = (err.find('Code') or err.find('fev1:Code') or err).text
+            msg = (err.find('Msg') or err.find('fev1:Msg') or err).text
+            errores.append(f"{code}: {msg}")
+        raise RuntimeError(f"AFIP Fault: {'; '.join(errores)}")
+
+    result = fecae_resp.find('FECAESolicitarResult', ns) or fecae_resp.find('fev1:FECAESolicitarResult', ns)
+    if result is None:
+        raise RuntimeError(f"AFIP no retornó FECAESolicitarResult")
+
+    fe_cab = result.find('FeCabResp', ns) or result.find('fev1:FeCabResp', ns)
+    fe_det = result.find('FeDetResp', ns) or result.find('fev1:FeDetResp', ns)
+
+    if fe_det is not None:
+        det = fe_det.find('FECAEDetResponse', ns) or fe_det.find('fev1:FECAEDetResponse', ns)
+        if det is not None:
+            cae_el = det.find('CAE', ns) or det.find('fev1:CAE', ns)
+            fe.cae = cae_el.text if cae_el is not None else ''
+            cbte_desde = det.find('CbteDesde', ns) or det.find('fev1:CbteDesde', ns)
+            if cbte_desde is not None:
+                fe.numero_fiscal = int(cbte_desde.text)
+            cae_fch = det.find('CAEFchVto', ns) or det.find('fev1:CAEFchVto', ns)
+            if cae_fch is not None and cae_fch.text:
+                try:
+                    fe.vencimiento_cae = datetime.strptime(cae_fch.text.strip(), "%Y%m%d")
+                except:
+                    pass
+
+    if fe_cab is not None:
+        resultado = (fe_cab.find('Resultado', ns) or fe_cab.find('fev1:Resultado', ns) or fe_cab).text
+        fe.resultado = resultado or 'R'
+        fe.estado = "emitida" if resultado == 'A' else "rechazada"
+
+        if resultado != 'A':
             errores = []
-            if hasattr(result, 'Errors') and result.Errors:
-                for err in result.Errors:
-                    if hasattr(err, 'Code') and hasattr(err, 'Msg'):
-                        errores.append(f"{err.Code}: {err.Msg}")
+            for err in (result.find('Errors', ns) or result.find('fev1:Errors', ns) or []):
+                code = (err.find('Code') or err.find('fev1:Code') or err).text
+                msg = (err.find('Msg') or err.find('fev1:Msg') or err).text
+                errores.append(f"{code}: {msg}")
             fe.error_message = "; ".join(errores) if errores else "Rechazada por AFIP"
-    else:
-        fe.resultado = 'R'
-        fe.estado = 'rechazada'
-        fe.error_message = "AFIP no retornó respuesta válida"
 
-    if hasattr(result, 'Observaciones') and result.Observaciones:
-        obs = []
-        for o in result.Observaciones:
-            if hasattr(o, 'Code') and hasattr(o, 'Msg'):
-                obs.append(f"{o.Code}: {o.Msg}")
-        if fe.error_message:
-            fe.error_message += " | Observaciones: " + "; ".join(obs)
-        else:
-            fe.error_message = "; ".join(obs)
+    if fe.error_message and result is not None:
+        obs_list = result.find('Observaciones', ns) or result.find('fev1:Observaciones', ns)
+        if obs_list is not None:
+            obs = []
+            for o in obs_list:
+                code = (o.find('Code') or o.find('fev1:Code') or o).text
+                msg = (o.find('Msg') or o.find('fev1:Msg') or o).text
+                obs.append(f"{code}: {msg}")
+            fe.error_message += " | Obs: " + "; ".join(obs)
 
     fe.emitted_at = datetime.utcnow()
     db.commit()
