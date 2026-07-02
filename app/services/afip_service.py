@@ -287,13 +287,17 @@ def _emitir_factura_zeep(db: Session, fe: FacturaElectronica, venta: Venta, tipo
             key_path = f.name
 
     import subprocess
+    import os
     wsdl_url = _get_wsfe_wsdl(cfg["mode"])
     wsdl_local = "/tmp/wsfe_production.wsdl"
+    if os.path.exists(wsdl_local):
+        os.unlink(wsdl_local)
     try:
         result = subprocess.run(
-            ['/usr/bin/curl', '-skL', '--tlsv1.2', '-o', wsdl_local, wsdl_url],
+            ['/usr/bin/curl', '-skL', '--tlsv1.0', '--sslv3', '-o', wsdl_local, wsdl_url],
             capture_output=True, text=True, check=True
         )
+        logger.info(f"WSDL download rc={result.returncode}")
     except Exception as e:
         logger.warning(f"Could not download WSDL with curl: {e}")
 
