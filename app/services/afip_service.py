@@ -369,7 +369,7 @@ def _emitir_factura_zeep(db: DbSession, fe: FacturaElectronica, venta: Venta, ti
             data=fe_xml.encode('utf-8'),
             headers={'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': 'FECAESolicitar'},
             cert=(cert_path, key_path),
-            verify=False,
+            verify=True,
             timeout=30
         )
         logger.info(f"WSFE response status: {response.status_code}")
