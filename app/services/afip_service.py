@@ -166,15 +166,24 @@ def _autenticar_zeep(db: Session) -> tuple[str, str]:
 
     wsaa_url = _get_wsaa_url(cfg["mode"])
 
+    soap_envelope = f"""<?xml version="1.0" encoding="UTF-8"?>
+<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="http://wsaa.view.sua.dvadac.desein.afip.gov">
+  <SOAP-ENV:Body>
+    <ns1:loginCms>
+      <ns1:in0>{base64.b64encode(cms_data).decode()}</ns1:in0>
+    </ns1:loginCms>
+  </SOAP-ENV:Body>
+</SOAP-ENV:Envelope>"""
+
     session = Session()
     session.cert = (cert_path, key_path)
 
     try:
         response = session.post(
             wsaa_url,
-            data=cms_data,
+            data=soap_envelope.encode('utf-8'),
             headers={
-                'Content-Type': 'application/octet-stream',
+                'Content-Type': 'text/xml; charset=utf-8',
                 'SOAPAction': 'loginCms'
             },
             verify=True
