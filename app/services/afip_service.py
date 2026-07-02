@@ -15,7 +15,7 @@ import requests
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from sqlalchemy.orm import Session as DbSession
-from urllib.request import urlretrieve
+import urllib.request, urllib.error
 
 from app.models.factura_electronica import FacturaElectronica
 from app.models.venta import Venta
@@ -344,26 +344,33 @@ def _emitir_factura_zeep(db: DbSession, fe: FacturaElectronica, venta: Venta, ti
   </soapenv:Body>
 </soapenv:Envelope>"""
 
-    session = requests.Session()
+    import ssl
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    ctx.set_ciphers('DEFAULT@SECLEVEL=0')
     if cert_path and key_path:
-        session.cert = (cert_path, key_path)
-    session.verify = False
+        ctx.load_cert_chain(cert_path, key_path)
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
     wsfe_url = _get_wsfe_url(cfg["mode"])
 
     try:
-        response = session.post(
+        req = urllib.request.Request(
             wsfe_url,
             data=fe_xml.encode('utf-8'),
             headers={'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': 'FECAESolicitar'},
-            verify=False,
-            timeout=30
+            method='POST'
         )
-        logger.info(f"WSFE response status: {response.status_code}")
-        logger.info(f"WSFE response (first 2000): {response.text[:2000]}")
+        with urllib.request.urlopen(req, context=ctx, timeout=30) as resp:
+            response_text = resp.read().decode('utf-8')
+        logger.info(f"WSFE response (first 2000): {response_text[:2000]}")
+    except urllib.error.HTTPError as e:
+        response_text = e.read().decode('utf-8') if e.fp else ''
+        logger.error(f"WSFE HTTP error {e.code}: {response_text[:2000]}")
+        raise RuntimeError(f"WSFE HTTP {e.code}: {response_text[:500]}")
     except Exception as e:
         raise RuntimeError(f"Error conectando a WSFE: {e}")
 
-    root = ET.fromstring(response.text)
+    root = ET.fromstring(response_text)
     ns = {'soap': 'http://schemas.xmlsoap.org/soap/envelope/', 'fev1': 'http://ar.gov.afip.dif.FEV1/'}
     body = root.find('soap:Body', ns)
     if body is None:
