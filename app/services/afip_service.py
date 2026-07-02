@@ -286,12 +286,23 @@ def _emitir_factura_zeep(db: Session, fe: FacturaElectronica, venta: Venta, tipo
             f.write(decrypted_key.decode())
             key_path = f.name
 
+    import urllib.request
+    wsdl_url = _get_wsfe_wsdl(cfg["mode"])
+    wsdl_local = "/tmp/wsfe_production.wsdl"
+    ssl_context = __import__('ssl').create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = __import__('ssl').CERT_NONE
+    wsdl_req = urllib.request.Request(wsdl_url, headers={'User-Agent': 'Python'})
+    with urllib.request.urlopen(wsdl_req, context=ssl_context) as response:
+        with open(wsdl_local, 'wb') as f:
+            f.write(response.read())
+
     session = Session()
-    session.verify = False
     if cert_path and key_path:
         session.cert = (cert_path, key_path)
+    session.verify = False
     transport = Transport(session=session)
-    client = Client(wsdl=_get_wsfe_wsdl(cfg["mode"]), transport=transport)
+    client = Client(f"file://{wsdl_local}", transport=transport)
 
     ultimo = _obtener_ultimo_comprobante(db, client, tipo_cbte, cfg)
     numero_fiscal = (ultimo or 0) + 1
