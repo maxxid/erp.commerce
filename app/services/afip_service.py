@@ -275,8 +275,11 @@ def _emitir_factura_zeep(db: DbSession, fe: FacturaElectronica, venta: Venta, ti
     if not cert_path and cert_val:
         try:
             decrypted_key = _decrypt_key(key_val, _encryption_secret)
-        except Exception:
+            decrypted_key_str = decrypted_key.decode('utf-8')
+        except Exception as exc:
+            logger.warning(f"Key decryption failed ({exc}), trying raw key")
             decrypted_key = key_val.encode()
+            decrypted_key_str = key_val
         cert_bytes = cert_val.encode('utf-8') if isinstance(cert_val, str) else cert_val
         with tempfile.NamedTemporaryFile(mode='wb', suffix='.crt', delete=False) as f:
             f.write(cert_bytes)
@@ -291,7 +294,12 @@ def _emitir_factura_zeep(db: DbSession, fe: FacturaElectronica, venta: Venta, ti
         logger.info(f"DEBUG openssl x509: {r.stdout.strip() or r.stderr.strip()}")
         r2 = subprocess.run(['openssl', 'rsa', '-in', key_path, '-check', '-noout'],
                           capture_output=True, text=True)
-        logger.info(f"DEBUG openssl rsa: {r2.returncode} {r2.stderr.strip()}")
+        logger.info(f"DEBUG openssl rsa check: rc={r2.returncode} {r2.stderr.strip()}")
+        if r2.returncode != 0:
+            r3 = subprocess.run(['openssl', 'rsa', '-in', key_path, '-noout'],
+                              capture_output=True, text=True)
+            logger.warning(f"DEBUG openssl rsa (without check): rc={r3.returncode} {r3.stderr.strip()}")
+            raise RuntimeError(f"Private key inválido para SSL: {r2.stderr.strip() or r3.stderr.strip()}")
 
     last_fe = db.query(FacturaElectronica).filter(
         FacturaElectronica.punto_venta == cfg["pto_vta"],
