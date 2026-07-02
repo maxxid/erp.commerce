@@ -277,17 +277,21 @@ def _emitir_factura_zeep(db: DbSession, fe: FacturaElectronica, venta: Venta, ti
             decrypted_key = _decrypt_key(key_val, _encryption_secret)
         except Exception:
             decrypted_key = key_val.encode()
-        logger.info(f"DEBUG cert starts: {cert_val[:60]!r}")
-        logger.info(f"DEBUG key starts: {decrypted_key[:60]!r}")
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.crt', delete=False) as f:
-            f.write(cert_val)
+        cert_bytes = cert_val.encode('utf-8') if isinstance(cert_val, str) else cert_val
+        with tempfile.NamedTemporaryFile(mode='wb', suffix='.crt', delete=False) as f:
+            f.write(cert_bytes)
             cert_path = f.name
         with tempfile.NamedTemporaryFile(mode='wb', suffix='.key', delete=False) as f:
             f.write(decrypted_key)
             key_path = f.name
-        logger.info(f"DEBUG cert file: {cert_path}")
-        with open(cert_path) as f:
-            logger.info(f"DEBUG cert file content: {f.read()[:80]!r}")
+        logger.info(f"DEBUG cert_path={cert_path} cert_bytes={len(cert_bytes)}")
+        import subprocess
+        r = subprocess.run(['openssl', 'x509', '-in', cert_path, '-noout', '-subject'],
+                         capture_output=True, text=True)
+        logger.info(f"DEBUG openssl x509: {r.stdout.strip() or r.stderr.strip()}")
+        r2 = subprocess.run(['openssl', 'rsa', '-in', key_path, '-check', '-noout'],
+                          capture_output=True, text=True)
+        logger.info(f"DEBUG openssl rsa: {r2.returncode} {r2.stderr.strip()}")
 
     last_fe = db.query(FacturaElectronica).filter(
         FacturaElectronica.punto_venta == cfg["pto_vta"],
