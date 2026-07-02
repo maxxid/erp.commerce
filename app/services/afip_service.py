@@ -376,7 +376,7 @@ def _emitir_factura_zeep(db: DbSession, fe: FacturaElectronica, venta: Venta, ti
         response = requests.post(
             wsfe_url,
             data=fe_xml.encode('utf-8'),
-            headers={'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': 'FECAESolicitar'},
+            headers={'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': ''},
             cert=(cert_path, key_path),
             verify=True,
             timeout=30
