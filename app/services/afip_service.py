@@ -189,20 +189,31 @@ def _autenticar_zeep(db: Session) -> tuple[str, str]:
             verify=True
         )
         logger.info(f"WSAA response status: {response.status_code}")
-        logger.info(f"WSAA response body (first 1000): {response.text[:1000]}")
+        logger.info(f"WSAA response body (first 1500): {response.text[:1500]}")
         if response.status_code != 200:
             raise RuntimeError(f"WSAA respondió {response.status_code}: {response.text[:500]}")
-        login_ticket = response.text.strip()
+        soap_response = response.text.strip()
     except Exception as e:
         raise RuntimeError(f"Error conectando a WSAA: {e}")
 
     import xml.etree.ElementTree as ET
+    import html
     try:
-        root = ET.fromstring(login_ticket)
-        token = root.find('.//token').text
-        sign = root.find('.//sign').text
+        root = ET.fromstring(soap_response)
+        ns = {'wsaa': 'http://wsaa.view.sua.dvadac.desein.afip.gov'}
+        login_cms_return = root.find('.//wsaa:loginCmsReturn', ns)
+        if login_cms_return is None:
+            login_cms_return = root.find('.//loginCmsReturn')
+        if login_cms_return is None:
+            login_cms_return = root.find('.//{http://wsaa.view.sua.dvadac.desein.afip.gov}loginCmsReturn')
+        inner_xml = login_cms_return.text if login_cms_return is not None else ''
+        inner_xml = html.unescape(inner_xml)
+        logger.info(f"Inner XML (first 500): {inner_xml[:500]}")
+        inner_root = ET.fromstring(inner_xml)
+        token = inner_root.find('.//token').text if inner_root.find('.//token') is not None else ''
+        sign = inner_root.find('.//sign').text if inner_root.find('.//sign') is not None else ''
     except Exception as e:
-        raise RuntimeError(f"Error parseando login ticket: {e}\nRespuesta: {login_ticket[:500]}")
+        raise RuntimeError(f"Error parseando login ticket: {e}\nRespuesta: {soap_response[:500]}")
 
     if not token or not sign:
         raise RuntimeError(f"WSAA no retornó token/sign completos. token={bool(token)}, sign={bool(sign)}")
