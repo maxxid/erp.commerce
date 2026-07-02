@@ -263,12 +263,32 @@ def _emitir_factura_zeep(db: Session, fe: FacturaElectronica, venta: Venta, tipo
     from zeep import Client
     from zeep.transports import Transport
     from requests import Session
+    from app.services.afip_csr_service import _decrypt_key
+    global _encryption_secret
 
     token, sign = _autenticar_zeep(db)
 
+    cert_val = cfg.get("cert", "") or os.getenv("AFIP_CERT", "")
+    key_val = cfg.get("key", "") or os.getenv("AFIP_KEY", "")
+
+    cert_path = cert_val if os.path.exists(cert_val) else None
+    key_path = key_val if os.path.exists(key_val) else None
+
+    if not cert_path and cert_val:
+        try:
+            decrypted_key = _decrypt_key(key_val, _encryption_secret)
+        except Exception:
+            decrypted_key = key_val.encode()
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.crt', delete=False) as f:
+            f.write(cert_val)
+            cert_path = f.name
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.key', delete=False) as f:
+            f.write(decrypted_key.decode())
+            key_path = f.name
+
     session = Session()
-    if cfg.get("cert") and os.path.exists(cfg["cert"]):
-        session.cert = cfg["cert"]
+    if cert_path and key_path:
+        session.cert = (cert_path, key_path)
     transport = Transport(session=session)
     client = Client(wsdl=_get_wsfe_wsdl(cfg["mode"]), transport=transport)
 
