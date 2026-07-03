@@ -24,6 +24,7 @@ const keyUpload = ref('')
 const pemUpload = ref('')
 const afipExpanded = ref(false)
 const bancariosExpanded = ref(false)
+const mercadopagoExpanded = ref(false)
 
 const config = ref({
   afip_mode: 'testing',
@@ -37,6 +38,10 @@ const config = ref({
   banco_titular: '',
   banco_alias: '',
   empresa_nombre: '',
+  mercadopago_enabled: 'false',
+  mercadopago_access_token: '',
+  mercadopago_pos_id: '',
+  mercadopago_mode: 'sandbox',
 })
 
 async function loadConfig() {
@@ -95,7 +100,13 @@ const descs = {
   banco_nombre: 'Nombre del banco para transferencias',
   banco_titular: 'Nombre del titular de la cuenta',
   banco_alias: 'Alias de CBU/Alias para transferencias',
+  mercadopago_enabled: 'Habilitar cobros con QR de MercadoPago',
+  mercadopago_access_token: 'Access Token de MercadoPago (del portal de desarrolladores)',
+  mercadopago_pos_id: 'ID del POS/caja registradora en MercadoPago',
+  mercadopago_mode: 'Entorno: sandbox (pruebas) o prod (producción)',
 }
+
+const MP_KEYS = ['mercadopago_enabled', 'mercadopago_access_token', 'mercadopago_pos_id', 'mercadopago_mode']
 
 async function saveConfig(keys = null) {
   saving.value = true
@@ -472,6 +483,68 @@ onMounted(loadConfig)
 
         <div class="flex items-center gap-3 pt-2">
           <BaseButton variant="primary" :loading="saving" @click="saveConfig(BANCOS_KEYS)">
+            <i class="fa-solid fa-floppy-disk"></i> Guardar
+          </BaseButton>
+          <p class="text-[11px] text-slate-400">Los cambios se aplican inmediatamente</p>
+        </div>
+      </div>
+    </BaseCard>
+
+    <BaseCard v-if="!loading">
+      <button class="w-full text-left" @click="mercadopagoExpanded = !mercadopagoExpanded">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <i class="fa-brands fa-cc-mastercard text-brand-600"></i>
+            MercadoPago QR
+          </h3>
+          <div class="flex items-center gap-3">
+            <span v-if="config.mercadopago_enabled === 'true' && config.mercadopago_access_token" class="text-xs text-green-600 dark:text-green-400">
+              <i class="fa-solid fa-check-circle mr-1"></i>Configurado
+            </span>
+            <span v-else class="text-xs text-amber-500">
+              <i class="fa-solid fa-circle-xmark mr-1"></i>No configurado
+            </span>
+            <i :class="['fa-solid fa-chevron-down text-xs transition-transform', mercadopagoExpanded ? 'rotate-180' : '']"></i>
+          </div>
+        </div>
+      </button>
+
+      <div v-if="mercadopagoExpanded" class="mt-4 space-y-4 max-w-lg">
+        <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded p-3 mb-4">
+          <p class="text-xs text-blue-700 dark:text-blue-300">
+            <i class="fa-solid fa-circle-info mr-1"></i>
+            Para cobrar con QR de MercadoPago, necesitás crear una cuenta de vendedor en <a href="https://www.mercadopago.com.ar" target="_blank" class="underline font-semibold">MercadoPago</a> y configurar tu POSQR en su portal de desarrolladores.
+          </p>
+        </div>
+
+        <BaseSelect
+          v-model="config.mercadopago_enabled"
+          label="Habilitar MercadoPago QR"
+          :options="[
+            { value: 'false', label: 'Deshabilitado' },
+            { value: 'true', label: 'Habilitado' }
+          ]"
+          option-value="value"
+          option-label="label"
+        />
+
+        <BaseSelect
+          v-model="config.mercadopago_mode"
+          label="Entorno"
+          :options="[
+            { value: 'sandbox', label: 'Sandbox (Pruebas)' },
+            { value: 'prod', label: 'Producción' }
+          ]"
+          option-value="value"
+          option-label="label"
+        />
+
+        <BaseInput v-model="config.mercadopago_access_token" label="Access Token" type="password" placeholder="APP_USR-..." hint="Lo encontrás en: MercadoPago Dev → Tus integraciones → Credenciales" />
+
+        <BaseInput v-model="config.mercadopago_pos_id" label="POS ID" placeholder="ID de tu caja registradora" hint="Identificador del POS QR en MercadoPago" />
+
+        <div class="flex items-center gap-3 pt-2">
+          <BaseButton variant="primary" :loading="saving" @click="saveConfig(MP_KEYS)">
             <i class="fa-solid fa-floppy-disk"></i> Guardar
           </BaseButton>
           <p class="text-[11px] text-slate-400">Los cambios se aplican inmediatamente</p>

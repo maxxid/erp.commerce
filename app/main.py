@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from app.config import settings
 from app.database import engine, Base
 from app.models import *  # noqa: F401, F403 — Registrar todos los modelos
-from app.routers import auth, productos, categorias, dashboard, caja, clientes, ventas, proveedores, compras, calendario, backups, usuarios, auditoria, licencia, catalogo, ofertas, facturacion, configuracion as config_router
+from app.routers import auth, productos, categorias, dashboard, caja, clientes, ventas, proveedores, compras, calendario, backups, usuarios, auditoria, licencia, catalogo, ofertas, facturacion, configuracion as config_router, pagos
 
 
 def crear_app() -> FastAPI:
@@ -51,6 +51,7 @@ def crear_app() -> FastAPI:
     app.include_router(ofertas.router)
     app.include_router(facturacion.router)
     app.include_router(config_router.router)
+    app.include_router(pagos.router)
 
     # Servir el frontend Vue 3 (producción)
     @app.get("/app")

@@ -485,7 +485,7 @@
           <div ref="pagoSection" tabindex="0" @keydown="handlePagoKeydown">
             <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase block mb-2">
               Medio de Pago
-              <span class="text-slate-300 dark:text-slate-600 ml-2 font-normal">Atajos: 1-5, ←→, Enter</span>
+              <span class="text-slate-300 dark:text-slate-600 ml-2 font-normal">Atajos: 1-6, ←→, Enter</span>
             </label>
             <div class="grid grid-cols-5 gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
               <button
@@ -787,6 +787,53 @@
       </div>
     </div>
   </BaseModal>
+
+  <!-- MercadoPago QR Modal -->
+  <BaseModal v-model="mpQrModal" title="Cobro con MercadoPago QR" size="md" :close-on-esc="false" :close-on-backdrop="false">
+    <div v-if="mpQrLoading" class="text-center py-8">
+      <div class="w-16 h-16 rounded-2xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center mx-auto mb-4">
+        <i class="fa-solid fa-circle-notch fa-spin text-blue-500 text-2xl"></i>
+      </div>
+      <p class="text-sm font-semibold text-slate-700 dark:text-slate-200">Generando código QR...</p>
+    </div>
+
+    <div v-else-if="mpQrError" class="text-center py-8">
+      <div class="w-16 h-16 rounded-2xl bg-red-50 dark:bg-red-900/20 flex items-center justify-center mx-auto mb-4">
+        <i class="fa-solid fa-circle-xmark text-red-500 text-2xl"></i>
+      </div>
+      <p class="text-sm font-semibold text-red-700 dark:text-red-300 mb-2">Error al generar QR</p>
+      <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">{{ mpQrError }}</p>
+      <BaseButton variant="secondary" @click="mpQrModal = false">Cerrar</BaseButton>
+    </div>
+
+    <div v-else-if="mpQrData" class="text-center">
+      <div class="mb-4">
+        <p class="text-lg font-bold text-slate-900 dark:text-white">{{ fc(mpQrData.monto) }}</p>
+        <p class="text-xs text-slate-500 dark:text-slate-400">Venta #{{ mpQrData.venta_numero }}</p>
+      </div>
+
+      <div v-if="mpQrData.qr_image_url" class="bg-white rounded-xl p-4 inline-block mb-4">
+        <img :src="mpQrData.qr_image_url" alt="QR Code" class="w-48 h-48 mx-auto" />
+      </div>
+      <div v-else-if="mpQrData.qr_data" class="bg-white rounded-xl p-4 inline-block mb-4">
+        <p class="text-xs font-mono text-slate-600 break-all">{{ mpQrData.qr_data }}</p>
+      </div>
+
+      <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 mb-4">
+        <p class="text-xs text-blue-700 dark:text-blue-300">
+          <i class="fa-solid fa-mobile-screen-button mr-1"></i>
+          Escaneá el QR con la app de MercadoPago para pagar
+        </p>
+      </div>
+
+      <div class="flex items-center justify-center gap-3">
+        <div class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></div>
+        <p class="text-xs text-slate-500 dark:text-slate-400">Esperando pago...</p>
+      </div>
+
+      <BaseButton variant="secondary" class="mt-4" @click="cancelMpQr">Cancelar</BaseButton>
+    </div>
+  </BaseModal>
 </template>
 
 <script setup>
@@ -827,6 +874,15 @@ const selectedPOSCategory = ref(null)
 const filterPorKilo = ref(false)
 const confirmando = ref(false)
 const showTicket = ref(false)
+
+// MercadoPago QR states
+const mpQrModal = ref(false)
+const mpQrLoading = ref(false)
+const mpQrData = ref(null)
+const mpQrError = ref('')
+const mpPollingInterval = ref(null)
+const mpVentaId = ref(null)
+const mpOrderId = ref(null)
 const showStatsPanel = ref(true)
 const showRecallDropdown = ref(false)
 const ticketData = reactive({ items: [], numero: '', fecha: '', total: 0, descuento: 0, medio_pago: '', cliente: '', sucursal: '', venta_id: null })
@@ -951,6 +1007,7 @@ const mediosPago = [
   { value: 'debito', label: 'Débito', icon: 'fa-credit-card' },
   { value: 'credito', label: 'Crédito', icon: 'fa-credit-card' },
   { value: 'transferencia', label: 'Transf.', icon: 'fa-mobile-screen-button' },
+  { value: 'mercadopago_qr', label: 'MercadoPago', icon: 'fa-brands fa-cc-mastercard' },
   { value: 'cta_corriente', label: 'Cta. Cte.', icon: 'fa-file-invoice-dollar' }
 ]
 
@@ -1422,7 +1479,7 @@ function addToCart(product, qty = 1, price = null) {
 function handlePagoKeydown(event) {
   const pagos = mediosPago.map(m => m.value)
   const key = event.key
-  if (key >= '1' && key <= '5') {
+  if (key >= '1' && key <= '6') {
     event.preventDefault()
     cart.medio_pago = pagos[parseInt(key) - 1]
   } else if (key === 'ArrowLeft') {
@@ -1578,6 +1635,15 @@ async function confirmarVenta() {
           por_kilo: item.por_kilo || false,
           peso: item.peso || null,
         })
+      }
+
+      // Si es MercadoPago QR, generar orden y esperar pago
+      if (cart.medio_pago === 'mercadopago_qr') {
+        confirmando.value = false
+        vaciarCarrito()
+        await iniciarPagoMpQr(ventaId, ventaNumero, cart.total)
+        nextTick(() => barcodeInput.value?.focus())
+        return
       }
 
       const confirmResp = await api.put(`/api/ventas/${ventaId}/confirmar`, {
@@ -1768,6 +1834,135 @@ async function loadSaleForEditing(ventaId) {
   } catch {
     toast.error('No se pudo cargar la venta para edición')
   }
+}
+
+// MercadoPago QR functions
+async function iniciarPagoMpQr(ventaId, ventaNumero, monto) {
+  mpQrLoading.value = true
+  mpQrError.value = ''
+  mpQrData.value = null
+  mpVentaId.value = ventaId
+  mpOrderId.value = null
+  mpQrModal.value = true
+
+  try {
+    const resp = await api.post('/api/pagos/mercadopago/crear-orden', {
+      venta_id: ventaId,
+      descripcion: `Venta ${ventaNumero}`
+    })
+    if (resp && resp.success) {
+      mpQrData.value = {
+        order_id: resp.order_id,
+        qr_data: resp.qr_data,
+        qr_image_url: resp.qr_image_url,
+        ticket_url: resp.ticket_url,
+        monto: monto,
+        venta_numero: ventaNumero
+      }
+      mpOrderId.value = resp.order_id
+      startMpPolling(ventaId, resp.order_id)
+    } else {
+      throw new Error(resp?.detail || 'Error al crear orden de pago')
+    }
+  } catch (e) {
+    mpQrError.value = e.response?.data?.detail || e.message || 'Error desconocido'
+  } finally {
+    mpQrLoading.value = false
+  }
+}
+
+function startMpPolling(ventaId, orderId) {
+  if (mpPollingInterval.value) {
+    clearInterval(mpPollingInterval.value)
+  }
+  mpPollingInterval.value = setInterval(async () => {
+    try {
+      const resp = await api.get(`/api/pagos/mercadopago/orden/${orderId}`)
+      if (resp && resp.orden) {
+        const status = resp.orden.status
+        if (status === 'approved' || status === 'processed') {
+          clearInterval(mpPollingInterval.value)
+          mpPollingInterval.value = null
+          mpQrModal.value = false
+          await onMpPagoConfirmado(ventaId, orderId)
+        } else if (status === 'cancelled' || status === 'rejected') {
+          clearInterval(mpPollingInterval.value)
+          mpPollingInterval.value = null
+          mpQrModal.value = false
+          toast.error(`Pago cancelado o rechazado: ${status}`)
+        }
+      }
+    } catch {
+      // Ignore polling errors
+    }
+  }, 3000)
+}
+
+async function onMpPagoConfirmado(ventaId, orderId) {
+  try {
+    const resp = await api.get(`/api/ventas/${ventaId}`)
+    const venta = resp?.data || resp
+    if (venta && venta.estado === 'confirmada') {
+      toast.success(`Pago confirmado! Venta ${venta.numero} completada.`)
+      playSale()
+      firstSaleOfDay()
+
+      ticketData.numero = venta.numero
+      ticketData.fecha = new Date().toLocaleString('es-AR')
+      ticketData.items = venta.items || []
+      ticketData.total = venta.total
+      ticketData.descuento = venta.descuento || 0
+      ticketData.medio_pago = 'mercadopago_qr'
+      ticketData.cliente = venta.cliente_nombre || ''
+      ticketData.venta_id = ventaId
+      showTicket.value = true
+
+      stats.ventas_hoy += venta.total
+      stats.tickets_hoy += 1
+      stats.ticket_promedio = Math.round(stats.ventas_hoy / stats.tickets_hoy)
+      stats.saldo_caja += venta.total
+
+      recentTransactions.value.unshift({
+        id: ventaId,
+        ventaNumero: venta.numero,
+        cliente: venta.cliente_nombre || null,
+        total: venta.total,
+        subtotal: venta.subtotal,
+        descuento: venta.descuento || 0,
+        medio_pago: 'mercadopago_qr',
+        items: (venta.items || []).map(i => ({
+          producto_id: i.producto_id,
+          nombre: i.producto_nombre,
+          cantidad: i.cantidad,
+          precio_unitario: i.precio_unitario
+        })),
+        itemCount: venta.items ? venta.items.length : 0,
+        hora: new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }),
+        createdAt: Date.now()
+      })
+      if (recentTransactions.value.length > 20) recentTransactions.value.pop()
+
+      vaciarCarrito()
+    } else {
+      toast.warning('Pago registrado pero venta no confirmada. Refrescando...')
+      fetchRecentTransactions()
+    }
+  } catch {
+    toast.warning('Pago recibido. Refrescando estado de venta...')
+    fetchRecentTransactions()
+  }
+}
+
+function cancelMpQr() {
+  if (mpPollingInterval.value) {
+    clearInterval(mpPollingInterval.value)
+    mpPollingInterval.value = null
+  }
+  mpQrModal.value = false
+  mpQrData.value = null
+  mpVentaId.value = null
+  mpOrderId.value = null
+  toast.info('Cobro con QR cancelado')
 }
 </script>
 

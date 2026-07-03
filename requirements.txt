@@ -10,3 +10,4 @@ python-multipart>=0.0.18
 boto3>=1.35
 apscheduler>=3.10
 zeep>=0.40
+mercadopago>=2.2
