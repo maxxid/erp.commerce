@@ -65,6 +65,8 @@ const config = ref({
   empresa_nombre: '',
   mercadopago_enabled: 'false',
   mercadopago_access_token: '',
+  mercadopago_user_id: '',
+  mercadopago_external_pos_id: '',
   mercadopago_pos_id_qr: '',
   mercadopago_pos_id_smart: '',
   mercadopago_mode: 'sandbox',
@@ -137,7 +139,7 @@ const descs = {
   mercadopago_qr_fijo_modo: 'Modo QR: dinamico (solo QR en pantalla) o hibrido (QR fijo + dinámico)',
 }
 
-const MP_KEYS = ['mercadopago_enabled', 'mercadopago_access_token', 'mercadopago_pos_id_qr', 'mercadopago_pos_id_smart', 'mercadopago_mode', 'mercadopago_qr_fijo_url', 'mercadopago_qr_fijo_modo']
+const MP_KEYS = ['mercadopago_enabled', 'mercadopago_access_token', 'mercadopago_user_id', 'mercadopago_external_pos_id', 'mercadopago_pos_id_qr', 'mercadopago_pos_id_smart', 'mercadopago_mode', 'mercadopago_qr_fijo_url', 'mercadopago_qr_fijo_modo']
 
 async function saveConfig(keys = null) {
   saving.value = true
@@ -694,7 +696,18 @@ onMounted(loadConfig)
 
         <hr class="border-slate-200 dark:border-slate-700" />
 
-        <BaseInput v-model="config.mercadopago_pos_id_qr" label="POS ID (QR)" placeholder="Se completa automáticamente al crear la caja" hint="ID del POS configurado como QR en MercadoPago" />
+        <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded p-3 mb-3">
+          <p class="text-xs text-blue-700 dark:text-blue-300">
+            <i class="fa-solid fa-info-circle mr-1"></i>
+            <strong>Creado desde MercadoPago:</strong> Completá estos datos si ya tenés la caja creada en el portal de MercadoPago.
+          </p>
+        </div>
+
+        <BaseInput v-model="config.mercadopago_user_id" label="User ID" placeholder="Ej: 3517052704" hint="Tu ID de usuario en MercadoPago (9 dígitos)" />
+
+        <BaseInput v-model="config.mercadopago_external_pos_id" label="External POS ID" placeholder="Ej: CAJA001" hint="El external_id que asignaste a la caja en MercadoPago" />
+
+        <BaseInput v-model="config.mercadopago_pos_id_qr" label="POS ID (QR)" placeholder="Completá manualmente o crealo desde aquí" hint="ID numérico del POS para QR en MercadoPago" />
 
         <BaseSelect
           v-model="config.mercadopago_qr_fijo_modo"

@@ -35,7 +35,7 @@ def get_mercadopago_config(db: Session) -> dict:
 
 
 def _get_api_base(mode: str) -> str:
-    return "https://api.mercadopago.com" if mode == "prod" else "https://api.sandbox.mercadopago.com"
+    return "https://api.mercadopago.com"
 
 
 def crear_orden_qr(
