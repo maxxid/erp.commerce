@@ -56,3 +56,9 @@ node ./node_modules/vite/bin/vite.js build
 ```
 
 Luego commit y push - el dist/ se sube a git y el server hace pull.
+
+## MercadoPago - URL API Sandbox
+
+**Importante:** MercadoPago ya no usa `api.sandbox.mercadopago.com`. El sandbox ahora usa el mismo dominio `api.mercadopago.com` - el ambiente se determina por el access token (`APP_USR-` = sandbox, `APP_PROD-` = producción).
+
+Si falla `crear-sucursal` o `crear-caja` con error DNS, verificar que `_get_api_base()` en `mercadopago_service.py` use solo `https://api.mercadopago.com`.
