@@ -1,7 +1,7 @@
 """Router de Pagos: MercadoPago QR."""
 
 import logging
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Header
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
