@@ -39,8 +39,8 @@ const storeForm = ref({
   external_id: 'SUC001',
   street_number: '',
   street_name: '',
-  city_name: '',
-  state_name: 'Capital Federal',
+  city_name: 'San Salvador de Jujuy',
+  state_name: 'Jujuy',
   latitude: -34.6037,
   longitude: -58.3816,
   reference: ''

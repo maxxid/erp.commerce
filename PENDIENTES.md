@@ -83,3 +83,8 @@ Un dueño con varios negocios (cada uno con su machine_id) necesita ver todo cen
 - Si alguien accede a la DB + código fuente, puede descifrarla
 - Solución: no guardar clave privada en la DB — solo descargar y que el usuario la guarde localmente
 - Alternativa: usar un secrets manager (AWS Secrets Manager, etc.)
+
+### MercadoPago: completar localidades por provincia
+- El select de provincia ya está (24 opciones válidas para MP)
+- Faltaría tener un segundo select de ciudad/localidad que se actualice según la provincia seleccionada
+- MercadoPago requiere valores válidos de city_name para crear sucursales
