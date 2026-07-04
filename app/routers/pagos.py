@@ -19,6 +19,11 @@ class CrearOrdenQRRequest(BaseModel):
     descripcion: Optional[str] = "Cobro ERP"
 
 
+class CrearOrdenPOSRequest(BaseModel):
+    venta_id: int
+    descripcion: Optional[str] = "Cobro ERP"
+
+
 class WebhookPayload(BaseModel):
     action: Optional[str] = None
     data: Optional[dict] = None
@@ -63,6 +68,50 @@ def crear_orden_qr(
             "qr_data": result.get("qr_data"),
             "qr_image_url": result.get("qr_image_url"),
             "ticket_url": result.get("ticket_url"),
+            "venta_id": venta.id,
+            "venta_numero": venta.numero,
+            "monto": venta.subtotal,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/mercadopago/crear-orden-pos")
+def crear_orden_pos(
+    req: CrearOrdenPOSRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "cajero")),
+):
+    """Envía una orden de pago al Smart Point de MercadoPago.
+
+    El cliente elige el medio de pago (QR, débito, crédito, NFC) en el dispositivo.
+    """
+    from app.services import venta_service
+
+    venta = venta_service.obtener_venta(db, req.venta_id)
+    if not venta:
+        raise HTTPException(status_code=404, detail="Venta no encontrada")
+
+    if venta.estado != "pendiente":
+        raise HTTPException(status_code=400, detail=f"Venta en estado {venta.estado}, no se puede cobrar")
+
+    if not venta.items:
+        raise HTTPException(status_code=400, detail="Venta sin productos")
+
+    try:
+        result = mercadopago_service.crear_orden_pos(
+            db,
+            venta_id=venta.id,
+            venta_numero=venta.numero,
+            monto=venta.subtotal,
+            descripcion=req.descripcion or f"Venta {venta.numero}",
+        )
+        return {
+            "success": True,
+            "order_id": result["order_id"],
+            "status": result.get("status"),
+            "point_of_interaction": result.get("point_of_interaction"),
             "venta_id": venta.id,
             "venta_numero": venta.numero,
             "monto": venta.subtotal,

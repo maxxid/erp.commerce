@@ -834,6 +834,53 @@
       <BaseButton variant="secondary" class="mt-4" @click="cancelMpQr">Cancelar</BaseButton>
     </div>
   </BaseModal>
+
+  <!-- MercadoPago POS (Smart Point) Modal -->
+  <BaseModal v-model="mpPosModal" title="Cobro con Smart Point" size="md" :close-on-esc="false" :close-on-backdrop="false">
+    <div v-if="mpPosLoading" class="text-center py-8">
+      <div class="w-16 h-16 rounded-2xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center mx-auto mb-4">
+        <i class="fa-solid fa-circle-notch fa-spin text-blue-500 text-2xl"></i>
+      </div>
+      <p class="text-sm font-semibold text-slate-700 dark:text-slate-200">Enviando orden al dispositivo...</p>
+    </div>
+
+    <div v-else-if="mpPosError" class="text-center py-8">
+      <div class="w-16 h-16 rounded-2xl bg-red-50 dark:bg-red-900/20 flex items-center justify-center mx-auto mb-4">
+        <i class="fa-solid fa-circle-xmark text-red-500 text-2xl"></i>
+      </div>
+      <p class="text-sm font-semibold text-red-700 dark:text-red-300 mb-2">Error al enviar al POS</p>
+      <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">{{ mpPosError }}</p>
+      <BaseButton variant="secondary" @click="mpPosModal = false">Cerrar</BaseButton>
+    </div>
+
+    <div v-else-if="mpPosData" class="text-center">
+      <div class="mb-4">
+        <p class="text-lg font-bold text-slate-900 dark:text-white">{{ fc(mpPosData.monto) }}</p>
+        <p class="text-xs text-slate-500 dark:text-slate-400">Venta #{{ mpPosData.venta_numero }}</p>
+      </div>
+
+      <div class="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-4 mb-4">
+        <p class="text-xs text-emerald-700 dark:text-emerald-300">
+          <i class="fa-solid fa-check-circle mr-1"></i>
+          Orden enviada al Smart Point
+        </p>
+      </div>
+
+      <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 mb-4">
+        <p class="text-xs text-blue-700 dark:text-blue-300">
+          <i class="fa-solid fa-mobile-button mr-1"></i>
+          El cliente debe seleccionar el medio de pago en el dispositivo (débito, crédito, QR, NFC)
+        </p>
+      </div>
+
+      <div class="flex items-center justify-center gap-3">
+        <div class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></div>
+        <p class="text-xs text-slate-500 dark:text-slate-400">Esperando pago...</p>
+      </div>
+
+      <BaseButton variant="secondary" class="mt-4" @click="cancelMpPos">Cancelar</BaseButton>
+    </div>
+  </BaseModal>
 </template>
 
 <script setup>
@@ -883,6 +930,16 @@ const mpQrError = ref('')
 const mpPollingInterval = ref(null)
 const mpVentaId = ref(null)
 const mpOrderId = ref(null)
+
+// MercadoPago POS (Smart Point) states
+const mpPosModal = ref(false)
+const mpPosLoading = ref(false)
+const mpPosData = ref(null)
+const mpPosError = ref('')
+const mpPosPollingInterval = ref(null)
+const mpPosVentaId = ref(null)
+const mpPosOrderId = ref(null)
+
 const showStatsPanel = ref(true)
 const showRecallDropdown = ref(false)
 const ticketData = reactive({ items: [], numero: '', fecha: '', total: 0, descuento: 0, medio_pago: '', cliente: '', sucursal: '', venta_id: null })
@@ -1636,11 +1693,19 @@ async function confirmarVenta() {
         })
       }
 
-      // Si es MercadoPago QR, generar orden y esperar pago
+      // Si es MercadoPago QR o POS, generar orden y esperar pago
       if (cart.medio_pago === 'mercadopago_qr') {
         confirmando.value = false
         vaciarCarrito()
         await iniciarPagoMpQr(ventaId, ventaNumero, cart.total)
+        nextTick(() => barcodeInput.value?.focus())
+        return
+      }
+
+      if (cart.medio_pago === 'mercadopago_pos') {
+        confirmando.value = false
+        vaciarCarrito()
+        await iniciarPagoMpPos(ventaId, ventaNumero, cart.total)
         nextTick(() => barcodeInput.value?.focus())
         return
       }
@@ -1962,6 +2027,133 @@ function cancelMpQr() {
   mpVentaId.value = null
   mpOrderId.value = null
   toast.info('Cobro con QR cancelado')
+}
+
+// Smart Point (POS MP) functions
+async function iniciarPagoMpPos(ventaId, ventaNumero, monto) {
+  mpPosLoading.value = true
+  mpPosError.value = ''
+  mpPosData.value = null
+  mpPosVentaId.value = ventaId
+  mpPosOrderId.value = null
+  mpPosModal.value = true
+
+  try {
+    const resp = await api.post('/api/pagos/mercadopago/crear-orden-pos', {
+      venta_id: ventaId,
+      descripcion: `Venta ${ventaNumero}`
+    })
+    if (resp && resp.success) {
+      mpPosData.value = {
+        order_id: resp.order_id,
+        status: resp.status,
+        monto: monto,
+        venta_numero: ventaNumero
+      }
+      mpPosOrderId.value = resp.order_id
+      startMpPosPolling(ventaId, resp.order_id)
+    } else {
+      throw new Error(resp?.detail || 'Error al enviar orden al POS')
+    }
+  } catch (e) {
+    mpPosError.value = e.response?.data?.detail || e.message || 'Error desconocido'
+  } finally {
+    mpPosLoading.value = false
+  }
+}
+
+function startMpPosPolling(ventaId, orderId) {
+  if (mpPosPollingInterval.value) {
+    clearInterval(mpPosPollingInterval.value)
+  }
+  mpPosPollingInterval.value = setInterval(async () => {
+    try {
+      const resp = await api.get(`/api/pagos/mercadopago/orden/${orderId}`)
+      if (resp && resp.orden) {
+        const status = resp.orden.status
+        if (status === 'approved' || status === 'processed') {
+          clearInterval(mpPosPollingInterval.value)
+          mpPosPollingInterval.value = null
+          mpPosModal.value = false
+          await onMpPosPagoConfirmado(ventaId, orderId)
+        } else if (status === 'cancelled' || status === 'rejected') {
+          clearInterval(mpPosPollingInterval.value)
+          mpPosPollingInterval.value = null
+          mpPosModal.value = false
+          toast.error(`Pago cancelado o rechazado en POS: ${status}`)
+        }
+      }
+    } catch {
+      // Ignore polling errors
+    }
+  }, 3000)
+}
+
+async function onMpPosPagoConfirmado(ventaId, orderId) {
+  try {
+    const resp = await api.get(`/api/ventas/${ventaId}`)
+    const venta = resp?.data || resp
+    if (venta && venta.estado === 'confirmada') {
+      toast.success(`Pago confirmado! Venta ${venta.numero} completada.`)
+      playSale()
+      firstSaleOfDay()
+
+      ticketData.numero = venta.numero
+      ticketData.fecha = new Date().toLocaleString('es-AR')
+      ticketData.items = venta.items || []
+      ticketData.total = venta.total
+      ticketData.descuento = venta.descuento || 0
+      ticketData.medio_pago = 'mercadopago_pos'
+      ticketData.cliente = venta.cliente_nombre || ''
+      ticketData.venta_id = ventaId
+      showTicket.value = true
+
+      stats.ventas_hoy += venta.total
+      stats.tickets_hoy += 1
+      stats.ticket_promedio = Math.round(stats.ventas_hoy / stats.tickets_hoy)
+      stats.saldo_caja += venta.total
+
+      recentTransactions.value.unshift({
+        id: ventaId,
+        ventaNumero: venta.numero,
+        cliente: venta.cliente_nombre || null,
+        total: venta.total,
+        subtotal: venta.subtotal,
+        descuento: venta.descuento || 0,
+        medio_pago: 'mercadopago_pos',
+        items: (venta.items || []).map(i => ({
+          producto_id: i.producto_id,
+          nombre: i.producto_nombre,
+          cantidad: i.cantidad,
+          precio_unitario: i.precio_unitario
+        })),
+        itemCount: venta.items ? venta.items.length : 0,
+        hora: new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }),
+        createdAt: Date.now()
+      })
+      if (recentTransactions.value.length > 20) recentTransactions.value.pop()
+
+      vaciarCarrito()
+    } else {
+      toast.warning('Pago registrado pero venta no confirmada. Refrescando...')
+      fetchRecentTransactions()
+    }
+  } catch {
+    toast.warning('Pago recibido. Refrescando estado de venta...')
+    fetchRecentTransactions()
+  }
+}
+
+function cancelMpPos() {
+  if (mpPosPollingInterval.value) {
+    clearInterval(mpPosPollingInterval.value)
+    mpPosPollingInterval.value = null
+  }
+  mpPosModal.value = false
+  mpPosData.value = null
+  mpPosVentaId.value = null
+  mpPosOrderId.value = null
+  toast.info('Cobro con POS cancelado')
 }
 </script>
 

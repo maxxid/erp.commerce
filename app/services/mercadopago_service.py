@@ -1,9 +1,14 @@
-"""Servicio de MercadoPago para cobros con QR.
+"""Servicio de MercadoPago para cobros con QR y Smart Point.
 
-Flujo:
+Flujo QR:
 1. crear_orden_qr() - Crea orden y obtiene QR
 2. obtener_estado_orden() - Consulta estado del pago
-3. confirmar_pago_webhook() - Procesa notificación de pago
+3. procesar_webhook() - Procesa notificación de pago
+
+Flujo Smart Point:
+1. crear_orden_pos() - Envía orden al POS físico
+2. esperar_pago_pos() - Polling del estado
+3. procesar_webhook() - Notificación automática
 """
 
 import logging
@@ -20,7 +25,8 @@ def get_mercadopago_config(db: Session) -> dict:
     return {
         "enabled": config_service.get_config(db, "mercadopago_enabled") == "true",
         "access_token": config_service.get_config(db, "mercadopago_access_token") or "",
-        "pos_id": config_service.get_config(db, "mercadopago_pos_id") or "",
+        "pos_id_qr": config_service.get_config(db, "mercadopago_pos_id_qr") or "",
+        "pos_id_smart": config_service.get_config(db, "mercadopago_pos_id_smart") or "",
         "mode": config_service.get_config(db, "mercadopago_mode") or "sandbox",
     }
 
@@ -53,8 +59,8 @@ def crear_orden_qr(
     if not config["access_token"]:
         raise ValueError("MercadoPago access token no configurado")
 
-    if not config["pos_id"]:
-        raise ValueError("MercadoPago POS ID no configurado")
+    if not config["pos_id_qr"]:
+        raise ValueError("MercadoPago POS ID (QR) no configurado")
 
     base_url = _get_api_base(config["mode"])
     headers = {
@@ -79,14 +85,14 @@ def crear_orden_qr(
             }
         ],
         "marketplace": "ERP_COMERCIO",
-        "pos_id": config["pos_id"],
+        "pos_id": config["pos_id_qr"],
     }
 
-    logger.info(f"Creando orden MP para venta {venta_numero}, monto={monto}")
+    logger.info(f"Creando orden MP QR para venta {venta_numero}, monto={monto}")
 
     try:
         response = requests.post(
-            f"{base_url}/instore/qr/seller/collectors/{config['pos_id']}/orders",
+            f"{base_url}/instore/qr/seller/collectors/{config['pos_id_qr']}/orders",
             headers=headers,
             json=payload,
             timeout=30,
@@ -108,6 +114,87 @@ def crear_orden_qr(
         "qr_data": (data.get("qrs") or [{}])[0].get("qr_data") if data.get("qrs") else None,
         "qr_image_url": (data.get("qrs") or [{}])[0].get("image_url") if data.get("qrs") else None,
         "ticket_url": (data.get("qrs") or [{}])[0].get("ticket_url") if data.get("qrs") else None,
+    }
+
+
+def crear_orden_pos(
+    db: Session,
+    venta_id: int,
+    venta_numero: str,
+    monto: float,
+    descripcion: str = "Cobro ERP",
+) -> dict:
+    """Envía una orden de pago al Smart Point de MercadoPago.
+
+    El cliente elige el medio de pago directamente en el dispositivo.
+    Returns:
+        dict con {order_id, status}
+    Raises:
+        ValueError: Si MercadoPago no está configurado o falla la API
+    """
+    import requests
+
+    config = get_mercadopago_config(db)
+
+    if not config["enabled"]:
+        raise ValueError("MercadoPago no está habilitado")
+
+    if not config["access_token"]:
+        raise ValueError("MercadoPago access token no configurado")
+
+    if not config["pos_id_smart"]:
+        raise ValueError("MercadoPago POS ID (Smart Point) no configurado")
+
+    base_url = _get_api_base(config["mode"])
+    headers = {
+        "Authorization": f"Bearer {config['access_token']}",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "external_reference": f"venta_{venta_id}",
+        "notification_url": f"{config_service.get_config(db, 'base_url') or 'http://localhost:8000'}/api/pagos/mercadopago/webhook",
+        "description": descripcion,
+        "cash_out": {"amount": 0},
+        "items": [
+            {
+                "sku_number": venta_numero,
+                "category_id": "services",
+                "title": descripcion,
+                "description": f"Venta {venta_numero}",
+                "quantity": 1,
+                "unit_price": float(monto),
+                "total_amount": float(monto),
+            }
+        ],
+        "marketplace": "ERP_COMERCIO",
+        "pos_id": config["pos_id_smart"],
+    }
+
+    logger.info(f"Enviando orden MP POS para venta {venta_numero}, monto={monto}")
+
+    try:
+        response = requests.post(
+            f"{base_url}/instore/qr/seller/collectors/{config['pos_id_smart']}/orders",
+            headers=headers,
+            json=payload,
+            timeout=30,
+        )
+    except requests.RequestException as e:
+        logger.error(f"Error de conexión a MercadoPago: {e}")
+        raise ValueError(f"Error de conexión a MercadoPago: {e}")
+
+    if response.status_code not in (200, 201):
+        logger.error(f"MP API error: {response.status_code} - {response.text}")
+        raise ValueError(f"Error de MercadoPago: {response.status_code} - {response.text[:200]}")
+
+    data = response.json()
+    logger.info(f"Orden MP POS creada: {data}")
+
+    return {
+        "order_id": data.get("id"),
+        "status": data.get("status"),
+        "point_of_interaction": data.get("point_of_interaction", {}),
     }
 
 

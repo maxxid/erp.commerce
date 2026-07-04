@@ -40,7 +40,8 @@ const config = ref({
   empresa_nombre: '',
   mercadopago_enabled: 'false',
   mercadopago_access_token: '',
-  mercadopago_pos_id: '',
+  mercadopago_pos_id_qr: '',
+  mercadopago_pos_id_smart: '',
   mercadopago_mode: 'sandbox',
 })
 
@@ -102,11 +103,12 @@ const descs = {
   banco_alias: 'Alias de CBU/Alias para transferencias',
   mercadopago_enabled: 'Habilitar cobros con QR de MercadoPago',
   mercadopago_access_token: 'Access Token de MercadoPago (del portal de desarrolladores)',
-  mercadopago_pos_id: 'ID del POS/caja registradora en MercadoPago',
+  mercadopago_pos_id_qr: 'ID del POS para QR (genera códigos QR dinámicos)',
+  mercadopago_pos_id_smart: 'ID del Smart Point (dispositivo físico)',
   mercadopago_mode: 'Entorno: sandbox (pruebas) o prod (producción)',
 }
 
-const MP_KEYS = ['mercadopago_enabled', 'mercadopago_access_token', 'mercadopago_pos_id', 'mercadopago_mode']
+const MP_KEYS = ['mercadopago_enabled', 'mercadopago_access_token', 'mercadopago_pos_id_qr', 'mercadopago_pos_id_smart', 'mercadopago_mode']
 
 async function saveConfig(keys = null) {
   saving.value = true
@@ -495,7 +497,7 @@ onMounted(loadConfig)
         <div class="flex items-center justify-between">
           <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <i class="fa-brands fa-cc-mastercard text-brand-600"></i>
-            MercadoPago QR
+            MercadoPago (QR y Smart Point)
           </h3>
           <div class="flex items-center gap-3">
             <span v-if="config.mercadopago_enabled === 'true' && config.mercadopago_access_token" class="text-xs text-green-600 dark:text-green-400">
@@ -513,13 +515,13 @@ onMounted(loadConfig)
         <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded p-3 mb-4">
           <p class="text-xs text-blue-700 dark:text-blue-300">
             <i class="fa-solid fa-circle-info mr-1"></i>
-            Para cobrar con QR de MercadoPago, necesitás crear una cuenta de vendedor en <a href="https://www.mercadopago.com.ar" target="_blank" class="underline font-semibold">MercadoPago</a> y configurar tu POSQR en su portal de desarrolladores.
+            Configurá tu cuenta de MercadoPago en <a href="https://www.mercadopago.com.ar" target="_blank" class="underline font-semibold">MercadoPago</a>. Tenés que crear dos POS: uno para QR y otro para el Smart Point.
           </p>
         </div>
 
         <BaseSelect
           v-model="config.mercadopago_enabled"
-          label="Habilitar MercadoPago QR"
+          label="Habilitar MercadoPago"
           :options="[
             { value: 'false', label: 'Deshabilitado' },
             { value: 'true', label: 'Habilitado' }
@@ -541,7 +543,9 @@ onMounted(loadConfig)
 
         <BaseInput v-model="config.mercadopago_access_token" label="Access Token" type="password" placeholder="APP_USR-..." hint="Lo encontrás en: MercadoPago Dev → Tus integraciones → Credenciales" />
 
-        <BaseInput v-model="config.mercadopago_pos_id" label="POS ID" placeholder="ID de tu caja registradora" hint="Identificador del POS QR en MercadoPago" />
+        <BaseInput v-model="config.mercadopago_pos_id_qr" label="POS ID (QR)" placeholder="Para cobrar con código QR" hint="ID del POS configurado como QR en MercadoPago" />
+
+        <BaseInput v-model="config.mercadopago_pos_id_smart" label="POS ID (Smart Point)" placeholder="Para cobrar con dispositivo físico" hint="ID del Smart Point en MercadoPago" />
 
         <div class="flex items-center gap-3 pt-2">
           <BaseButton variant="primary" :loading="saving" @click="saveConfig(MP_KEYS)">
