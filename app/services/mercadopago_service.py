@@ -288,7 +288,7 @@ def procesar_webhook(db: Session, payload: dict) -> Optional[dict]:
     order_id = data.get("id") or payload.get("id")
     external_ref = data.get("external_reference") or payload.get("external_reference") or payload.get("data_external_reference", "")
 
-    logger.info(f"Webhook MP recibido: action={action}, order_id={order_id}, external_ref={external_ref}"
+    logger.info(f"Webhook MP recibido: action={action}, order_id={order_id}, external_ref={external_ref}")
 
     if not order_id and not external_ref:
         logger.warning(f"Webhook MP sin order_id ni external_reference")
