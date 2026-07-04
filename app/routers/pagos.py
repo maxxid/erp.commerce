@@ -163,59 +163,20 @@ async def webhook_mercadopago(
     x_signature: str = Header(None, alias="X-Signature"),
     x_request_id: str = Header(None, alias="X-Request-Id"),
     data_id: str = Query(None, alias="data.id"),
+    data_external_reference: str = Query(None, alias="data.external_reference"),
 ):
     """Endpoint para recibir webhooks de MercadoPago.
 
-    MercadoPago envía notificaciones cuando un pago se completa.
-    Valida la firma del webhook si está configurado el secret.
+    IMPORTANTE: Para QR Code, la validación de firma NO está disponible (según docs de MP).
+    Procesamos todos los webhooks sin validar firma.
     """
-    import hmac
-    import hashlib
     from app.services import venta_service
     from app.services import mercadopago_service as mp_svc
 
-    logger.info(f"Webhook MP recibido: {payload}")
-
-    webhook_secret = mp_svc.get_mercadopago_config(db).get("webhook_secret")
-    if webhook_secret and x_signature:
-        ts = None
-        hash_value = None
-        for part in x_signature.split(","):
-            if "=" not in part:
-                continue
-            key, _, value = part.partition("=")
-            key = key.strip()
-            value = value.strip()
-            if key == "ts":
-                ts = value
-            if key == "v1":
-                hash_value = value
-
-        data_id_lower = (data_id or "").lower()
-        if data_id_lower and payload.data and payload.data.get("id"):
-            data_id_lower = payload.data.get("id", "").lower()
-
-        parts = []
-        if data_id_lower:
-            parts.append(f"id:{data_id_lower}")
-        if x_request_id:
-            parts.append(f"request-id:{x_request_id}")
-        parts.append(f"ts:{ts}")
-        manifest = ";".join(parts) + ";"
-
-        computed = hmac.new(
-            webhook_secret.encode(),
-            manifest.encode(),
-            hashlib.sha256
-        ).hexdigest()
-
-        if not hmac.compare_digest(computed, hash_value or ""):
-            logger.warning(f"Webhook MP firma inválida: computed={computed}, received={hash_value}, manifest={manifest}")
-            raise HTTPException(status_code=403, detail="Firma de webhook inválida")
-    else:
-        logger.info(f"Webhook MP recibido sin validación de firma (secret no configurado)")
+    logger.info(f"Webhook MP recibido: payload={payload}, data_id={data_id}, data_external_reference={data_external_reference}")
 
     webhook_data = payload.model_dump()
+    webhook_data["data_external_reference"] = data_external_reference
 
     try:
         resultado = mercadopago_service.procesar_webhook(db, webhook_data)

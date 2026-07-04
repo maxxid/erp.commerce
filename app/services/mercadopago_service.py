@@ -284,53 +284,58 @@ def procesar_webhook(db: Session, payload: dict) -> Optional[dict]:
         dict con info del pago si se procesó correctamente, None si no aplica
     """
     action = payload.get("action", "")
-    order_id = payload.get("data", {}).get("id") or payload.get("order_id")
+    data = payload.get("data", {})
+    order_id = data.get("id") or payload.get("id")
+    external_ref = data.get("external_reference") or payload.get("external_reference") or payload.get("data_external_reference", "")
 
-    logger.info(f"Webhook MP recibido: action={action}, order_id={order_id}")
+    logger.info(f"Webhook MP recibido: action={action}, order_id={order_id}, external_ref={external_ref}"
 
-    if not order_id:
+    if not order_id and not external_ref:
+        logger.warning(f"Webhook MP sin order_id ni external_reference")
         return None
 
-    if "order.processed" in action or "order.completed" in action or "payment.created" in action or "order_prepaid" in action:
-        external_ref = payload.get("data", {}).get("external_reference") or payload.get("external_reference", "")
-
-        if not external_ref and order_id:
-            external_ref = str(order_id)
-
-        logger.info(f"Webhook MP: action={action}, order_id={order_id}, external_ref={external_ref}")
-
-        parts = external_ref.split("_") if external_ref else []
-        if len(parts) >= 2 and parts[0] == "venta":
-            venta_id = int(parts[1])
-            payment_id = payload.get("data", {}).get("transactions", {}).get("payments", [{}])[0].get("id") if payload.get("data", {}).get("transactions", {}).get("payments") else None
-            return {
-                "venta_id": venta_id,
-                "order_id": order_id or external_ref,
-                "payment_id": payment_id,
-                "status": payload.get("data", {}).get("status") or "processed",
-                "amount": payload.get("data", {}).get("total_paid_amount") or payload.get("data", {}).get("total_amount"),
-            }
-
-        try:
-            orden = obtener_estado_orden(db, str(order_id)) if order_id else None
-        except Exception as e:
-            logger.error(f"Error consultando orden en webhook: {e}")
-            orden = None
-
-        if orden:
-            status = orden.get("status")
-            external_ref = orden.get("external_reference") or external_ref
-            parts = external_ref.split("_") if external_ref else []
-            if len(parts) >= 2 and parts[0] == "venta":
+    if "order.processed" in action or "order.completed" in action or "payment.created" in action or "order_prepaid" in action or "order.processed" in action:
+        if external_ref and external_ref.startswith("venta_"):
+            parts = external_ref.split("_")
+            if len(parts) >= 2:
                 venta_id = int(parts[1])
-                payment_id = orden.get("payments", [{}])[0].get("id") if orden.get("payments") else None
+                payment_id = None
+                transactions = data.get("transactions", {})
+                if transactions and transactions.get("payments"):
+                    payment_id = transactions["payments"][0].get("id")
+                status = data.get("status") or "processed"
+                amount = data.get("total_paid_amount") or data.get("total_amount")
+
+                logger.info(f"Webhook MP confirmando venta {venta_id} desde external_ref")
                 return {
                     "venta_id": venta_id,
-                    "order_id": order_id,
+                    "order_id": order_id or external_ref,
                     "payment_id": payment_id,
                     "status": status,
-                    "amount": orden.get("total_amount"),
+                    "amount": amount,
                 }
+
+        if order_id:
+            try:
+                orden = obtener_estado_orden(db, str(order_id))
+                status = orden.get("status")
+                external_ref = orden.get("external_reference") or external_ref
+                parts = external_ref.split("_") if external_ref else []
+                if len(parts) >= 2 and parts[0] == "venta":
+                    venta_id = int(parts[1])
+                    payment_id = orden.get("payments", [{}])[0].get("id") if orden.get("payments") else None
+                    return {
+                        "venta_id": venta_id,
+                        "order_id": order_id,
+                        "payment_id": payment_id,
+                        "status": status,
+                        "amount": orden.get("total_amount"),
+                    }
+            except Exception as e:
+                logger.error(f"Error consultando orden en webhook: {e}")
+
+    if "order.canceled" in action or "order.expired" in action:
+        logger.info(f"Webhook MP: orden cancelada/expirada {order_id}")
 
     return None
 
