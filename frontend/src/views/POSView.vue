@@ -1716,16 +1716,18 @@ async function confirmarVenta() {
       // Si es MercadoPago QR o POS, generar orden y esperar pago
       if (cart.medio_pago === 'mercadopago_qr') {
         confirmando.value = false
+        const montoQr = cart.total
         vaciarCarrito()
-        await iniciarPagoMpQr(ventaId, ventaNumero, cart.total)
+        await iniciarPagoMpQr(ventaId, ventaNumero, montoQr)
         nextTick(() => barcodeInput.value?.focus())
         return
       }
 
       if (cart.medio_pago === 'mercadopago_pos') {
         confirmando.value = false
+        const montoQr = cart.total
         vaciarCarrito()
-        await iniciarPagoMpPos(ventaId, ventaNumero, cart.total)
+        await iniciarPagoMpPos(ventaId, ventaNumero, montoQr)
         nextTick(() => barcodeInput.value?.focus())
         return
       }
