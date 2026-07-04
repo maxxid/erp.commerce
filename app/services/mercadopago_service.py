@@ -26,8 +26,10 @@ def get_mercadopago_config(db: Session) -> dict:
         "enabled": config_service.get_config(db, "mercadopago_enabled") == "true",
         "access_token": config_service.get_config(db, "mercadopago_access_token") or "",
         "pos_id_qr": config_service.get_config(db, "mercadopago_pos_id_qr") or "",
+        "external_pos_id": config_service.get_config(db, "mercadopago_external_pos_id") or "",
         "pos_id_smart": config_service.get_config(db, "mercadopago_pos_id_smart") or "",
         "mode": config_service.get_config(db, "mercadopago_mode") or "sandbox",
+        "qr_fijo_modo": config_service.get_config(db, "mercadopago_qr_fijo_modo") or "dinamico",
     }
 
 
@@ -41,15 +43,18 @@ def crear_orden_qr(
     venta_numero: str,
     monto: float,
     descripcion: str = "Cobro ERP",
+    modo_qr: str = None,
 ) -> dict:
-    """Crea una orden QR en MercadoPago.
+    """Crea una orden QR en MercadoPago usando la API v1.
+
+    Args:
+        modo_qr: 'dinamico', 'estatico', o 'hibrido'. Usa config si no se especifica.
 
     Returns:
-        dict con {order_id, qr_data, qr_expires, ticket_url}
-    Raises:
-        ValueError: Si MercadoPago no está configurado o falla la API
+        dict con {order_id, qr_data, qr_image_url, status}
     """
     import requests
+    import uuid
 
     config = get_mercadopago_config(db)
 
@@ -59,40 +64,52 @@ def crear_orden_qr(
     if not config["access_token"]:
         raise ValueError("MercadoPago access token no configurado")
 
-    if not config["pos_id_qr"]:
-        raise ValueError("MercadoPago POS ID (QR) no configurado")
+    external_pos_id = config.get("external_pos_id")
+    if not external_pos_id:
+        raise ValueError("No se encontró external_pos_id. Creá una caja primero en Ajustes.")
+
+    modo = modo_qr or config.get("qr_fijo_modo") or "dinamico"
 
     base_url = _get_api_base(config["mode"])
+    idempotency_key = str(uuid.uuid4())
+
     headers = {
         "Authorization": f"Bearer {config['access_token']}",
         "Content-Type": "application/json",
+        "X-Idempotency-Key": idempotency_key,
     }
 
     payload = {
+        "type": "qr",
+        "total_amount": str(monto),
+        "description": descripcion[:150],
         "external_reference": f"venta_{venta_id}",
-        "notification_url": f"{config_service.get_config(db, 'base_url') or 'http://localhost:8000'}/api/pagos/mercadopago/webhook",
-        "description": descripcion,
-        "cash_out": {"amount": 0},
+        "expiration_time": "PT15M",
+        "config": {
+            "qr": {
+                "external_pos_id": external_pos_id,
+                "mode": modo,
+            }
+        },
+        "transactions": {
+            "payments": [
+                {"amount": str(monto)}
+            ]
+        },
         "items": [
             {
-                "sku_number": venta_numero,
-                "category_id": "services",
-                "title": descripcion,
-                "description": f"Venta {venta_numero}",
+                "title": descripcion[:100],
+                "unit_price": str(monto),
                 "quantity": 1,
-                "unit_price": float(monto),
-                "total_amount": float(monto),
             }
         ],
-        "marketplace": "ERP_COMERCIO",
-        "pos_id": config["pos_id_qr"],
     }
 
-    logger.info(f"Creando orden MP QR para venta {venta_numero}, monto={monto}")
+    logger.info(f"Creando orden MP QR para venta {venta_numero}, monto={monto}, modo={modo}")
 
     try:
         response = requests.post(
-            f"{base_url}/instore/qr/seller/collectors/{config['pos_id_qr']}/orders",
+            f"{base_url}/v1/orders",
             headers=headers,
             json=payload,
             timeout=30,
@@ -108,12 +125,15 @@ def crear_orden_qr(
     data = response.json()
     logger.info(f"Orden MP creada: {data}")
 
+    qr_data = None
+    if data.get("type_response") and data["type_response"].get("qr_data"):
+        qr_data = data["type_response"]["qr_data"]
+
     return {
         "order_id": data.get("id"),
-        "qrs": data.get("qrs", []),
-        "qr_data": (data.get("qrs") or [{}])[0].get("qr_data") if data.get("qrs") else None,
-        "qr_image_url": (data.get("qrs") or [{}])[0].get("image_url") if data.get("qrs") else None,
-        "ticket_url": (data.get("qrs") or [{}])[0].get("ticket_url") if data.get("qrs") else None,
+        "status": data.get("status"),
+        "qr_data": qr_data,
+        "external_reference": data.get("external_reference"),
     }
 
 
@@ -127,12 +147,12 @@ def crear_orden_pos(
     """Envía una orden de pago al Smart Point de MercadoPago.
 
     El cliente elige el medio de pago directamente en el dispositivo.
+    Usa la API v1 de orders.
     Returns:
         dict con {order_id, status}
-    Raises:
-        ValueError: Si MercadoPago no está configurado o falla la API
     """
     import requests
+    import uuid
 
     config = get_mercadopago_config(db)
 
@@ -142,40 +162,50 @@ def crear_orden_pos(
     if not config["access_token"]:
         raise ValueError("MercadoPago access token no configurado")
 
-    if not config["pos_id_smart"]:
-        raise ValueError("MercadoPago POS ID (Smart Point) no configurado")
+    external_pos_id = config.get("external_pos_id")
+    if not external_pos_id:
+        raise ValueError("No se encontró external_pos_id. Creá una caja primero.")
 
     base_url = _get_api_base(config["mode"])
+    idempotency_key = str(uuid.uuid4())
+
     headers = {
         "Authorization": f"Bearer {config['access_token']}",
         "Content-Type": "application/json",
+        "X-Idempotency-Key": idempotency_key,
     }
 
     payload = {
+        "type": "qr",
+        "total_amount": str(monto),
+        "description": descripcion[:150],
         "external_reference": f"venta_{venta_id}",
-        "notification_url": f"{config_service.get_config(db, 'base_url') or 'http://localhost:8000'}/api/pagos/mercadopago/webhook",
-        "description": descripcion,
-        "cash_out": {"amount": 0},
+        "expiration_time": "PT15M",
+        "config": {
+            "qr": {
+                "external_pos_id": external_pos_id,
+                "mode": "dynamic",
+            }
+        },
+        "transactions": {
+            "payments": [
+                {"amount": str(monto)}
+            ]
+        },
         "items": [
             {
-                "sku_number": venta_numero,
-                "category_id": "services",
-                "title": descripcion,
-                "description": f"Venta {venta_numero}",
+                "title": descripcion[:100],
+                "unit_price": str(monto),
                 "quantity": 1,
-                "unit_price": float(monto),
-                "total_amount": float(monto),
             }
         ],
-        "marketplace": "ERP_COMERCIO",
-        "pos_id": config["pos_id_smart"],
     }
 
     logger.info(f"Enviando orden MP POS para venta {venta_numero}, monto={monto}")
 
     try:
         response = requests.post(
-            f"{base_url}/instore/qr/seller/collectors/{config['pos_id_smart']}/orders",
+            f"{base_url}/v1/orders",
             headers=headers,
             json=payload,
             timeout=30,
@@ -194,7 +224,6 @@ def crear_orden_pos(
     return {
         "order_id": data.get("id"),
         "status": data.get("status"),
-        "point_of_interaction": data.get("point_of_interaction", {}),
     }
 
 

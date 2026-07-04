@@ -273,6 +273,24 @@ def crear_caja(
         if result.get("qr") and result["qr"].get("image"):
             qr_image_url = result["qr"]["image"]
 
+        box_external_id = result.get("external_id")
+        box_id = result.get("id")
+
+        config_service.set_config(
+            db,
+            "mercadopago_external_pos_id",
+            box_external_id,
+            "External ID de la caja para órdenes QR"
+        )
+
+        if box_id:
+            config_service.set_config(
+                db,
+                "mercadopago_pos_id_qr",
+                str(box_id),
+                "ID numérico de la caja"
+            )
+
         if qr_image_url:
             config_service.set_config(
                 db,
@@ -283,10 +301,11 @@ def crear_caja(
 
         return {
             "success": True,
-            "pos_id": result.get("id"),
+            "pos_id": box_id,
+            "external_pos_id": box_external_id,
             "name": result.get("name"),
             "qr_image_url": qr_image_url,
-            "external_id": result.get("external_id"),
+            "external_id": box_external_id,
             "message": "Caja creada exitosamente"
         }
     except ValueError as e:

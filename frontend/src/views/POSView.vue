@@ -1921,6 +1921,11 @@ async function loadSaleForEditing(ventaId) {
 }
 
 // MercadoPago QR functions
+function generarQrImageUrl(qrData, size = 300) {
+  if (!qrData) return null
+  return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(qrData)}`
+}
+
 async function iniciarPagoMpQr(ventaId, ventaNumero, monto) {
   mpQrLoading.value = true
   mpQrError.value = ''
@@ -1935,11 +1940,11 @@ async function iniciarPagoMpQr(ventaId, ventaNumero, monto) {
       descripcion: `Venta ${ventaNumero}`
     })
     if (resp && resp.success) {
+      const qrData = resp.qr_data
       mpQrData.value = {
         order_id: resp.order_id,
-        qr_data: resp.qr_data,
-        qr_image_url: resp.qr_image_url,
-        ticket_url: resp.ticket_url,
+        qr_data: qrData,
+        qr_image_url: generarQrImageUrl(qrData),
         monto: monto,
         venta_numero: ventaNumero
       }
