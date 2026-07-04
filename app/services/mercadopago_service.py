@@ -290,7 +290,7 @@ def procesar_webhook(db: Session, payload: dict) -> Optional[dict]:
     if not order_id:
         return None
 
-    if "order_prepaid" in action or "order_completed" in action or "payment.created" in action:
+    if "order.processed" in action or "order.completed" in action or "payment.created" in action or "order_prepaid" in action:
         try:
             orden = obtener_estado_orden(db, str(order_id))
         except Exception as e:
