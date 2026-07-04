@@ -28,6 +28,7 @@ def get_mercadopago_config(db: Session) -> dict:
         "pos_id_qr": config_service.get_config(db, "mercadopago_pos_id_qr") or "",
         "external_pos_id": config_service.get_config(db, "mercadopago_external_pos_id") or "",
         "pos_id_smart": config_service.get_config(db, "mercadopago_pos_id_smart") or "",
+        "user_id": config_service.get_config(db, "mercadopago_user_id") or "",
         "mode": config_service.get_config(db, "mercadopago_mode") or "sandbox",
         "qr_fijo_modo": config_service.get_config(db, "mercadopago_qr_fijo_modo") or "dinamico",
     }
