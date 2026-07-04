@@ -106,6 +106,7 @@ def crear_orden_qr(
                 "title": descripcion[:100],
                 "unit_price": str(monto),
                 "quantity": 1,
+                "unit_measure": "unit",
             }
         ],
     }
@@ -202,6 +203,7 @@ def crear_orden_pos(
                 "title": descripcion[:100],
                 "unit_price": str(monto),
                 "quantity": 1,
+                "unit_measure": "unit",
             }
         ],
     }
