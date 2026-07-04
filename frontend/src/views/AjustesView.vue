@@ -199,7 +199,7 @@ async function crearCajaMp() {
     const resp = await api.post('/api/pagos/mercadopago/crear-caja', {
       nombre: cajaForm.value.nombre,
       external_id: cajaForm.value.external_id,
-      external_store_id: mpStoreId.value,
+      external_store_id: storeForm.value.external_id,
       fixed_amount: true,
       category: 621102
     })
