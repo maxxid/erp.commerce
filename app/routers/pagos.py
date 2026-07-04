@@ -151,6 +151,7 @@ def obtener_orden(
         orden = mercadopago_service.obtener_estado_orden(db, order_id)
         return {"success": True, "orden": orden}
     except ValueError as e:
+        logger.error(f"Error consultando orden {order_id}: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 
