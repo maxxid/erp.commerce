@@ -72,6 +72,8 @@ def crear_orden_qr(
         raise ValueError("No se encontró external_pos_id. Creá una caja primero en Ajustes.")
 
     modo = modo_qr or config.get("qr_fijo_modo") or "dinamico"
+    modo_map = {"dinamico": "dynamic", "estatico": "static", "hibrido": "hybrid"}
+    modo_mp = modo_map.get(modo, "dynamic")
 
     base_url = _get_api_base(config["mode"])
     idempotency_key = str(uuid.uuid4())
@@ -91,7 +93,7 @@ def crear_orden_qr(
         "config": {
             "qr": {
                 "external_pos_id": external_pos_id,
-                "mode": modo,
+                "mode": modo_mp,
             }
         },
         "transactions": {
@@ -108,7 +110,7 @@ def crear_orden_qr(
         ],
     }
 
-    logger.info(f"Creando orden MP QR para venta {venta_numero}, monto={monto}, modo={modo}")
+    logger.info(f"Creando orden MP QR para venta {venta_numero}, monto={monto}, modo={modo_mp}")
 
     try:
         response = requests.post(
