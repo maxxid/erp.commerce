@@ -315,6 +315,13 @@ def procesar_webhook(db: Session, payload: dict) -> Optional[dict]:
                     "amount": amount,
                 }
 
+        if not external_ref or not external_ref.startswith("venta_"):
+            logger.warning(
+                f"Webhook MP sin external_reference valido (order_id={order_id}), "
+                f"no se puede asociar a una venta. Ignorando (comun en simulaciones de prueba)."
+            )
+            return None
+
         if order_id:
             try:
                 orden = obtener_estado_orden(db, str(order_id))

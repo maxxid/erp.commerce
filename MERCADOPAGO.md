@@ -122,6 +122,13 @@ mercadopago_webhook_secret= (opcional para QR Code)
 - Verificar que `external_reference` empiece con `venta_`
 - Ver logs: `sudo journalctl -u erp-comercio -n 100 | grep -i webhook`
 
+### Webhook con 404 al consultar orden
+- Si el log muestra `MP API error: 404 - resource not found` cuando llegas webhooks, puede ser porque:
+  - La simulación de MP no incluye `external_reference` válido
+  - El `order_id` de test no existe en la API de MP
+- **Fix aplicado**: Si el webhook no tiene `external_reference` válido, se ignora silenciosamente
+- Esto es normal en simulaciones - los webhooks reales con pago incluyen el `external_reference`
+
 ### Polling da 400
 - El order_id puede haber expirado (15 min)
 - Ver logs de error: `sudo journalctl -u erp-comercio -n 50 | grep -i error`
