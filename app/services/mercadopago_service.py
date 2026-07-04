@@ -292,18 +292,34 @@ def procesar_webhook(db: Session, payload: dict) -> Optional[dict]:
         return None
 
     if "order.processed" in action or "order.completed" in action or "payment.created" in action or "order_prepaid" in action:
+        external_ref = payload.get("data", {}).get("external_reference") or payload.get("external_reference", "")
+
+        if not external_ref and order_id:
+            external_ref = str(order_id)
+
+        logger.info(f"Webhook MP: action={action}, order_id={order_id}, external_ref={external_ref}")
+
+        parts = external_ref.split("_") if external_ref else []
+        if len(parts) >= 2 and parts[0] == "venta":
+            venta_id = int(parts[1])
+            payment_id = payload.get("data", {}).get("transactions", {}).get("payments", [{}])[0].get("id") if payload.get("data", {}).get("transactions", {}).get("payments") else None
+            return {
+                "venta_id": venta_id,
+                "order_id": order_id or external_ref,
+                "payment_id": payment_id,
+                "status": payload.get("data", {}).get("status") or "processed",
+                "amount": payload.get("data", {}).get("total_paid_amount") or payload.get("data", {}).get("total_amount"),
+            }
+
         try:
-            orden = obtener_estado_orden(db, str(order_id))
+            orden = obtener_estado_orden(db, str(order_id)) if order_id else None
         except Exception as e:
             logger.error(f"Error consultando orden en webhook: {e}")
-            return None
+            orden = None
 
-        status = orden.get("status")
-        external_ref = orden.get("external_reference")
-
-        logger.info(f"Orden {order_id} status={status}, external_ref={external_ref}")
-
-        if status in ("approved", "processed"):
+        if orden:
+            status = orden.get("status")
+            external_ref = orden.get("external_reference") or external_ref
             parts = external_ref.split("_") if external_ref else []
             if len(parts) >= 2 and parts[0] == "venta":
                 venta_id = int(parts[1])

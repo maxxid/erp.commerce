@@ -212,6 +212,8 @@ async def webhook_mercadopago(
         if not hmac.compare_digest(computed, hash_value or ""):
             logger.warning(f"Webhook MP firma inválida: computed={computed}, received={hash_value}, manifest={manifest}")
             raise HTTPException(status_code=403, detail="Firma de webhook inválida")
+    else:
+        logger.info(f"Webhook MP recibido sin validación de firma (secret no configurado)")
 
     webhook_data = payload.model_dump()
 
