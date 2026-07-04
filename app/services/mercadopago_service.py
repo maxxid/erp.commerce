@@ -316,3 +316,189 @@ def confirmar_venta_por_mp(db: Session, venta_id: int, order_id: str, payment_id
         "payment_id": payment_id,
         "estado": venta.estado,
     }
+
+
+def crear_sucursal_mp(
+    db: Session,
+    nombre: str,
+    external_id: str,
+    street_number: str = "0",
+    street_name: str = "",
+    city_name: str = "Ciudad",
+    state_name: str = "Estado",
+    latitude: float = -34.6037,
+    longitude: float = -58.3816,
+    reference: str = "",
+) -> dict:
+    """Crea una sucursal en MercadoPago.
+
+    Returns:
+        dict con {id, name, external_id, location, etc}
+    """
+    import requests
+
+    config = get_mercadopago_config(db)
+
+    if not config["enabled"]:
+        raise ValueError("MercadoPago no está habilitado")
+
+    if not config["access_token"]:
+        raise ValueError("MercadoPago access token no configurado")
+
+    base_url = _get_api_base(config["mode"])
+
+    payload = {
+        "name": nombre,
+        "external_id": external_id,
+        "business_hours": {
+            "monday": [{"open": "08:00", "close": "20:00"}],
+            "tuesday": [{"open": "08:00", "close": "20:00"}],
+            "wednesday": [{"open": "08:00", "close": "20:00"}],
+            "thursday": [{"open": "08:00", "close": "20:00"}],
+            "friday": [{"open": "08:00", "close": "20:00"}],
+            "saturday": [{"open": "09:00", "close": "14:00"}],
+        },
+        "location": {
+            "street_number": street_number,
+            "street_name": street_name,
+            "city_name": city_name,
+            "state_name": state_name,
+            "latitude": latitude,
+            "longitude": longitude,
+            "reference": reference,
+        },
+    }
+
+    headers = {
+        "Authorization": f"Bearer {config['access_token']}",
+        "Content-Type": "application/json",
+    }
+
+    user_id = config.get("user_id") or _get_mp_user_id(db)
+    if not user_id:
+        raise ValueError("No se pudo obtener el user_id de MercadoPago")
+
+    logger.info(f"Creando sucursal MP: {nombre}, external_id={external_id}")
+
+    try:
+        response = requests.post(
+            f"{base_url}/users/{user_id}/stores",
+            headers=headers,
+            json=payload,
+            timeout=30,
+        )
+    except requests.RequestException as e:
+        logger.error(f"Error de conexión a MercadoPago: {e}")
+        raise ValueError(f"Error de conexión a MercadoPago: {e}")
+
+    if response.status_code not in (200, 201):
+        logger.error(f"MP API error: {response.status_code} - {response.text}")
+        raise ValueError(f"Error de MercadoPago: {response.status_code} - {response.text[:200]}")
+
+    data = response.json()
+    logger.info(f"Sucursal MP creada: {data}")
+
+    return data
+
+
+def crear_caja_mp(
+    db: Session,
+    nombre: str,
+    store_id: int,
+    external_store_id: str,
+    external_id: str,
+    fixed_amount: bool = True,
+    category: int = 621102,
+) -> dict:
+    """Crea una caja (POS) en MercadoPago.
+
+    Args:
+        store_id: ID de la sucursal creada previamente
+        external_id: ID único para esta caja (ej: "MI_CAJA_001")
+        fixed_amount: True para que el monto sea prefijado por el vendedor
+
+    Returns:
+        dict con {id, qr, status, etc}
+    """
+    import requests
+
+    config = get_mercadopago_config(db)
+
+    if not config["enabled"]:
+        raise ValueError("MercadoPago no está habilitado")
+
+    if not config["access_token"]:
+        raise ValueError("MercadoPago access token no configurado")
+
+    base_url = _get_api_base(config["mode"])
+
+    payload = {
+        "name": nombre,
+        "fixed_amount": fixed_amount,
+        "store_id": store_id,
+        "external_store_id": external_store_id,
+        "external_id": external_id,
+        "category": category,
+    }
+
+    headers = {
+        "Authorization": f"Bearer {config['access_token']}",
+        "Content-Type": "application/json",
+    }
+
+    logger.info(f"Creando caja MP: {nombre}, store_id={store_id}, external_id={external_id}")
+
+    try:
+        response = requests.post(
+            f"{base_url}/pos",
+            headers=headers,
+            json=payload,
+            timeout=30,
+        )
+    except requests.RequestException as e:
+        logger.error(f"Error de conexión a MercadoPago: {e}")
+        raise ValueError(f"Error de conexión a MercadoPago: {e}")
+
+    if response.status_code not in (200, 201):
+        logger.error(f"MP API error: {response.status_code} - {response.text}")
+        raise ValueError(f"Error de MercadoPago: {response.status_code} - {response.text[:200]}")
+
+    data = response.json()
+    logger.info(f"Caja MP creada: {data}")
+
+    return data
+
+
+def _get_mp_user_id(db: Session) -> Optional[str]:
+    """Obtiene el user_id de MercadoPago desde la config o haciendo un request."""
+    user_id = config_service.get_config(db, "mercadopago_user_id")
+    if user_id:
+        return user_id
+
+    import requests
+    config = get_mercadopago_config(db)
+
+    if not config["access_token"]:
+        return None
+
+    base_url = _get_api_base(config["mode"])
+    headers = {
+        "Authorization": f"Bearer {config['access_token']}",
+    }
+
+    try:
+        response = requests.get(
+            f"{base_url}/users/me",
+            headers=headers,
+            timeout=15,
+        )
+        if response.status_code == 200:
+            data = response.json()
+            user_id = str(data.get("id", ""))
+            if user_id:
+                config_service.set_config(db, "mercadopago_user_id", user_id, "User ID de MercadoPago")
+                return user_id
+    except Exception:
+        pass
+
+    return None

@@ -31,6 +31,26 @@ class WebhookPayload(BaseModel):
     id: Optional[str] = None
 
 
+class CrearSucursalRequest(BaseModel):
+    nombre: str
+    external_id: str
+    street_number: str = "0"
+    street_name: str = ""
+    city_name: str = "Ciudad"
+    state_name: str = "Estado"
+    latitude: float = -34.6037
+    longitude: float = -58.3816
+    reference: str = ""
+
+
+class CrearCajaRequest(BaseModel):
+    nombre: str
+    external_id: str
+    external_store_id: str
+    fixed_amount: bool = True
+    category: int = 621102
+
+
 @router.post("/mercadopago/crear-orden")
 def crear_orden_qr(
     req: CrearOrdenQRRequest,
@@ -192,3 +212,82 @@ def confirmar_venta_mp_background(db_url: str, venta_id: int, order_id: str, pay
             db.close()
     except Exception as e:
         logger.error(f"Error confirmando venta {venta_id} en background: {e}")
+
+
+@router.post("/mercadopago/crear-sucursal")
+def crear_sucursal(
+    req: CrearSucursalRequest,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin")),
+):
+    """Crea una sucursal en MercadoPago."""
+    try:
+        result = mercadopago_service.crear_sucursal_mp(
+            db,
+            nombre=req.nombre,
+            external_id=req.external_id,
+            street_number=req.street_number,
+            street_name=req.street_name,
+            city_name=req.city_name,
+            state_name=req.state_name,
+            latitude=req.latitude,
+            longitude=req.longitude,
+            reference=req.reference,
+        )
+        return {
+            "success": True,
+            "store_id": result.get("id"),
+            "name": result.get("name"),
+            "external_id": result.get("external_id"),
+            "message": "Sucursal creada exitosamente"
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/mercadopago/crear-caja")
+def crear_caja(
+    req: CrearCajaRequest,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin")),
+):
+    """Crea una caja (POS) en MercadoPago y guarda el QR fijo."""
+    from app.services import config_service
+
+    config_mp = mercadopago_service.get_mercadopago_config(db)
+    if not config_mp.get("user_id"):
+        mercadopago_service._get_mp_user_id(db)
+
+    try:
+        result = mercadopago_service.crear_caja_mp(
+            db,
+            nombre=req.nombre,
+            store_id=int(config_mp.get("store_id") or 0),
+            external_store_id=req.external_store_id,
+            external_id=req.external_id,
+            fixed_amount=req.fixed_amount,
+            category=req.category,
+        )
+
+        qr_image_url = None
+        if result.get("qr") and result["qr"].get("image"):
+            qr_image_url = result["qr"]["image"]
+
+        if qr_image_url:
+            config_service.set_config(
+                db,
+                "mercadopago_qr_fijo_url",
+                qr_image_url,
+                "URL de imagen del QR fijo de MercadoPago"
+            )
+
+        return {
+            "success": True,
+            "pos_id": result.get("id"),
+            "name": result.get("name"),
+            "qr_image_url": qr_image_url,
+            "external_id": result.get("external_id"),
+            "message": "Caja creada exitosamente"
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

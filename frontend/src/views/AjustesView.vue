@@ -26,6 +26,31 @@ const afipExpanded = ref(false)
 const bancariosExpanded = ref(false)
 const mercadopagoExpanded = ref(false)
 
+// MercadoPago store/POS creation
+const creandoStore = ref(false)
+const creandoCaja = ref(false)
+const storeCreado = ref(false)
+const cajaCreada = ref(false)
+const mpStoreId = ref('')
+const mpCajaId = ref('')
+const qrFijoUrl = ref('')
+const storeForm = ref({
+  nombre: '',
+  external_id: 'SUC001',
+  street_number: '',
+  street_name: '',
+  city_name: '',
+  state_name: '',
+  latitude: -34.6037,
+  longitude: -58.3816,
+  reference: ''
+})
+const cajaForm = ref({
+  nombre: '',
+  external_id: 'CAJA001',
+  external_store_id: ''
+})
+
 const config = ref({
   afip_mode: 'testing',
   facturacion_provider: 's360',
@@ -128,6 +153,66 @@ async function saveConfig(keys = null) {
     toast.error('Error al guardar configuración')
   }
   saving.value = false
+}
+
+async function crearSucursalMp() {
+  if (!storeForm.value.nombre) {
+    toast.warning('Ingresá un nombre para la sucursal')
+    return
+  }
+  if (!storeForm.value.external_id) {
+    toast.warning('Ingresá un ID externo para la sucursal')
+    return
+  }
+  creandoStore.value = true
+  try {
+    const resp = await api.post('/api/pagos/mercadopago/crear-sucursal', storeForm.value)
+    if (resp && resp.success) {
+      mpStoreId.value = resp.store_id
+      storeCreado.value = true
+      cajaForm.value.external_store_id = storeForm.value.external_id
+      toast.success(`Sucursal creada! ID: ${resp.store_id}`)
+    }
+  } catch (e) {
+    toast.error(e.response?.data?.detail || 'Error al crear sucursal')
+  }
+  creandoStore.value = false
+}
+
+async function crearCajaMp() {
+  if (!mpStoreId.value) {
+    toast.warning('Primero tenés que crear una sucursal')
+    return
+  }
+  if (!cajaForm.value.nombre) {
+    toast.warning('Ingresá un nombre para la caja')
+    return
+  }
+  if (!cajaForm.value.external_id) {
+    toast.warning('Ingresá un ID externo para la caja')
+    return
+  }
+  creandoCaja.value = true
+  try {
+    const resp = await api.post('/api/pagos/mercadopago/crear-caja', {
+      nombre: cajaForm.value.nombre,
+      external_id: cajaForm.value.external_id,
+      external_store_id: mpStoreId.value,
+      fixed_amount: true,
+      category: 621102
+    })
+    if (resp && resp.success) {
+      mpCajaId.value = resp.pos_id
+      qrFijoUrl.value = resp.qr_image_url || ''
+      config.value.mercadopago_pos_id_qr = String(resp.pos_id)
+      config.value.mercadopago_qr_fijo_url = resp.qr_image_url || ''
+      cajaCreada.value = true
+      toast.success(`Caja creada! POS ID: ${resp.pos_id}`)
+    }
+  } catch (e) {
+    toast.error(e.response?.data?.detail || 'Error al crear caja')
+  }
+  creandoCaja.value = false
 }
 
 async function generarCsr() {
@@ -519,7 +604,7 @@ onMounted(loadConfig)
         <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded p-3 mb-4">
           <p class="text-xs text-blue-700 dark:text-blue-300">
             <i class="fa-solid fa-circle-info mr-1"></i>
-            Configurá tu cuenta de MercadoPago en <a href="https://www.mercadopago.com.ar" target="_blank" class="underline font-semibold">MercadoPago</a>. Tenés que crear dos POS: uno para QR y otro para el Smart Point.
+            Configurá tu Access Token y luego usá los botones de abajo para crear automáticamente la sucursal, caja y QR fijo de MercadoPago.
           </p>
         </div>
 
@@ -547,7 +632,69 @@ onMounted(loadConfig)
 
         <BaseInput v-model="config.mercadopago_access_token" label="Access Token" type="password" placeholder="APP_USR-..." hint="Lo encontrás en: MercadoPago Dev → Tus integraciones → Credenciales" />
 
-        <BaseInput v-model="config.mercadopago_pos_id_qr" label="POS ID (QR)" placeholder="Para cobrar con código QR" hint="ID del POS configurado como QR en MercadoPago" />
+        <hr class="border-slate-200 dark:border-slate-700" />
+
+        <div class="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded p-3">
+          <p class="text-xs text-emerald-700 dark:text-emerald-300">
+            <i class="fa-solid fa-wand-magic-sparkles mr-1"></i>
+            <strong>Crear sucursal y caja automáticamente</strong> — Completá los datos abajo y hacemos todo desde acá.
+          </p>
+        </div>
+
+        <details class="border border-slate-200 dark:border-slate-700 rounded-lg">
+          <summary class="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800">
+            <i class="fa-solid fa-store mr-2"></i>Crear Sucursal
+          </summary>
+          <div class="p-4 space-y-3 border-t border-slate-200 dark:border-slate-700">
+            <BaseInput v-model="storeForm.nombre" label="Nombre de la sucursal" placeholder="Ej: Mi Tienda Central" />
+            <BaseInput v-model="storeForm.external_id" label="ID Externo" placeholder="Ej: SUC001" hint="Identificador único para tu sistema" />
+            <BaseInput v-model="storeForm.street_name" label="Calle" placeholder="Nombre de la calle" />
+            <div class="grid grid-cols-2 gap-3">
+              <BaseInput v-model="storeForm.street_number" label="Número" placeholder="123" />
+              <BaseInput v-model="storeForm.city_name" label="Ciudad" placeholder="Ciudad" />
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <BaseInput v-model="storeForm.state_name" label="Provincia" placeholder="Buenos Aires" />
+              <BaseInput v-model="storeForm.reference" label="Referencia" placeholder="Cerca de..." />
+            </div>
+            <BaseButton variant="primary" :loading="creandoStore" :disabled="storeCreado" @click="crearSucursalMp">
+              <i class="fa-solid fa-plus mr-1"></i> {{ storeCreado ? 'Sucursal Creada' : 'Crear Sucursal' }}
+            </BaseButton>
+            <div v-if="storeCreado" class="text-xs text-emerald-600 dark:text-emerald-400">
+              <i class="fa-solid fa-check-circle mr-1"></i>Sucursal ID: {{ mpStoreId }}
+            </div>
+          </div>
+        </details>
+
+        <details class="border border-slate-200 dark:border-slate-700 rounded-lg" :class="{ 'opacity-50': !storeCreado }">
+          <summary class="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800" :class="{ 'pointer-events-none': !storeCreado }">
+            <i class="fa-solid fa-desktop mr-2"></i>Crear Caja (POS)
+          </summary>
+          <div class="p-4 space-y-3 border-t border-slate-200 dark:border-slate-700">
+            <BaseInput v-model="cajaForm.nombre" label="Nombre de la caja" placeholder="Ej: Caja Principal" />
+            <BaseInput v-model="cajaForm.external_id" label="ID Externo" placeholder="Ej: CAJA001" hint="Identificador único para tu sistema" />
+            <div class="bg-slate-100 dark:bg-slate-800 rounded p-2 text-xs text-slate-600 dark:text-slate-400">
+              <i class="fa-solid fa-info-circle mr-1"></i>
+              La caja se asociará a la sucursal: <strong>{{ storeForm.nombre || 'Sin nombre' }}</strong> (ID: {{ mpStoreId || 'Sin crear' }})
+            </div>
+            <BaseButton variant="primary" :loading="creandoCaja" :disabled="cajaCreada || !storeCreado" @click="crearCajaMp">
+              <i class="fa-solid fa-plus mr-1"></i> {{ cajaCreada ? 'Caja Creada' : 'Crear Caja' }}
+            </BaseButton>
+            <div v-if="cajaCreada" class="space-y-2">
+              <div class="text-xs text-emerald-600 dark:text-emerald-400">
+                <i class="fa-solid fa-check-circle mr-1"></i>Caja POS ID: {{ mpCajaId }}
+              </div>
+              <div v-if="qrFijoUrl" class="bg-white dark:bg-slate-900 rounded p-2 inline-block">
+                <p class="text-[10px] text-slate-500 mb-1">QR Fijo:</p>
+                <img :src="qrFijoUrl" alt="QR Fijo" class="w-24 h-24" />
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <hr class="border-slate-200 dark:border-slate-700" />
+
+        <BaseInput v-model="config.mercadopago_pos_id_qr" label="POS ID (QR)" placeholder="Se completa automáticamente al crear la caja" hint="ID del POS configurado como QR en MercadoPago" />
 
         <BaseSelect
           v-model="config.mercadopago_qr_fijo_modo"
@@ -564,10 +711,14 @@ onMounted(loadConfig)
           <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded p-3">
             <p class="text-xs text-amber-700 dark:text-amber-300">
               <i class="fa-solid fa-triangle-exclamation mr-1"></i>
-              <strong>Modo Híbrido:</strong> Tenés que subir la imagen del QR fijo que te da MercadoPago. Podés imprimirlo y pegarlo en el mostrador. 同时 se muestra un QR dinámico en pantalla.
+              <strong>Modo Híbrido:</strong> El QR fijo se obtiene al crear la caja (arriba). Imprimilo y pegalo en el mostrador. El QR dinámico se muestra en pantalla al cobrar.
             </p>
           </div>
-          <BaseInput v-model="config.mercadopago_qr_fijo_url" label="QR Fijo (imágen)" type="textarea" placeholder="Pegá el contenido de la imagen del QR fijo (base64 o URL)" hint="Imagen del QR fijo que MercadoPago te da al crear el POS" />
+          <div v-if="qrFijoUrl" class="bg-white dark:bg-slate-900 rounded p-3 inline-block">
+            <p class="text-[10px] text-slate-500 mb-2">QR Fijo (descargado de MercadoPago):</p>
+            <img :src="qrFijoUrl" alt="QR Fijo" class="w-32 h-32" />
+          </div>
+          <BaseInput v-model="config.mercadopago_qr_fijo_url" label="QR Fijo (URL)" type="textarea" placeholder="Se completa automáticamente o pegá otra URL" hint="URL de la imagen del QR fijo" />
         </div>
 
         <BaseInput v-model="config.mercadopago_pos_id_smart" label="POS ID (Smart Point)" placeholder="Para cobrar con dispositivo físico" hint="ID del Smart Point en MercadoPago" />
