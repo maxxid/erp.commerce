@@ -485,7 +485,7 @@
           <div ref="pagoSection" tabindex="0" @keydown="handlePagoKeydown">
             <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase block mb-2">
               Medio de Pago
-              <span class="text-slate-300 dark:text-slate-600 ml-2 font-normal">Atajos: 1-6, ←→, Enter</span>
+              <span class="text-slate-300 dark:text-slate-600 ml-2 font-normal">Atajos: 1-5, ←→, Enter</span>
             </label>
             <div class="grid grid-cols-5 gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
               <button
@@ -1004,10 +1004,9 @@ const pendingLookups = ref([])
 
 const mediosPago = [
   { value: 'efectivo', label: 'Efectivo', icon: 'fa-money-bill-wave' },
-  { value: 'debito', label: 'Débito', icon: 'fa-credit-card' },
-  { value: 'credito', label: 'Crédito', icon: 'fa-credit-card' },
   { value: 'transferencia', label: 'Transf.', icon: 'fa-mobile-screen-button' },
-  { value: 'mercadopago_qr', label: 'MercadoPago', icon: 'fa-brands fa-cc-mastercard' },
+  { value: 'mercadopago_qr', label: 'QR MP', icon: 'fa-brands fa-cc-mastercard' },
+  { value: 'mercadopago_pos', label: 'POS MP', icon: 'fa-solid fa-mobile-button' },
   { value: 'cta_corriente', label: 'Cta. Cte.', icon: 'fa-file-invoice-dollar' }
 ]
 
@@ -1479,7 +1478,7 @@ function addToCart(product, qty = 1, price = null) {
 function handlePagoKeydown(event) {
   const pagos = mediosPago.map(m => m.value)
   const key = event.key
-  if (key >= '1' && key <= '6') {
+  if (key >= '1' && key <= '5') {
     event.preventDefault()
     cart.medio_pago = pagos[parseInt(key) - 1]
   } else if (key === 'ArrowLeft') {
