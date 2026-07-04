@@ -66,6 +66,8 @@ const config = ref({
   mercadopago_enabled: 'false',
   mercadopago_access_token: '',
   mercadopago_user_id: '',
+  mercadopago_store_id: '',
+  mercadopago_external_store_id: '',
   mercadopago_external_pos_id: '',
   mercadopago_pos_id_qr: '',
   mercadopago_pos_id_smart: '',
@@ -139,7 +141,7 @@ const descs = {
   mercadopago_qr_fijo_modo: 'Modo QR: dinamico (solo QR en pantalla) o hibrido (QR fijo + dinámico)',
 }
 
-const MP_KEYS = ['mercadopago_enabled', 'mercadopago_access_token', 'mercadopago_user_id', 'mercadopago_external_pos_id', 'mercadopago_pos_id_qr', 'mercadopago_pos_id_smart', 'mercadopago_mode', 'mercadopago_qr_fijo_url', 'mercadopago_qr_fijo_modo']
+const MP_KEYS = ['mercadopago_enabled', 'mercadopago_access_token', 'mercadopago_user_id', 'mercadopago_store_id', 'mercadopago_external_store_id', 'mercadopago_external_pos_id', 'mercadopago_pos_id_qr', 'mercadopago_pos_id_smart', 'mercadopago_mode', 'mercadopago_qr_fijo_url', 'mercadopago_qr_fijo_modo']
 
 async function saveConfig(keys = null) {
   saving.value = true
@@ -173,6 +175,9 @@ async function crearSucursalMp() {
       mpStoreId.value = resp.store_id
       storeCreado.value = true
       cajaForm.value.external_store_id = storeForm.value.external_id
+      config.value.mercadopago_store_id = String(resp.store_id)
+      config.value.mercadopago_external_store_id = storeForm.value.external_id
+      await saveConfig(['mercadopago_store_id', 'mercadopago_external_store_id'])
       toast.success(`Sucursal creada! ID: ${resp.store_id}`)
     }
   } catch (e) {
@@ -207,8 +212,10 @@ async function crearCajaMp() {
       mpCajaId.value = resp.pos_id
       qrFijoUrl.value = resp.qr_image_url || ''
       config.value.mercadopago_pos_id_qr = String(resp.pos_id)
+      config.value.mercadopago_external_pos_id = cajaForm.value.external_id
       config.value.mercadopago_qr_fijo_url = resp.qr_image_url || ''
       cajaCreada.value = true
+      await saveConfig(['mercadopago_pos_id_qr', 'mercadopago_external_pos_id', 'mercadopago_qr_fijo_url'])
       toast.success(`Caja creada! POS ID: ${resp.pos_id}`)
     }
   } catch (e) {
