@@ -812,11 +812,28 @@
         <p class="text-xs text-slate-500 dark:text-slate-400">Venta #{{ mpQrData.venta_numero }}</p>
       </div>
 
-      <div v-if="mpQrData.qr_image_url" class="bg-white rounded-xl p-4 inline-block mb-4">
-        <img :src="mpQrData.qr_image_url" alt="QR Code" class="w-48 h-48 mx-auto" />
+      <!-- Hybrid mode: show fixed QR + dynamic QR side by side -->
+      <div v-if="mpConfig.qr_fijo_modo === 'hibrido' && mpConfig.qr_fijo_url" class="grid grid-cols-2 gap-4 mb-4">
+        <div class="bg-white rounded-xl p-3">
+          <p class="text-[10px] text-slate-500 mb-2">QR Fijo (para imprimir)</p>
+          <img v-if="mpConfig.qr_fijo_url.startsWith('data:image') || mpConfig.qr_fijo_url.startsWith('http')" :src="mpConfig.qr_fijo_url" alt="QR Fijo" class="w-28 h-28 mx-auto" />
+          <p v-else class="text-[8px] font-mono text-slate-600 break-all">{{ mpConfig.qr_fijo_url.substring(0, 100) }}...</p>
+        </div>
+        <div class="bg-white rounded-xl p-3">
+          <p class="text-[10px] text-slate-500 mb-2">QR Dinámico (esta venta)</p>
+          <img v-if="mpQrData.qr_image_url" :src="mpQrData.qr_image_url" alt="QR Dinámico" class="w-28 h-28 mx-auto" />
+          <p v-else-if="mpQrData.qr_data" class="text-[8px] font-mono text-slate-600 break-all">{{ mpQrData.qr_data.substring(0, 50) }}...</p>
+        </div>
       </div>
-      <div v-else-if="mpQrData.qr_data" class="bg-white rounded-xl p-4 inline-block mb-4">
-        <p class="text-xs font-mono text-slate-600 break-all">{{ mpQrData.qr_data }}</p>
+
+      <!-- Dynamic mode only -->
+      <div v-else>
+        <div v-if="mpQrData.qr_image_url" class="bg-white rounded-xl p-4 inline-block mb-4">
+          <img :src="mpQrData.qr_image_url" alt="QR Code" class="w-48 h-48 mx-auto" />
+        </div>
+        <div v-else-if="mpQrData.qr_data" class="bg-white rounded-xl p-4 inline-block mb-4">
+          <p class="text-xs font-mono text-slate-600 break-all">{{ mpQrData.qr_data }}</p>
+        </div>
       </div>
 
       <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 mb-4">
@@ -1101,6 +1118,7 @@ const emitiendoFactura = reactive({})
 const facturaEmitida = reactive({})
 
 const bankConfig = reactive({ banco_nombre: '', banco_titular: '', banco_alias: '' })
+const mpConfig = reactive({ qr_fijo_url: '', qr_fijo_modo: 'dinamico' })
 
 const filteredPOSProducts = computed(() => {
   let list = products.value
@@ -1143,6 +1161,8 @@ onMounted(async () => {
       if (cfg.banco_nombre) bankConfig.banco_nombre = cfg.banco_nombre.valor || ''
       if (cfg.banco_titular) bankConfig.banco_titular = cfg.banco_titular.valor || ''
       if (cfg.banco_alias) bankConfig.banco_alias = cfg.banco_alias.valor || ''
+      if (cfg.mercadopago_qr_fijo_url) mpConfig.qr_fijo_url = cfg.mercadopago_qr_fijo_url.valor || ''
+      if (cfg.mercadopago_qr_fijo_modo) mpConfig.qr_fijo_modo = cfg.mercadopago_qr_fijo_modo.valor || 'dinamico'
     }
   } catch { /* sin datos */ }
 

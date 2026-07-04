@@ -43,6 +43,8 @@ const config = ref({
   mercadopago_pos_id_qr: '',
   mercadopago_pos_id_smart: '',
   mercadopago_mode: 'sandbox',
+  mercadopago_qr_fijo_url: '',
+  mercadopago_qr_fijo_modo: 'dinamico',
 })
 
 async function loadConfig() {
@@ -106,9 +108,11 @@ const descs = {
   mercadopago_pos_id_qr: 'ID del POS para QR (genera códigos QR dinámicos)',
   mercadopago_pos_id_smart: 'ID del Smart Point (dispositivo físico)',
   mercadopago_mode: 'Entorno: sandbox (pruebas) o prod (producción)',
+  mercadopago_qr_fijo_url: 'URL o código base64 del QR fijo (imagen para imprimir)',
+  mercadopago_qr_fijo_modo: 'Modo QR: dinamico (solo QR en pantalla) o hibrido (QR fijo + dinámico)',
 }
 
-const MP_KEYS = ['mercadopago_enabled', 'mercadopago_access_token', 'mercadopago_pos_id_qr', 'mercadopago_pos_id_smart', 'mercadopago_mode']
+const MP_KEYS = ['mercadopago_enabled', 'mercadopago_access_token', 'mercadopago_pos_id_qr', 'mercadopago_pos_id_smart', 'mercadopago_mode', 'mercadopago_qr_fijo_url', 'mercadopago_qr_fijo_modo']
 
 async function saveConfig(keys = null) {
   saving.value = true
@@ -544,6 +548,27 @@ onMounted(loadConfig)
         <BaseInput v-model="config.mercadopago_access_token" label="Access Token" type="password" placeholder="APP_USR-..." hint="Lo encontrás en: MercadoPago Dev → Tus integraciones → Credenciales" />
 
         <BaseInput v-model="config.mercadopago_pos_id_qr" label="POS ID (QR)" placeholder="Para cobrar con código QR" hint="ID del POS configurado como QR en MercadoPago" />
+
+        <BaseSelect
+          v-model="config.mercadopago_qr_fijo_modo"
+          label="Modo QR"
+          :options="[
+            { value: 'dinamico', label: 'Dinámico (QR en pantalla)' },
+            { value: 'hibrido', label: 'Híbrido (QR fijo + dinámico)' }
+          ]"
+          option-value="value"
+          option-label="label"
+        />
+
+        <div v-if="config.mercadopago_qr_fijo_modo === 'hibrido'" class="space-y-3">
+          <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded p-3">
+            <p class="text-xs text-amber-700 dark:text-amber-300">
+              <i class="fa-solid fa-triangle-exclamation mr-1"></i>
+              <strong>Modo Híbrido:</strong> Tenés que subir la imagen del QR fijo que te da MercadoPago. Podés imprimirlo y pegarlo en el mostrador. 同时 se muestra un QR dinámico en pantalla.
+            </p>
+          </div>
+          <BaseInput v-model="config.mercadopago_qr_fijo_url" label="QR Fijo (imágen)" type="textarea" placeholder="Pegá el contenido de la imagen del QR fijo (base64 o URL)" hint="Imagen del QR fijo que MercadoPago te da al crear el POS" />
+        </div>
 
         <BaseInput v-model="config.mercadopago_pos_id_smart" label="POS ID (Smart Point)" placeholder="Para cobrar con dispositivo físico" hint="ID del Smart Point en MercadoPago" />
 
