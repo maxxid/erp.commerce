@@ -25,6 +25,8 @@ def get_mercadopago_config(db: Session) -> dict:
     return {
         "enabled": config_service.get_config(db, "mercadopago_enabled") == "true",
         "access_token": config_service.get_config(db, "mercadopago_access_token") or "",
+        "store_id": config_service.get_config(db, "mercadopago_store_id") or "",
+        "external_store_id": config_service.get_config(db, "mercadopago_external_store_id") or "",
         "pos_id_qr": config_service.get_config(db, "mercadopago_pos_id_qr") or "",
         "external_pos_id": config_service.get_config(db, "mercadopago_external_pos_id") or "",
         "pos_id_smart": config_service.get_config(db, "mercadopago_pos_id_smart") or "",
