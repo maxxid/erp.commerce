@@ -1,7 +1,7 @@
 """Router de Pagos: MercadoPago QR."""
 
 import logging
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Header
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Header, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
@@ -161,13 +161,13 @@ async def webhook_mercadopago(
     db: Session = Depends(get_db),
     x_signature: str = Header(None, alias="X-Signature"),
     x_request_id: str = Header(None, alias="X-Request-Id"),
+    data_id: str = Query(None, alias="data.id"),
 ):
     """Endpoint para recibir webhooks de MercadoPago.
 
     MercadoPago envía notificaciones cuando un pago se completa.
     Valida la firma del webhook si está configurado el secret.
     """
-    import requests
     import hmac
     import hashlib
     from app.services import venta_service
@@ -177,14 +177,39 @@ async def webhook_mercadopago(
 
     webhook_secret = mp_svc.get_mercadopago_config(db).get("webhook_secret")
     if webhook_secret and x_signature:
-        payload_str = payload.model_dump_json()
-        expected_sig = hmac.new(
+        ts = None
+        hash_value = None
+        for part in x_signature.split(","):
+            if "=" not in part:
+                continue
+            key, _, value = part.partition("=")
+            key = key.strip()
+            value = value.strip()
+            if key == "ts":
+                ts = value
+            if key == "v1":
+                hash_value = value
+
+        data_id_lower = (data_id or "").lower()
+        if data_id_lower and payload.data and payload.data.get("id"):
+            data_id_lower = payload.data.get("id", "").lower()
+
+        parts = []
+        if data_id_lower:
+            parts.append(f"id:{data_id_lower}")
+        if x_request_id:
+            parts.append(f"request-id:{x_request_id}")
+        parts.append(f"ts:{ts}")
+        manifest = ";".join(parts) + ";"
+
+        computed = hmac.new(
             webhook_secret.encode(),
-            payload_str.encode(),
+            manifest.encode(),
             hashlib.sha256
         ).hexdigest()
-        if not hmac.compare_digest(x_signature, expected_sig):
-            logger.warning(f"Webhook MP firma inválida")
+
+        if not hmac.compare_digest(computed, hash_value or ""):
+            logger.warning(f"Webhook MP firma inválida: computed={computed}, received={hash_value}, manifest={manifest}")
             raise HTTPException(status_code=403, detail="Firma de webhook inválida")
 
     webhook_data = payload.model_dump()
