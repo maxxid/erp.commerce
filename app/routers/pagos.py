@@ -159,15 +159,33 @@ async def webhook_mercadopago(
     payload: WebhookPayload,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
+    x_signature: str = Header(None, alias="X-Signature"),
+    x_request_id: str = Header(None, alias="X-Request-Id"),
 ):
     """Endpoint para recibir webhooks de MercadoPago.
 
     MercadoPago envía notificaciones cuando un pago se completa.
+    Valida la firma del webhook si está configurado el secret.
     """
     import requests
+    import hmac
+    import hashlib
     from app.services import venta_service
+    from app.services import mercadopago_service as mp_svc
 
     logger.info(f"Webhook MP recibido: {payload}")
+
+    webhook_secret = mp_svc.get_mercadopago_config(db).get("webhook_secret")
+    if webhook_secret and x_signature:
+        payload_str = payload.model_dump_json()
+        expected_sig = hmac.new(
+            webhook_secret.encode(),
+            payload_str.encode(),
+            hashlib.sha256
+        ).hexdigest()
+        if not hmac.compare_digest(x_signature, expected_sig):
+            logger.warning(f"Webhook MP firma inválida")
+            raise HTTPException(status_code=403, detail="Firma de webhook inválida")
 
     webhook_data = payload.model_dump()
 

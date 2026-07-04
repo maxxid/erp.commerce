@@ -74,6 +74,7 @@ const config = ref({
   mercadopago_mode: 'sandbox',
   mercadopago_qr_fijo_url: '',
   mercadopago_qr_fijo_modo: 'dinamico',
+  mercadopago_webhook_secret: '',
 })
 
 async function loadConfig() {
@@ -139,9 +140,10 @@ const descs = {
   mercadopago_mode: 'Entorno: sandbox (pruebas) o prod (producción)',
   mercadopago_qr_fijo_url: 'URL o código base64 del QR fijo (imagen para imprimir)',
   mercadopago_qr_fijo_modo: 'Modo QR: dinamico (solo QR en pantalla) o hibrido (QR fijo + dinámico)',
+  mercadopago_webhook_secret: 'Clave secreta para validar webhooks de MercadoPago',
 }
 
-const MP_KEYS = ['mercadopago_enabled', 'mercadopago_access_token', 'mercadopago_user_id', 'mercadopago_store_id', 'mercadopago_external_store_id', 'mercadopago_external_pos_id', 'mercadopago_pos_id_qr', 'mercadopago_pos_id_smart', 'mercadopago_mode', 'mercadopago_qr_fijo_url', 'mercadopago_qr_fijo_modo']
+const MP_KEYS = ['mercadopago_enabled', 'mercadopago_access_token', 'mercadopago_user_id', 'mercadopago_store_id', 'mercadopago_external_store_id', 'mercadopago_external_pos_id', 'mercadopago_pos_id_qr', 'mercadopago_pos_id_smart', 'mercadopago_mode', 'mercadopago_qr_fijo_url', 'mercadopago_qr_fijo_modo', 'mercadopago_webhook_secret']
 
 async function saveConfig(keys = null) {
   saving.value = true
@@ -773,6 +775,19 @@ onMounted(loadConfig)
         </div>
 
         <BaseInput v-model="config.mercadopago_pos_id_smart" label="POS ID (Smart Point)" placeholder="Para cobrar con dispositivo físico" hint="ID del Smart Point en MercadoPago" />
+
+        <div class="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg p-3">
+          <p class="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-2">
+            <i class="fa-solid fa-shield-halved mr-1"></i>Seguridad Webhook
+          </p>
+          <BaseInput
+            v-model="config.mercadopago_webhook_secret"
+            label="Webhook Secret"
+            type="password"
+            placeholder="Clave secreta de MP para validar webhooks"
+            hint="Opcional. Encontrás esta clave en el portal de MP Developer > Webhooks"
+          />
+        </div>
 
         <div class="flex items-center gap-3 pt-2">
           <BaseButton variant="primary" :loading="saving" @click="saveConfig(MP_KEYS)">

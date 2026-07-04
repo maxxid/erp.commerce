@@ -33,6 +33,7 @@ def get_mercadopago_config(db: Session) -> dict:
         "user_id": config_service.get_config(db, "mercadopago_user_id") or "",
         "mode": config_service.get_config(db, "mercadopago_mode") or "sandbox",
         "qr_fijo_modo": config_service.get_config(db, "mercadopago_qr_fijo_modo") or "dinamico",
+        "webhook_secret": config_service.get_config(db, "mercadopago_webhook_secret") or "",
     }
 
 
