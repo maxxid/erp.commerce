@@ -95,13 +95,13 @@ class Ticket80:
         self.y -= h + 2 * mm
 
     def factura_letter(self, letra):
-        box_size = 16 * mm
+        box_size = 8 * mm
         x = WIDTH - LEFT - box_size - 2 * mm
         y = self.y - box_size
         self.c.setStrokeColor(COLOR_DARK)
         self.c.rect(x, y, box_size, box_size, stroke=1, fill=0)
-        self.c.setFont(FONT_BOLD, 20)
-        self.c.drawCentredString(x + box_size / 2, y + box_size / 2 - 3, letra)
+        self.c.setFont(FONT_BOLD, 14)
+        self.c.drawCentredString(x + box_size / 2, y + box_size / 2 - 2, letra)
         self.y -= box_size + 2 * mm
 
     def product(self, nombre, cantidad, precio, subtotal):
@@ -250,16 +250,12 @@ def generar_factura_pdf(venta, factura, emisor, items) -> bytes:
     t.key_value("Comprobante", f"{pv}-{numero}")
     t.key_value("Fecha", fecha)
     t.space(2)
-    t.boxed_section(20 * mm)
-    yy = t.y + 15 * mm
-    c.setFont(FONT_BOLD, 8)
-    c.drawString(LEFT + 2 * mm, yy, "CAE")
-    c.drawRightString(RIGHT - 2 * mm, yy, str(factura.get("cae", "N/A")))
-    yy -= 5 * mm
+    t.boxed_section(12 * mm)
+    yy = t.y + 8 * mm
+    venc = str(factura.get("vencimiento_cae", ""))[:10] if factura.get("vencimiento_cae") else "-"
     c.setFont(FONT, 8)
-    c.drawString(LEFT + 2 * mm, yy, "Vencimiento")
-    c.drawRightString(RIGHT - 2 * mm, yy, str(factura.get("vencimiento_cae", ""))[:10] if factura.get("vencimiento_cae") else "-")
-    t.y -= 24 * mm
+    c.drawString(LEFT + 2 * mm, yy, f"CAE {factura.get('cae', 'N/A')}  |  Venc: {venc}")
+    t.y -= 16 * mm
 
     t.hr()
 

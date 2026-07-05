@@ -166,8 +166,8 @@ function formatCurrency(v) {
           <!-- FACTURA -->
           <div class="flex items-start justify-between mb-2">
             <div class="flex-1"></div>
-            <div class="border-2 border-slate-900 rounded text-center" style="width: 16mm; height: 16mm;">
-              <p class="text-lg font-bold leading-none mt-1">{{ tipoFacturaLabel }}</p>
+            <div class="border-2 border-slate-900 rounded text-center" style="width: 8mm; height: 8mm;">
+              <p class="text-sm font-bold leading-none mt-0.5">{{ tipoFacturaLabel }}</p>
             </div>
           </div>
 
@@ -188,9 +188,7 @@ function formatCurrency(v) {
 
           <!-- CAE BOX -->
           <div class="border border-slate-300 rounded p-1 mb-2 text-center">
-            <p class="text-[9px] font-bold">CAE</p>
-            <p class="text-[10px] font-bold">{{ factura?.cae || 'N/A' }}</p>
-            <p class="text-[9px]">Vencimiento: {{ vencimientoCae || '-' }}</p>
+            <p class="text-[9px]">CAE {{ factura?.cae || 'N/A' }} <span class="text-slate-400">|</span> Venc: {{ vencimientoCae || '-' }}</p>
           </div>
 
           <!-- CLIENTE -->
