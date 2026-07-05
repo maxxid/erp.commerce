@@ -274,6 +274,91 @@ def obtener_estado_orden(
     return response.json()
 
 
+def validar_firma_webhook(
+    x_signature: str | None,
+    x_request_id: str | None,
+    data_id: str | None,
+    db: Session,
+) -> bool:
+    """Valida la firma de un webhook de MercadoPago usando HMAC-SHA256.
+
+    Segun documentacion oficial de MP, el header X-Signature tiene el formato:
+    ts=timestamp,v1=firma_hex
+
+    El manifest se arma como:
+    id:{data_id_lower};request-id:{x_request_id};ts:{timestamp};
+
+    Args:
+        x_signature: Header X-Signature de MercadoPago
+        x_request_id: Header X-Request-Id de MercadoPago
+        data_id: Query param data.id (el order_id)
+        db: Sesion de DB para leer el secret
+
+    Returns:
+        True si la firma es valida o no hay secret configurado (se permite)
+        False si la firma no coincide (posible intento de fraude)
+    """
+    import hashlib
+    import hmac
+
+    config = get_mercadopago_config(db)
+    webhook_secret = config.get("webhook_secret", "")
+
+    if not webhook_secret:
+        logger.info("Webhook MP: no hay secret configurado, se omite validacion de firma")
+        return True
+
+    if not x_signature:
+        logger.warning("Webhook MP: falta header X-Signature, se rechazara")
+        return False
+
+    ts = None
+    hash_value = None
+    for part in x_signature.split(","):
+        if "=" not in part:
+            continue
+        key, _, value = part.partition("=")
+        key = key.strip()
+        value = value.strip()
+        if key == "ts":
+            ts = value
+        if key == "v1":
+            hash_value = value
+
+    if not ts or not hash_value:
+        logger.warning(f"Webhook MP: X-Signature sin ts o hash: {x_signature}")
+        return False
+
+    if not data_id:
+        logger.warning("Webhook MP: falta data.id para validar firma")
+        return False
+
+    data_id_lower = data_id.lower()
+
+    parts = []
+    parts.append(f"id:{data_id_lower}")
+    if x_request_id:
+        parts.append(f"request-id:{x_request_id}")
+    parts.append(f"ts:{ts}")
+    manifest = ";".join(parts) + ";"
+
+    computed = hmac.new(
+        webhook_secret.encode("utf-8"),
+        manifest.encode("utf-8"),
+        hashlib.sha256
+    ).hexdigest()
+
+    if not hmac.compare_digest(computed, hash_value):
+        logger.warning(
+            f"Webhook MP: firma invalida. Computed={computed}, Received={hash_value}, "
+            f"manifest={manifest}"
+        )
+        return False
+
+    logger.info("Webhook MP: firma validada correctamente")
+    return True
+
+
 def procesar_webhook(db: Session, payload: dict) -> Optional[dict]:
     """Procesa notificación de pago desde MercadoPago.
 

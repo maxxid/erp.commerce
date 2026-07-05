@@ -167,11 +167,20 @@ async def webhook_mercadopago(
 ):
     """Endpoint para recibir webhooks de MercadoPago.
 
-    IMPORTANTE: Para QR Code, la validación de firma NO está disponible (según docs de MP).
-    Procesamos todos los webhooks sin validar firma.
+    Si mercadopago_webhook_secret esta configurado en la DB, se valida la firma
+    HMAC-SHA256 del webhook. Si no esta configurado, se acepta sin validar.
     """
     from app.services import venta_service
     from app.services import mercadopago_service as mp_svc
+
+    if not mercadopago_service.validar_firma_webhook(
+        x_signature=x_signature,
+        x_request_id=x_request_id,
+        data_id=data_id,
+        db=db,
+    ):
+        logger.warning(f"Webhook MP: firma invalida, rechazando request")
+        raise HTTPException(status_code=401, detail="Firma de webhook invalida")
 
     logger.info(f"Webhook MP recibido: payload={payload}, data_id={data_id}, data_external_reference={data_external_reference}")
 
