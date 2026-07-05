@@ -140,14 +140,17 @@ class Ticket80:
         x = (WIDTH - size) / 2
         qr_url = self._build_arca_qr_url(qr_data)
         try:
-            qr_code = qr.QrCode(qr_url, barWidth=4, barHeight=4)
-            qr_code.drawAt((x + 2 * mm), self.y - size - 2 * mm, self.c)
-        except Exception:
+            qr_code_widget = qr.QrCode(qr_url, barWidth=4, barHeight=4)
+            qr_code_widget.drawAt((x + 2 * mm), self.y - size - 2 * mm, self.c)
+        except Exception as e:
+            self.c.setStrokeColor(COLOR_LIGHT)
             self.c.setDash(2, 2)
             self.c.rect(x, self.y - size, size, size, stroke=1, fill=0)
             self.c.setDash()
+            self.c.setFillColor(COLOR_TEXT)
             self.c.setFont(FONT, 8)
             self.c.drawCentredString(WIDTH / 2, self.y - size / 2 - 3, "QR")
+        self.c.setFillColor(COLOR_TEXT)
         self.c.setFont(FONT, 7)
         self.c.drawCentredString(WIDTH / 2, self.y - size - 4, "ARCA")
         self.y -= size + 6 * mm

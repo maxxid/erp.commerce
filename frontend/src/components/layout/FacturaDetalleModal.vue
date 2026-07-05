@@ -146,70 +146,116 @@ function formatCurrency(v) {
         </div>
 
         <div id="factura-imprimir" class="p-4 font-mono text-[11px] leading-snug text-slate-900 bg-white" style="width: 80mm; margin: 0 auto; font-family: 'Courier New', monospace;">
-          <div class="text-center border-b-2 border-slate-900 pb-2 mb-2">
-            <p class="font-bold text-sm">{{ emisor.nombre || 'Empresa' }}</p>
-            <p class="text-[9px] text-slate-500">{{ emisor.domicilio || '' }}</p>
-            <p class="text-[9px] text-slate-400">CUIT: {{ emisor.cuit || '' }}</p>
-            <p class="text-[9px] text-slate-400">{{ condicionIvaLabel }}</p>
-            <p class="text-[9px] text-slate-400">Ing. Brutos: {{ emisor.ingresos_brutos || 'Exento' }}</p>
-            <p class="text-[9px] text-slate-400">Fecha Inicio: {{ emisor.fecha_inicio || '' }}</p>
+          <!-- LOGO -->
+          <div class="flex justify-center mb-2">
+            <div class="border border-dashed border-slate-400 rounded flex items-center justify-center" style="width: 32mm; height: 14mm;">
+              <span class="text-[9px] text-slate-400">LOGO</span>
+            </div>
           </div>
 
-          <div class="text-center border-2 border-slate-900 rounded p-2 mb-2">
-            <p class="text-lg font-bold">{{ tipoFacturaLabel }}</p>
-            <p class="text-[9px] text-slate-500">Código: {{ factura?.tipo || '011' }}</p>
+          <!-- EMPRESA -->
+          <div class="text-center border-b-2 border-slate-900 pb-2 mb-2">
+            <p class="font-bold text-sm">{{ emisor.nombre || 'EMPRESA' }}</p>
+            <p class="text-[9px] text-slate-500">{{ emisor.domicilio || '' }}</p>
+            <p class="text-[9px]">CUIT: {{ emisor.cuit || '' }}</p>
+            <p class="text-[9px] text-slate-500">{{ condicionIvaLabel }}</p>
+            <p class="text-[9px] text-slate-500" v-if="emisor.ingresos_brutos">IIBB {{ emisor.ingresos_brutos }}</p>
+            <p class="text-[9px] text-slate-500" v-if="emisor.fecha_inicio">Inicio {{ emisor.fecha_inicio }}</p>
+          </div>
+
+          <!-- FACTURA -->
+          <div class="flex items-start justify-between mb-2">
+            <div class="flex-1"></div>
+            <div class="border-2 border-slate-900 rounded text-center" style="width: 16mm; height: 16mm;">
+              <p class="text-lg font-bold leading-none mt-1">{{ tipoFacturaLabel }}</p>
+            </div>
           </div>
 
           <div class="text-center border-b border-dotted border-slate-300 pb-2 mb-2">
-            <p class="text-[10px] font-bold">Punto de Venta: {{ factura?.punto_venta || '00001' }}</p>
-            <p class="text-[10px] font-bold">Comp. Nro: {{ numeroFiscalFormateado || '00000000' }}</p>
-            <p class="text-[10px]">Fecha: {{ fechaEmision }}</p>
+            <div class="flex justify-between text-[10px]">
+              <span>Punto de Venta</span>
+              <span>{{ String(factura?.punto_venta || 1).padStart(5, '0') }}</span>
+            </div>
+            <div class="flex justify-between text-[10px] font-bold">
+              <span>Comprobante</span>
+              <span>{{ numeroFiscalFormateado || '00000000' }}</span>
+            </div>
+            <div class="flex justify-between text-[10px]">
+              <span>Fecha</span>
+              <span>{{ fechaEmision }}</span>
+            </div>
           </div>
 
+          <!-- CAE BOX -->
+          <div class="border border-slate-300 rounded p-1 mb-2 text-center">
+            <p class="text-[9px] font-bold">CAE</p>
+            <p class="text-[10px] font-bold">{{ factura?.cae || 'N/A' }}</p>
+            <p class="text-[9px]">Vencimiento: {{ vencimientoCae || '-' }}</p>
+          </div>
+
+          <!-- CLIENTE -->
+          <div class="bg-slate-100 rounded px-2 py-1 mb-2">
+            <p class="text-[9px] font-bold text-slate-500 uppercase">Cliente</p>
+          </div>
           <div class="border-b border-dotted border-slate-300 pb-2 mb-2">
-            <p class="text-[9px] font-bold mb-1">RECEPTOR:</p>
-            <p class="text-[10px]">{{ receptorLabel }}</p>
-            <p class="text-[9px] text-slate-500">{{ receptorDoc }}</p>
+            <p class="text-[10px] font-bold">{{ receptorLabel }}</p>
+            <p class="text-[9px] text-slate-500">{{ receptorDoc || 'Consumidor Final' }}</p>
           </div>
 
+          <!-- PRODUCTOS -->
+          <div class="bg-slate-100 rounded px-2 py-1 mb-1">
+            <div class="flex justify-between text-[9px] font-bold">
+              <span class="flex-1">Descripción</span>
+              <span class="text-right">Importe</span>
+            </div>
+          </div>
           <div class="space-y-0.5 mb-2">
-            <div class="flex justify-between text-[9px] font-bold text-slate-400 border-b border-dotted border-slate-300 pb-0.5">
-              <span class="flex-1">Producto</span>
-              <span class="w-8 text-right">Cant</span>
-              <span class="w-16 text-right">Precio</span>
-              <span class="w-16 text-right">Subtotal</span>
-            </div>
-            <div v-for="(item, i) in (venta?.items || [])" :key="i" class="flex justify-between text-[10px]">
-              <span class="flex-1 truncate">{{ item.producto_nombre || item.nombre || 'Producto' }}</span>
-              <span class="w-8 text-right">{{ item.cantidad }}</span>
-              <span class="w-16 text-right">{{ formatCurrency(item.precio_unitario) }}</span>
-              <span class="w-16 text-right font-bold">{{ formatCurrency(item.subtotal) }}</span>
+            <div v-for="(item, i) in (venta?.items || [])" :key="i" class="border-b border-dotted border-slate-200 pb-0.5">
+              <p class="text-[10px] font-bold truncate">{{ (item.producto_nombre || item.nombre || 'Producto').toUpperCase() }}</p>
+              <div class="flex justify-between text-[9px] text-slate-600">
+                <span>{{ item.cantidad }} x {{ formatCurrency(item.precio_unitario) }}</span>
+                <span class="font-bold">{{ formatCurrency(item.subtotal) }}</span>
+              </div>
             </div>
           </div>
 
-          <div class="border-t border-dotted border-slate-300 pt-1 space-y-0.5">
+          <!-- TOTALES -->
+          <div class="border border-slate-300 rounded p-1 mb-2 space-y-0.5">
+            <div class="flex justify-between text-[10px]">
+              <span>Subtotal</span>
+              <span>{{ formatCurrency(factura?.neto || venta?.total || 0) }}</span>
+            </div>
             <div class="flex justify-between text-[10px]" v-if="venta?.descuento > 0">
               <span>Descuento</span>
               <span class="font-bold">- {{ formatCurrency(venta.descuento) }}</span>
-            </div>
-            <div class="flex justify-between text-[10px]">
-              <span>Neto</span>
-              <span>{{ formatCurrency(factura?.neto || venta?.total || 0) }}</span>
             </div>
             <div class="flex justify-between text-[10px]" v-if="factura?.iva > 0">
               <span>IVA</span>
               <span>{{ formatCurrency(factura.iva) }}</span>
             </div>
-            <div class="flex justify-between text-sm font-bold border-t border-slate-300 pt-1 mt-1">
+          </div>
+
+          <!-- TOTAL BOX -->
+          <div class="bg-slate-900 text-white rounded p-2 mb-2">
+            <div class="flex justify-between text-sm font-bold">
               <span>TOTAL</span>
               <span>{{ formatCurrency(factura?.total || venta?.total || 0) }}</span>
             </div>
           </div>
 
-          <div class="border-t border-dotted border-slate-300 mt-2 pt-1 text-center">
-            <p class="text-[9px] mb-1">CAI: {{ factura?.cae || 'N/A' }}</p>
-            <p class="text-[9px] mb-1">Vencimiento: {{ vencimientoCae || 'N/A' }}</p>
-            <p class="text-[9px] text-slate-400">¡Gracias por su compra!</p>
+          <!-- QR PLACEHOLDER -->
+          <div class="flex justify-center mb-2">
+            <div class="border border-dashed border-slate-400 rounded flex flex-col items-center justify-center" style="width: 24mm; height: 24mm;">
+              <span class="text-[10px] font-bold">QR</span>
+              <span class="text-[7px] text-slate-400">ARCA</span>
+            </div>
+          </div>
+
+          <!-- PIE -->
+          <div class="border-t-2 border-dotted border-slate-300 pt-2 text-center">
+            <p class="text-[10px] font-bold">¡GRACIAS POR SU COMPRA!</p>
+            <p class="text-[8px] text-slate-400">Comprobante electrónico</p>
+            <p class="text-[8px] text-slate-400">Autorizado por ARCA</p>
           </div>
         </div>
 
