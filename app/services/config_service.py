@@ -54,6 +54,15 @@ def set_config(db: Session, clave: str, valor: str, descripcion: str = ""):
     logger.info(f"set_config: committed OK, id={cfg.id if cfg else 'N/A'}")
 
 
+def get_factura_auto_por_medio(db: Session, medio_pago: str) -> bool:
+    """Retorna True si la factura debe emitirse automáticamente para este medio de pago."""
+    key = f"factura_auto_{medio_pago}"
+    valor = get_config(db, key)
+    if valor is None:
+        return medio_pago in ("mercadopago_qr", "mercadopago_pos")
+    return valor == "true"
+
+
 def get_afip_config(db: Session) -> dict:
     """Lee toda la configuración de AFIP desde la DB + entorno."""
     return {

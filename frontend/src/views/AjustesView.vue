@@ -6,6 +6,7 @@ import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseToggle from '@/components/ui/BaseToggle.vue'
 
 const toast = useToastStore()
 
@@ -25,6 +26,7 @@ const pemUpload = ref('')
 const afipExpanded = ref(false)
 const bancariosExpanded = ref(false)
 const mercadopagoExpanded = ref(false)
+const ventasExpanded = ref(false)
 
 // MercadoPago store/POS creation
 const creandoStore = ref(false)
@@ -75,6 +77,13 @@ const config = ref({
   mercadopago_qr_fijo_url: '',
   mercadopago_qr_fijo_modo: 'dinamico',
   mercadopago_webhook_secret: '',
+  factura_auto_efectivo: 'false',
+  factura_auto_debito: 'false',
+  factura_auto_credito: 'false',
+  factura_auto_transferencia: 'false',
+  factura_auto_cta_corriente: 'false',
+  factura_auto_mercadopago_qr: 'true',
+  factura_auto_mercadopago_pos: 'true',
 })
 
 async function loadConfig() {
@@ -141,9 +150,18 @@ const descs = {
   mercadopago_qr_fijo_url: 'URL o código base64 del QR fijo (imagen para imprimir)',
   mercadopago_qr_fijo_modo: 'Modo QR: dinamico (solo QR en pantalla) o hibrido (QR fijo + dinámico)',
   mercadopago_webhook_secret: 'Clave secreta para validar webhooks de MercadoPago',
+  factura_auto_efectivo: 'Emitir factura electrónica automáticamente al cobrar en efectivo',
+  factura_auto_debito: 'Emitir factura electrónica automáticamente al cobrar con débito',
+  factura_auto_credito: 'Emitir factura electrónica automáticamente al cobrar con crédito',
+  factura_auto_transferencia: 'Emitir factura electrónica automáticamente al cobrar con transferencia',
+  factura_auto_cta_corriente: 'Emitir factura electrónica automáticamente al cobrar a cuenta corriente',
+  factura_auto_mercadopago_qr: 'Emitir factura electrónica automáticamente al cobrar con MercadoPago QR',
+  factura_auto_mercadopago_pos: 'Emitir factura electrónica automáticamente al cobrar con MercadoPago POS',
 }
 
 const MP_KEYS = ['mercadopago_enabled', 'mercadopago_access_token', 'mercadopago_user_id', 'mercadopago_store_id', 'mercadopago_external_store_id', 'mercadopago_external_pos_id', 'mercadopago_pos_id_qr', 'mercadopago_pos_id_smart', 'mercadopago_mode', 'mercadopago_qr_fijo_url', 'mercadopago_qr_fijo_modo', 'mercadopago_webhook_secret']
+
+const VENTAS_KEYS = ['factura_auto_efectivo', 'factura_auto_debito', 'factura_auto_credito', 'factura_auto_transferencia', 'factura_auto_cta_corriente', 'factura_auto_mercadopago_qr', 'factura_auto_mercadopago_pos']
 
 async function saveConfig(keys = null) {
   saving.value = true
@@ -803,6 +821,79 @@ onMounted(loadConfig)
 
         <div class="flex items-center gap-3 pt-2">
           <BaseButton variant="primary" :loading="saving" @click="saveConfig(MP_KEYS)">
+            <i class="fa-solid fa-floppy-disk"></i> Guardar
+          </BaseButton>
+          <p class="text-[11px] text-slate-400">Los cambios se aplican inmediatamente</p>
+        </div>
+      </div>
+    </BaseCard>
+
+    <BaseCard v-if="!loading">
+      <button class="w-full text-left" @click="ventasExpanded = !ventasExpanded">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <i class="fa-solid fa-receipt text-brand-600"></i>
+            Factura Electrónica Automática por Medio de Pago
+          </h3>
+          <i :class="['fa-solid fa-chevron-down text-xs transition-transform', ventasExpanded ? 'rotate-180' : '']"></i>
+        </div>
+      </button>
+
+      <div v-if="ventasExpanded" class="mt-4 space-y-4 max-w-lg">
+        <div class="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg p-4">
+          <p class="text-xs text-slate-600 dark:text-slate-400 mb-4">
+            Activá o desactivá la emisión automática de facturas electrónicas para cada medio de pago.
+            Cuando está <strong>OFF</strong>, la factura se emite manualmente desde el ticket.
+          </p>
+
+          <div class="space-y-4">
+            <BaseToggle
+              v-model="config.factura_auto_efectivo"
+              label="Efectivo"
+              description="Factura automática al cobrar en efectivo"
+              size="sm"
+            />
+            <BaseToggle
+              v-model="config.factura_auto_debito"
+              label="Débito"
+              description="Factura automática al cobrar con tarjeta de débito"
+              size="sm"
+            />
+            <BaseToggle
+              v-model="config.factura_auto_credito"
+              label="Crédito"
+              description="Factura automática al cobrar con tarjeta de crédito"
+              size="sm"
+            />
+            <BaseToggle
+              v-model="config.factura_auto_transferencia"
+              label="Transferencia"
+              description="Factura automática al cobrar por transferencia bancaria"
+              size="sm"
+            />
+            <BaseToggle
+              v-model="config.factura_auto_cta_corriente"
+              label="Cuenta Corriente"
+              description="Factura automática al cobrar a cuenta corriente"
+              size="sm"
+            />
+            <BaseToggle
+              v-model="config.factura_auto_mercadopago_qr"
+              label="MercadoPago QR"
+              description="Factura automática al cobrar con QR de MercadoPago"
+              size="sm"
+            />
+            <BaseToggle
+              v-model="config.factura_auto_mercadopago_pos"
+              label="MercadoPago POS"
+              description="Factura automática al cobrar con Smart Point de MercadoPago"
+              size="sm"
+            />
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3 pt-2">
+          <BaseButton variant="primary" :loading="saving" @click="saveConfig(VENTAS_KEYS)">
             <i class="fa-solid fa-floppy-disk"></i> Guardar
           </BaseButton>
           <p class="text-[11px] text-slate-400">Los cambios se aplican inmediatamente</p>
