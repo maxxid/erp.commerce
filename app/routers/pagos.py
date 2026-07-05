@@ -173,6 +173,7 @@ async def webhook_mercadopago(
     from app.services import venta_service
     from app.services import mercadopago_service as mp_svc
 
+    logger.warning(f"WEBHOOK DEBUG: arrived at endpoint, payload type={type(payload)}, model_dump={payload.model_dump()}")
     logger.info(f"Webhook MP recibido: payload={payload}, data_id={data_id}, data_external_reference={data_external_reference}")
 
     webhook_data = payload.model_dump()
@@ -207,6 +208,7 @@ def confirmar_venta_mp_background(db_url: str, venta_id: int, order_id: str, pay
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
+    logger.warning(f"BACKGROUND TASK START: venta_id={venta_id}, order_id={order_id}, db_url={db_url}")
     try:
         engine = create_engine(db_url)
         SessionLocal = sessionmaker(bind=engine)
