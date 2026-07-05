@@ -12,6 +12,7 @@ import BaseBadge from '@/components/ui/BaseBadge.vue'
 import BaseTable from '@/components/ui/BaseTable.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import TicketModal from '@/components/layout/TicketModal.vue'
+import FacturaDetalleModal from '@/components/layout/FacturaDetalleModal.vue'
 
 const auth = useAuthStore()
 const toast = useToastStore()
@@ -34,6 +35,9 @@ const ticketData = ref({ items: [], numero: '', fecha: '', total: 0, descuento: 
 const sales = ref([])
 const facturasMap = ref({})
 const facturandoId = ref(null)
+const showFacturaDetalle = ref(false)
+const detalleFactura = ref(null)
+const detalleVenta = ref(null)
 
 const tableColumns = [
   { key: 'expand', label: '', width: 'w-10' },
@@ -136,6 +140,7 @@ const tableRows = computed(() => filteredSales.value)
 
 onMounted(async () => {
   await fetchVentas()
+  await fetchEmisorConfig()
 })
 
 async function fetchVentas() {
@@ -171,11 +176,42 @@ async function emitirFactura(ventaId) {
       facturasMap.value[ventaId] = res
       toast.success(res.cae ? `Factura emitida CAE: ${res.cae}` : 'Factura pendiente')
     }
+    await fetchEmisorConfig()
+    abrirDetalleFactura(ventaId)
   } catch (e) {
     toast.error(e?.message || 'Error al emitir factura')
   } finally {
     facturandoId.value = null
   }
+}
+
+const emisorConfig = ref({})
+async function fetchEmisorConfig() {
+  try {
+    const data = await api.get('/api/config/ajustes')
+    if (data) {
+      emisorConfig.value = {
+        nombre: data.empresa_nombre?.valor || '',
+        domicilio: data.empresa_domicilio?.valor || '',
+        condicion_iva: data.empresa_condicion_iva?.valor || 'responsable_inscripto',
+        ingresos_brutos: data.empresa_ingresos_brutos?.valor || '',
+        fecha_inicio: data.empresa_fecha_inicio?.valor || '',
+        cuit: data.afip_cuit?.valor || ''
+      }
+    }
+  } catch { /* ignore */ }
+}
+
+async function abrirDetalleFactura(ventaId) {
+  const venta = sales.value.find(s => s.id === ventaId)
+  const factura = facturasMap.value[ventaId]
+  if (!venta) return
+  detalleVenta.value = venta
+  detalleFactura.value = factura
+  if (!emisorConfig.value.cuit) {
+    await fetchEmisorConfig()
+  }
+  showFacturaDetalle.value = true
 }
 
 function verTicket(row) {
@@ -193,10 +229,7 @@ function verTicket(row) {
 }
 
 function verFactura(ventaId) {
-  const factura = facturasMap.value[ventaId]
-  if (factura) {
-    toast.info(`CAE: ${factura.cae}\nFecha: ${factura.fecha || 'N/A'}\nEstado: ${factura.estado}`)
-  }
+  abrirDetalleFactura(ventaId)
 }
 
 async function syncData() {
@@ -368,23 +401,27 @@ async function executeAnular() {
           <BaseBadge :variant="estadoVariant(row.estado)" size="xs">{{ row.estado }}</BaseBadge>
         </template>
         <template #factura="{ row }">
-          <div v-if="facturasMap[row.id]" class="flex items-center gap-1">
+          <div v-if="facturasMap[row.id]">
             <button
-              v-if="facturasMap[row.id].estado === 'emitida'"
               type="button"
-              class="px-2 py-1 bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/30 text-green-700 dark:text-green-300 rounded-lg text-[10px] font-bold transition"
+              :disabled="facturandoId === row.id"
+              class="px-2 py-1 bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/30 text-green-700 dark:text-green-300 rounded-lg text-[10px] font-bold transition disabled:opacity-50"
               @click.stop="verFactura(row.id)"
             >
-              <i class="fa-solid fa-file-signature mr-1"></i> {{ facturasMap[row.id].cae ? `CAE: ${facturasMap[row.id].cae.substring(0,10)}...` : 'Ver' }}
+              <i :class="facturasMap[row.id].estado === 'emitida' ? 'fa-solid fa-file-signature' : (facturasMap[row.id].estado === 'rechazada' ? 'fa-solid fa-triangle-exclamation' : 'fa-solid fa-clock')" class="mr-1"></i>
+              {{ facturasMap[row.id].estado === 'emitida' ? (facturasMap[row.id].cae ? `CAE: ${facturasMap[row.id].cae.substring(0,8)}...` : 'Ver') : facturasMap[row.id].estado }}
             </button>
-            <BaseBadge
-              v-else
-              :variant="facturasMap[row.id].estado === 'rechazada' ? 'danger' : 'warning'"
-              size="xs"
-            >
-              {{ facturasMap[row.id].estado }}
-            </BaseBadge>
           </div>
+          <button
+            v-else-if="row.estado === 'Completada'"
+            type="button"
+            :disabled="facturandoId === row.id"
+            class="px-2 py-1 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-lg text-[10px] font-bold transition disabled:opacity-50"
+            @click.stop="emitirFactura(row.id)"
+          >
+            <i :class="facturandoId === row.id ? 'fa-solid fa-circle-notch fa-spin' : 'fa-solid fa-file-export'" class="mr-1"></i>
+            {{ facturandoId === row.id ? '...' : 'EMITIR' }}
+          </button>
           <span v-else class="text-[10px] text-slate-400">—</span>
         </template>
         <template #acciones="{ row }">
@@ -495,5 +532,14 @@ async function executeAnular() {
     </BaseModal>
 
     <TicketModal :show="showTicket" :ticket="ticketData" @close="showTicket = false" />
+
+    <FacturaDetalleModal
+      :show="showFacturaDetalle"
+      :factura="detalleFactura"
+      :venta="detalleVenta"
+      :emisor="emisorConfig"
+      @close="showFacturaDetalle = false"
+      @reemitir="emitirFactura(detalleVenta?.id)"
+    />
   </div>
 </template>

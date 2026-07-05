@@ -65,6 +65,10 @@ const config = ref({
   banco_titular: '',
   banco_alias: '',
   empresa_nombre: '',
+  empresa_domicilio: '',
+  empresa_condicion_iva: 'responsable_inscripto',
+  empresa_ingresos_brutos: '',
+  empresa_fecha_inicio: '',
   mercadopago_enabled: 'false',
   mercadopago_access_token: '',
   mercadopago_user_id: '',
@@ -141,6 +145,8 @@ async function loadCertInfo() {
 
 const AFIP_BASIC_KEYS = ['afip_mode', 'facturacion_provider', 'afip_cuit', 'afip_pto_vta']
 const BANCOS_KEYS = ['banco_nombre', 'banco_titular', 'banco_alias']
+const EMISOR_KEYS = ['empresa_nombre', 'empresa_domicilio', 'empresa_condicion_iva', 'empresa_ingresos_brutos', 'empresa_fecha_inicio']
+const AFIP_ALL_KEYS = [...AFIP_BASIC_KEYS, ...EMISOR_KEYS]
 
 const descs = {
   afip_mode: 'Entorno AFIP: testing | production',
@@ -152,6 +158,11 @@ const descs = {
   banco_nombre: 'Nombre del banco para transferencias',
   banco_titular: 'Nombre del titular de la cuenta',
   banco_alias: 'Alias de CBU/Alias para transferencias',
+  empresa_nombre: 'Razón Social para facturas electrónicas',
+  empresa_domicilio: 'Domicilio comercial para facturas',
+  empresa_condicion_iva: 'Condición frente al IVA: responsable_inscripto, monotributista, exento',
+  empresa_ingresos_brutos: 'Número de Ingresos Brutos (o "Exento")',
+  empresa_fecha_inicio: 'Fecha de inicio de actividades (YYYY-MM-DD)',
   mercadopago_enabled: 'Habilitar cobros con QR de MercadoPago',
   mercadopago_access_token: 'Access Token de MercadoPago (del portal de desarrolladores)',
   mercadopago_pos_id_qr: 'ID del POS para QR (genera códigos QR dinámicos)',
@@ -458,8 +469,32 @@ onMounted(loadConfig)
 
           <BaseInput v-model="config.afip_pto_vta" label="Punto de Venta" placeholder="1" maxlength="4" hint="Número habilitado en AFIP" />
 
+          <hr class="border-slate-200 dark:border-slate-700 my-4" />
+
+          <p class="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-3">Datos del Emisor (para factura electrónica)</p>
+
+          <BaseInput v-model="config.empresa_nombre" label="Razón Social" placeholder="Nombre de la empresa" />
+
+          <BaseInput v-model="config.empresa_domicilio" label="Domicilio Comercial" placeholder="Dirección fiscal" />
+
+          <BaseSelect
+            v-model="config.empresa_condicion_iva"
+            label="Condición frente al IVA"
+            :options="[
+              { value: 'responsable_inscripto', label: 'Responsable Inscripto' },
+              { value: 'monotributista', label: 'Monotributista' },
+              { value: 'exento', label: 'Exento' }
+            ]"
+            option-value="value"
+            option-label="label"
+          />
+
+          <BaseInput v-model="config.empresa_ingresos_brutos" label="Ingresos Brutos" placeholder="1234567 o 'Exento'" />
+
+          <BaseInput v-model="config.empresa_fecha_inicio" label="Fecha de Inicio de Actividades" type="date" />
+
           <div class="flex items-center gap-3 pt-2">
-            <BaseButton variant="primary" :loading="saving" @click="saveConfig(AFIP_BASIC_KEYS)">
+            <BaseButton variant="primary" :loading="saving" @click="saveConfig(AFIP_ALL_KEYS)">
               <i class="fa-solid fa-floppy-disk"></i> Guardar
             </BaseButton>
             <p class="text-[11px] text-slate-400">Los cambios se aplican inmediatamente</p>

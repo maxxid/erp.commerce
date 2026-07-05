@@ -11,6 +11,7 @@ from app.schemas.common import RespuestaData, RespuestaLista
 from app.auth.dependencies import get_current_user, require_role
 from app.models.usuario import Usuario
 from app.models.factura_electronica import FacturaElectronica
+from app.models.venta import Venta
 from app.services.venta_service import obtener_venta
 from app.services import afip_service
 from app.services import afip_csr_service
@@ -272,3 +273,77 @@ def subir_certificado(
         return RespuestaData(data=result, message=result["mensaje"])
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/facturas/{venta_id}/pdf")
+def descargar_factura_pdf(
+    venta_id: int,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """Genera y descarga un PDF de la factura electrónica asociada a una venta."""
+    from fastapi.responses import StreamingResponse
+    from app.services.factura_pdf_service import generar_factura_pdf
+    from app.services.config_service import get_config
+
+    venta = db.query(Venta).filter(Venta.id == venta_id).first()
+    if not venta:
+        raise HTTPException(status_code=404, detail="Venta no encontrada")
+
+    factura = db.query(FacturaElectronica).filter(
+        FacturaElectronica.venta_id == venta_id
+    ).first()
+    if not factura:
+        raise HTTPException(status_code=404, detail="No hay factura para esta venta")
+
+    emisor = {
+        "nombre": get_config(db, "empresa_nombre") or "",
+        "domicilio": get_config(db, "empresa_domicilio") or "",
+        "cuit": get_config(db, "afip_cuit") or "",
+        "condicion_iva": get_config(db, "empresa_condicion_iva") or "responsable_inscripto",
+        "ingresos_brutos": get_config(db, "empresa_ingresos_brutos") or "Exento",
+        "fecha_inicio": get_config(db, "empresa_fecha_inicio") or "",
+    }
+
+    items = []
+    for item in venta.items:
+        items.append({
+            "producto_nombre": item.producto.nombre if item.producto else "Producto",
+            "cantidad": item.cantidad,
+            "precio_unitario": item.precio_unitario,
+            "subtotal": item.subtotal,
+        })
+
+    venta_data = {
+        "id": venta.id,
+        "numero": venta.numero,
+        "fecha": venta.fecha.isoformat() if venta.fecha else None,
+        "total": venta.total,
+        "descuento": venta.descuento,
+        "cliente_nombre": venta.cliente.nombre if venta.cliente else "Consumidor Final",
+    }
+
+    factura_data = {
+        "tipo": factura.tipo,
+        "punto_venta": factura.punto_venta,
+        "numero_fiscal": factura.numero_fiscal,
+        "cae": factura.cae,
+        "vencimiento_cae": factura.vencimiento_cae.isoformat() if factura.vencimiento_cae else None,
+        "total": factura.total,
+        "neto": factura.neto,
+        "iva": factura.iva,
+        "nro_doc_comprador": factura.nro_doc_comprador,
+    }
+
+    pdf_bytes = generar_factura_pdf(venta_data, factura_data, emisor, items)
+
+    numero_limpio = venta.numero.replace("/", "-").replace("\\", "-") if venta.numero else str(venta_id)
+    filename = f"factura_{numero_limpio}.pdf"
+
+    return StreamingResponse(
+        iter([pdf_bytes]),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
+    )
