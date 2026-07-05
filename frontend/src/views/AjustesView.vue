@@ -77,13 +77,16 @@ const config = ref({
   mercadopago_qr_fijo_url: '',
   mercadopago_qr_fijo_modo: 'dinamico',
   mercadopago_webhook_secret: '',
-  factura_auto_efectivo: 'false',
-  factura_auto_debito: 'false',
-  factura_auto_credito: 'false',
-  factura_auto_transferencia: 'false',
-  factura_auto_cta_corriente: 'false',
-  factura_auto_mercadopago_qr: 'true',
-  factura_auto_mercadopago_pos: 'true',
+})
+
+const facturaAuto = ref({
+  efectivo: false,
+  debito: false,
+  credito: false,
+  transferencia: false,
+  cta_corriente: false,
+  mercadopago_qr: true,
+  mercadopago_pos: true,
 })
 
 async function loadConfig() {
@@ -93,6 +96,13 @@ async function loadConfig() {
     if (data) {
       for (const key of Object.keys(config.value)) {
         if (data[key]) config.value[key] = data[key].valor || ''
+      }
+      const medios = ['efectivo', 'debito', 'credito', 'transferencia', 'cta_corriente', 'mercadopago_qr', 'mercadopago_pos']
+      for (const medio of medios) {
+        const configKey = `factura_auto_${medio}`
+        if (data[configKey]) {
+          facturaAuto.value[medio] = data[configKey].valor === 'true'
+        }
       }
     }
     await loadCertInfo()
@@ -166,11 +176,18 @@ const VENTAS_KEYS = ['factura_auto_efectivo', 'factura_auto_debito', 'factura_au
 async function saveConfig(keys = null) {
   saving.value = true
   try {
-    const entries = keys
-      ? Object.entries(config.value).filter(([k]) => keys.includes(k))
-      : Object.entries(config.value)
-    for (const [clave, valor] of entries) {
-      await api.put('/api/config/ajustes', { clave, valor, descripcion: descs[clave] || '' })
+    if (keys && keys === VENTAS_KEYS) {
+      for (const [key, value] of Object.entries(facturaAuto.value)) {
+        const configKey = `factura_auto_${key}`
+        await api.put('/api/config/ajustes', { clave: configKey, valor: String(value), descripcion: descs[configKey] || '' })
+      }
+    } else {
+      const entries = keys
+        ? Object.entries(config.value).filter(([k]) => keys.includes(k))
+        : Object.entries(config.value)
+      for (const [clave, valor] of entries) {
+        await api.put('/api/config/ajustes', { clave, valor, descripcion: descs[clave] || '' })
+      }
     }
     toast.success('Configuración guardada')
   } catch {
@@ -848,43 +865,43 @@ onMounted(loadConfig)
 
           <div class="space-y-4">
             <BaseToggle
-              v-model="config.factura_auto_efectivo"
+              v-model="facturaAuto.efectivo"
               label="Efectivo"
               description="Factura automática al cobrar en efectivo"
               size="sm"
             />
             <BaseToggle
-              v-model="config.factura_auto_debito"
+              v-model="facturaAuto.debito"
               label="Débito"
               description="Factura automática al cobrar con tarjeta de débito"
               size="sm"
             />
             <BaseToggle
-              v-model="config.factura_auto_credito"
+              v-model="facturaAuto.credito"
               label="Crédito"
               description="Factura automática al cobrar con tarjeta de crédito"
               size="sm"
             />
             <BaseToggle
-              v-model="config.factura_auto_transferencia"
+              v-model="facturaAuto.transferencia"
               label="Transferencia"
               description="Factura automática al cobrar por transferencia bancaria"
               size="sm"
             />
             <BaseToggle
-              v-model="config.factura_auto_cta_corriente"
+              v-model="facturaAuto.cta_corriente"
               label="Cuenta Corriente"
               description="Factura automática al cobrar a cuenta corriente"
               size="sm"
             />
             <BaseToggle
-              v-model="config.factura_auto_mercadopago_qr"
+              v-model="facturaAuto.mercadopago_qr"
               label="MercadoPago QR"
               description="Factura automática al cobrar con QR de MercadoPago"
               size="sm"
             />
             <BaseToggle
-              v-model="config.factura_auto_mercadopago_pos"
+              v-model="facturaAuto.mercadopago_pos"
               label="MercadoPago POS"
               description="Factura automática al cobrar con Smart Point de MercadoPago"
               size="sm"
