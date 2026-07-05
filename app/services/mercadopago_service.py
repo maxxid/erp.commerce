@@ -133,13 +133,19 @@ def crear_orden_qr(
     logger.info(f"Orden MP creada: {data}")
 
     qr_data = None
-    if data.get("type_response") and data["type_response"].get("qr_data"):
-        qr_data = data["type_response"]["qr_data"]
+    qr_image_url = None
+    if data.get("type_response"):
+        tr = data["type_response"]
+        if tr.get("qr_data"):
+            qr_data = tr["qr_data"]
+        if tr.get("qr") and tr["qr"].get("image"):
+            qr_image_url = tr["qr"]["image"]
 
     return {
         "order_id": data.get("id"),
         "status": data.get("status"),
         "qr_data": qr_data,
+        "qr_image_url": qr_image_url,
         "external_reference": data.get("external_reference"),
     }
 
