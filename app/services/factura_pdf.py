@@ -317,15 +317,15 @@ def generar_factura_pdf(venta, factura, emisor, items) -> bytes:
 
     # QR
     qr_payload = {
-        "fecha": venta_data.get("fecha"),
+        "fecha": venta.get("fecha"),
         "cuit_emisor": emisor.get("cuit", "").replace("-", "").replace(" ", ""),
-        "punto_venta": factura_data.get("punto_venta"),
-        "tipo": factura_data.get("tipo"),
-        "numero_fiscal": factura_data.get("numero_fiscal"),
-        "total": factura_data.get("total"),
-        "tipo_doc_comprador": factura_data.get("tipo_doc_comprador"),
-        "nro_doc_comprador": factura_data.get("nro_doc_comprador"),
-        "cae": factura_data.get("cae"),
+        "punto_venta": factura.get("punto_venta"),
+        "tipo": factura.get("tipo"),
+        "numero_fiscal": factura.get("numero_fiscal"),
+        "total": factura.get("total"),
+        "tipo_doc_comprador": factura.get("tipo_doc_comprador"),
+        "nro_doc_comprador": factura.get("nro_doc_comprador"),
+        "cae": factura.get("cae"),
     }
     t.qr_code(qr_payload)
 
