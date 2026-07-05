@@ -812,17 +812,19 @@
         <p class="text-xs text-slate-500 dark:text-slate-400">Venta #{{ mpQrData.venta_numero }}</p>
       </div>
 
-      <!-- Hybrid mode: show fixed QR + dynamic QR side by side -->
-      <div v-if="mpConfig.qr_fijo_modo === 'hibrido' && mpConfig.qr_fijo_url" class="grid grid-cols-2 gap-4 mb-4">
-        <div class="bg-white rounded-xl p-3">
+      <!-- Hybrid mode: show fixed QR collapsible + dynamic QR -->
+      <div v-if="mpConfig.qr_fijo_modo === 'hibrido' && mpConfig.qr_fijo_url">
+        <button
+          class="flex items-center gap-2 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 mb-2 transition-colors"
+          @click="showFixedQr = !showFixedQr"
+        >
+          <i :class="['fa-solid', showFixedQr ? 'fa-chevron-up' : 'fa-chevron-down']"></i>
+          {{ showFixedQr ? 'Ocultar' : 'Mostrar' }} QR Fijo (fallback)
+        </button>
+        <div v-if="showFixedQr" class="bg-white rounded-xl p-3 mb-4">
           <p class="text-[10px] text-slate-500 mb-2">QR Fijo (para imprimir)</p>
           <img v-if="mpConfig.qr_fijo_url.startsWith('data:image') || mpConfig.qr_fijo_url.startsWith('http')" :src="mpConfig.qr_fijo_url" alt="QR Fijo" class="w-28 h-28 mx-auto" />
           <p v-else class="text-[8px] font-mono text-slate-600 break-all">{{ mpConfig.qr_fijo_url.substring(0, 100) }}...</p>
-        </div>
-        <div class="bg-white rounded-xl p-3">
-          <p class="text-[10px] text-slate-500 mb-2">QR Dinámico (esta venta)</p>
-          <img v-if="mpQrData.qr_image_url" :src="mpQrData.qr_image_url" alt="QR Dinámico" class="w-28 h-28 mx-auto" />
-          <p v-else-if="mpQrData.qr_data" class="text-[8px] font-mono text-slate-600 break-all">{{ mpQrData.qr_data.substring(0, 50) }}...</p>
         </div>
       </div>
 
@@ -1119,6 +1121,7 @@ const facturaEmitida = reactive({})
 
 const bankConfig = reactive({ banco_nombre: '', banco_titular: '', banco_alias: '' })
 const mpConfig = reactive({ qr_fijo_url: '', qr_fijo_modo: 'dinamico' })
+const showFixedQr = ref(false)
 
 const filteredPOSProducts = computed(() => {
   let list = products.value
