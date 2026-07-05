@@ -10,8 +10,8 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue'])
 
 const sizeClass = {
-  sm: { track: 'w-9 h-5', knob: 'w-3.5 h-3.5', translate: 'translate-x-4.5' },
-  md: { track: 'w-11 h-6', knob: 'w-5 h-5', translate: 'translate-x-5' }
+  sm: { track: 'w-9 h-5', knob: 'w-3.5 h-3.5', translate: 'translate-x-[18px]' },
+  md: { track: 'w-11 h-6', knob: 'w-5 h-5', translate: 'translate-x-[22px]' }
 }[props.size]
 
 function toggle() {
