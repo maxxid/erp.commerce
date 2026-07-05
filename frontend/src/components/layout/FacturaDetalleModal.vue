@@ -94,7 +94,81 @@ async function downloadPdf() {
 }
 
 function printFactura() {
-  window.print()
+  const printContent = document.getElementById('factura-imprimir')
+  if (!printContent) return
+  const printWindow = window.open('', '_blank', 'width=300,height=600')
+  printWindow.document.write(`
+    <html>
+    <head>
+      <title>Factura</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Courier New', monospace; font-size: 11px; line-height: 1.4; color: #000; width: 80mm; padding: 4px; }
+        .text-center { text-align: center; }
+        .border-b-2 { border-bottom-width: 2px; border-bottom-style: solid; border-color: #000; }
+        .border-b { border-bottom: 1px dotted #ccc; }
+        .border-dotted { border-style: dotted; border-color: #ccc; }
+        .border-2 { border: 2px solid #000; }
+        .border { border: 1px solid #ccc; }
+        .border-slate-300 { border-color: #ccc; }
+        .border-slate-900 { border-color: #000; }
+        .rounded { border-radius: 4px; }
+        .p-1 { padding: 2px; }
+        .p-2 { padding: 4px; }
+        .mb-1 { margin-bottom: 2px; }
+        .mb-2 { margin-bottom: 4px; }
+        .mt-1 { margin-top: 2px; }
+        .pt-1 { padding-top: 2px; }
+        .pt-2 { padding-top: 4px; }
+        .pb-1 { padding-bottom: 2px; }
+        .pb-2 { padding-bottom: 4px; }
+        .mb-3 { margin-bottom: 6px; }
+        .flex { display: flex; }
+        .flex-col { flex-direction: column; }
+        .items-center { align-items: center; }
+        .justify-center { justify-content: center; }
+        .justify-between { justify-content: space-between; }
+        .flex-1 { flex: 1; }
+        .w-full { width: 100%; }
+        .font-bold { font-weight: bold; }
+        .text-lg { font-size: 16px; }
+        .text-sm { font-size: 12px; }
+        .text-xs { font-size: 9px; }
+        .text-\\[9px\\] { font-size: 9px; }
+        .text-\\[10px\\] { font-size: 10px; }
+        .uppercase { text-transform: uppercase; }
+        .text-slate-400 { color: #666; }
+        .text-slate-500 { color: #888; }
+        .text-slate-600 { color: #555; }
+        .bg-slate-100 { background: #f5f5f5; }
+        .bg-slate-900 { background: #000; color: #fff; }
+        .bg-white { background: #fff; }
+        .border-dashed { border-style: dashed; }
+        .leading-none { line-height: 1; }
+        .mt-0\\.5 { margin-top: 1px; }
+        .rounded-lg { border-radius: 4px; }
+        .gap-1 { gap: 2px; }
+        .space-y-0\\.5 > * + * { margin-top: 1px; }
+        .border-t-2 { border-top-width: 2px; border-top-style: solid; }
+        .tracking-tight { letter-spacing: -0.02em; }
+        .font-mono { font-family: 'Courier New', monospace; }
+        .whitespace-pre-wrap { white-space: pre-wrap; }
+        .break-all { word-break: break-all; }
+        @media print {
+          body { width: 80mm; margin: 0; padding: 2mm; }
+          .no-print { display: none !important; }
+        }
+      </style>
+    </head>
+    <body>${printContent.innerHTML}</body>
+    </html>
+  `)
+  printWindow.document.close()
+  printWindow.focus()
+  setTimeout(() => {
+    printWindow.print()
+    printWindow.close()
+  }, 250)
 }
 
 async function sendWhatsapp() {

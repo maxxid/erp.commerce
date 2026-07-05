@@ -283,8 +283,12 @@ def descargar_factura_pdf(
 ):
     """Genera y descarga un PDF de la factura electrónica asociada a una venta."""
     from fastapi.responses import StreamingResponse
-    from app.services.factura_pdf import generar_factura_pdf
     from app.services.config_service import get_config
+
+    try:
+        from app.services.factura_pdf import generar_factura_pdf
+    except ImportError as e:
+        raise HTTPException(status_code=500, detail=f"Error importando generador PDF: {str(e)}")
 
     venta = db.query(Venta).filter(Venta.id == venta_id).first()
     if not venta:
@@ -336,7 +340,10 @@ def descargar_factura_pdf(
         "nro_doc_comprador": factura.nro_doc_comprador,
     }
 
-    pdf_bytes = generar_factura_pdf(venta_data, factura_data, emisor, items)
+    try:
+        pdf_bytes = generar_factura_pdf(venta_data, factura_data, emisor, items)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generando PDF: {str(e)}")
 
     numero_limpio = venta.numero.replace("/", "-").replace("\\", "-") if venta.numero else str(venta_id)
     filename = f"factura_{numero_limpio}.pdf"
