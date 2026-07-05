@@ -24,6 +24,7 @@ const certContent = ref('')
 const keyUpload = ref('')
 const pemUpload = ref('')
 const afipExpanded = ref(false)
+const facturacionExpanded = ref(false)
 const bancariosExpanded = ref(false)
 const mercadopagoExpanded = ref(false)
 const ventasExpanded = ref(false)
@@ -469,32 +470,8 @@ onMounted(loadConfig)
 
           <BaseInput v-model="config.afip_pto_vta" label="Punto de Venta" placeholder="1" maxlength="4" hint="Número habilitado en AFIP" />
 
-          <hr class="border-slate-200 dark:border-slate-700 my-4" />
-
-          <p class="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-3">Datos del Emisor (para factura electrónica)</p>
-
-          <BaseInput v-model="config.empresa_nombre" label="Razón Social" placeholder="Nombre de la empresa" />
-
-          <BaseInput v-model="config.empresa_domicilio" label="Domicilio Comercial" placeholder="Dirección fiscal" />
-
-          <BaseSelect
-            v-model="config.empresa_condicion_iva"
-            label="Condición frente al IVA"
-            :options="[
-              { value: 'responsable_inscripto', label: 'Responsable Inscripto' },
-              { value: 'monotributista', label: 'Monotributista' },
-              { value: 'exento', label: 'Exento' }
-            ]"
-            option-value="value"
-            option-label="label"
-          />
-
-          <BaseInput v-model="config.empresa_ingresos_brutos" label="Ingresos Brutos" placeholder="1234567 o 'Exento'" />
-
-          <BaseInput v-model="config.empresa_fecha_inicio" label="Fecha de Inicio de Actividades" type="date" />
-
           <div class="flex items-center gap-3 pt-2">
-            <BaseButton variant="primary" :loading="saving" @click="saveConfig(AFIP_ALL_KEYS)">
+            <BaseButton variant="primary" :loading="saving" @click="saveConfig(AFIP_BASIC_KEYS)">
               <i class="fa-solid fa-floppy-disk"></i> Guardar
             </BaseButton>
             <p class="text-[11px] text-slate-400">Los cambios se aplican inmediatamente</p>
@@ -588,6 +565,54 @@ onMounted(loadConfig)
               <i class="fa-solid fa-floppy-disk"></i> Guardar Certificado
             </BaseButton>
           </div>
+        </div>
+      </div>
+    </BaseCard>
+
+    <BaseCard v-if="!loading">
+      <button class="w-full text-left" @click="facturacionExpanded = !facturacionExpanded">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <i class="fa-solid fa-file-invoice text-brand-600"></i>
+            Datos de Facturación
+          </h3>
+          <i :class="['fa-solid fa-chevron-down text-xs transition-transform', facturacionExpanded ? 'rotate-180' : '']"></i>
+        </div>
+      </button>
+
+      <div v-if="facturacionExpanded" class="mt-4 space-y-4 max-w-lg">
+        <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded p-3 mb-4">
+          <p class="text-xs text-amber-700 dark:text-amber-300">
+            <i class="fa-solid fa-triangle-exclamation mr-1"></i>
+            <strong>Temporal:</strong> Estos datos se completarán automáticamente desde ARCA en el futuro.
+          </p>
+        </div>
+
+        <BaseInput v-model="config.empresa_nombre" label="Razón Social" placeholder="Nombre de la empresa" />
+
+        <BaseInput v-model="config.empresa_domicilio" label="Domicilio Comercial" placeholder="Dirección fiscal completa" />
+
+        <BaseSelect
+          v-model="config.empresa_condicion_iva"
+          label="Condición frente al IVA"
+          :options="[
+            { value: 'responsable_inscripto', label: 'Responsable Inscripto' },
+            { value: 'monotributista', label: 'Monotributista' },
+            { value: 'exento', label: 'Exento' }
+          ]"
+          option-value="value"
+          option-label="label"
+        />
+
+        <BaseInput v-model="config.empresa_ingresos_brutos" label="Ingresos Brutos" placeholder="1234567 o 'Exento'" />
+
+        <BaseInput v-model="config.empresa_fecha_inicio" label="Fecha de Inicio de Actividades" type="date" />
+
+        <div class="flex items-center gap-3 pt-2">
+          <BaseButton variant="primary" :loading="saving" @click="saveConfig(EMISOR_KEYS)">
+            <i class="fa-solid fa-floppy-disk"></i> Guardar
+          </BaseButton>
+          <p class="text-[11px] text-slate-400">Los cambios se aplican inmediatamente</p>
         </div>
       </div>
     </BaseCard>
