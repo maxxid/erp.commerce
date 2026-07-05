@@ -283,7 +283,7 @@ def descargar_factura_pdf(
 ):
     """Genera y descarga un PDF de la factura electrónica asociada a una venta."""
     from fastapi.responses import StreamingResponse
-    from app.services.factura_pdf_service import generar_factura_pdf
+    from app.services.factura_pdf import generar_factura_pdf
     from app.services.config_service import get_config
 
     venta = db.query(Venta).filter(Venta.id == venta_id).first()
@@ -332,6 +332,7 @@ def descargar_factura_pdf(
         "total": factura.total,
         "neto": factura.neto,
         "iva": factura.iva,
+        "tipo_doc_comprador": factura.tipo_doc_comprador,
         "nro_doc_comprador": factura.nro_doc_comprador,
     }
 
