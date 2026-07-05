@@ -1968,20 +1968,13 @@ function startMpPolling(ventaId, orderId) {
   }
   mpPollingInterval.value = setInterval(async () => {
     try {
-      const resp = await api.get(`/api/pagos/mercadopago/orden/${orderId}`)
-      if (resp && resp.orden) {
-        const status = resp.orden.status
-        if (status === 'approved' || status === 'processed') {
-          clearInterval(mpPollingInterval.value)
-          mpPollingInterval.value = null
-          mpQrModal.value = false
-          await onMpPagoConfirmado(ventaId, orderId)
-        } else if (status === 'cancelled' || status === 'rejected') {
-          clearInterval(mpPollingInterval.value)
-          mpPollingInterval.value = null
-          mpQrModal.value = false
-          toast.error(`Pago cancelado o rechazado: ${status}`)
-        }
+      const resp = await api.get(`/api/ventas/${ventaId}`)
+      const venta = resp?.data || resp
+      if (venta && venta.estado === 'confirmada') {
+        clearInterval(mpPollingInterval.value)
+        mpPollingInterval.value = null
+        mpQrModal.value = false
+        await onMpPagoConfirmado(ventaId, orderId)
       }
     } catch {
       // Ignore polling errors
@@ -2095,20 +2088,13 @@ function startMpPosPolling(ventaId, orderId) {
   }
   mpPosPollingInterval.value = setInterval(async () => {
     try {
-      const resp = await api.get(`/api/pagos/mercadopago/orden/${orderId}`)
-      if (resp && resp.orden) {
-        const status = resp.orden.status
-        if (status === 'approved' || status === 'processed') {
-          clearInterval(mpPosPollingInterval.value)
-          mpPosPollingInterval.value = null
-          mpPosModal.value = false
-          await onMpPosPagoConfirmado(ventaId, orderId)
-        } else if (status === 'cancelled' || status === 'rejected') {
-          clearInterval(mpPosPollingInterval.value)
-          mpPosPollingInterval.value = null
-          mpPosModal.value = false
-          toast.error(`Pago cancelado o rechazado en POS: ${status}`)
-        }
+      const resp = await api.get(`/api/ventas/${ventaId}`)
+      const venta = resp?.data || resp
+      if (venta && venta.estado === 'confirmada') {
+        clearInterval(mpPosPollingInterval.value)
+        mpPosPollingInterval.value = null
+        mpPosModal.value = false
+        await onMpPosPagoConfirmado(ventaId, orderId)
       }
     } catch {
       // Ignore polling errors
