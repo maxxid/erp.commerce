@@ -813,6 +813,7 @@
       </div>
 
       <!-- Hybrid mode: show fixed QR collapsible + dynamic QR -->
+      <!-- Hybrid mode: fixed QR collapsible + always show dynamic QR -->
       <div v-if="mpConfig.qr_fijo_modo === 'hibrido' && mpConfig.qr_fijo_url">
         <button
           class="flex items-center gap-2 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 mb-2 transition-colors"
@@ -825,6 +826,13 @@
           <p class="text-[10px] text-slate-500 mb-2">QR Fijo (para imprimir)</p>
           <img v-if="mpConfig.qr_fijo_url.startsWith('data:image') || mpConfig.qr_fijo_url.startsWith('http')" :src="mpConfig.qr_fijo_url" alt="QR Fijo" class="w-28 h-28 mx-auto" />
           <p v-else class="text-[8px] font-mono text-slate-600 break-all">{{ mpConfig.qr_fijo_url.substring(0, 100) }}...</p>
+        </div>
+        <!-- Dynamic QR always shown in hybrid mode -->
+        <div v-if="mpQrData.qr_image_url" class="bg-white rounded-xl p-4 inline-block mb-4">
+          <img :src="mpQrData.qr_image_url" alt="QR Dinámico" class="w-48 h-48 mx-auto" />
+        </div>
+        <div v-else-if="mpQrData.qr_data" class="bg-white rounded-xl p-4 inline-block mb-4">
+          <p class="text-xs font-mono text-slate-600 break-all">{{ mpQrData.qr_data }}</p>
         </div>
       </div>
 
