@@ -112,7 +112,7 @@ def crear_orden_qr(
         ],
     }
 
-    logger.info(f"Creando orden MP QR para venta {venta_numero}, monto={monto}, modo={modo_mp}")
+    logger.info(f"Creando orden MP QR para venta {venta_numero}, monto={monto}, modo={modo_mp}, external_pos_id={external_pos_id}, qr_fijo_modo_config={config.get('qr_fijo_modo')}")
 
     try:
         response = requests.post(
