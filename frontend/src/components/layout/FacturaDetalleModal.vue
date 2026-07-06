@@ -1,0 +1,403 @@
+<script setup>
+import { ref, computed } from 'vue'
+import { useToastStore } from '@/stores/toasts'
+import api from '@/services/api'
+import { buildArcaQrUrl, generarQrDataUrl } from '@/composables/useUtils'
+
+const props = defineProps({
+  show: Boolean,
+  factura: { type: Object, default: null },
+  venta: { type: Object, default: null },
+  emisor: { type: Object, default: () => ({}) }
+})
+
+const emit = defineEmits(['close', 'reemitir'])
+const toast = useToastStore()
+
+const showWhatsappInput = ref(false)
+const whatsappNumber = ref('')
+const downloadingPdf = ref(false)
+const sendingWhatsapp = ref(false)
+
+const condicionIvaLabel = computed(() => {
+  const map = {
+    'responsable_inscripto': 'Responsable Inscripto',
+    'monotributista': 'Monotributista',
+    'exento': 'Exento'
+  }
+  return map[props.emisor.condicion_iva] || props.emisor.condicion_iva || ''
+})
+
+const tipoFacturaLabel = computed(() => {
+  const tipoMap = { '11': 'C', '1': 'A', '6': 'B' }
+  return tipoMap[props.factura?.tipo] || 'C'
+})
+
+const numeroFiscalFormateado = computed(() => {
+  if (!props.factura?.numero_fiscal) return ''
+  const num = String(props.factura.numero_fiscal).padStart(8, '0')
+  const ptoVta = String(props.factura.punto_venta || 1).padStart(5, '0')
+  return `${ptoVta} - ${num}`
+})
+
+const ventaNumero = computed(() => {
+  return props.venta?.numero || `V-${String(props.venta?.id || '').padStart(8, '0')}`
+})
+
+const fechaEmision = computed(() => {
+  if (!props.venta?.fecha) return ''
+  return new Date(props.venta.fecha).toLocaleDateString('es-AR')
+})
+
+const vencimientoCae = computed(() => {
+  if (!props.factura?.vencimiento_cae) return ''
+  return new Date(props.factura.vencimiento_cae).toLocaleDateString('es-AR')
+})
+
+const receptorLabel = computed(() => {
+  if (props.venta?.cliente_nombre && props.venta?.cliente_nombre !== 'Consumidor Final') {
+    return props.venta.cliente_nombre
+  }
+  return 'A CONSUMIDOR FINAL'
+})
+
+const receptorDoc = computed(() => {
+  if (props.factura?.nro_doc_comprador && props.factura?.nro_doc_comprador !== '0') {
+    return `CUIT: ${props.factura.nro_doc_comprador}`
+  }
+  if (props.venta?.cliente_nombre && props.venta?.cliente_nombre !== 'Consumidor Final') {
+    return 'Consumidor Final'
+  }
+  return ''
+})
+
+const qrUrl = computed(() => {
+  if (!props.factura?.cae) return null
+  return buildArcaQrUrl({
+    tipo: props.factura.tipo,
+    punto_venta: props.factura.punto_venta,
+    numero_fiscal: props.factura.numero_fiscal,
+    cae: props.factura.cae,
+    total: props.factura.total,
+    tipo_doc_comprador: props.factura.tipo_doc_comprador,
+    nro_doc_comprador: props.factura.nro_doc_comprador,
+    fecha_emision: props.venta?.fecha,
+  }, props.emisor)
+})
+
+const qrDataUrl = computed(() => {
+  if (!qrUrl.value) return null
+  return generarQrDataUrl(qrUrl.value, 120)
+})
+
+async function downloadPdf() {
+  if (!props.venta?.id) return
+  downloadingPdf.value = true
+  try {
+    const token = localStorage.getItem('apex_token')
+    const headers = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
+
+    const response = await fetch(`/api/facturacion/facturas/${props.venta.id}/pdf`, { headers })
+    if (!response.ok) {
+      const text = await response.text()
+      let detail = text
+      try { detail = JSON.parse(text).detail || text } catch {}
+      throw new Error(detail || `Error ${response.status}`)
+    }
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `factura_${ventaNumero.value.replace(/[^a-zA-Z0-9]/g, '')}.pdf`)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+    toast.success('PDF descargado')
+  } catch (e) {
+    toast.error('Error al descargar PDF: ' + e.message)
+  } finally {
+    downloadingPdf.value = false
+  }
+}
+
+function printFactura() {
+  const printContent = document.getElementById('factura-imprimir')
+  if (!printContent) return
+  const printWindow = window.open('', '_blank', 'width=300,height=600')
+  printWindow.document.write(`
+    <html>
+    <head>
+      <title>Factura</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Courier New', monospace; font-size: 11px; line-height: 1.4; color: #000; width: 80mm; padding: 4px; }
+        .text-center { text-align: center; }
+        .border-b-2 { border-bottom-width: 2px; border-bottom-style: solid; border-color: #000; }
+        .border-b { border-bottom: 1px dotted #ccc; }
+        .border-dotted { border-style: dotted; border-color: #ccc; }
+        .border-2 { border: 2px solid #000; }
+        .border { border: 1px solid #ccc; }
+        .border-slate-300 { border-color: #ccc; }
+        .border-slate-900 { border-color: #000; }
+        .rounded { border-radius: 4px; }
+        .p-1 { padding: 2px; }
+        .p-2 { padding: 4px; }
+        .mb-1 { margin-bottom: 2px; }
+        .mb-2 { margin-bottom: 4px; }
+        .mt-1 { margin-top: 2px; }
+        .pt-1 { padding-top: 2px; }
+        .pt-2 { padding-top: 4px; }
+        .pb-1 { padding-bottom: 2px; }
+        .pb-2 { padding-bottom: 4px; }
+        .mb-3 { margin-bottom: 6px; }
+        .flex { display: flex; }
+        .flex-col { flex-direction: column; }
+        .items-center { align-items: center; }
+        .justify-center { justify-content: center; }
+        .justify-between { justify-content: space-between; }
+        .flex-1 { flex: 1; }
+        .w-full { width: 100%; }
+        .font-bold { font-weight: bold; }
+        .text-lg { font-size: 16px; }
+        .text-sm { font-size: 12px; }
+        .text-xs { font-size: 9px; }
+        .text-\\[9px\\] { font-size: 9px; }
+        .text-\\[10px\\] { font-size: 10px; }
+        .uppercase { text-transform: uppercase; }
+        .text-slate-400 { color: #666; }
+        .text-slate-500 { color: #888; }
+        .text-slate-600 { color: #555; }
+        .bg-slate-100 { background: #f5f5f5; }
+        .bg-slate-900 { background: #000; color: #fff; }
+        .bg-white { background: #fff; }
+        .border-dashed { border-style: dashed; }
+        .leading-none { line-height: 1; }
+        .mt-0\\.5 { margin-top: 1px; }
+        .rounded-lg { border-radius: 4px; }
+        .gap-1 { gap: 2px; }
+        .space-y-0\\.5 > * + * { margin-top: 1px; }
+        .border-t-2 { border-top-width: 2px; border-top-style: solid; }
+        .tracking-tight { letter-spacing: -0.02em; }
+        .font-mono { font-family: 'Courier New', monospace; }
+        .whitespace-pre-wrap { white-space: pre-wrap; }
+        .break-all { word-break: break-all; }
+        @media print {
+          body { width: 80mm; margin: 0; padding: 2mm; }
+        }
+      </style>
+    </head>
+    <body>${printContent.innerHTML}</body>
+    </html>
+  `)
+  printWindow.document.close()
+  printWindow.focus()
+}
+
+async function sendWhatsapp() {
+  if (!whatsappNumber.value || whatsappNumber.value.length < 8) {
+    toast.warning('Ingresá un número válido')
+    return
+  }
+  sendingWhatsapp.value = true
+  try {
+    await downloadPdf()
+    const message = encodeURIComponent(
+      `Hola! Te envío la factura de tu compra.\n` +
+      `Número: ${ventaNumero.value}\n` +
+      `Total: $${(props.venta?.total || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}\n` +
+      `CAE: ${props.factura?.cae || 'N/A'}`
+    )
+    const cleanNumber = whatsappNumber.value.replace(/\D/g, '')
+    const fullNumber = cleanNumber.startsWith('54') ? cleanNumber : `54${cleanNumber}`
+    window.open(`https://wa.me/${fullNumber}?text=${message}`, '_blank')
+    showWhatsappInput.value = false
+    whatsappNumber.value = ''
+  } catch (e) {
+    toast.error('Error al enviar por WhatsApp')
+  } finally {
+    sendingWhatsapp.value = false
+  }
+}
+
+function formatCurrency(v) {
+  if (v == null) return '$0'
+  return '$' + Number(v).toLocaleString('es-AR', { minimumFractionDigits: 2 })
+}
+</script>
+
+<template>
+  <Teleport to="body">
+    <div v-if="show" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm" @click.self="$emit('close')">
+      <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between p-4 border-b border-slate-100">
+          <h3 class="font-bold text-slate-900 text-sm">Factura Electrónica</h3>
+          <div class="flex items-center gap-2">
+            <button v-if="factura?.estado === 'rechazada'" @click="$emit('reemitir')" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold transition">
+              <i class="fa-solid fa-rotate mr-1"></i> Reemitir
+            </button>
+            <button @click="$emit('close')" class="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 flex items-center justify-center transition">
+              <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
+          </div>
+        </div>
+
+        <div id="factura-imprimir" class="p-4 font-mono text-[11px] leading-snug text-slate-900 bg-white" style="width: 80mm; margin: 0 auto; font-family: 'Courier New', monospace;">
+          <!-- LOGO -->
+          <div class="flex justify-center mb-2">
+            <div class="border border-dashed border-slate-400 rounded flex items-center justify-center" style="width: 32mm; height: 14mm;">
+              <span class="text-[9px] text-slate-400">LOGO</span>
+            </div>
+          </div>
+
+          <!-- EMPRESA -->
+          <div class="text-center border-b-2 border-slate-900 pb-2 mb-2">
+            <p class="font-bold text-sm">{{ emisor.nombre || 'EMPRESA' }}</p>
+            <p class="text-[9px] text-slate-500">{{ emisor.domicilio || '' }}</p>
+            <p class="text-[9px]">CUIT: {{ emisor.cuit || '' }}</p>
+            <p class="text-[9px] text-slate-500">{{ condicionIvaLabel }}</p>
+            <p class="text-[9px] text-slate-500" v-if="emisor.ingresos_brutos">IIBB {{ emisor.ingresos_brutos }}</p>
+            <p class="text-[9px] text-slate-500" v-if="emisor.fecha_inicio">Inicio {{ emisor.fecha_inicio }}</p>
+          </div>
+
+          <!-- FACTURA -->
+          <div class="flex items-start justify-between mb-2">
+            <div class="flex-1"></div>
+            <div class="border-2 border-slate-900 rounded text-center" style="width: 8mm; height: 8mm;">
+              <p class="text-sm font-bold leading-none mt-0.5">{{ tipoFacturaLabel }}</p>
+            </div>
+          </div>
+
+          <div class="text-center border-b border-dotted border-slate-300 pb-2 mb-2">
+            <div class="flex justify-between text-[10px]">
+              <span>Punto de Venta</span>
+              <span>{{ String(factura?.punto_venta || 1).padStart(5, '0') }}</span>
+            </div>
+            <div class="flex justify-between text-[10px] font-bold">
+              <span>Comprobante</span>
+              <span>{{ numeroFiscalFormateado || '00000000' }}</span>
+            </div>
+            <div class="flex justify-between text-[10px]">
+              <span>Fecha</span>
+              <span>{{ fechaEmision }}</span>
+            </div>
+          </div>
+
+          <!-- CAE BOX -->
+          <div class="border border-slate-300 rounded p-1 mb-2 text-center">
+            <p class="text-[9px]">CAE {{ factura?.cae || 'N/A' }} <span class="text-slate-400">|</span> Venc: {{ vencimientoCae || '-' }}</p>
+          </div>
+
+          <!-- CLIENTE -->
+          <div class="bg-slate-100 rounded px-2 py-1 mb-2">
+            <p class="text-[9px] font-bold text-slate-500 uppercase">Cliente</p>
+          </div>
+          <div class="border-b border-dotted border-slate-300 pb-2 mb-2">
+            <p class="text-[10px] font-bold">{{ receptorLabel }}</p>
+            <p class="text-[9px] text-slate-500">{{ receptorDoc || 'Consumidor Final' }}</p>
+          </div>
+
+          <!-- PRODUCTOS -->
+          <div class="bg-slate-100 rounded px-2 py-1 mb-1">
+            <div class="flex justify-between text-[9px] font-bold">
+              <span class="flex-1">Descripción</span>
+              <span class="text-right">Importe</span>
+            </div>
+          </div>
+          <div class="space-y-0.5 mb-2">
+            <div v-for="(item, i) in (venta?.items || [])" :key="i" class="border-b border-dotted border-slate-200 pb-0.5">
+              <p class="text-[10px] font-bold truncate">{{ (item.producto_nombre || item.nombre || 'Producto').toUpperCase() }}</p>
+              <div class="flex justify-between text-[9px] text-slate-600">
+                <span>{{ item.cantidad }} x {{ formatCurrency(item.precio_unitario) }}</span>
+                <span class="font-bold">{{ formatCurrency(item.subtotal) }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- TOTALES -->
+          <div class="border border-slate-300 rounded p-1 mb-2 space-y-0.5">
+            <div class="flex justify-between text-[10px]">
+              <span>Subtotal</span>
+              <span>{{ formatCurrency(factura?.neto || venta?.total || 0) }}</span>
+            </div>
+            <div class="flex justify-between text-[10px]" v-if="venta?.descuento > 0">
+              <span>Descuento</span>
+              <span class="font-bold">- {{ formatCurrency(venta.descuento) }}</span>
+            </div>
+            <div class="flex justify-between text-[10px]" v-if="factura?.iva > 0">
+              <span>IVA</span>
+              <span>{{ formatCurrency(factura.iva) }}</span>
+            </div>
+          </div>
+
+          <!-- TOTAL BOX -->
+          <div class="bg-slate-900 text-white rounded p-2 mb-2">
+            <div class="flex justify-between text-sm font-bold">
+              <span>TOTAL</span>
+              <span>{{ formatCurrency(factura?.total || venta?.total || 0) }}</span>
+            </div>
+          </div>
+
+          <!-- QR CODE -->
+          <div class="flex justify-center mb-2">
+            <img v-if="qrDataUrl" :src="qrDataUrl" alt="QR Code" style="width: 24mm; height: 24mm;" class="rounded" />
+            <div v-else class="border border-dashed border-slate-400 rounded flex flex-col items-center justify-center" style="width: 24mm; height: 24mm;">
+              <span class="text-[10px] font-bold">QR</span>
+              <span class="text-[7px] text-slate-400">ARCA</span>
+            </div>
+          </div>
+
+          <!-- PIE -->
+          <div class="border-t-2 border-dotted border-slate-300 pt-2 text-center">
+            <p class="text-[10px] font-bold">¡GRACIAS POR SU COMPRA!</p>
+            <p class="text-[8px] text-slate-400">Comprobante electrónico</p>
+            <p class="text-[8px] text-slate-400">Autorizado por ARCA</p>
+          </div>
+        </div>
+
+        <div class="p-4 border-t border-slate-100">
+          <p class="text-[10px] text-slate-500 mb-3 text-center">¿Qué desea hacer con esta factura?</p>
+          <div class="flex items-center justify-center gap-2">
+            <button @click="downloadPdf" :disabled="downloadingPdf" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-2 disabled:opacity-50">
+              <i :class="downloadingPdf ? 'fa-solid fa-circle-notch fa-spin' : 'fa-solid fa-file-pdf'"></i>
+              PDF
+            </button>
+            <button @click="printFactura" class="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-2">
+              <i class="fa-solid fa-print"></i>
+              Imprimir
+            </button>
+            <button @click="showWhatsappInput = !showWhatsappInput" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-2">
+              <i class="fa-brands fa-whatsapp"></i>
+              WhatsApp
+            </button>
+          </div>
+
+          <div v-if="showWhatsappInput" class="mt-3 flex items-center gap-2">
+            <input v-model="whatsappNumber" type="tel" placeholder="Número sin 0 ni 15" class="flex-1 px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500" />
+            <button @click="sendWhatsapp" :disabled="sendingWhatsapp" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold transition disabled:opacity-50">
+              <i :class="sendingWhatsapp ? 'fa-solid fa-circle-notch fa-spin' : 'fa-solid fa-paper-plane'"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+</template>
+
+<style scoped>
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #factura-imprimir, #factura-imprimir * {
+    visibility: visible;
+  }
+  #factura-imprimir {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 80mm;
+  }
+}
+</style>

@@ -1,0 +1,276 @@
+"""Router de Ventas: crear, items, confirmar, anular, listar."""
+
+from datetime import datetime
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+from pydantic import BaseModel, Field
+from app.database import get_db
+from app.services import venta_service
+from app.services import auditoria_service
+from app.schemas.common import RespuestaData, RespuestaLista
+from app.auth.dependencies import get_current_user, require_role
+from app.models.usuario import Usuario
+from app.models.venta import Venta
+
+router = APIRouter(prefix="/api/ventas", tags=["Ventas"])
+
+
+def _venta_to_dict(v: Venta) -> dict:
+    """Convierte una venta a dict seguro para JSON, evitando lazy loads."""
+    return {
+        "id": v.id,
+        "numero": v.numero,
+        "cliente_id": v.cliente_id,
+        "cliente_nombre": v.cliente.nombre if v.cliente else None,
+        "comprador_cuit": v.comprador_cuit,
+        "usuario_id": v.usuario_id,
+        "sucursal_id": v.sucursal_id,
+        "fecha": v.fecha.isoformat() if v.fecha else None,
+        "subtotal": v.subtotal,
+        "descuento": v.descuento,
+        "total": v.total,
+        "medio_pago": v.medio_pago,
+        "estado": v.estado,
+        "notas": v.notas,
+        "items": [
+            {
+                "id": i.id,
+                "producto_id": i.producto_id,
+                "producto_nombre": i.producto.nombre if i.producto else "",
+                "cantidad": i.cantidad,
+                "precio_unitario": i.precio_unitario,
+                "precio_costo": i.precio_costo,
+                "subtotal": i.subtotal,
+                "oferta_tipo": i.oferta_tipo,
+                "oferta_valor": i.oferta_valor,
+                "oferta_info": i.oferta_info,
+            }
+            for i in (v.items or [])
+        ],
+        "created_at": v.created_at.isoformat() if v.created_at else None,
+    }
+
+
+class VentaCreate(BaseModel):
+    cliente_id: Optional[int] = None
+    sucursal_id: int = 1
+    notas: Optional[str] = None
+
+
+class VentaItemAdd(BaseModel):
+    producto_id: int
+    cantidad: float = Field(..., gt=0)
+    precio_unitario: Optional[float] = None
+    oferta_tipo: Optional[str] = None
+    oferta_valor: Optional[float] = None
+    oferta_info: Optional[str] = None
+    por_kilo: Optional[bool] = False
+    peso: Optional[float] = None
+
+
+class VentaConfirmar(BaseModel):
+    medio_pago: str = "efectivo"
+    descuento: float = 0.0
+    descuento_tipo: Optional[str] = Field(None, description="Tipo de descuento: 'manual' o 'automatico'")
+    cliente_id: Optional[int] = None
+    comprador_cuit: Optional[str] = None
+
+
+@router.get("", response_model=RespuestaLista)
+def listar(
+    estado: Optional[str] = Query(None),
+    cliente_id: Optional[int] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """Lista ventas con filtros."""
+    ventas, total = venta_service.listar_ventas(
+        db, estado=estado, cliente_id=cliente_id, page=page, page_size=page_size
+    )
+    return RespuestaLista(
+        data=[_venta_to_dict(v) for v in ventas],
+        total=total, page=page, page_size=page_size,
+        message=f"{total} venta(s)"
+    )
+
+
+@router.get("/{venta_id}", response_model=RespuestaData)
+def obtener(
+    venta_id: int,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """Obtiene una venta con sus items."""
+    venta = venta_service.obtener_venta(db, venta_id)
+    if not venta:
+        raise HTTPException(status_code=404, detail="Venta no encontrada")
+    return RespuestaData(data=_venta_to_dict(venta))
+
+
+@router.post("", response_model=RespuestaData)
+def crear(
+    data: VentaCreate,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "cajero")),
+):
+    """Crea una venta nueva (vacía, estado pendiente)."""
+    venta = venta_service.crear_venta(
+        db,
+        usuario_id=user.id,
+        cliente_id=data.cliente_id,
+        sucursal_id=data.sucursal_id,
+        notas=data.notas,
+    )
+    auditoria_service.registrar(db, user.id, "carrito_creado", venta.id, venta.numero)
+    return RespuestaData(data=_venta_to_dict(venta), message=f"Venta {venta.numero} creada")
+
+
+@router.post("/{venta_id}/items", response_model=RespuestaData)
+def agregar_item(
+    venta_id: int,
+    data: VentaItemAdd,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "cajero")),
+):
+    """Agrega un producto a la venta."""
+    venta = venta_service.obtener_venta(db, venta_id)
+    if not venta:
+        raise HTTPException(status_code=404, detail="Venta no encontrada")
+    try:
+        item = venta_service.agregar_item(
+            db, venta, data.producto_id, data.cantidad, data.precio_unitario,
+            data.oferta_tipo, data.oferta_valor, data.oferta_info,
+            data.por_kilo, data.peso
+        )
+        db.refresh(venta)
+        auditoria_service.registrar(db, user.id, "item_agregado", venta.id, venta.numero, {
+            "producto_id": data.producto_id,
+            "producto_nombre": item.producto.nombre if item.producto else "?",
+            "cantidad": data.cantidad,
+            "por_kilo": data.por_kilo,
+            "peso": data.peso,
+            "precio_unitario": data.precio_unitario,
+            "subtotal": item.subtotal,
+        })
+        return RespuestaData(
+            data={"item_id": item.id, "subtotal": item.subtotal, "venta_subtotal": venta.subtotal},
+            message="Ítem agregado",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete("/{venta_id}/items/{item_id}", response_model=RespuestaData)
+def quitar_item(
+    venta_id: int,
+    item_id: int,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "cajero")),
+):
+    """Quita un ítem de la venta."""
+    venta = venta_service.obtener_venta(db, venta_id)
+    if not venta:
+        raise HTTPException(status_code=404, detail="Venta no encontrada")
+    try:
+        # Obtener info del item antes de quitarlo para el log
+        item_obj = next((i for i in venta.items if i.id == item_id), None)
+        detalle = None
+        if item_obj:
+            detalle = {
+                "producto": item_obj.producto.nombre if item_obj.producto else "?",
+                "cantidad": item_obj.cantidad,
+                "precio": item_obj.precio_unitario,
+                "subtotal_anterior": item_obj.subtotal,
+                "venta_subtotal_antes": venta.subtotal,
+                "venta_total_antes": venta.total,
+            }
+        items_antes = len(venta.items)
+        venta_service.quitar_item(db, venta, item_id)
+        db.refresh(venta)
+        if detalle:
+            detalle["venta_subtotal_despues"] = venta.subtotal
+        auditoria_service.registrar(db, user.id, "item_quitado", venta.id, venta.numero, detalle)
+        if items_antes == 1:
+            auditoria_service.registrar(db, user.id, "carrito_vaciado", venta.id, venta.numero, {
+                "ultimo_item": detalle,
+                "subtotal_final": 0,
+            })
+        return RespuestaData(data={"venta_subtotal": venta.subtotal}, message="Ítem quitado")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.put("/{venta_id}/confirmar", response_model=RespuestaData)
+def confirmar(
+    venta_id: int,
+    data: VentaConfirmar,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "cajero")),
+):
+    """Confirma la venta: descuenta stock, registra en caja."""
+    venta = venta_service.obtener_venta(db, venta_id)
+    if not venta:
+        raise HTTPException(status_code=404, detail="Venta no encontrada")
+    # Si se especificó cliente_id, asignarlo antes de confirmar
+    if data.cliente_id and not venta.cliente_id:
+        venta.cliente_id = data.cliente_id
+        db.commit()
+    if data.comprador_cuit:
+        venta.comprador_cuit = data.comprador_cuit
+        db.commit()
+    try:
+        venta = venta_service.confirmar_venta(
+            db, venta, data.medio_pago, data.descuento, user.id
+        )
+        auditoria_service.registrar(db, user.id, "venta_confirmada", venta.id, venta.numero,
+                                     {"medio_pago": data.medio_pago, "total": venta.total, "items": len(venta.items), "descuento": data.descuento, "hora": datetime.now().strftime("%H:%M")})
+        if data.descuento and data.descuento > 0:
+            tipo_desc = data.descuento_tipo or "manual"
+            if venta.subtotal > 0 and data.descuento >= venta.subtotal:
+                evento_desc = "descuento_100pct"
+            else:
+                evento_desc = f"descuento_{tipo_desc}"
+            auditoria_service.registrar(db, user.id, evento_desc, venta.id, venta.numero,
+                                         {"monto_descuento": data.descuento, "total_original": venta.subtotal,
+                                          "total_final": venta.total, "tipo": tipo_desc})
+
+        whatsapp_url = None
+        if venta.cliente_id and venta.cliente and venta.cliente.telefono:
+            telefono = venta.cliente.telefono.replace('+','').replace(' ','').replace('-','')
+            items_detalle = ", ".join([f"{i.cantidad}x {i.producto.nombre if i.producto else '?'}" for i in venta.items][:5])
+            mensaje = f"*Ticket #{venta.numero}*%0A%0A*Total:* ${venta.total:,.2f}%0A*Medio:* {data.medio_pago}%0A*Items:* {items_detalle}%0A*Fecha:* {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+            whatsapp_url = f"https://wa.me/{telefono}?text={mensaje}"
+
+        respuesta_data = _venta_to_dict(venta)
+        if whatsapp_url:
+            respuesta_data["whatsapp_url"] = whatsapp_url
+        return RespuestaData(
+            data=respuesta_data,
+            message=f"Venta {venta.numero} confirmada. Total: ${venta.total:,.2f}" + (" Enviando WhatsApp..." if whatsapp_url else ""),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.put("/{venta_id}/anular", response_model=RespuestaData)
+def anular(
+    venta_id: int,
+    edit: bool = Query(False, description="Si es true, se registra como edición en auditoría"),
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "encargado", "cajero")),
+):
+    """Anula una venta confirmada, revirtiendo stock y caja."""
+    venta = venta_service.obtener_venta(db, venta_id)
+    if not venta:
+        raise HTTPException(status_code=404, detail="Venta no encontrada")
+    try:
+        venta = venta_service.anular_venta(db, venta, user.id)
+        evento = "venta_editada" if edit else "venta_anulada"
+        auditoria_service.registrar(db, user.id, evento, venta.id, venta.numero,
+                                     {"total_anulado": venta.total, "medio_pago": venta.medio_pago, "edit": edit})
+        return RespuestaData(data=_venta_to_dict(venta), message=f"Venta {venta.numero} anulada")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

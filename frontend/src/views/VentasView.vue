@@ -1,0 +1,551 @@
+<script setup>
+import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+import { useToastStore } from '@/stores/toasts'
+import api from '@/services/api'
+import { formatCurrency as fc, formatDateTime } from '@/composables/useUtils'
+import BaseCard from '@/components/ui/BaseCard.vue'
+import BaseInput from '@/components/ui/BaseInput.vue'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseBadge from '@/components/ui/BaseBadge.vue'
+import BaseTable from '@/components/ui/BaseTable.vue'
+import BaseModal from '@/components/ui/BaseModal.vue'
+import TicketModal from '@/components/layout/TicketModal.vue'
+import FacturaDetalleModal from '@/components/layout/FacturaDetalleModal.vue'
+
+const auth = useAuthStore()
+const toast = useToastStore()
+const router = useRouter()
+
+const filtroFecha = ref('')
+const filtroFechaHasta = ref('')
+const filtroEstado = ref('')
+const filtroMedioPago = ref('')
+const filtroFactura = ref('')
+const filtroSearch = ref('')
+const expandedRows = ref([])
+const syncing = ref(false)
+const anullingId = ref(null)
+const loading = ref(true)
+const anularTarget = ref(null)
+const showTicket = ref(false)
+const ticketData = ref({ items: [], numero: '', fecha: '', total: 0, descuento: 0, medio_pago: '', cliente: '', sucursal: '' })
+
+const sales = ref([])
+const facturasMap = ref({})
+const facturandoId = ref(null)
+const showFacturaDetalle = ref(false)
+const detalleFactura = ref(null)
+const detalleVenta = ref(null)
+
+const tableColumns = [
+  { key: 'expand', label: '', width: 'w-10' },
+  { key: 'id', label: 'Ticket' },
+  { key: 'fecha', label: 'Fecha' },
+  { key: 'cliente_nombre', label: 'Cliente' },
+  { key: 'medio_pago', label: 'Medio de Pago' },
+  { key: 'descuento', label: 'Descuento', align: 'right' },
+  { key: 'total', label: 'Total', align: 'right' },
+  { key: 'estado', label: 'Estado' },
+  { key: 'factura', label: 'Factura' },
+  { key: 'acciones', label: '', align: 'right' }
+]
+
+const estadoOptions = [
+  { value: '', label: 'Todos' },
+  { value: 'confirmada', label: 'Completadas' },
+  { value: 'pendiente', label: 'Pendientes' },
+  { value: 'anulada', label: 'Anuladas' },
+]
+
+const medioPagoOptions = [
+  { value: '', label: 'Todos' },
+  { value: 'efectivo', label: 'Efectivo' },
+  { value: 'debito', label: 'Débito' },
+  { value: 'credito', label: 'Crédito' },
+  { value: 'transferencia', label: 'Transferencia' },
+  { value: 'cta_corriente', label: 'Cta. Cte.' },
+]
+
+const facturaOptions = [
+  { value: '', label: 'Todas' },
+  { value: 'sin_factura', label: 'Sin Factura' },
+  { value: 'pendiente', label: 'Pendiente' },
+  { value: 'emitida', label: 'Emitida' },
+]
+
+const hasActiveFilters = computed(() => {
+  return filtroFecha.value || filtroFechaHasta.value || filtroEstado.value || filtroMedioPago.value || filtroFactura.value || filtroSearch.value
+})
+
+function clearFilters() {
+  filtroFecha.value = ''
+  filtroFechaHasta.value = ''
+  filtroEstado.value = ''
+  filtroMedioPago.value = ''
+  filtroFactura.value = ''
+  filtroSearch.value = ''
+}
+
+const filteredSales = computed(() => {
+  let result = sales.value
+
+  if (filtroFecha.value) {
+    const desde = filtroFecha.value
+    const hasta = filtroFechaHasta.value
+    result = result.filter(s => {
+      if (!s.fecha) return false
+      const fecha = s.fecha.substring(0, 10)
+      if (hasta) {
+        return fecha >= desde && fecha <= hasta
+      }
+      return fecha.startsWith(desde)
+    })
+  }
+
+  if (filtroEstado.value) {
+    result = result.filter(s => s.estado === filtroEstado.value)
+  }
+
+  if (filtroMedioPago.value) {
+    result = result.filter(s => s.medio_pago === filtroMedioPago.value)
+  }
+
+  if (filtroFactura.value) {
+    if (filtroFactura.value === 'sin_factura') {
+      result = result.filter(s => !facturasMap.value[s.id])
+    } else if (filtroFactura.value === 'pendiente') {
+      result = result.filter(s => facturasMap.value[s.id] && facturasMap.value[s.id].estado !== 'emitida')
+    } else if (filtroFactura.value === 'emitida') {
+      result = result.filter(s => facturasMap.value[s.id] && facturasMap.value[s.id].estado === 'emitida')
+    }
+  }
+
+  if (filtroSearch.value) {
+    const q = filtroSearch.value.toLowerCase()
+    result = result.filter(s =>
+      (s.numero || '').toLowerCase().includes(q) ||
+      (s.cliente_nombre || '').toLowerCase().includes(q) ||
+      (s.medio_pago || '').toLowerCase().includes(q) ||
+      String(s.total).includes(q) ||
+      String(s.id).includes(q)
+    )
+  }
+
+  return result
+})
+
+const tableRows = computed(() => filteredSales.value)
+
+onMounted(async () => {
+  await fetchVentas()
+  await fetchEmisorConfig()
+})
+
+async function fetchVentas() {
+  loading.value = true
+  try {
+    const data = await api.get('/api/ventas')
+    if (data && data.length) sales.value = data
+    await fetchFacturas()
+  } catch { /* fallback to mock */ }
+  loading.value = false
+}
+
+async function fetchFacturas() {
+  try {
+    const facturas = await api.get('/api/facturacion/facturas')
+    if (facturas && facturas.length) {
+      facturasMap.value = {}
+      for (const f of facturas) {
+        facturasMap.value[f.venta_id] = f
+      }
+    }
+  } catch { /* silently ignore */ }
+}
+
+async function emitirFactura(ventaId) {
+  facturandoId.value = ventaId
+  try {
+    const res = await api.post(`/api/facturacion/facturas/${ventaId}/emitir`, {})
+    if (res && res.estado === 'rechazada') {
+      facturasMap.value[ventaId] = res
+      toast.error(`Factura rechazada: ${res.error_message || 'verificar cert/key AFIP'}`)
+    } else if (res && res.id) {
+      facturasMap.value[ventaId] = res
+      toast.success(res.cae ? `Factura emitida CAE: ${res.cae}` : 'Factura pendiente')
+    }
+    await fetchEmisorConfig()
+    abrirDetalleFactura(ventaId)
+  } catch (e) {
+    toast.error(e?.message || 'Error al emitir factura')
+  } finally {
+    facturandoId.value = null
+  }
+}
+
+const emisorConfig = ref({})
+async function fetchEmisorConfig() {
+  try {
+    const data = await api.get('/api/config/ajustes')
+    if (data) {
+      emisorConfig.value = {
+        nombre: data.empresa_nombre?.valor || '',
+        domicilio: data.empresa_domicilio?.valor || '',
+        condicion_iva: data.empresa_condicion_iva?.valor || 'responsable_inscripto',
+        ingresos_brutos: data.empresa_ingresos_brutos?.valor || '',
+        fecha_inicio: data.empresa_fecha_inicio?.valor || '',
+        cuit: data.afip_cuit?.valor || ''
+      }
+    }
+  } catch { /* ignore */ }
+}
+
+async function abrirDetalleFactura(ventaId) {
+  const venta = sales.value.find(s => s.id === ventaId)
+  const factura = facturasMap.value[ventaId]
+  if (!venta) return
+  detalleVenta.value = venta
+  detalleFactura.value = factura
+  if (!emisorConfig.value.cuit) {
+    await fetchEmisorConfig()
+  }
+  showFacturaDetalle.value = true
+}
+
+function verTicket(row) {
+  ticketData.value = {
+    items: row.items || [],
+    numero: row.numero || `#${row.id}`,
+    fecha: row.fecha || '',
+    total: row.total || 0,
+    descuento: row.descuento || 0,
+    medio_pago: row.medio_pago || '',
+    cliente: row.cliente_nombre || '',
+    sucursal: 'Sucursal Principal'
+  }
+  showTicket.value = true
+}
+
+function verFactura(ventaId) {
+  abrirDetalleFactura(ventaId)
+}
+
+async function syncData() {
+  syncing.value = true
+  try {
+    await fetchVentas()
+    toast.success('Datos sincronizados')
+  } catch {
+    toast.warning('Error al sincronizar')
+  } finally {
+    syncing.value = false
+  }
+}
+
+function toggleRow(id) {
+  const idx = expandedRows.value.indexOf(id)
+  if (idx >= 0) {
+    expandedRows.value.splice(idx, 1)
+  } else {
+    expandedRows.value.push(id)
+  }
+}
+
+function estadoVariant(estado) {
+  const map = {
+    'Completada': 'success',
+    'Pendiente': 'warning',
+    'Anulada': 'danger'
+  }
+  return map[estado] || 'default'
+}
+
+function confirmAnular(sale) {
+  anularTarget.value = sale
+}
+
+async function executeAnular() {
+  if (!anularTarget.value) return
+  anullingId.value = anularTarget.value.id
+  try {
+    const sale = sales.value.find(s => s.id === anularTarget.value.id)
+    if (sale) sale.estado = 'Anulada'
+    toast.info(`Venta #${anularTarget.value.id} anulada`)
+  } finally {
+    anullingId.value = null
+    anularTarget.value = null
+  }
+}
+</script>
+
+<template>
+  <div class="space-y-5">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div>
+        <h2 class="text-2xl font-bold text-slate-950 dark:text-white font-display">Ventas</h2>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Historial de tickets de venta</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <BaseButton variant="secondary" size="sm" :loading="syncing" @click="syncData">
+          <i :class="syncing ? 'fa-solid fa-circle-notch fa-spin' : 'fa-solid fa-arrows-rotate'"></i>
+          {{ syncing ? 'Sincronizando...' : 'Sincronizar' }}
+        </BaseButton>
+        <BaseButton v-if="hasActiveFilters" variant="ghost" size="sm" @click="clearFilters">
+          <i class="fa-solid fa-times mr-1"></i> Limpiar Filtros
+        </BaseButton>
+      </div>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-3">
+      <div class="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
+        <button
+          v-for="est in estadoOptions"
+          :key="est.value"
+          type="button"
+          class="px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all"
+          :class="filtroEstado === est.value ? 'bg-white dark:bg-slate-700 text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'"
+          @click="filtroEstado = est.value"
+        >
+          {{ est.label }}
+        </button>
+      </div>
+
+      <select
+        v-model="filtroMedioPago"
+        class="px-3 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 w-36"
+      >
+        <option value="">Medio de Pago</option>
+        <option value="efectivo">Efectivo</option>
+        <option value="debito">Débito</option>
+        <option value="credito">Crédito</option>
+        <option value="transferencia">Transferencia</option>
+        <option value="cta_corriente">Cta. Cte.</option>
+      </select>
+
+      <select
+        v-model="filtroFactura"
+        class="px-3 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 w-36"
+      >
+        <option value="">Factura</option>
+        <option value="sin_factura">Sin Factura</option>
+        <option value="pendiente">Pendiente</option>
+        <option value="emitida">Emitida</option>
+      </select>
+
+      <div class="relative flex-1 min-w-[200px] max-w-xs">
+        <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+        <input
+          v-model="filtroSearch"
+          type="text"
+          placeholder="Buscar ticket, cliente..."
+          class="pl-8 pr-3 py-1.5 text-xs w-full border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20"
+        >
+      </div>
+
+      <div class="flex items-center gap-2 ml-auto">
+        <span class="text-[10px] text-slate-400">Desde</span>
+        <input
+          v-model="filtroFecha"
+          type="date"
+          class="px-2 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 focus:border-brand-500"
+        >
+        <span class="text-[10px] text-slate-400">Hasta</span>
+        <input
+          v-model="filtroFechaHasta"
+          type="date"
+          class="px-2 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 focus:border-brand-500"
+        >
+      </div>
+    </div>
+
+    <BaseCard padding="none">
+      <BaseTable
+        :columns="tableColumns"
+        :rows="tableRows"
+        :loading="loading"
+        :expanded-rows="expandedRows"
+        empty-title="Sin ventas"
+        empty-text="No hay ventas para mostrar en este período."
+        empty-icon="fa-receipt"
+      >
+        <template #expand="{ row }">
+          <button
+            type="button"
+            class="w-6 h-6 rounded-lg flex items-center justify-center text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition"
+            @click.stop="toggleRow(row.id)"
+          >
+            <i class="fa-solid text-[10px]" :class="expandedRows.includes(row.id) ? 'fa-chevron-down' : 'fa-chevron-right'"></i>
+          </button>
+        </template>
+        <template #id="{ row }">
+          <span class="text-xs font-bold text-slate-700 dark:text-slate-200">#{{ row.id }}</span>
+        </template>
+        <template #fecha="{ row }">
+          <span class="text-xs text-slate-600 dark:text-slate-400">{{ formatDateTime(row.fecha) }}</span>
+        </template>
+        <template #cliente_nombre="{ row }">
+          <span class="text-xs text-slate-600 dark:text-slate-300">
+            <template v-if="row.cliente_nombre">{{ row.cliente_nombre }}</template>
+            <template v-else-if="row.comprador_cuit">
+              <span class="text-[10px] text-slate-400">CUIL: </span>{{ row.comprador_cuit }}
+            </template>
+            <template v-else>—</template>
+          </span>
+        </template>
+        <template #medio_pago="{ row }">
+          <span class="text-xs text-slate-600 dark:text-slate-300 capitalize">{{ row.medio_pago || '—' }}</span>
+        </template>
+        <template #descuento="{ row }">
+          <span class="text-xs font-mono-data text-red-500">{{ row.descuento > 0 ? fc(row.descuento) : '—' }}</span>
+        </template>
+        <template #total="{ row }">
+          <span class="text-xs font-mono-data font-bold text-slate-800 dark:text-slate-100">{{ fc(row.total) }}</span>
+        </template>
+        <template #estado="{ row }">
+          <BaseBadge :variant="estadoVariant(row.estado)" size="xs">{{ row.estado }}</BaseBadge>
+        </template>
+        <template #factura="{ row }">
+          <div v-if="facturasMap[row.id]">
+            <button
+              type="button"
+              :disabled="facturandoId === row.id"
+              class="px-2 py-1 bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/30 text-green-700 dark:text-green-300 rounded-lg text-[10px] font-bold transition disabled:opacity-50"
+              @click.stop="verFactura(row.id)"
+            >
+              <i :class="facturasMap[row.id].estado === 'emitida' ? 'fa-solid fa-file-signature' : (facturasMap[row.id].estado === 'rechazada' ? 'fa-solid fa-triangle-exclamation' : 'fa-solid fa-clock')" class="mr-1"></i>
+              {{ facturasMap[row.id].estado === 'emitida' ? (facturasMap[row.id].cae ? `CAE: ${facturasMap[row.id].cae.substring(0,8)}...` : 'Ver') : facturasMap[row.id].estado }}
+            </button>
+          </div>
+          <button
+            v-else-if="row.estado === 'Completada'"
+            type="button"
+            :disabled="facturandoId === row.id"
+            class="px-2 py-1 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-lg text-[10px] font-bold transition disabled:opacity-50"
+            @click.stop="emitirFactura(row.id)"
+          >
+            <i :class="facturandoId === row.id ? 'fa-solid fa-circle-notch fa-spin' : 'fa-solid fa-file-export'" class="mr-1"></i>
+            {{ facturandoId === row.id ? '...' : 'EMITIR' }}
+          </button>
+          <span v-else class="text-[10px] text-slate-400">—</span>
+        </template>
+        <template #acciones="{ row }">
+          <div class="flex items-center justify-end gap-1">
+            <button
+              v-if="row.estado === 'Completada' && !facturasMap[row.id]"
+              type="button"
+              :disabled="facturandoId === row.id"
+              class="px-2 py-1 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-lg text-[10px] font-bold transition disabled:opacity-50"
+              @click.stop="emitirFactura(row.id)"
+            >
+              <i :class="facturandoId === row.id ? 'fa-solid fa-circle-notch fa-spin' : 'fa-regular fa-file-lines'" class="mr-1"></i>
+              {{ facturandoId === row.id ? 'Facturando...' : 'Facturar' }}
+            </button>
+            <button
+              type="button"
+              class="px-2 py-1 bg-brand-50 dark:bg-brand-900/20 hover:bg-brand-100 dark:hover:bg-brand-900/30 text-brand-700 dark:text-brand-300 rounded-lg text-[10px] font-bold transition"
+              @click.stop="toggleRow(row.id)"
+            >
+              <i class="fa-solid fa-eye mr-1"></i> Ver
+            </button>
+            <button
+              type="button"
+              class="px-2 py-1 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 rounded-lg text-[10px] font-bold transition"
+              @click.stop="verTicket(row)"
+            >
+              <i class="fa-solid fa-receipt mr-1"></i> Ticket
+            </button>
+            <button
+              v-if="row.estado === 'Completada'"
+              type="button"
+              class="px-2 py-1 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-lg text-[10px] font-bold transition"
+              @click.stop="router.push({ name: 'pos', query: { editVentaId: row.id } })"
+            >
+              <i class="fa-solid fa-pen mr-1"></i> Editar
+            </button>
+            <button
+              v-if="row.estado === 'Completada'"
+              type="button"
+              :disabled="anullingId === row.id"
+              class="px-2 py-1 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 dark:text-red-300 rounded-lg text-[10px] font-bold transition disabled:opacity-50"
+              @click.stop="confirmAnular(row)"
+            >
+              <i :class="[anullingId === row.id ? 'fa-solid fa-circle-notch fa-spin' : 'fa-solid fa-ban', 'mr-1']"></i>
+              {{ anullingId === row.id ? 'Anulando...' : 'Anular' }}
+            </button>
+          </div>
+        </template>
+        <template #detail="{ row }">
+          <p class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-2">Detalle de Productos</p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead>
+                <tr class="text-left">
+                  <th class="py-1.5 text-[10px] font-bold text-slate-400 uppercase">Producto</th>
+                  <th class="py-1.5 text-[10px] font-bold text-slate-400 uppercase text-center">Cant.</th>
+                  <th class="py-1.5 text-[10px] font-bold text-slate-400 uppercase text-right">Precio</th>
+                  <th class="py-1.5 text-[10px] font-bold text-slate-400 uppercase text-right">Subtotal</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+                <tr v-for="(item, idx) in row.items" :key="idx">
+                  <td class="py-1.5 text-slate-700 dark:text-slate-200">
+                    {{ item.producto_nombre || item.nombre || '—' }}
+                    <span v-if="item.oferta_info" class="ml-1 text-[9px] text-orange-500 font-bold">[{{ item.oferta_info }}]</span>
+                  </td>
+                  <td class="py-1.5 text-slate-600 dark:text-slate-400 text-center">{{ item.cantidad }}</td>
+                  <td class="py-1.5 text-slate-600 dark:text-slate-400 text-right font-mono-data">{{ fc(item.precio_unitario) }}</td>
+                  <td class="py-1.5 text-slate-800 dark:text-slate-100 text-right font-mono-data font-bold">{{ fc(item.subtotal) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="flex flex-wrap items-center gap-4 sm:gap-6 pt-3 border-t border-slate-200 dark:border-slate-700 mt-3">
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] font-bold text-slate-400 uppercase">Total</span>
+              <span class="text-sm font-mono-data font-bold text-brand-700 dark:text-brand-400">{{ fc(row.total) }}</span>
+            </div>
+            <div v-if="row.descuento > 0" class="flex items-center gap-2">
+              <span class="text-[10px] font-bold text-slate-400 uppercase">Descuento</span>
+              <span class="text-sm font-mono-data font-bold text-red-600 dark:text-red-400">{{ fc(row.descuento) }}</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] font-bold text-slate-400 uppercase">Medio de Pago</span>
+              <span class="text-xs font-bold text-slate-700 dark:text-slate-200 capitalize">{{ row.medio_pago || '—' }}</span>
+            </div>
+          </div>
+        </template>
+      </BaseTable>
+    </BaseCard>
+
+    <BaseModal v-model="anularTarget" title="Anular Venta" size="sm">
+      <div class="text-center">
+        <div class="w-12 h-12 rounded-2xl bg-red-50 dark:bg-red-900/20 flex items-center justify-center mx-auto mb-3">
+          <i class="fa-solid fa-triangle-exclamation text-red-500 text-xl"></i>
+        </div>
+        <h3 class="text-lg font-bold text-slate-950 dark:text-white font-display mb-1">Anular Venta</h3>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mb-5">
+          ¿Estás seguro de anular la venta <strong class="text-slate-900 dark:text-slate-100">#{{ anularTarget?.id }}</strong>? Esta acción no se puede deshacer.
+        </p>
+        <div class="flex items-center gap-3">
+          <BaseButton variant="secondary" class="flex-1" @click="anularTarget = null">Cancelar</BaseButton>
+          <BaseButton variant="danger" :loading="anullingId === anularTarget?.id" class="flex-1" @click="executeAnular">
+            <i class="fa-solid fa-ban"></i> Anular
+          </BaseButton>
+        </div>
+      </div>
+    </BaseModal>
+
+    <TicketModal :show="showTicket" :ticket="ticketData" @close="showTicket = false" />
+
+    <FacturaDetalleModal
+      :show="showFacturaDetalle"
+      :factura="detalleFactura"
+      :venta="detalleVenta"
+      :emisor="emisorConfig"
+      @close="showFacturaDetalle = false"
+      @reemitir="emitirFactura(detalleVenta?.id)"
+    />
+  </div>
+</template>
