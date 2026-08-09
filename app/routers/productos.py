@@ -13,7 +13,7 @@ from app.schemas.producto import (
 from app.schemas.common import RespuestaData, RespuestaLista
 from app.auth.dependencies import get_current_user, require_role
 from app.models.usuario import Usuario
-from app.models.producto import Producto
+from app.models.producto import Producto, producto_proveedor
 from app.services import producto_service
 from app.services import lookup_service as lk
 from app.services import stock_service
@@ -345,12 +345,34 @@ def listar_proveedores_producto(
     db: Session = Depends(get_db),
     user: Usuario = Depends(get_current_user),
 ):
-    """Lista los proveedores asignados a un producto."""
+    """Lista los proveedores asignados a un producto, con datos por-relación."""
     producto = producto_service.obtener_producto(db, producto_id)
     if not producto:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
-    provs = [{"id": p.id, "nombre": p.nombre, "cuit": p.cuit} for p in producto.proveedores]
-    return RespuestaData(data=provs)
+    from app.schemas.producto_proveedor import ProductoProveedorOut
+    from sqlalchemy import select
+    stmt = select(
+        producto_proveedor.c.codigo_proveedor,
+        producto_proveedor.c.costo,
+        producto_proveedor.c.plazo_entrega_dias,
+        producto_proveedor.c.es_principal,
+        producto_proveedor.c.activo,
+        producto_proveedor.c.notas,
+    ).where(producto_proveedor.c.producto_id == producto_id)
+    rows = {r.proveedor_id: r._mapping for r in db.execute(stmt)}
+    data = []
+    for p in producto.proveedores:
+        meta = rows.get(p.id, {})
+        data.append(ProductoProveedorOut(
+            id=p.id, nombre=p.nombre, cuit=p.cuit,
+            codigo_proveedor=meta.get("codigo_proveedor"),
+            costo=meta.get("costo"),
+            plazo_entrega_dias=meta.get("plazo_entrega_dias"),
+            es_principal=meta.get("es_principal") or 0,
+            activo=meta.get("activo") if meta.get("activo") is not None else 1,
+            notas=meta.get("notas"),
+        ).model_dump())
+    return RespuestaData(data=data)
 
 
 @router.post("/{producto_id}/proveedores", response_model=RespuestaData)
@@ -373,6 +395,56 @@ def asignar_proveedor(
         producto.proveedores.append(prov)
         db.commit()
     return RespuestaData(message=f"Proveedor '{prov.nombre}' asignado")
+
+
+@router.put("/{producto_id}/proveedores/{proveedor_id}", response_model=RespuestaData)
+def editar_proveedor_producto(
+    producto_id: int,
+    proveedor_id: int,
+    data: ProductoProveedorUpdate,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "encargado")),
+):
+    """Edita los datos por-relación de un proveedor asignado a un producto.
+    Si se marca es_principal=True, desmarca los demás del mismo producto (transacción)."""
+    from app.models.proveedor import Proveedor
+    from datetime import datetime, timezone
+    producto = producto_service.obtener_producto(db, producto_id)
+    if not producto:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+    prov = db.query(Proveedor).filter(Proveedor.id == proveedor_id).first()
+    if not prov:
+        raise HTTPException(status_code=404, detail="Proveedor no encontrado")
+    if prov not in producto.proveedores:
+        raise HTTPException(status_code=400, detail="El proveedor no está asignado a este producto")
+
+    update_data = data.model_dump(exclude_unset=True)
+
+    if update_data.get("es_principal") is True:
+        # Desmarcar los demás del mismo producto
+        db.execute(
+            producto_proveedor.update()
+            .where(producto_proveedor.c.producto_id == producto_id)
+            .where(producto_proveedor.c.proveedor_id != proveedor_id)
+            .values(es_principal=0, updated_at=datetime.now(timezone.utc))
+        )
+        update_data["es_principal"] = 1
+    elif "es_principal" in update_data and update_data["es_principal"] is False:
+        update_data["es_principal"] = 0
+
+    if "activo" in update_data:
+        update_data["activo"] = 1 if update_data["activo"] else 0
+
+    update_data["updated_at"] = datetime.now(timezone.utc)
+
+    db.execute(
+        producto_proveedor.update()
+        .where(producto_proveedor.c.producto_id == producto_id)
+        .where(producto_proveedor.c.proveedor_id == proveedor_id)
+        .values(**update_data)
+    )
+    db.commit()
+    return RespuestaData(message=f"Proveedor '{prov.nombre}' actualizado")
 
 
 @router.delete("/{producto_id}/proveedores/{proveedor_id}", response_model=RespuestaData)

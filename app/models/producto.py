@@ -15,11 +15,21 @@ from app.database import Base
 
 
 # Tabla de asociación muchos-a-muchos entre Producto y Proveedor
+# Además del vínculo, guarda datos propios de la relación (costo, código del proveedor, etc.)
 producto_proveedor = Table(
     "producto_proveedor",
     Base.metadata,
     Column("producto_id", Integer, ForeignKey("productos.id"), primary_key=True),
     Column("proveedor_id", Integer, ForeignKey("proveedores.id"), primary_key=True),
+    Column("codigo_proveedor", String(100), nullable=True),
+    Column("costo", Float, nullable=True),
+    Column("plazo_entrega_dias", Integer, nullable=True),
+    Column("es_principal", Integer, default=0, nullable=False),
+    Column("activo", Integer, default=1, nullable=False),
+    Column("notas", Text, nullable=True),
+    Column("created_at", DateTime, default=lambda: datetime.now(timezone.utc)),
+    Column("updated_at", DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc)),
 )
 
 

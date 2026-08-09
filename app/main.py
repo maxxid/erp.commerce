@@ -243,6 +243,21 @@ def _migrate_new_columns():
         if "valor_texto" not in existentes_conf:
             conn.execute(sa.text("ALTER TABLE configuraciones ADD COLUMN valor_texto TEXT"))
             conn.commit()
+        # Extender tabla puente producto_proveedor con datos por-relación
+        existentes_pp = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(producto_proveedor)"))]
+        for col, tipo in [
+            ("codigo_proveedor", "VARCHAR(100)"),
+            ("costo", "FLOAT"),
+            ("plazo_entrega_dias", "INTEGER"),
+            ("es_principal", "INTEGER NOT NULL DEFAULT 0"),
+            ("activo", "INTEGER NOT NULL DEFAULT 1"),
+            ("notas", "TEXT"),
+            ("created_at", "DATETIME"),
+            ("updated_at", "DATETIME"),
+        ]:
+            if col not in existentes_pp:
+                conn.execute(sa.text(f"ALTER TABLE producto_proveedor ADD COLUMN {col} {tipo}"))
+                conn.commit()
     finally:
         conn.close()
 
