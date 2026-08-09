@@ -163,9 +163,9 @@ const filteredProducts = computed(() => {
   if (searchQuery.value.trim()) {
     const q = searchQuery.value.toLowerCase()
     list = list.filter(p =>
-      p.nombre.toLowerCase().includes(q) ||
-      p.marca.toLowerCase().includes(q) ||
-      p.codigo_barras.includes(q)
+      (p.nombre || '').toLowerCase().includes(q) ||
+      (p.marca || '').toLowerCase().includes(q) ||
+      (p.codigo_barras || '').toLowerCase().includes(q)
     )
   }
   return list
@@ -307,8 +307,10 @@ async function saveProduct() {
       payload.precio_por_kilo = form.precio_venta
       payload.precio_venta = null
     }
+    let productoId = null
     if (editingProduct.value) {
       const resp = await api.put(`/api/productos/${editingProduct.value.id}`, payload)
+      productoId = editingProduct.value.id
 
       const idx = products.value.findIndex(p => p.id === editingProduct.value.id)
       if (idx !== -1) {
@@ -317,15 +319,22 @@ async function saveProduct() {
       toast.success('Producto actualizado')
     } else {
       const resp = await api.post('/api/productos', payload)
+      productoId = resp.id
       products.value.push({ id: resp.id, ...payload })
       toast.success('Producto creado')
+    }
 
-      if (form.proveedor_id && resp.id) {
-        try {
-          await api.post(`/api/productos/${resp.id}/proveedores`, { proveedor_id: form.proveedor_id })
-        } catch { /* silencioso */ }
+    const oldProveedorId = editingProduct.value?.proveedor_id || null
+    if (productoId && form.proveedor_id !== oldProveedorId) {
+      try {
+        if (form.proveedor_id) {
+          await api.post(`/api/productos/${productoId}/proveedores`, { proveedor_id: form.proveedor_id })
+        }
+      } catch (e) {
+        toast.error('Producto guardado, pero no se pudo asociar el proveedor: ' + (e.message || 'error desconocido'))
       }
     }
+
     closeModal()
   } catch (e) {
     formError.value = e.message || 'Error al guardar'

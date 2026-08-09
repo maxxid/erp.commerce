@@ -1,0 +1,1 @@
+function t(e){return e==null?"—":"$ "+Number(e).toLocaleString("es-AR",{minimumFractionDigits:2})}function n(e){return e?new Date(e).toLocaleString("es-AR",{timeZone:"America/Argentina/Buenos_Aires",day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",hour12:!1}):"—"}export{n as a,t as f};
