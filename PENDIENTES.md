@@ -1,90 +1,136 @@
-# Ideas Pendientes — ApexERP
+# Pendientes — ApexERP
 
-## Completados en esta sesión (30/06/2026)
+> Estado actual del proyecto. **Actualizar al final de cada sesión relevante** (en el commit que cierra la jornada o cuando arranca la siguiente).
 
-- Botón WhatsApp en Clientes con mensaje prellenado de deuda
-- Botón WhatsApp en Compras (proveedores)
-- Estado "parcial" en Compras (recepción parcial)
-- Modal de arqueo en Cierre de Caja (montos esperados vs reales)
+---
+
+## ✅ Completados recientemente
+
+### Producto ↔ Proveedor (relación rica) — 08/08/2026
+- Migración: tabla puente `producto_proveedor` extendida con `codigo_proveedor`, `costo`, `plazo_entrega_dias`, `es_principal`, `activo`, `notas`, `created_at`, `updated_at` (`app/main.py:246-259`)
+- Endpoint `PUT /api/productos/{id}/proveedores/{pid}` para editar la relación (`app/routers/productos.py:400-447`)
+  - Marcar `es_principal=true` desmarca los demás del mismo producto (transaccional)
+- `GET /api/productos/{id}/proveedores` ahora devuelve los metadatos de la relación (`app/routers/productos.py:344-374`)
+- `ProductsView`: buscador con null-safety y persistencia de proveedor al editar (`frontend/src/views/ProductsView.vue:163, 320-336`)
+- **Falta UI** para gestionar múltiples proveedores por producto y editar los nuevos campos (ver "Pendientes" abajo)
+
+### Facturación Electrónica ARCA / AFIP — julio 2026
+- `AjustesView`: sección colapsable "Datos de Facturación" con campos del emisor (Razón Social, Domicilio, Condición IVA, Ingresos Brutos, Fecha Inicio)
+- Toggle `facturacion_provider` s360 / afip en Ajustes (`app/services/s360_service.py` + `afip_service.py`)
+- Generación de clave RSA + CSR desde el ERP (`app/services/afip_csr_service.py`)
+- Upload de archivos `.key` / `.crt` / `.csr` / `.pem` en Ajustes con endpoints `/subir-key` y `/subir-pem`
+- WSFE vía `curl` (sin zeep, sin WSDL dinámico) — fix de múltiples problemas SSL con servers legacy ARCA
+- Tipo de comprobante 11 (Factura C) para no-RI; Factura A con array Iva
+- Campos según spec ARCA: `ImpIVA`, `ImpOpEx`, `CondicionIVAReceptorId`
+- Generador de QR para facturas electrónicas (`app/services/factura_pdf.py`)
+- Modal de factura electrónica con PDF, impresión y WhatsApp (`FacturaDetalleModal.vue`)
+- Toggle de factura automática por medio de pago (7 medios, default QR MP / POS MP ON) — `app/services/config_service.py:get_factura_auto_por_medio()`
+- `venta_service.confirmar_venta()` consulta el toggle antes de emitir FE
+- UI: CAE en una línea, box factura 8mm, vencimiento en una línea
+- Impresión en ventana nueva con `qr.drawOn` (no `drawAt`)
+- Botón "Re-emitir facturas rechazadas"
+- Botón "Descargar `.key`" para guardar clave privada AFIP localmente
+
+### MercadoPago — julio 2026
+- API `v1/orders` (`app/services/mercadopago_service.py`)
+- Creación de store / POS desde Ajustes
+- Modo QR híbrido: fijo + dinámico, con QR fijo colapsable por defecto
+- Smart Point (POS MP) integrado
+- Webhooks con validación HMAC-SHA256 + `webhook_secret` configurable
+- Eventos correctos según docs MP (`order.processed`)
+- Procesa webhook aunque la orden no esté en MP, usando `external_reference` directo
+- Botón borrar clave webhook en Ajustes
+- Sandbox URL = `api.mercadopago.com` (no `sandbox.mercadopago.com`)
+- Provincia como select con 24 valores válidos para MP; default Jujuy / San Salvador
+- `mercadopago_user_id`, `store_id`, `external_store_id` en `get_mercadopago_config`
+- Auto-guardado de store y caja en config al crearse
+- `caja` usa `external_id` de store (no store_id numérico)
+- Polling consulta estado de venta en DB, no en API de MP
+- `unit_measure` faltante agregado a items de orden MP
+- Mapping español → inglés de modo QR (`dinamico` → `dynamic`)
+- `MERCADOPAGO.md` con info de integración y troubleshooting
+
+### Sesión 30/06/2026 (previo, ya documentado)
+- WhatsApp en Clientes con mensaje prellenado de deuda
+- WhatsApp en Compras (proveedores)
+- Estado "parcial" en Compras
+- Modal de arqueo en Cierre de Caja
 - Logout automático tras cierre-total de caja
 - Validación de token con `/api/auth/me` en auto-login
-- Columnas en Compras: Total color brand-600, Canti., Pendiente, icono Comentarios
+- Columnas Compras: Total brand-600, Canti., Pendiente, icono Comentarios
 - Comentarios en Compras con fecha/hora y autor
-- Fix: items ahora se guardan al crear OC (antes se perdían)
-- Endpoint POST `/api/compras/{id}/comentario`
-- Endpoint POST `/api/clientes/{id}/abonar`
+- Fix: items se guardan al crear OC
+- Endpoints `POST /api/compras/{id}/comentario` y `POST /api/clientes/{id}/abonar`
 
 ---
 
-## Dashboard multi-negocio (admin central)
-**Estado:** Idea — para más adelante
+## 🟡 En curso (próximo a retomar)
 
-Un dueño con varios negocios (cada uno con su machine_id) necesita ver todo centralizado.
+### Producto ↔ Proveedor — UI rica
+El backend ya soporta múltiples proveedores por producto con metadatos, pero la UI en `ProductsView` sigue usando un solo `<select>`. Falta:
+- Tabla/sección en el modal de producto para listar proveedores asignados
+- Botón "Agregar proveedor" con búsqueda rápida y modal mini
+- Edit inline o modal de los campos `codigo_proveedor`, `costo`, `plazo_entrega_dias`, `es_principal`, `activo`, `notas`
+- Badge "Principal" en el item marcado como tal
+- Mostrar `codigo_proveedor` en el detalle del producto y (opcional) en el POS al hacer lookup
 
-### Opción A: App separada para el dueño
-- Nueva app que lee los backups de R2 de todos los machine_id
-- Muestra dashboard global + drill-down por negocio
-- No interfiere con el ERP de cada negocio
-- Stack: mismo Python/FastAPI + SQLite (lee los .db descargados)
-
-### Opción B: El admin del ERP actual puede "importar" backups de otros
-- Endpoint `GET /api/admin/backups/todos` — lista todos los backups de todos los clientes en R2
-- Botón "Ver negocio X" que descarga, restaura temporalmente, y muestra dashboard
-- Más simple pero menos elegante
-
-### Datos que interesan al dueño (por negocio y global)
-- Ventas hoy / semana / mes
-- Margen bruto
-- Ticket promedio
-- Productos más vendidos
-- Alertas (stock bajo, caja sin cerrar)
-- Comparativas entre negocios (ranking)
-- Auditoría (ventas anuladas, carritos abandonados)
+**Backend listo:** endpoints GET / POST / PUT / DELETE ya funcionan; solo falta el frontend.
 
 ---
 
-## Otras ideas pendientes
+## 📋 Pendientes activos
 
-### Impresión de tickets
-- PDF o impresora térmica
-- Formato de ticket fiscal simplificado
+### Alta prioridad
+- **Producto-Proveedor UI** (ver "En curso" arriba)
+- **Gestión de productos POR LOTES + FEFO** — cambio de negocio
+  - Registrar productos por **lote** al recibir mercadería (en Compras o Productos), con cantidad, fecha de vencimiento y costo por lote
+  - El `stock_actual` del producto pasa a ser la **suma de lotes activos** (no un contador global)
+  - Política de despacho **FEFO** (First Expired, First Out): al confirmar una venta, el sistema toma automáticamente del lote que vence primero; si no alcanza, sigue con el siguiente
+  - Trazabilidad: poder ver de qué lote salió cada item de una venta (y revertir correctamente al anular)
+  - Alertas: lotes por vencer (ej. 30/15/7 días) y lotes vencidos (bloqueo de venta + reposición)
+  - Reportes: stock desglosado por lote, valorización de stock por costo real de cada lote
+  - Decisiones pendientes de diseño:
+    - ¿El campo `fecha_vencimiento` actual del producto se mantiene o se elimina? (hoy es a nivel producto, no lote)
+    - ¿Productos sin vencimiento también van por lote? (sí, lote sin fecha)
+    - ¿El código de barras del producto se mantiene único o cada lote tiene el suyo? (recomendado: único, el lote es interno)
+    - ¿FEFO aplica también a la salida por ajuste manual de stock? (sí, pero registrando de qué lote)
+  - Impacto grande: modelos `Producto` y `CompraItem` + `VentaItem` + `MovimientoStock` + POS + Compras (recepción) + Reportes + Auditoría
+- **MercadoPago: select de ciudad por provincia** — `app/services/mercadopago_service.py` ya tiene provincia como select (24 valores válidos); falta el segundo select de ciudad/localidad que dependa de la provincia elegida, porque MP rechaza si el `city_name` no es válido
+- **Seguridad clave privada AFIP** — la clave se guarda encriptada en la DB con una key hardcodeada (`"erp-afip-key-encryption-v1"`). Si alguien accede a DB + código fuente puede descifrarla. **Solución propuesta:** no guardar clave privada en DB — solo descargar (botón "Descargar .key" ya existe) y que el usuario la guarde localmente. Alternativa: secrets manager (AWS Secrets Manager, etc.). Requiere re-flujo de setup de AFIP.
 
-### Reportes exportables (CSV/PDF)
-- Ventas por período
-- Stock actual
-- Movimientos de caja
+### Media prioridad
+- **Impresión de tickets** — `TicketModal.vue` ya tiene preview 80/58mm; falta:
+  - PDF descargable (no solo ventana de impresión)
+  - Impresora térmica (ESC/POS o similar)
+  - Formato fiscal simplificado
+- **Reportes exportables (CSV/PDF)** — los reportes en `/reportes` se ven en pantalla pero no se exportan
+- **Notificaciones** — stock bajo, licencia por vencer, caja sin cerrar al final del día
+- **Compras: producto similar o discontinuo** — al recibir, poder reemplazar un producto pedido por otro similar; marcar ítems como "no enviado / discontinuo"; registrar qué se recibió en lugar de qué se pidió
 
-### Notificaciones
-- Stock bajo
-- Licencia por vencer
-- Caja sin cerrar al final del día
+### Baja prioridad
+- **Multi-sucursal** — modelos `Sucursal` ya existen; falta que cada caja/usuario vea solo su sucursal
+- **Migración PostgreSQL + Alembic** — para cuando haya >5 usuarios concurrentes o acceso remoto multi-sucursal
+- **Instalador Windows (.exe)** — NSIS o Inno Setup, empaqueta Python + deps + app
+- **Dashboard multi-negocio (admin central)** — dueño con varios `machine_id` necesita vista global. Dos opciones:
+  - **A)** App separada que lee backups de R2 de todos los machine_id
+  - **B)** El admin del ERP actual puede "importar" backups de otros (endpoint `GET /api/admin/backups/todos` + drill-down)
 
-### Multi-sucursal
-- Modelos ya existen (Sucursal)
-- Misma DB, diferente sucursal_id
-- Cada caja ve solo su sucursal
+---
 
-### Migración PostgreSQL + Alembic
-- Para cuando haya >5 usuarios concurrentes
-- O cuando se necesite acceso remoto multi-sucursal
+## 💡 Backlog (ideas sin priorizar)
 
-### Instalador Windows (.exe)
-- NSIS o Inno Setup
-- Empaqueta Python + dependencias + la app
-- Un solo .exe, siguiente-siguiente-instalar
+- Auditoría de carritos sospechosos (> 2h) — ya hay banner, falta reporte histórico en vista Auditoría
+- Catálogo central cross-tenant (compartir entre sucursales)
+- Integración con balanza / lector de código de barras por USB
+- App mobile companion para el dueño (consultar ventas en vivo)
+- Exportar productos a Excel/CSV desde Productos
+- Importar productos desde Excel (masivo)
 
-### Compras: producto similar o discontinuo
-- Al recibir, poder reemplazar un producto pedido por otro similar
-- Marcar ítems como "no enviado / discontinuo"
-- Registrar qué se recibió en lugar de qué se pidió
+---
 
-### Seguridad: clave privada AFIP
-- La clave privada AFIP está encriptada en la DB con una key hardcodeada ("erp-afip-key-encryption-v1")
-- Si alguien accede a la DB + código fuente, puede descifrarla
-- Solución: no guardar clave privada en la DB — solo descargar y que el usuario la guarde localmente
-- Alternativa: usar un secrets manager (AWS Secrets Manager, etc.)
+## 🗒️ Cómo mantener este archivo
 
-### MercadoPago: completar localidades por provincia
-- El select de provincia ya está (24 opciones válidas para MP)
-- Faltaría tener un segundo select de ciudad/localidad que se actualice según la provincia seleccionada
-- MercadoPago requiere valores válidos de city_name para crear sucursales
+1. Al **cerrar una sesión relevante** (no cada commit chico), agregar entrada a "Completados recientemente" con la fecha
+2. Si algo queda a medias, mover a "En curso" con bullets claros de qué falta
+3. Si aparece algo nuevo, agregar a "Pendientes activos" en la prioridad que corresponda
+4. Si se descarta o se vuelve irrelevante, **borrarlo** (no acumular) — el historial está en `git log`
