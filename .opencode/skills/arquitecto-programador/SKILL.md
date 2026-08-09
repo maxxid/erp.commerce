@@ -32,7 +32,7 @@ Siempre ejecutá estos pasos en orden:
 
 - **Actualizá MAESTRO.md** — si el cambio agrega o modifica features documentadas, actualizá la sección correspondiente (POS, Caja, Productos, Ventas, Flujos, Reglas, Atajos, etc.)
 - **Verificá el build** — ejecutá `npm run build` y confirmá que no hay errores
-- **Commit + push** — solo cuando el usuario lo solicite explícitamente
+- **Auto commit + push** — después de cada cambio relevante, hacer `git add` + `commit` (mensaje en español, scope claro) + `push` a `origin master` en una sola acción. No esperar a que el usuario lo pida. El backend está deployado en otro server, así que push = deploy automático. Si algo falla, se hace `git revert` o un fix commit encima
 
 ## Stack del proyecto
 

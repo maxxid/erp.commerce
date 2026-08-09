@@ -123,23 +123,27 @@ erp.commerce/
 
 ## 🔧 Git
 
+**Política: auto commit + push después de cada cambio relevante.** No esperar a que el usuario lo pida. El backend está deployado en otro server, así que push = deploy automático. Si algo falla, se hace `git revert` o un fix commit encima.
+
 ```bash
-# Estado
+# Estado (consultar, no esperar a que el usuario lo pida)
 git status
 git log --oneline -20
 
-# Feature con scope
+# Flujo automático después de un cambio
 git add <files>
 git commit -m "feat(productos): ..."
+git push origin master
 # Tipos: feat, fix, refactor, chore, docs, build, ui, debug
 
-# Push
-git push origin master
+# Si algo se rompe
+git revert HEAD        # deshace el último commit (genera un commit nuevo)
+git push origin master # publica el revert
 ```
 
-- **Solo commitear cuando el usuario lo pida explícitamente**
 - Mensajes en español, lowercase después del scope, descripción clara
 - Cada commit debe dejar el sistema funcional (no romper build)
+- `npm run build` antes de commitear cambios de frontend (el `dist/` está commiteado)
 
 ---
 

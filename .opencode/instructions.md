@@ -42,6 +42,6 @@
 1. **No romper features existentes** — verificar contra MAESTRO.md antes de cambiar
 2. **Actualizar MAESTRO.md** después de cambios significativos (nuevas features, flujos, atajos, reglas)
 3. **Build sin errores** — siempre ejecutar `npm run build` antes de finalizar
-4. **Commit solo cuando el usuario lo pida**
+4. **Auto commit + push** — después de cada cambio relevante, hacer `git add` + `commit` + `push` en una sola acción. No esperar a que el usuario lo pida. El backend está en otro server, push = deploy.
 5. **Backend async** — `crear_producto`, `actualizar_producto` son sync (SQLAlchemy), los endpoints son async
 6. **Errores HTTP** — el backend levanta `HTTPException` con código y detail; el frontend muestra `toast.error(e?.response?.data?.detail || e.message)`
