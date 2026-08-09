@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
 import api from '@/services/api'
-import { formatCurrency as fc } from '@/composables/useUtils'
+import { formatCurrency as fc, formatDateTime } from '@/composables/useUtils'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -383,10 +383,10 @@ async function executeAnular() {
           <span class="text-xs font-bold text-slate-700 dark:text-slate-200">#{{ row.id }}</span>
         </template>
         <template #fecha="{ row }">
-          <span class="text-xs text-slate-600 dark:text-slate-400">{{ row.fecha }}</span>
+          <span class="text-xs text-slate-600 dark:text-slate-400">{{ formatDateTime(row.fecha) }}</span>
         </template>
         <template #cliente_nombre="{ row }">
-          <span class="text-xs text-slate-600 dark:text-slate-300">{{ row.cliente_nombre || '—' }}</span>
+          <span class="text-xs text-slate-600 dark:text-slate-300">{{ row.cliente_nombre || row.comprador_cuit || '2014' }}</span>
         </template>
         <template #medio_pago="{ row }">
           <span class="text-xs text-slate-600 dark:text-slate-300 capitalize">{{ row.medio_pago || '—' }}</span>

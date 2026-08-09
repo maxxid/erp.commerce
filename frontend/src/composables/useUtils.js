@@ -21,3 +21,17 @@ export function esc(s) {
   if (!s) return ''
   return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
+
+export function formatDateTime(isoStr) {
+  if (!isoStr) return '\u2014'
+  const d = new Date(isoStr)
+  return d.toLocaleString('es-AR', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+}

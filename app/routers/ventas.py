@@ -23,6 +23,7 @@ def _venta_to_dict(v: Venta) -> dict:
         "numero": v.numero,
         "cliente_id": v.cliente_id,
         "cliente_nombre": v.cliente.nombre if v.cliente else None,
+        "comprador_cuit": v.comprador_cuit,
         "usuario_id": v.usuario_id,
         "sucursal_id": v.sucursal_id,
         "fecha": v.fecha.isoformat() if v.fecha else None,
