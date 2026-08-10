@@ -1141,11 +1141,13 @@ const filteredPOSProducts = computed(() => {
   }
   if (posTextSearch.value.trim()) {
     const q = posTextSearch.value.toLowerCase()
-    list = list.filter(p =>
-      p.nombre.toLowerCase().includes(q) ||
-      p.marca.toLowerCase().includes(q) ||
-      p.codigo_barras.includes(q)
-    )
+    list = list.filter(p => {
+      if (!p) return false
+      const nombre = (p.nombre || '').toLowerCase()
+      const marca = (p.marca || '').toLowerCase()
+      const codigo = (p.codigo_barras || '').toLowerCase()
+      return nombre.includes(q) || marca.includes(q) || codigo.includes(q)
+    })
   }
   return list
 })
