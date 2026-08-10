@@ -84,11 +84,14 @@ class ProductoLookupRequest(BaseModel):
 
 class ProductoLookupResponse(BaseModel):
     """Respuesta del lookup, incluye comparación de precios."""
+    id: Optional[int] = None
     codigo_barras: str
     nombre: str
     marca: Optional[str] = None
     descripcion: Optional[str] = None
     precio_referencia: Optional[float] = None
+    precio_venta: Optional[float] = None
+    stock_actual: Optional[float] = None
     imagen_url: Optional[str] = None
     sku: Optional[str] = None
     propiedades: Optional[dict] = None

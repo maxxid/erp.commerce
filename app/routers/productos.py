@@ -251,11 +251,14 @@ def lookup(
     local = producto_service.obtener_por_barcode(db, barcode)
     if local:
         result = ProductoLookupResponse(
+            id=local.id,
             codigo_barras=local.codigo_barras,
             nombre=local.nombre,
             marca=local.marca,
             descripcion=local.descripcion,
             precio_referencia=local.precio_referencia,
+            precio_venta=local.precio_venta,
+            stock_actual=local.stock_actual,
             imagen_url=local.imagen_url,
             sku=local.sku,
             propiedades=local.propiedades,

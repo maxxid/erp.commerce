@@ -1154,7 +1154,7 @@ onMounted(async () => {
   localStorage.setItem('apex_user', JSON.stringify({ nombre: auth.currentUser?.nombre || auth.currentUser?.username || '' }))
   try {
     const [prods, cats, clis, ofs, cfg] = await Promise.all([
-      api.get('/api/productos').catch(() => null),
+      api.get('/api/productos?page_size=200').catch(() => null),
       api.get('/api/categorias').catch(() => null),
       api.get('/api/clientes').catch(() => null),
       api.get('/api/ofertas?page_size=200').catch(() => null),
@@ -1320,6 +1320,28 @@ async function triggerPOSLookup() {
 
   try {
     const resp = await api.post('/api/productos/lookup', { barcode: raw }).catch(() => null)
+    if (resp && resp.id) {
+      const localHit = products.value.find(p => p.id === resp.id)
+      if (!localHit) {
+        products.value.push({
+          id: resp.id,
+          codigo_barras: resp.codigo_barras,
+          nombre: resp.nombre,
+          marca: resp.marca || '',
+          precio_venta: resp.precio_venta || 0,
+          stock_actual: resp.stock_actual || 0,
+          categoria_id: null
+        })
+      }
+      addToCart(localHit || products.value[products.value.length - 1])
+      posLookupCode.value = ''
+      if (!lookupBadges.value.some(b => b.includes(raw))) {
+        lookupBadges.value.unshift(raw)
+        if (lookupBadges.value.length > 10) lookupBadges.value.pop()
+      }
+      nextTick(() => barcodeInput.value?.focus())
+      return
+    }
     if (resp && resp.nombre) {
       // Encontrado en fuentes externas - mostrar en panel
       lookupProduct._searchingExternal = false
