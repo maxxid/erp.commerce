@@ -916,7 +916,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
 import { useProductosStore } from '@/stores/productos'
-import { storeToRefs } from 'pinia'
 import { formatCurrency as fc } from '@/composables/useUtils'
 import api from '@/services/api'
 import { useCajaStore } from '@/stores/caja'
@@ -939,7 +938,10 @@ const auth = useAuthStore()
 const toast = useToastStore()
 const cajaStore = useCajaStore()
 const productosStore = useProductosStore()
-const { productos: products, categorias: categories, ofertas } = storeToRefs(productosStore)
+
+const products = computed(() => productosStore.productos)
+const categories = computed(() => productosStore.categorias)
+const ofertas = computed(() => productosStore.ofertas)
 const route = useRoute()
 const { addPendingSale, syncPendingSales } = useOfflineSales()
 const router = useRouter()
