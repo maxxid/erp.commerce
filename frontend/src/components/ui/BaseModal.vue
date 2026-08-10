@@ -117,13 +117,14 @@ onUnmounted(() => {
             <div
               v-if="modelValue"
               ref="modalRef"
-              class="w-full bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200/80 dark:border-slate-700/80 outline-none"
+              class="w-full bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200/80 dark:border-slate-700/80 outline-none flex flex-col"
               :class="[sizeClasses]"
+              style="max-height: calc(100vh - 3rem)"
               @click.stop
             >
               <div
                 v-if="title || showClose"
-                class="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800"
+                class="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0"
               >
                 <h3
                   v-if="title"
@@ -141,8 +142,17 @@ onUnmounted(() => {
                   <i class="fa-solid fa-xmark"></i>
                 </button>
               </div>
-              <div :class="padding ? 'p-6' : ''">
+              <div
+                :class="padding ? 'p-6' : ''"
+                class="overflow-y-auto flex-1 min-h-0"
+              >
                 <slot />
+              </div>
+              <div
+                v-if="$slots.footer"
+                class="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 shrink-0 rounded-b-2xl"
+              >
+                <slot name="footer" />
               </div>
             </div>
           </Transition>

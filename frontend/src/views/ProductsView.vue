@@ -1027,15 +1027,17 @@ async function fetchProveedores() {
         <div v-if="formError" class="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 rounded-xl border border-red-100 dark:border-red-800/50 text-xs font-medium flex items-center gap-2">
           <i class="fa-solid fa-triangle-exclamation"></i>{{ formError }}
         </div>
+      </form>
 
-        <div class="flex items-center gap-3 pt-2">
+      <template #footer>
+        <div class="flex items-center gap-3">
           <BaseButton variant="secondary" class="flex-1" @click="closeModal">Cancelar</BaseButton>
-          <BaseButton variant="primary" type="submit" :loading="saving" class="flex-1">
+          <BaseButton variant="primary" type="submit" :loading="saving" class="flex-1" @click.prevent="saveProduct">
             <i :class="saving ? 'fa-solid fa-circle-notch fa-spin' : 'fa-solid fa-floppy-disk'"></i>
             {{ saving ? 'Guardando...' : (editingProduct ? 'Actualizar' : 'Crear Producto') }}
           </BaseButton>
         </div>
-      </form>
+      </template>
     </BaseModal>
 
     <!-- Delete confirmation modal -->
@@ -1144,15 +1146,17 @@ async function fetchProveedores() {
           label="Descripción (opcional)"
           placeholder="Ej: Liquidación de stock, Promoción especial..."
         />
+      </form>
 
-        <div class="flex items-center gap-3 pt-2">
+      <template #footer>
+        <div class="flex items-center gap-3">
           <BaseButton variant="secondary" class="flex-1" @click="closeOfertaModal">Cancelar</BaseButton>
-          <BaseButton variant="primary" type="submit" :loading="savingOferta" class="flex-1">
+          <BaseButton variant="primary" type="submit" :loading="savingOferta" class="flex-1" @click.prevent="saveOferta">
             <i :class="savingOferta ? 'fa-solid fa-circle-notch fa-spin' : 'fa-solid fa-tag'"></i>
             {{ savingOferta ? 'Guardando...' : (editingOferta ? 'Actualizar' : 'Crear Oferta') }}
           </BaseButton>
         </div>
-      </form>
+      </template>
     </BaseModal>
 
     <!-- Delete Oferta Modal -->
