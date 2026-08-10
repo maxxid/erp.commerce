@@ -6,6 +6,30 @@
 
 ## ✅ Completados recientemente
 
+### Lotes + FEFO (MVP + UI rica) — 09/08/2026
+**Decisiones de diseño cerradas:** todos los productos usan lotes · 1 lote por item en recepción · FEFO automático en ventas/ajustes/anulación · `fecha_vencimiento` vive solo en lote (se elimina del producto).
+
+**Backend:**
+- Modelos: `Lote` (producto_id, codigo_lote, fecha_fabricacion, fecha_vencimiento, cantidad_inicial/actual, costo, activo, notas, compra_id, compra_item_id) y `VentaItemLote` (trazabilidad por item — un item puede consumir de varios lotes)
+- `MovimientoStock.lote_id` para vincular movimientos a lote específico
+- Migración auto al arrancar: cada producto con `stock_actual > 0` recibe un "Lote inicial" (sin vencimiento, costo=precio_costo) para preservar el stock preexistente
+- `lote_service.py`: CRUD, FEFO (`descontar_fefo`, `reingresar_en_lote`), alertas (`lotes_por_vencer`, `lotes_vencidos`), resumen por producto
+- `stock_service.ajustar_stock_por_lote()`: entradas crean lote "AJUSTE", salidas aplican FEFO
+- `venta_service.confirmar_venta()`: usa FEFO y registra `VentaItemLote` por item
+- `venta_service.anular_venta()`: revierte consumo lote por lote
+- `compra_service.recibir_compra()`: crea lote con `fecha_vencimiento` informada, acepta `vencimientos` por item
+- `PUT /api/productos/{id}/ajustar-stock` ahora usa FEFO via `ajustar_stock_por_lote`
+- Endpoints: `GET /api/lotes`, `GET /api/lotes/alertas`, `GET /api/lotes/{id}`, `POST /api/lotes`, `PUT /api/lotes/{id}`, `POST /api/lotes/{id}/desactivar`, `GET /api/lotes/producto/{id}/resumen`, `GET /api/lotes/reporte/stock-por-lote`, `GET /api/dashboard/alertas-lotes`
+- `PUT /api/compras/{id}/recibir` ahora acepta `vencimientos: {item_id: iso_date}` opcional
+
+**Frontend:**
+- `ProductoLotesManager.vue` integrado en el modal de edición de producto: lista de lotes con badges de vencimiento (vencido/Xd), resumen (vencidos + por vencer 30d), botones editar/desactivar (con confirmación), sub-modales de edición y creación manual de lote (mermas, ajustes)
+- `ComprasView.vue`: nueva columna "Vencimiento" (date input) en el modal de Recepción con hint visible sobre FEFO
+- `DashboardView.vue`: alertas arriba (vencidos y por vencer 7d en rojo, 15d en amarillo)
+- `ReportesView.vue`: nueva card "Stock por Lote" con buscador + KPIs (productos con stock, lotes activos, valorización total) + lista con chips coloreados
+
+**Pendiente refinar (no bloqueante):** bloquear venta de lotes vencidos en POS · edición inline de codigo_proveedor por lote · exportar reporte stock-por-lote a CSV · deshabilitar lotes en el POS al confirmar venta vencida.
+
 ### Producto ↔ Proveedor (UI rica) — 09/08/2026
 - Componente `ProductoProveedoresManager.vue` (`frontend/src/components/products/ProductoProveedoresManager.vue`)
   - Lista de proveedores asignados al producto con badge "Principal" e "Inactivo"
@@ -77,14 +101,21 @@
 
 ## 🟡 En curso (próximo a retomar)
 
-_(Vacío — siguiente frente a elegir)_
+### Lotes + FEFO — Refinamientos
+- Bloquear venta de lotes vencidos en POS (validación backend al confirmar)
+- Edición inline de `codigo_proveedor` por lote (en ProductoLotesManager)
+- Exportar reporte stock-por-lote a CSV
+- Deshabilitar lotes inactivos en UI de recepción
+- Auditoría: registrar eventos `lote_creado`, `lote_desactivado`, `lote_modificado`
+
+_(Frontend de Lotes/FEFO MVP+UI rica cerrado y pusheado)_
 
 ---
 
 ## 📋 Pendientes activos
 
 ### Alta prioridad
-- **Gestión de productos POR LOTES + FEFO** — cambio de negocio
+- _(Vacío — siguiente frente a elegir entre los de media/baja prioridad)_
   - Registrar productos por **lote** al recibir mercadería (en Compras o Productos), con cantidad, fecha de vencimiento y costo por lote
   - El `stock_actual` del producto pasa a ser la **suma de lotes activos** (no un contador global)
   - Política de despacho **FEFO** (First Expired, First Out): al confirmar una venta, el sistema toma automáticamente del lote que vence primero; si no alcanza, sigue con el siguiente
