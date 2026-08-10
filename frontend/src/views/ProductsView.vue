@@ -13,6 +13,7 @@ import BaseBadge from '@/components/ui/BaseBadge.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseTable from '@/components/ui/BaseTable.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
+import ProductoProveedoresManager from '@/components/products/ProductoProveedoresManager.vue'
 
 const auth = useAuthStore()
 const toast = useToastStore()
@@ -783,7 +784,7 @@ async function fetchProveedores() {
               <i class="fa-solid fa-plus"></i>
             </BaseButton>
           </div>
-          <div class="flex items-end gap-2">
+          <div v-if="!editingProduct" class="flex items-end gap-2">
             <div class="flex-1">
               <label class="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Proveedor</label>
               <select
@@ -799,6 +800,12 @@ async function fetchProveedores() {
             </BaseButton>
           </div>
         </div>
+
+        <ProductoProveedoresManager
+          v-if="editingProduct"
+          :producto-id="editingProduct.id"
+          :proveedores="proveedores"
+        />
 
         <BaseInput
           v-model="form.fecha_vencimiento"
