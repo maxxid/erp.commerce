@@ -916,6 +916,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
 import { useProductosStore } from '@/stores/productos'
+import { storeToRefs } from 'pinia'
 import { formatCurrency as fc } from '@/composables/useUtils'
 import api from '@/services/api'
 import { useCajaStore } from '@/stores/caja'
@@ -938,6 +939,7 @@ const auth = useAuthStore()
 const toast = useToastStore()
 const cajaStore = useCajaStore()
 const productosStore = useProductosStore()
+const { productos: products, categorias: categories, ofertas } = storeToRefs(productosStore)
 const route = useRoute()
 const { addPendingSale, syncPendingSales } = useOfflineSales()
 const router = useRouter()
@@ -1114,13 +1116,7 @@ const stats = reactive({
   saldo_caja: 72000
 })
 
-const products = productosStore.productos
-
-const categories = productosStore.categorias
-
 const clientes = ref([])
-
-const ofertas = productosStore.ofertas
 
 const recentTransactions = ref([])
 const editingVentaId = ref(null)

@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
 import { useProductosStore } from '@/stores/productos'
+import { storeToRefs } from 'pinia'
 import { formatCurrency as fc } from '@/composables/useUtils'
 import api from '@/services/api'
 import BaseCard from '@/components/ui/BaseCard.vue'
@@ -21,6 +22,7 @@ const auth = useAuthStore()
 const toast = useToastStore()
 const route = useRoute()
 const productosStore = useProductosStore()
+const { productos: products, categorias: categories, ofertas } = storeToRefs(productosStore)
 
 const searchInput = ref('')
 const searchQuery = ref('')
@@ -40,7 +42,7 @@ const formError = ref('')
 const highlightedIds = ref(new Set())
 const showBarcodeHint = ref(false)
 
-const ofertas = productosStore.ofertas
+const filterPendientes = ref(false)
 const showOfertaModal = ref(false)
 const editingOferta = ref(null)
 const deleteOfertaTarget = ref(null)
@@ -49,7 +51,6 @@ const deletingOferta = ref(false)
 const filterEnOferta = ref(false)
 const filterSinStock = ref(false)
 const filterSinCodigo = ref(false)
-const filterPendientes = ref(false)
 
 let searchDebounceTimer = null
 function onSearchInput() {
@@ -155,10 +156,6 @@ const defaultOfertaForm = () => ({
   descripcion: ''
 })
 const ofertaForm = reactive(defaultOfertaForm())
-
-const products = productosStore.productos
-
-const categories = productosStore.categorias
 
 const proveedores = ref([])
 
