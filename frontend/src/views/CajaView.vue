@@ -104,6 +104,201 @@
       </div>
     </BaseCard>
 
+    <!-- Historial de Sesiones de Caja -->
+    <BaseCard padding="none">
+      <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+        <h3 class="font-bold text-slate-900 text-sm">Historial de Caja</h3>
+        <div class="flex items-center gap-2">
+          <div class="flex gap-1">
+            <button
+              v-for="filtro in filtrosHistorial"
+              :key="filtro.valor"
+              @click="cambiarFiltroHistorial(filtro.valor)"
+              class="px-3 py-1 text-xs font-semibold rounded-lg transition"
+              :class="filtroHistorial === filtro.valor
+                ? 'bg-brand-500 text-white'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+            >
+              {{ filtro.label }}
+            </button>
+          </div>
+          <BaseButton v-if="filtroHistorial === 'personalizado'" variant="secondary" size="xs" @click="showFechasPersonalizadas = !showFechasPersonalizadas">
+            <i class="fa-solid fa-calendar"></i> Fechas
+          </BaseButton>
+        </div>
+      </div>
+
+      <!-- Filtro de fechas personalizadas -->
+      <div v-if="showFechasPersonalizadas && filtroHistorial === 'personalizado'" class="px-5 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-3">
+        <div class="flex items-center gap-2">
+          <label class="text-xs font-semibold text-slate-600">Desde:</label>
+          <input
+            v-model="fechaInicio"
+            type="date"
+            class="px-2 py-1 text-xs border border-slate-200 rounded-lg"
+          />
+        </div>
+        <div class="flex items-center gap-2">
+          <label class="text-xs font-semibold text-slate-600">Hasta:</label>
+          <input
+            v-model="fechaFin"
+            type="date"
+            class="px-2 py-1 text-xs border border-slate-200 rounded-lg"
+          />
+        </div>
+        <BaseButton variant="primary" size="xs" @click="fetchReportes">
+          <i class="fa-solid fa-search"></i> Buscar
+        </BaseButton>
+      </div>
+
+      <!-- Tabla de sesiones -->
+      <div class="overflow-x-auto">
+        <table v-if="sesionesCaja.length" class="w-full text-sm">
+          <thead class="bg-slate-50 border-b border-slate-100">
+            <tr>
+              <th class="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase">Fecha</th>
+              <th class="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase">Usuario</th>
+              <th class="px-4 py-2 text-right text-xs font-semibold text-slate-500 uppercase">Apertura</th>
+              <th class="px-4 py-2 text-right text-xs font-semibold text-slate-500 uppercase">Cierre</th>
+              <th class="px-4 py-2 text-right text-xs font-semibold text-slate-500 uppercase">Ingresos</th>
+              <th class="px-4 py-2 text-right text-xs font-semibold text-slate-500 uppercase">Egresos</th>
+              <th class="px-4 py-2 text-center text-xs font-semibold text-slate-500 uppercase">Estado</th>
+              <th class="px-4 py-2 text-center text-xs font-semibold text-slate-500 uppercase">Discrepancias</th>
+              <th class="px-4 py-2 text-center text-xs font-semibold text-slate-500 uppercase">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="sesion in sesionesCaja" :key="sesion.apertura_id" class="border-b border-slate-50 hover:bg-slate-50">
+              <td class="px-4 py-3">
+                <div class="text-xs font-medium text-slate-900">{{ formatFecha(sesion.apertura_fecha) }}</div>
+                <div class="text-[10px] text-slate-400">{{ formatHora(sesion.apertura_fecha) }}</div>
+              </td>
+              <td class="px-4 py-3 text-xs text-slate-600">{{ sesion.apertura_usuario }}</td>
+              <td class="px-4 py-3 text-right font-mono-data text-xs text-slate-700">{{ fc(sesion.apertura_monto) }}</td>
+              <td class="px-4 py-3 text-right font-mono-data text-xs" :class="sesion.cierre_monto ? 'text-slate-700' : 'text-slate-400'">
+                {{ sesion.cierre_monto ? fc(sesion.cierre_monto) : '—' }}
+              </td>
+              <td class="px-4 py-3 text-right font-mono-data text-xs text-emerald-600">{{ fc(sesion.total_ingresos) }}</td>
+              <td class="px-4 py-3 text-right font-mono-data text-xs text-rose-600">{{ fc(sesion.total_egresos) }}</td>
+              <td class="px-4 py-3 text-center">
+                <BaseBadge :variant="sesion.estado === 'cerrada' ? 'success' : 'warning'" size="xs">
+                  {{ sesion.estado === 'cerrada' ? 'Cerrada' : 'Abierta' }}
+                </BaseBadge>
+                <BaseBadge v-if="sesion.fue_automatico" variant="info" size="xs" class="ml-1">Auto</BaseBadge>
+              </td>
+              <td class="px-4 py-3 text-center">
+                <BaseBadge v-if="sesion.tiene_discrepancias" variant="danger" size="xs">
+                  <i class="fa-solid fa-triangle-exclamation mr-1"></i>Sí
+                </BaseBadge>
+                <BaseBadge v-else-if="sesion.cierres_metodo && sesion.cierres_metodo.length" variant="success" size="xs">No</BaseBadge>
+                <span v-else class="text-xs text-slate-400">—</span>
+              </td>
+              <td class="px-4 py-3 text-center">
+                <BaseButton variant="ghost" size="xs" @click="verDetalleSesion(sesion)">
+                  <i class="fa-solid fa-eye"></i>
+                </BaseButton>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <EmptyState v-else icon="fa-clock-rotate-left" title="Sin sesiones" text="No hay sesiones de caja en este período." />
+      </div>
+    </BaseCard>
+
+    <!-- Modal Detalle de Sesión -->
+    <BaseModal v-model="showDetalleSesion" title="Detalle de Sesión de Caja" size="lg">
+      <div v-if="sesionSeleccionada" class="space-y-4">
+        <!-- Info general -->
+        <div class="grid grid-cols-2 gap-4">
+          <div class="bg-slate-50 rounded-xl p-3">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Apertura</div>
+            <div class="text-sm font-medium text-slate-900">{{ formatFechaHora(sesionSeleccionada.apertura_fecha) }}</div>
+            <div class="text-xs text-slate-600">{{ sesionSeleccionada.apertura_usuario }}</div>
+            <div class="font-mono-data font-bold text-brand-600 mt-1">{{ fc(sesionSeleccionada.apertura_monto) }}</div>
+            <div v-if="sesionSeleccionada.apertura_descripcion" class="text-[10px] text-slate-500 mt-1">{{ sesionSeleccionada.apertura_descripcion }}</div>
+          </div>
+          <div class="bg-slate-50 rounded-xl p-3">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Cierre</div>
+            <div v-if="sesionSeleccionada.cierre_fecha" class="text-sm font-medium text-slate-900">{{ formatFechaHora(sesionSeleccionada.cierre_fecha) }}</div>
+            <div v-else class="text-sm text-slate-400 italic">Sin cerrar</div>
+            <div v-if="sesionSeleccionada.cierre_usuario" class="text-xs text-slate-600">{{ sesionSeleccionada.cierre_usuario }}</div>
+            <div v-if="sesionSeleccionada.cierre_monto" class="font-mono-data font-bold text-brand-600 mt-1">{{ fc(sesionSeleccionada.cierre_monto) }}</div>
+            <div v-if="sesionSeleccionada.cierre_descripcion" class="text-[10px] text-slate-500 mt-1">{{ sesionSeleccionada.cierre_descripcion }}</div>
+            <BaseBadge v-if="sesionSeleccionada.fue_automatico" variant="info" size="xs" class="mt-1">Cierre automático</BaseBadge>
+          </div>
+        </div>
+
+        <!-- Resumen -->
+        <div class="grid grid-cols-3 gap-3">
+          <div class="bg-emerald-50 rounded-xl p-3 text-center">
+            <div class="text-[10px] uppercase tracking-wider text-emerald-600 font-semibold">Ingresos</div>
+            <div class="font-mono-data font-bold text-lg text-emerald-700">{{ fc(sesionSeleccionada.total_ingresos) }}</div>
+          </div>
+          <div class="bg-rose-50 rounded-xl p-3 text-center">
+            <div class="text-[10px] uppercase tracking-wider text-rose-600 font-semibold">Egresos</div>
+            <div class="font-mono-data font-bold text-lg text-rose-700">{{ fc(sesionSeleccionada.total_egresos) }}</div>
+          </div>
+          <div class="bg-brand-50 rounded-xl p-3 text-center">
+            <div class="text-[10px] uppercase tracking-wider text-brand-600 font-semibold">Saldo Final</div>
+            <div class="font-mono-data font-bold text-lg text-brand-700">{{ fc(sesionSeleccionada.saldo_final) }}</div>
+          </div>
+        </div>
+
+        <!-- Cierres por método -->
+        <div v-if="sesionSeleccionada.cierres_metodo && sesionSeleccionada.cierres_metodo.length">
+          <h4 class="text-sm font-bold text-slate-900 mb-2">Cierres por Método</h4>
+          <div class="space-y-2">
+            <div v-for="cierre in sesionSeleccionada.cierres_metodo" :key="cierre.medio_pago" class="bg-slate-50 rounded-xl p-3">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-semibold text-slate-700 capitalize">{{ cierre.medio_pago }}</span>
+                <BaseBadge :variant="Math.abs(cierre.diferencia) > 0.01 ? 'danger' : 'success'" size="xs">
+                  {{ Math.abs(cierre.diferencia) > 0.01 ? 'Discrepancia' : 'OK' }}
+                </BaseBadge>
+              </div>
+              <div class="grid grid-cols-3 gap-2 text-xs">
+                <div>
+                  <span class="text-slate-500">Esperado:</span>
+                  <span class="font-mono-data font-semibold ml-1">{{ fc(cierre.esperado) }}</span>
+                </div>
+                <div>
+                  <span class="text-slate-500">Real:</span>
+                  <span class="font-mono-data font-semibold ml-1">{{ fc(cierre.monto_real) }}</span>
+                </div>
+                <div>
+                  <span class="text-slate-500">Diferencia:</span>
+                  <span class="font-mono-data font-semibold ml-1" :class="cierre.diferencia >= 0 ? 'text-emerald-600' : 'text-rose-600'">
+                    {{ cierre.diferencia >= 0 ? '+' : '' }}{{ fc(cierre.diferencia) }}
+                  </span>
+                </div>
+              </div>
+              <div v-if="cierre.descripcion" class="text-[10px] text-slate-500 mt-2 italic">{{ cierre.descripcion }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Movimientos -->
+        <div v-if="sesionSeleccionada.ingresos.length || sesionSeleccionada.egresos.length">
+          <h4 class="text-sm font-bold text-slate-900 mb-2">Movimientos</h4>
+          <div class="max-h-48 overflow-y-auto space-y-1">
+            <div v-for="ing in sesionSeleccionada.ingresos" :key="'ing-'+ing.id" class="flex items-center justify-between bg-emerald-50 rounded-lg px-3 py-2">
+              <div class="flex-1">
+                <div class="text-xs font-medium text-slate-700">{{ ing.descripcion || 'Ingreso' }}</div>
+                <div class="text-[10px] text-slate-500">{{ formatHora(ing.fecha) }} · {{ ing.medio_pago }}</div>
+              </div>
+              <span class="font-mono-data font-bold text-xs text-emerald-600">+{{ fc(ing.monto) }}</span>
+            </div>
+            <div v-for="egr in sesionSeleccionada.egresos" :key="'egr-'+egr.id" class="flex items-center justify-between bg-rose-50 rounded-lg px-3 py-2">
+              <div class="flex-1">
+                <div class="text-xs font-medium text-slate-700">{{ egr.descripcion || 'Egreso' }}</div>
+                <div class="text-[10px] text-slate-500">{{ formatHora(egr.fecha) }}</div>
+              </div>
+              <span class="font-mono-data font-bold text-xs text-rose-600">-{{ fc(egr.monto) }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </BaseModal>
+
     <!-- Modal Nuevo Movimiento -->
     <BaseModal v-model="showNuevoMovimiento" title="Nuevo Movimiento" size="md">
       <div class="space-y-4">
@@ -405,10 +600,123 @@ const movementColumns = [
   { key: 'comentario', label: 'Comentario' },
 ]
 
+// Historial de sesiones de caja
+const filtroHistorial = ref('semana')
+const showFechasPersonalizadas = ref(false)
+const fechaInicio = ref('')
+const fechaFin = ref('')
+const sesionesCaja = ref([])
+const showDetalleSesion = ref(false)
+const sesionSeleccionada = ref(null)
+const loadingReportes = ref(false)
+
+const filtrosHistorial = [
+  { valor: 'hoy', label: 'Hoy' },
+  { valor: 'semana', label: 'Semana' },
+  { valor: 'mes', label: 'Mes' },
+  { valor: 'personalizado', label: 'Personalizado' },
+]
+
+function cambiarFiltroHistorial(filtro) {
+  filtroHistorial.value = filtro
+  if (filtro !== 'personalizado') {
+    showFechasPersonalizadas.value = false
+    fetchReportes()
+  }
+}
+
+function calcularFechasFiltro() {
+  const hoy = new Date()
+  let inicio = new Date()
+  let fin = new Date()
+
+  if (filtroHistorial.value === 'hoy') {
+    inicio = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate())
+    fin = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), 23, 59, 59)
+  } else if (filtroHistorial.value === 'semana') {
+    const diaSemana = hoy.getDay()
+    const diff = diaSemana === 0 ? 6 : diaSemana - 1
+    inicio = new Date(hoy)
+    inicio.setDate(hoy.getDate() - diff)
+    inicio.setHours(0, 0, 0, 0)
+    fin = new Date(hoy)
+    fin.setHours(23, 59, 59, 999)
+  } else if (filtroHistorial.value === 'mes') {
+    inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
+    fin = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0, 23, 59, 59)
+  }
+
+  return {
+    inicio: inicio.toISOString().split('T')[0],
+    fin: fin.toISOString().split('T')[0]
+  }
+}
+
+async function fetchReportes() {
+  loadingReportes.value = true
+  try {
+    let fechaIni = ''
+    let fechaFinStr = ''
+
+    if (filtroHistorial.value === 'personalizado') {
+      fechaIni = fechaInicio.value
+      fechaFinStr = fechaFin.value
+    } else {
+      const fechas = calcularFechasFiltro()
+      fechaIni = fechas.inicio
+      fechaFinStr = fechas.fin
+    }
+
+    const params = new URLSearchParams()
+    if (fechaIni) params.append('fecha_inicio', fechaIni)
+    if (fechaFinStr) params.append('fecha_fin', fechaFinStr)
+
+    const resp = await api.get(`/api/caja/reportes?${params.toString()}`)
+    if (resp && resp.sesiones) {
+      sesionesCaja.value = resp.sesiones
+    }
+  } catch (e) {
+    console.error('Error fetching reportes:', e)
+    toast.error('Error al cargar historial de caja')
+  } finally {
+    loadingReportes.value = false
+  }
+}
+
+function verDetalleSesion(sesion) {
+  sesionSeleccionada.value = sesion
+  showDetalleSesion.value = true
+}
+
+function formatFecha(fechaStr) {
+  if (!fechaStr) return '—'
+  const fecha = new Date(fechaStr)
+  return fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+function formatHora(fechaStr) {
+  if (!fechaStr) return '—'
+  const fecha = new Date(fechaStr)
+  return fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+}
+
+function formatFechaHora(fechaStr) {
+  if (!fechaStr) return '—'
+  const fecha = new Date(fechaStr)
+  return fecha.toLocaleString('es-AR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
 onMounted(async () => {
   await fetchMovimientos()
   await fetchResumen()
   await cajaStore.fetchUltimoCierre()
+  await fetchReportes()
 })
 
 async function fetchMovimientos() {

@@ -268,3 +268,155 @@ def resumen_por_medio(
     data = caja_service.obtener_resumen_por_medio_pago(db)
     data["metodos_cerrados"] = caja_service._metodos_ya_cerrados(db)
     return RespuestaData(data=data)
+
+
+@router.get("/reportes", response_model=RespuestaData)
+def reportes_caja(
+    fecha_inicio: Optional[str] = Query(None, description="Fecha inicio (YYYY-MM-DD)"),
+    fecha_fin: Optional[str] = Query(None, description="Fecha fin (YYYY-MM-DD)"),
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "encargado")),
+):
+    """Reporte de sesiones de caja con aperturas, cierres y discrepancias."""
+    from datetime import datetime
+    from app.models.movimiento_caja import MovimientoCaja
+    
+    # Parsear fechas
+    fecha_ini = None
+    fecha_fi = None
+    if fecha_inicio:
+        try:
+            fecha_ini = datetime.strptime(fecha_inicio, "%Y-%m-%d")
+        except:
+            pass
+    if fecha_fin:
+        try:
+            fecha_fi = datetime.strptime(fecha_fin, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+        except:
+            pass
+    
+    # Obtener todos los movimientos en el rango
+    query = db.query(MovimientoCaja).filter(
+        MovimientoCaja.sucursal_id == 1
+    )
+    
+    if fecha_ini:
+        query = query.filter(MovimientoCaja.created_at >= fecha_ini)
+    if fecha_fi:
+        query = query.filter(MovimientoCaja.created_at <= fecha_fi)
+    
+    movimientos = query.order_by(MovimientoCaja.created_at.desc()).all()
+    
+    # Agrupar por sesiones (apertura -> cierre)
+    sesiones = []
+    sesion_actual = None
+    
+    for mov in movimientos:
+        if mov.tipo == "apertura":
+            # Nueva sesión
+            sesion_actual = {
+                "id": mov.id,
+                "apertura_id": mov.id,
+                "apertura_fecha": mov.created_at.isoformat() if mov.created_at else None,
+                "apertura_monto": mov.monto,
+                "apertura_usuario": mov.usuario.nombre if mov.usuario else "Desconocido",
+                "apertura_descripcion": mov.descripcion,
+                "cierres": [],
+                "ingresos": [],
+                "egresos": [],
+                "total_ingresos": 0,
+                "total_egresos": 0,
+                "saldo_final": 0,
+                "estado": "abierta"
+            }
+            sesiones.append(sesion_actual)
+        elif mov.tipo == "cierre" and sesion_actual:
+            # Cierre de sesión
+            sesion_actual["cierre_id"] = mov.id
+            sesion_actual["cierre_fecha"] = mov.created_at.isoformat() if mov.created_at else None
+            sesion_actual["cierre_monto"] = mov.monto
+            sesion_actual["cierre_usuario"] = mov.usuario.nombre if mov.usuario else "Desconocido"
+            sesion_actual["cierre_descripcion"] = mov.descripcion
+            sesion_actual["estado"] = "cerrada"
+            
+            # Calcular saldo final
+            total_ingresos = sum(i["monto"] for i in sesion_actual["ingresos"])
+            total_egresos = sum(e["monto"] for e in sesion_actual["egresos"])
+            sesion_actual["total_ingresos"] = total_ingresos
+            sesion_actual["total_egresos"] = total_egresos
+            sesion_actual["saldo_final"] = sesion_actual["apertura_monto"] + total_ingresos - total_egresos
+            
+            # Detectar si fue automático
+            if mov.descripcion and "automático" in mov.descripcion.lower():
+                sesion_actual["fue_automatico"] = True
+            
+            sesion_actual = None
+        elif mov.tipo == "ingreso" and sesion_actual:
+            sesion_actual["ingresos"].append({
+                "id": mov.id,
+                "monto": mov.monto,
+                "medio_pago": mov.medio_pago,
+                "descripcion": mov.descripcion,
+                "fecha": mov.created_at.isoformat() if mov.created_at else None
+            })
+        elif mov.tipo == "egreso" and sesion_actual:
+            sesion_actual["egresos"].append({
+                "id": mov.id,
+                "monto": mov.monto,
+                "descripcion": mov.descripcion,
+                "fecha": mov.created_at.isoformat() if mov.created_at else None
+            })
+    
+    # Obtener cierres parciales (arqueos por método)
+    cierres_parciales = db.query(MovimientoCaja).filter(
+        MovimientoCaja.sucursal_id == 1,
+        MovimientoCaja.tipo == "cierre_parcial"
+    )
+    
+    if fecha_ini:
+        cierres_parciales = cierres_parciales.filter(MovimientoCaja.created_at >= fecha_ini)
+    if fecha_fi:
+        cierres_parciales = cierres_parciales.filter(MovimientoCaja.created_at <= fecha_fi)
+    
+    cierres_parciales = cierres_parciales.order_by(MovimientoCaja.created_at.desc()).all()
+    
+    # Enriquecer sesiones con información de cierres parciales
+    for sesion in sesiones:
+        if sesion.get("apertura_id") and sesion.get("cierre_id"):
+            cierres_metodo = [
+                c for c in cierres_parciales
+                if sesion["apertura_id"] < c.id < sesion["cierre_id"]
+            ]
+            
+            discrepancias = []
+            for c in cierres_metodo:
+                # Parsear descripción para extraer esperado y diferencia
+                esperado = 0
+                diferencia = 0
+                if c.descripcion:
+                    try:
+                        parts = c.descripcion.split("Esperado: $")[1].split(". Diferencia: $")
+                        if len(parts) >= 2:
+                            esperado = float(parts[0].replace(",", ""))
+                            diferencia_str = parts[1].split(" — ")[0].replace(",", "")
+                            diferencia = float(diferencia_str)
+                    except:
+                        pass
+                
+                discrepancias.append({
+                    "medio_pago": c.medio_pago,
+                    "monto_real": c.monto,
+                    "esperado": esperado,
+                    "diferencia": diferencia,
+                    "descripcion": c.descripcion,
+                    "fecha": c.created_at.isoformat() if c.created_at else None,
+                    "usuario": c.usuario.nombre if c.usuario else "Desconocido"
+                })
+            
+            sesion["cierres_metodo"] = discrepancias
+            sesion["tiene_discrepancias"] = any(abs(d["diferencia"]) > 0.01 for d in discrepancias)
+    
+    return RespuestaData(data={
+        "sesiones": sesiones,
+        "total_sesiones": len(sesiones)
+    })
