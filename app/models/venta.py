@@ -67,6 +67,28 @@ class VentaItem(Base):
     # Relaciones
     venta = relationship("Venta", back_populates="items")
     producto = relationship("Producto", back_populates="venta_items")
+    lote_consumos = relationship("VentaItemLote", back_populates="venta_item", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<VentaItem(prod={self.producto_id}, cant={self.cantidad}, subt={self.subtotal})>"
+
+
+class VentaItemLote(Base):
+    """Trazabilidad de qué lote se consumió por cada item de venta.
+
+    Un item de venta puede consumir de varios lotes (FEFO). Cada VentaItemLote
+    registra cuánto se sacó de cada lote, permitiendo reversión exacta al anular.
+    """
+    __tablename__ = "venta_item_lotes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    venta_item_id = Column(Integer, ForeignKey("venta_items.id"), nullable=False, index=True)
+    lote_id = Column(Integer, ForeignKey("lotes.id"), nullable=False, index=True)
+    cantidad = Column(Float, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    venta_item = relationship("VentaItem", back_populates="lote_consumos")
+    lote = relationship("Lote", back_populates="venta_item_lotes")
+
+    def __repr__(self):
+        return f"<VentaItemLote(item={self.venta_item_id}, lote={self.lote_id}, cant={self.cantidad})>"

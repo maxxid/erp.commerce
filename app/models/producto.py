@@ -78,6 +78,7 @@ class Producto(Base):
     compra_items = relationship("CompraItem", back_populates="producto")
     movimientos_stock = relationship("MovimientoStock", back_populates="producto")
     proveedores = relationship("Proveedor", secondary=producto_proveedor, back_populates="productos")
+    lotes = relationship("Lote", back_populates="producto", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Producto(id={self.id}, nombre='{self.nombre[:30]}', stock={self.stock_actual})>"

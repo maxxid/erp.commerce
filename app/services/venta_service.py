@@ -12,10 +12,10 @@ Reglas de negocio:
 from typing import Optional, List, Tuple
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
-from app.models.venta import Venta, VentaItem
+from app.models.venta import Venta, VentaItem, VentaItemLote
 from app.models.producto import Producto
 from app.models.cliente import Cliente
-from app.services import stock_service, caja_service, oferta_service
+from app.services import stock_service, caja_service, oferta_service, lote_service
 
 
 def generar_numero(db: Session, prefijo: str = "V") -> str:
@@ -157,7 +157,7 @@ def confirmar_venta(
     if venta.estado != "pendiente":
         raise ValueError("La venta ya fue procesada")
 
-    # Verificar stock
+    # Verificar stock disponible (cache de producto.stock_actual, que refleja lotes)
     for item in venta.items:
         producto = db.query(Producto).filter(Producto.id == item.producto_id).first()
         if not producto:
@@ -187,9 +187,19 @@ def confirmar_venta(
 
     uid = usuario_id or venta.usuario_id
 
-    # Descontar stock
+    # Descontar stock con FEFO y registrar trazabilidad por lote
     for item in venta.items:
         cantidad_a_descontar = item.peso if item.por_kilo else item.cantidad
+        consumos = lote_service.descontar_fefo(
+            db, item.producto_id, cantidad_a_descontar
+        )
+        for lote_id, cant in consumos:
+            db.add(VentaItemLote(
+                venta_item_id=item.id,
+                lote_id=lote_id,
+                cantidad=cant,
+            ))
+
         stock_service.ajustar_stock(
             db,
             producto_id=item.producto_id,
@@ -260,8 +270,12 @@ def anular_venta(
 
     uid = usuario_id or venta.usuario_id
 
-    # Revertir stock
+    # Revertir stock: volver a ingresar en cada lote del que se había descontado
     for item in venta.items:
+        for consumo in item.lote_consumos:
+            lote_service.reingresar_en_lote(
+                db, item.producto_id, consumo.lote_id, consumo.cantidad
+            )
         stock_service.ajustar_stock(
             db,
             producto_id=item.producto_id,

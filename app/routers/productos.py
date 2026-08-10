@@ -320,19 +320,29 @@ def ajustar_stock(
     db: Session = Depends(get_db),
     user: Usuario = Depends(require_role("admin", "encargado")),
 ):
-    """Ajusta el stock de un producto (entrada o salida manual)."""
+    """Ajusta el stock de un producto (entrada o salida manual) usando FEFO.
+
+    Entradas (+) crean un nuevo lote 'AJUSTE'.
+    Salidas (-) descuentan vía FEFO (lote con vencimiento más próximo primero).
+    """
     producto = producto_service.obtener_producto(db, producto_id)
     if not producto:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
     tipo = "entrada" if data.cantidad > 0 else "salida"
     try:
-        mov = stock_service.ajustar_stock(
+        mov, consumos = stock_service.ajustar_stock_por_lote(
             db, producto_id, data.cantidad, tipo, user.id,
             referencia_tipo="ajuste_manual",
             notas=data.notas,
         )
         return RespuestaData(
-            data={"stock_anterior": mov.stock_anterior, "stock_resultante": mov.stock_resultante},
+            data={
+                "stock_anterior": mov.stock_anterior,
+                "stock_resultante": mov.stock_resultante,
+                "lotes_afectados": [
+                    {"lote_id": lid, "cantidad": cant} for lid, cant in consumos
+                ],
+            },
             message=f"Stock ajustado: {mov.stock_anterior} → {mov.stock_resultante}"
         )
     except ValueError as e:

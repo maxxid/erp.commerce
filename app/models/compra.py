@@ -37,6 +37,7 @@ class Compra(Base):
     usuario = relationship("Usuario", back_populates="compras")
     sucursal = relationship("Sucursal", back_populates="compras")
     items = relationship("CompraItem", back_populates="compra", cascade="all, delete-orphan")
+    lotes = relationship("Lote", back_populates="compra")
 
     def __repr__(self):
         return f"<Compra(id={self.id}, numero='{self.numero}', total={self.total})>"
@@ -57,6 +58,7 @@ class CompraItem(Base):
     # Relaciones
     compra = relationship("Compra", back_populates="items")
     producto = relationship("Producto", back_populates="compra_items")
+    lotes = relationship("Lote", back_populates="compra_item")
 
     @property
     def pendiente_recibir(self):

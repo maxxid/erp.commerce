@@ -2,9 +2,13 @@
 
 Regla de negocio: el stock nunca se modifica directamente.
 Siempre se registra un MovimientoStock que actualiza el saldo.
+
+A partir de Lotes/FEFO, el stock del producto se mantiene como cache derivado
+de la suma de `lotes.cantidad_actual`. Ver `lote_service` para las operaciones
+que crean/consumen stock de manera FEFO.
 """
 
-from typing import Optional
+from typing import Optional, List, Tuple
 from sqlalchemy.orm import Session
 from app.models.producto import Producto
 from app.models.movimiento_stock import MovimientoStock
@@ -20,18 +24,9 @@ def ajustar_stock(
     referencia_id: Optional[int] = None,
     notas: Optional[str] = None,
 ) -> MovimientoStock:
-    """Ajusta el stock de un producto registrando el movimiento.
-
-    Args:
-        cantidad: Positivo para entradas, negativo para salidas.
-                  El movimiento registra el valor absoluto.
-        tipo: 'entrada', 'salida', o 'ajuste'.
-
-    Returns:
-        El movimiento de stock creado.
-
-    Raises:
-        ValueError: Si no hay stock suficiente para una salida.
+    """Ajusta el stock directo (sin pasar por lotes). Reservado para migraciones
+    y casos donde aún no hay sistema de lotes. En operación normal usar
+    `ajustar_stock_por_lote` o `lote_service`.
     """
     producto = db.query(Producto).filter(Producto.id == producto_id).first()
     if not producto:
@@ -65,6 +60,63 @@ def ajustar_stock(
     db.refresh(movimiento)
 
     return movimiento
+
+
+def ajustar_stock_por_lote(
+    db: Session,
+    producto_id: int,
+    cantidad_delta: float,
+    tipo: str,
+    usuario_id: int,
+    referencia_tipo: str = "ajuste_manual",
+    referencia_id: Optional[int] = None,
+    notas: Optional[str] = None,
+) -> Tuple[MovimientoStock, List[Tuple[int, float]]]:
+    """Ajusta stock usando el sistema de lotes (FEFO para salidas).
+
+    - cantidad_delta > 0: crea un nuevo lote 'AJUSTE' con esa cantidad.
+    - cantidad_delta < 0: descuenta vía FEFO de los lotes existentes.
+
+    Retorna el MovimientoStock creado y la lista de (lote_id, cantidad) afectada.
+    """
+    from app.services import lote_service
+
+    producto = db.query(Producto).filter(Producto.id == producto_id).first()
+    if not producto:
+        raise ValueError(f"Producto {producto_id} no encontrado")
+
+    stock_anterior = producto.stock_actual
+
+    if cantidad_delta > 0:
+        consumos = lote_service.ajustar_lote(
+            db, producto_id, cantidad_delta, notas=notas
+        )
+        cantidad_real = cantidad_delta
+    else:
+        consumos = lote_service.ajustar_lote(
+            db, producto_id, cantidad_delta, notas=notas
+        )
+        cantidad_real = abs(cantidad_delta)
+
+    stock_resultante = producto.stock_actual
+
+    lote_principal = consumos[0][0] if consumos else None
+    movimiento = MovimientoStock(
+        producto_id=producto_id,
+        lote_id=lote_principal,
+        tipo=tipo,
+        cantidad=cantidad_real,
+        stock_anterior=stock_anterior,
+        stock_resultante=stock_resultante,
+        referencia_tipo=referencia_tipo,
+        referencia_id=referencia_id,
+        usuario_id=usuario_id,
+        notas=notas,
+    )
+    db.add(movimiento)
+    db.commit()
+    db.refresh(movimiento)
+    return movimiento, consumos
 
 
 def obtener_movimientos(

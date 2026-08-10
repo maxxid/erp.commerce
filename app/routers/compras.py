@@ -170,12 +170,22 @@ def recibir(
     db: Session = Depends(get_db),
     user: Usuario = Depends(require_role("admin", "encargado")),
 ):
-    """Recibe la mercadería. Opcional: pasar 'cantidades': {item_id: cantidad_real}."""
+    """Recibe la mercadería. Opcional: pasar 'cantidades' y/o 'vencimientos' por item_id.
+
+    Ejemplo body:
+        {
+          "cantidades": {"1": 50, "2": 30},
+          "vencimientos": {"1": "2026-12-15T00:00:00", "2": null}
+        }
+    """
     c = compra_service.obtener_compra(db, compra_id)
     if not c: raise HTTPException(status_code=404, detail="Compra no encontrada")
     try:
         cantidades = (data or {}).get("cantidades", None)
-        c = compra_service.recibir_compra(db, c, user.id, cantidades=cantidades)
+        vencimientos = (data or {}).get("vencimientos", None)
+        c = compra_service.recibir_compra(
+            db, c, user.id, cantidades=cantidades, vencimientos=vencimientos
+        )
         return RespuestaData(data=_compra_to_dict(c), message=f"Compra {c.numero} recibida.")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

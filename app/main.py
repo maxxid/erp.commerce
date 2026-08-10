@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from app.config import settings
 from app.database import engine, Base
 from app.models import *  # noqa: F401, F403 — Registrar todos los modelos
-from app.routers import auth, productos, categorias, dashboard, caja, clientes, ventas, proveedores, compras, calendario, backups, usuarios, auditoria, licencia, catalogo, ofertas, facturacion, configuracion as config_router, pagos
+from app.routers import auth, productos, categorias, dashboard, caja, clientes, ventas, proveedores, compras, calendario, backups, usuarios, auditoria, licencia, catalogo, ofertas, facturacion, configuracion as config_router, pagos, lotes
 
 
 def crear_app() -> FastAPI:
@@ -52,6 +52,7 @@ def crear_app() -> FastAPI:
     app.include_router(facturacion.router)
     app.include_router(config_router.router)
     app.include_router(pagos.router)
+    app.include_router(lotes.router)
 
     # Servir el frontend Vue 3 (producción)
     @app.get("/app")
@@ -88,6 +89,7 @@ def crear_app() -> FastAPI:
     def on_startup():
         Base.metadata.create_all(bind=engine)
         _migrate_new_columns()
+        _migrate_lotes_iniciales()
         _seed_database()
         _start_backup_scheduler()
 
@@ -258,8 +260,62 @@ def _migrate_new_columns():
             if col not in existentes_pp:
                 conn.execute(sa.text(f"ALTER TABLE producto_proveedor ADD COLUMN {col} {tipo}"))
                 conn.commit()
+        existentes_ms = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(movimientos_stock)"))]
+        if "lote_id" not in existentes_ms:
+            conn.execute(sa.text("ALTER TABLE movimientos_stock ADD COLUMN lote_id INTEGER"))
+            conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_movimientos_stock_lote_id ON movimientos_stock (lote_id)"))
+            conn.commit()
     finally:
         conn.close()
+
+
+def _migrate_lotes_iniciales():
+    """Crea un 'Lote inicial' para cada producto con stock > 0 que aún no tenga lotes.
+
+    Esto preserva el stock existente al activar el sistema de lotes: las ventas
+    futuras consumirán primero de este lote (sin vencimiento → FEFO lo manda al
+    final), y al recibir nueva mercadería se crearán lotes frescos con vencimiento
+    que tendrán prioridad en el despacho.
+    """
+    from app.database import SessionLocal
+    from app.models.producto import Producto
+    from app.models.lote import Lote
+    from datetime import datetime, timezone, timedelta
+
+    db = SessionLocal()
+    try:
+        productos_con_stock = (
+            db.query(Producto)
+            .filter(Producto.activo == True, Producto.stock_actual > 0)
+            .all()
+        )
+        creados = 0
+        for prod in productos_con_stock:
+            tiene_lotes = db.query(Lote).filter(Lote.producto_id == prod.id).first()
+            if tiene_lotes:
+                continue
+            fecha_vto = prod.fecha_vencimiento
+            db.add(Lote(
+                producto_id=prod.id,
+                codigo_lote="INICIAL",
+                cantidad_inicial=prod.stock_actual,
+                cantidad_actual=prod.stock_actual,
+                costo=prod.precio_costo,
+                activo=True,
+                notas="Lote creado automáticamente al activar el sistema de lotes/FEFO.",
+                fecha_vencimiento=fecha_vto,
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc),
+            ))
+            creados += 1
+        if creados:
+            db.commit()
+            print(f"[Lotes] {creados} lote(s) inicial(es) creado(s) para stock preexistente")
+    except Exception as e:
+        print(f"[Lotes] Error al crear lotes iniciales: {e}")
+        db.rollback()
+    finally:
+        db.close()
 
 
 def _start_backup_scheduler():

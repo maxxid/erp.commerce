@@ -20,11 +20,12 @@ class MovimientoStock(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     producto_id = Column(Integer, ForeignKey("productos.id"), nullable=False, index=True)
+    lote_id = Column(Integer, ForeignKey("lotes.id"), nullable=True, index=True)
     tipo = Column(String(20), nullable=False)       # entrada | salida | ajuste
     cantidad = Column(Float, nullable=False)
     stock_anterior = Column(Float, nullable=False)
     stock_resultante = Column(Float, nullable=False)
-    referencia_tipo = Column(String(20), nullable=True)   # venta | compra | ajuste_manual
+    referencia_tipo = Column(String(20), nullable=True)   # venta | compra | ajuste_manual | venta_anulada
     referencia_id = Column(Integer, nullable=True)
     usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
     notas = Column(Text, nullable=True)
@@ -32,6 +33,7 @@ class MovimientoStock(Base):
 
     producto = relationship("Producto", back_populates="movimientos_stock")
     usuario = relationship("Usuario", back_populates="movimientos_stock")
+    lote = relationship("Lote", foreign_keys=[lote_id])
 
     def __repr__(self):
         return f"<MovStock(id={self.id}, tipo='{self.tipo}', cant={self.cantidad})>"

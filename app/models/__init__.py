@@ -10,8 +10,9 @@ from app.models.producto import Producto
 from app.models.cliente import Cliente
 from app.models.proveedor import Proveedor
 from app.models.usuario import Usuario, Sucursal
-from app.models.venta import Venta, VentaItem
+from app.models.venta import Venta, VentaItem, VentaItemLote
 from app.models.compra import Compra, CompraItem
+from app.models.lote import Lote
 from app.models.movimiento_stock import MovimientoStock
 from app.models.movimiento_caja import MovimientoCaja
 from app.models.configuracion import Configuracion
@@ -29,8 +30,10 @@ __all__ = [
     "Sucursal",
     "Venta",
     "VentaItem",
+    "VentaItemLote",
     "Compra",
     "CompraItem",
+    "Lote",
     "MovimientoStock",
     "MovimientoCaja",
     "Configuracion",

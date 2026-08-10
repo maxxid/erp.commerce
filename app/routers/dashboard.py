@@ -438,3 +438,41 @@ def trimestral(db: Session = Depends(get_db), user: Usuario = Depends(get_curren
         "meses": meses_data,
         "top_productos": top_lista,
     })
+
+
+@router.get("/alertas-lotes", response_model=RespuestaData)
+def alertas_lotes(
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """Alertas resumidas: lotes por vencer (30/15/7 días) y lotes vencidos."""
+    from app.services import lote_service
+
+    por_vencer_30 = lote_service.lotes_por_vencer(db, dias=30)
+    por_vencer_15 = [l for l in por_vencer_30 if (l.dias_para_vencer or 999) <= 15]
+    por_vencer_7 = [l for l in por_vencer_30 if (l.dias_para_vencer or 999) <= 7]
+    vencidos = lote_service.lotes_vencidos(db)
+
+    def _item(l):
+        return {
+            "id": l.id,
+            "producto_id": l.producto_id,
+            "producto_nombre": l.producto.nombre if l.producto else "",
+            "codigo_lote": l.codigo_lote,
+            "fecha_vencimiento": l.fecha_vencimiento.isoformat() if l.fecha_vencimiento else None,
+            "dias_para_vencer": l.dias_para_vencer,
+            "cantidad_actual": l.cantidad_actual,
+        }
+
+    return RespuestaData(data={
+        "vencidos": [_item(l) for l in vencidos],
+        "por_vencer_7d": [_item(l) for l in por_vencer_7],
+        "por_vencer_15d": [_item(l) for l in por_vencer_15],
+        "por_vencer_30d": [_item(l) for l in por_vencer_30],
+        "totales": {
+            "vencidos": len(vencidos),
+            "por_vencer_7d": len(por_vencer_7),
+            "por_vencer_15d": len(por_vencer_15),
+            "por_vencer_30d": len(por_vencer_30),
+        },
+    })

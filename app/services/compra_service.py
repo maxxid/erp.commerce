@@ -2,16 +2,18 @@
 
 Reglas de negocio:
 - Una compra empieza en estado "pendiente".
-- Al recibir: ingresa stock, actualiza precio_costo del producto.
+- Al recibir: crea un lote con la cantidad y fecha_vencimiento informadas,
+  ingresa stock, actualiza precio_costo del producto.
 - Al anular (solo si está pendiente): no revierte stock porque nunca se ingresó.
 - Número autoincremental: C-00000001.
 """
 
 from typing import Optional, List, Tuple
+from datetime import datetime
 from sqlalchemy.orm import Session
 from app.models.compra import Compra, CompraItem
 from app.models.producto import Producto
-from app.services import stock_service
+from app.services import stock_service, lote_service
 
 
 def generar_numero_compra(db: Session) -> str:
@@ -101,13 +103,15 @@ def recibir_compra(
     compra: Compra,
     usuario_id: Optional[int] = None,
     cantidades: Optional[dict] = None,
+    vencimientos: Optional[dict] = None,
 ) -> Compra:
-    """Recibe la mercadería total o parcialmente: ingresa stock, actualiza costo.
+    """Recibe la mercadería total o parcialmente: crea lote, ingresa stock, actualiza costo.
 
     Args:
         cantidades: Dict opcional {item_id: cantidad_a_recibir}.
                     Si es None, recibe el pendiente completo de cada item.
-                    Si se especifica, recibe exactamente esa cantidad (suma a la ya recibida).
+        vencimientos: Dict opcional {item_id: fecha_vencimiento_iso}.
+                      Si no se provee, el lote queda sin fecha.
 
     Raises:
         ValueError: Si no está pendiente o cantidad > pendiente recibir.
@@ -145,6 +149,27 @@ def recibir_compra(
         producto = db.query(Producto).filter(Producto.id == item.producto_id).first()
         if producto:
             if cantidad_recibir > 0:
+                fecha_vto = None
+                if vencimientos and str(item.id) in vencimientos:
+                    raw = vencimientos[str(item.id)]
+                    if raw:
+                        try:
+                            fecha_vto = datetime.fromisoformat(raw)
+                        except (TypeError, ValueError):
+                            fecha_vto = None
+
+                codigo_lote = f"C-{compra.numero}-I{item.id}"
+                lote_service.crear_lote(
+                    db,
+                    producto_id=item.producto_id,
+                    codigo_lote=codigo_lote,
+                    fecha_vencimiento=fecha_vto,
+                    cantidad=cantidad_recibir,
+                    costo=item.precio_unitario,
+                    notas=f"Lote creado al recibir compra {compra.numero}",
+                    compra_id=compra.id,
+                    compra_item_id=item.id,
+                )
                 stock_service.ajustar_stock(
                     db, producto_id=item.producto_id, cantidad=cantidad_recibir,
                     tipo="entrada", usuario_id=uid,
