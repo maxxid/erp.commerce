@@ -121,6 +121,89 @@
       </div>
     </BaseModal>
 
+    <!-- Modal Apertura de Caja -->
+    <BaseModal v-model="showAperturaModal" title="Apertura de Caja" size="md" :hide-footer="true">
+      <div class="space-y-5">
+        <div v-if="cajaStore.ultimoCierre && cajaStore.ultimoCierre.monto > 0" class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4">
+          <div class="flex items-center gap-2 mb-2">
+            <i class="fa-solid fa-info-circle text-amber-500"></i>
+            <span class="font-semibold text-amber-700 dark:text-amber-300 text-sm">Último cierre detectado</span>
+            <BaseBadge v-if="cajaStore.ultimoCierre.fue_automatico" variant="warning" size="xs">Automático</BaseBadge>
+          </div>
+          <p class="text-xs text-amber-600 dark:text-amber-400 mb-2">
+            Monto del último cierre: <span class="font-mono-data font-bold">{{ fc(cajaStore.ultimoCierre.monto) }}</span>
+          </p>
+          <p v-if="cajaStore.ultimoCierre.fecha_local_str" class="text-[10px] text-amber-500 dark:text-amber-400">
+            Fecha: {{ cajaStore.ultimoCierre.fecha_local_str }}
+          </p>
+        </div>
+
+        <div class="space-y-4">
+          <div>
+            <label class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block mb-1">Monto inicial sugerido</label>
+            <div class="relative">
+              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold">$</span>
+              <input
+                v-model.number="aperturaForm.monto_inicial"
+                type="number"
+                min="0"
+                step="100"
+                class="w-full pl-7 pr-3 py-2.5 text-lg font-mono-data font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition"
+                placeholder="0.00"
+              />
+            </div>
+            <p class="text-[10px] text-slate-400 mt-1">Monto con el que inicia la caja (efectivo)</p>
+          </div>
+
+          <div class="border-t border-slate-200 dark:border-slate-700 pt-4">
+            <label class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block mb-1">Retiro de efectivo (opcional)</label>
+            <div class="relative">
+              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold">$</span>
+              <input
+                v-model.number="aperturaForm.monto_retiro"
+                type="number"
+                min="0"
+                step="100"
+                class="w-full pl-7 pr-3 py-2.5 text-lg font-mono-data font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition"
+                placeholder="0.00"
+              />
+            </div>
+            <p class="text-[10px] text-slate-400 mt-1">Efectivo que se aparta/retira al abrir (ej: fondo para cambio)</p>
+          </div>
+
+          <div v-if="aperturaForm.monto_retiro > 0">
+            <label class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block mb-1">Motivo del retiro</label>
+            <input
+              v-model="aperturaForm.motivo_retiro"
+              type="text"
+              class="w-full px-3 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition"
+              placeholder="Ej: Fondo para cambio, Retiro de efectivo..."
+            />
+          </div>
+
+          <div class="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Monto final de apertura</span>
+              <span class="font-mono-data font-bold text-2xl text-brand-600 dark:text-brand-400">{{ fc(montoFinalApertura) }}</span>
+            </div>
+            <p v-if="aperturaForm.monto_retiro > 0" class="text-[10px] text-slate-400 mt-1 text-right">
+              {{ fc(aperturaForm.monto_inicial) }} - {{ fc(aperturaForm.monto_retiro) }} = {{ fc(montoFinalApertura) }}
+            </p>
+          </div>
+        </div>
+
+        <div class="flex gap-3 pt-2">
+          <BaseButton variant="secondary" class="flex-1" :disabled="opening" @click="showAperturaModal = false">
+            Cancelar
+          </BaseButton>
+          <BaseButton variant="primary" class="flex-1" :loading="opening" :disabled="opening" @click="confirmarAperturaCaja">
+            <i :class="opening ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-lock-open'"></i>
+            {{ opening ? 'Abriendo...' : 'Abrir Caja' }}
+          </BaseButton>
+        </div>
+      </div>
+    </BaseModal>
+
     <!-- Modal Cierre de Caja -->
     <BaseModal v-model="showCierreModal" title="Cierre de Caja" size="lg" :hide-footer="true">
       <div class="space-y-5">
@@ -276,7 +359,18 @@ const cerrandoMetodo = ref(false)
 
 const showNuevoMovimiento = ref(false)
 const showCierreModal = ref(false)
+const showAperturaModal = ref(false)
 const cierreComentario = ref('')
+
+const aperturaForm = reactive({
+  monto_inicial: 0,
+  monto_retiro: 0,
+  motivo_retiro: '',
+})
+
+const montoFinalApertura = computed(() => {
+  return Math.max(0, aperturaForm.monto_inicial - aperturaForm.monto_retiro)
+})
 
 const metodosArqueo = reactive([
   { label: 'Efectivo', valor: 'efectivo', esperado: 0, montoReal: 0, comentario: '', cerrado: false, colorClass: 'bg-emerald-500' },
@@ -314,6 +408,7 @@ const movementColumns = [
 onMounted(async () => {
   await fetchMovimientos()
   await fetchResumen()
+  await cajaStore.fetchUltimoCierre()
 })
 
 async function fetchMovimientos() {
@@ -347,14 +442,52 @@ async function syncData() {
 }
 
 async function abrirCaja() {
-  const monto = parseFloat(prompt('Monto inicial de caja:', '50000') || '0')
-  if (!monto || monto <= 0) return
+  await cajaStore.fetchUltimoCierre()
+  
+  const ultimo = cajaStore.ultimoCierre
+  if (ultimo && ultimo.monto > 0) {
+    aperturaForm.monto_inicial = ultimo.monto
+    aperturaForm.monto_retiro = 0
+    aperturaForm.motivo_retiro = ''
+    showAperturaModal.value = true
+  } else {
+    aperturaForm.monto_inicial = 0
+    aperturaForm.monto_retiro = 0
+    aperturaForm.motivo_retiro = ''
+    showAperturaModal.value = true
+  }
+}
+
+async function confirmarAperturaCaja() {
+  if (aperturaForm.monto_inicial < 0) {
+    toast.error('El monto inicial no puede ser negativo')
+    return
+  }
+  if (aperturaForm.monto_retiro < 0) {
+    toast.error('El monto de retiro no puede ser negativo')
+    return
+  }
+  if (aperturaForm.monto_retiro > aperturaForm.monto_inicial) {
+    toast.error('El monto de retiro no puede ser mayor al monto inicial')
+    return
+  }
+  
   opening.value = true
   try {
-    await api.post('/api/caja/apertura', { monto_inicial: monto })
+    await api.post('/api/caja/apertura', {
+      monto_inicial: montoFinalApertura.value,
+      monto_retiro: aperturaForm.monto_retiro,
+      motivo_retiro: aperturaForm.motivo_retiro,
+    })
     await cajaStore.fetchEstado()
     await fetchMovimientos()
-    toast.success(`Caja abierta con $${monto.toLocaleString()}`)
+    showAperturaModal.value = false
+    
+    let msg = `Caja abierta con $${montoFinalApertura.value.toLocaleString()}`
+    if (aperturaForm.monto_retiro > 0) {
+      msg += ` (retiro: $${aperturaForm.monto_retiro.toLocaleString()})`
+    }
+    toast.success(msg)
     playOpenCash()
   } catch (e) {
     toast.error('Error al abrir caja: ' + (e.message || ''))

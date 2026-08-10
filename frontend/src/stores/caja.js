@@ -6,6 +6,7 @@ export const useCajaStore = defineStore('caja', () => {
   const abierta = ref(false)
   const saldo_actual = ref(0)
   const metodos_cerrados = ref([])
+  const ultimoCierre = ref(null)
 
   async function fetchEstado() {
     try {
@@ -18,5 +19,14 @@ export const useCajaStore = defineStore('caja', () => {
     } catch { /* fallback */ }
   }
 
-  return { abierta, saldo_actual, metodos_cerrados, fetchEstado }
+  async function fetchUltimoCierre() {
+    try {
+      const resp = await api.get('/api/caja/ultimo-cierre')
+      if (resp) {
+        ultimoCierre.value = resp
+      }
+    } catch { /* fallback */ }
+  }
+
+  return { abierta, saldo_actual, metodos_cerrados, ultimoCierre, fetchEstado, fetchUltimoCierre }
 })

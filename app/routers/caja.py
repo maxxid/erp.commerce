@@ -20,6 +20,8 @@ router = APIRouter(prefix="/api/caja", tags=["Caja"])
 class AperturaRequest(BaseModel):
     monto_inicial: float = Field(..., ge=0)
     sucursal_id: int = 1
+    monto_retiro: float = Field(0.0, ge=0, description="Monto que se retira al abrir caja")
+    motivo_retiro: str = Field("", description="Motivo del retiro (ej: 'Fondo para cambio')")
 
 
 class CierreMetodoRequest(BaseModel):
@@ -58,6 +60,20 @@ def estado(
     return RespuestaData(data=state)
 
 
+@router.get("/ultimo-cierre", response_model=RespuestaData)
+def ultimo_cierre(
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """Obtiene información del último cierre de caja.
+    
+    Devuelve el monto del último cierre (manual o automático), fecha, y si fue automático.
+    Se usa para sugerir el monto inicial al abrir caja.
+    """
+    info = caja_service.obtener_ultimo_cierre(db)
+    return RespuestaData(data=info)
+
+
 @router.post("/apertura", response_model=RespuestaData)
 def apertura(
     data: AperturaRequest,
@@ -65,9 +81,16 @@ def apertura(
     user: Usuario = Depends(require_role("admin", "cajero")),
 ):
     try:
-        mov = caja_service.abrir_caja(db, data.monto_inicial, user.id, data.sucursal_id)
+        mov = caja_service.abrir_caja(
+            db, data.monto_inicial, user.id, data.sucursal_id,
+            monto_retiro=data.monto_retiro,
+            motivo_retiro=data.motivo_retiro,
+        )
         auditoria_service.registrar(db, user.id, "apertura_caja", None, None,
-                                   {"monto_inicial": data.monto_inicial, "sucursal_id": data.sucursal_id})
+                                   {"monto_inicial": data.monto_inicial, 
+                                    "monto_retiro": data.monto_retiro,
+                                    "motivo_retiro": data.motivo_retiro,
+                                    "sucursal_id": data.sucursal_id})
         return RespuestaData(
             data={"id": mov.id, "monto": mov.monto, "tipo": mov.tipo},
             message="Caja abierta",

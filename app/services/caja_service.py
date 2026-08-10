@@ -5,19 +5,37 @@ Reglas de negocio:
 - Para vender, la caja debe estar abierta.
 - Cada medio de pago se cierra independientemente con su propio arqueo.
 - Cierre total = cierra todos los métodos pendientes de una vez.
-- Auto-cierre: si el día cambió desde la apertura, se cierra automáticamente.
+- Auto-cierre: si el día cambió desde la apertura, se cierra automáticamente con el saldo real.
 """
 
 from typing import Optional, List, Tuple
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
 from app.models.movimiento_caja import MovimientoCaja
+
+# Zona horaria Argentina (UTC-3)
+TZ_AR = timezone(timedelta(hours=-3))
+
+
+def _ahora_local() -> datetime:
+    """Devuelve la hora actual en zona horaria Argentina."""
+    return datetime.now(TZ_AR)
+
+
+def _a_local(dt: datetime) -> datetime:
+    """Convierte un datetime a zona horaria Argentina."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(TZ_AR)
 
 
 def caja_abierta(db: Session, sucursal_id: int = 1) -> bool:
     """Verifica si hay una caja abierta (sin cierre total).
     
-    Auto-cierre: si la apertura fue en un día diferente al actual, cierra automáticamente.
+    Auto-cierre: si la apertura fue en un día diferente al actual (hora Argentina),
+    cierra automáticamente con el saldo real.
     """
     ultimo = (
         db.query(MovimientoCaja)
@@ -32,7 +50,7 @@ def caja_abierta(db: Session, sucursal_id: int = 1) -> bool:
         return False
     # Si es apertura o cierre_parcial, está abierta
     if ultimo.tipo == "apertura":
-        # Verificar si la apertura fue en un día diferente al actual
+        # Verificar si la apertura fue en un día diferente al actual (hora Argentina)
         apertura_fecha = ultimo.created_at
         if apertura_fecha:
             # Convertir a datetime si es string
@@ -41,22 +59,33 @@ def caja_abierta(db: Session, sucursal_id: int = 1) -> bool:
                     apertura_fecha = datetime.fromisoformat(apertura_fecha.replace('Z', '+00:00'))
                 except:
                     return True
-            ahora = datetime.now(timezone.utc)
-            # Comparar fechas (día, mes, año)
-            if apertura_fecha.date() != ahora.date():
-                # Auto-cierre: crear movimiento de cierre automático
+            apertura_local = _a_local(apertura_fecha)
+            ahora_local = _ahora_local()
+            # Comparar fechas (día, mes, año) en hora local
+            if apertura_local.date() != ahora_local.date():
+                # Auto-cierre: crear movimiento de cierre automático con saldo real
                 _cierre_automatico(db, sucursal_id, ultimo)
                 return False
     return True
 
 
 def _cierre_automatico(db: Session, sucursal_id: int, apertura: MovimientoCaja):
-    """Cierra automáticamente la caja cuando cambia el día."""
+    """Cierra automáticamente la caja cuando cambia el día.
+    
+    Usa el saldo real calculado en lugar de 0.
+    """
     try:
+        # Calcular saldo real antes de cerrar
+        saldo_real = obtener_saldo_actual(db, sucursal_id)
+        
+        # Fecha local del día que corresponde (día de la apertura)
+        apertura_local = _a_local(apertura.created_at)
+        fecha_dia = apertura_local.strftime("%d/%m/%Y")
+        
         movimiento = MovimientoCaja(
             tipo="cierre",
-            monto=0.0,
-            descripcion=f"Cierre automático por cambio de día (apertura: {apertura.created_at})",
+            monto=saldo_real,
+            descripcion=f"Cierre automático del día {fecha_dia}. Saldo: ${saldo_real:,.2f}",
             usuario_id=apertura.usuario_id,
             sucursal_id=sucursal_id,
             medio_pago=None,
@@ -73,26 +102,99 @@ def abrir_caja(
     monto_inicial: float,
     usuario_id: int,
     sucursal_id: int = 1,
+    monto_retiro: float = 0.0,
+    motivo_retiro: str = "",
 ) -> MovimientoCaja:
     """Abre la caja con un monto inicial.
-
+    
+    Si hay monto_retiro > 0, crea automáticamente un egreso vinculado.
+    
+    Args:
+        monto_inicial: Monto con el que se abre la caja (sugerido del último cierre)
+        monto_retiro: Monto que se aparta/retira al abrir (opcional)
+        motivo_retiro: Motivo del retiro (ej: "Fondo para cambio", "Retiro de efectivo")
+    
+    Returns:
+        MovimientoCaja de la apertura
+    
     Raises:
         ValueError: Si ya hay una caja abierta.
     """
     if caja_abierta(db, sucursal_id):
         raise ValueError("Ya hay una caja abierta. Ciérrela primero.")
 
+    # Fecha local para la descripción
+    ahora_local = _ahora_local()
+    fecha_dia = ahora_local.strftime("%d/%m/%Y")
+    
     movimiento = MovimientoCaja(
         tipo="apertura",
         monto=monto_inicial,
-        descripcion="Apertura de caja",
+        descripcion=f"Apertura de caja del día {fecha_dia}",
         usuario_id=usuario_id,
         sucursal_id=sucursal_id,
     )
     db.add(movimiento)
     db.commit()
     db.refresh(movimiento)
+    
+    # Si hay retiro, crear egreso automáticamente
+    if monto_retiro > 0:
+        descripcion_retiro = f"Retiro al abrir caja"
+        if motivo_retiro:
+            descripcion_retiro += f": {motivo_retiro}"
+        
+        egreso = MovimientoCaja(
+            tipo="egreso",
+            monto=monto_retiro,
+            descripcion=descripcion_retiro,
+            usuario_id=usuario_id,
+            sucursal_id=sucursal_id,
+            referencia_tipo="retiro_apertura",
+            referencia_id=movimiento.id,
+        )
+        db.add(egreso)
+        db.commit()
+    
     return movimiento
+
+
+def obtener_ultimo_cierre(db: Session, sucursal_id: int = 1) -> Optional[dict]:
+    """Obtiene información del último cierre de caja.
+    
+    Returns:
+        dict con: monto, fecha (UTC), fecha_local, descripcion, fue_automatico
+        None si no hay cierres.
+    """
+    ultimo_cierre = (
+        db.query(MovimientoCaja)
+        .filter(
+            MovimientoCaja.sucursal_id == sucursal_id,
+            MovimientoCaja.tipo == "cierre",
+            MovimientoCaja.medio_pago == None,
+        )
+        .order_by(MovimientoCaja.id.desc())
+        .first()
+    )
+    
+    if not ultimo_cierre:
+        return None
+    
+    fecha_utc = ultimo_cierre.created_at
+    fecha_local = _a_local(fecha_utc) if fecha_utc else None
+    
+    # Detectar si fue automático por la descripción
+    fue_automatico = "automático" in (ultimo_cierre.descripcion or "").lower()
+    
+    return {
+        "monto": ultimo_cierre.monto or 0.0,
+        "fecha_utc": fecha_utc.isoformat() if fecha_utc else None,
+        "fecha_local": fecha_local.isoformat() if fecha_local else None,
+        "fecha_local_str": fecha_local.strftime("%d/%m/%Y %H:%M") if fecha_local else None,
+        "descripcion": ultimo_cierre.descripcion,
+        "fue_automatico": fue_automatico,
+        "usuario_id": ultimo_cierre.usuario_id,
+    }
 
 
 def cerrar_metodo(

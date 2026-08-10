@@ -90,6 +90,7 @@ export const useAuthStore = defineStore('auth', () => {
           nombre: loginData.nombre || loginForm.value.username,
           rol: loginData.rol || 'cajero'
         }
+        loggingIn.value = false
         return true
       }
       loginError.value = 'Respuesta inválida del servidor'
