@@ -13,7 +13,7 @@
 | **Branch actual** | `master` |
 | **Local** | `E:/erp.commerce` (Windows) |
 | **Stack** | Python FastAPI + SQLAlchemy + SQLite · Vue 3 (Composition API) + Vite 5 + Tailwind · Pinia |
-| **Última release funcional** | commit `5743cd8` (08/08/2026 22:14) |
+| **Última release funcional** | commit `3a494b7` (10/08/2026) |
 
 ---
 
@@ -159,20 +159,24 @@ git push origin master # publica el revert
 
 ---
 
-## 🟢 Dónde estamos ahora (sesión 08/08/2026 — último commit `5743cd8`)
+## 🟢 Dónde estamos ahora (sesión 09–10/08/2026 — último commit `3a494b7`)
 
-**Última tarea cerrada:** extender la relación producto-proveedor en el backend con metadatos ricos (código, costo, plazo, principal, activo, notas) y nuevo endpoint PUT.
+**Tareas cerradas en esta sesión (en orden):**
+1. **Producto ↔ Proveedor (UI rica)** — `ProductoProveedoresManager.vue` integrado en el modal de edición. Backend ya estaba desde el 08/08.
+2. **Lotes + FEFO (MVP + UI rica)** — backend completo + frontend (manager en producto, vencimiento en Compras, alertas en Dashboard, reporte en Reportes). Migración auto crea "Lote inicial" para stock preexistente.
+3. **ProductsView UX** — buscador con debounce + clear, filtros independientes (sin exclusión mutua), botón "Limpiar filtros" + contador de filtros activos, badges con contraste correcto.
+4. **ProductsView bug fix** — el buscador fallaba silenciosamente cuando la API devolvía campos con tipo raro (BigInt/Number/Object). Vue 3 en computeds con excepción mantiene valor anterior sin re-renderizar. Fix: `safeStr()` + `Number()` + try/catch con logging.
+5. **BaseModal scroll** — modal crecía sin límite y no se podía scrollear. Fix: max-height + flex-col + overflow-y-auto en body + footer slot para botones fijos.
 
-**Falta para cerrar ese frente:** la UI en `ProductsView.vue` — actualmente el modal de producto sigue mostrando un solo `<select>` de proveedor. No hay forma de:
-- Asignar varios proveedores a un mismo producto
-- Editar los metadatos de la relación (código, costo, plazo, principal)
-- Ver el badge "Principal" en el item marcado como tal
+**Pendiente de validación manual en browser (no testeado aún):**
+- Lotes/FEFO end-to-end: migración inicial → recepción con vencimiento → venta consume por FEFO → anulación revierte → alertas Dashboard → reporte valorizado
+- ProductsView: buscador con datos reales (especialmente con campos null/tipo raro)
+- BaseModal: scroll en modal de producto + edición con varios proveedores y lotes
 
-Backend listo, falta frontend. Ver "En curso" en `PENDIENTES.md`.
+**Próximo frente sugerido** (a discutir mañana): refinar Lotes (bloqueo de venta de lotes vencidos en POS) o pasar a **MercadoPago: select de ciudad por provincia** o **Reportes exportables CSV**.
 
-**Próximo paso sugerido:** armar la UI de gestión de proveedores en el modal de producto (tabla inline + sub-modal de edición o expansion panel).
-
-**Cambio de negocio en análisis (NO empezar sin discutir diseño):** registrar productos **por lotes** con FEFO (First Expired, First Out). Es un refactor grande que toca `Producto`, `CompraItem`, `VentaItem`, `MovimientoStock`, POS, Compras, Reportes y Auditoría. Detalle completo en `PENDIENTES.md` → "Pendientes activos" → Alta prioridad. **Antes de codear hay que cerrar las decisiones de diseño** (¿fecha de vencimiento queda a nivel producto o solo lote? ¿FEFO en ajustes manuales? ¿código de barras por lote?).
+**Decisiones de diseño Lotes ya cerradas** (referencia):
+- Todos los productos usan lotes · 1 lote por item en recepción · FEFO automático en ventas/ajustes/anulación · `fecha_vencimiento` vive solo en lote.
 
 ---
 

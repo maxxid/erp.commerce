@@ -6,6 +6,18 @@
 
 ## ✅ Completados recientemente
 
+### BaseModal scroll fix — 10/08/2026
+- `frontend/src/components/ui/BaseModal.vue`:
+  - `max-height: calc(100vh - 3rem)` en el contenedor (deja margen para el `py-6` del wrapper)
+  - `flex flex-col` con header `shrink-0` y body `overflow-y-auto flex-1 min-h-0` (el `min-h-0` es clave para que flex children puedan shrinkear y permitir scroll)
+  - Nuevo `<slot name="footer">` con border-top y bg distinto para botones fijos abajo
+- `frontend/src/views/ProductsView.vue`: movidos los botones Cancelar/Crear al footer slot del modal de producto y del modal de oferta (siempre visibles al scrollear). Submit pasa a `@click.prevent` (botón fuera del form).
+
+### ProductsView bug fix + UX — 10/08/2026
+- **Bug real del buscador:** cuando la API devolvía campos con tipo raro (BigInt/Number/Object), `(p.nombre || '').toLowerCase()` tiraba TypeError. Vue 3 en computeds que lanzan excepción mantiene el valor anterior sin re-renderizar → parecía que el filtro "no aplicaba".
+- Fix: helper `safeStr(v)` que convierte cualquier tipo a string limpio, `Number(v)` para campos numéricos, todos los filtros blindados con `if (!p) return false`. Wrap de `filteredProducts` y `tableRows` en try/catch que loggea y devuelve fallback sensato. Cambiados `} catch {}` por `} catch (err) { console.error(...) }` en `fetchProductsData` y `syncProducts`.
+- UX: debounce 200ms en searchInput → searchQuery, botón X para limpiar, búsqueda ahora en 5 campos (nombre, marca, código, **categoría**, **observaciones**), filtros independientes (sin exclusión mutua), botón "Limpiar filtros" con badge de cantidad + "N filtros activos" en el contador.
+
 ### Lotes + FEFO (MVP + UI rica) — 09/08/2026
 **Decisiones de diseño cerradas:** todos los productos usan lotes · 1 lote por item en recepción · FEFO automático en ventas/ajustes/anulación · `fecha_vencimiento` vive solo en lote (se elimina del producto).
 
@@ -101,6 +113,31 @@
 
 ## 🟡 En curso (próximo a retomar)
 
+### 🧪 Pendiente de validación manual en browser
+
+_(Código pusheado, falta probar end-to-end en navegador — sesión 10/08/2026)_
+
+**Lotes + FEFO** (commits `d9b97f5`, `b9391f7`):
+- [ ] Verificar que al primer arranque se creó un "Lote inicial" para cada producto con stock preexistente (ir a `/products` → Editar → sección "Lotes")
+- [ ] Crear OC en `/compras`, ir a "Recibir", completar la columna **Vencimiento**, confirmar → ver que el lote aparece en el producto
+- [ ] En POS, hacer una venta de un producto con varios lotes → confirmar que el consumo sale del lote más próximo a vencer (FEFO)
+- [ ] Anular la venta → verificar que el stock vuelve al mismo lote
+- [ ] Verificar que un lote vencido aparece con borde rojo en el manager y como alerta en el Dashboard
+- [ ] En `/reportes` → nueva card "Stock por Lote" abajo, verificar KPIs y chips coloreados
+
+**ProductsView buscador** (commits `3834d58`, `0460edf`):
+- [ ] Probar typing con debounce (no debe re-renderizar en cada tecla)
+- [ ] Botón X limpia la búsqueda
+- [ ] Buscar por texto parcial funciona (ej: `coca`, `779`)
+- [ ] Buscar en categoría (ej: nombre de la categoría)
+- [ ] Filtros combinables (Bajo stock + Sin código, etc.) — la exclusión mutua entre Bajo stock/Precio ≤ costo ya no existe
+- [ ] Botón "Limpiar filtros" resetea todos los toggles y la búsqueda
+
+**BaseModal scroll** (commit `3a494b7`):
+- [ ] Abrir modal de Nuevo/Editar Producto en pantalla chica (zoom del navegador) → debe scrollear internamente
+- [ ] Botones Cancelar/Crear deben quedar fijos abajo (footer slot)
+- [ ] Probar también en modal de Oferta y modal de Eliminar
+
 ### Lotes + FEFO — Refinamientos
 - Bloquear venta de lotes vencidos en POS (validación backend al confirmar)
 - Edición inline de `codigo_proveedor` por lote (en ProductoLotesManager)
@@ -108,26 +145,11 @@
 - Deshabilitar lotes inactivos en UI de recepción
 - Auditoría: registrar eventos `lote_creado`, `lote_desactivado`, `lote_modificado`
 
-_(Frontend de Lotes/FEFO MVP+UI rica cerrado y pusheado)_
-
 ---
 
 ## 📋 Pendientes activos
 
 ### Alta prioridad
-- _(Vacío — siguiente frente a elegir entre los de media/baja prioridad)_
-  - Registrar productos por **lote** al recibir mercadería (en Compras o Productos), con cantidad, fecha de vencimiento y costo por lote
-  - El `stock_actual` del producto pasa a ser la **suma de lotes activos** (no un contador global)
-  - Política de despacho **FEFO** (First Expired, First Out): al confirmar una venta, el sistema toma automáticamente del lote que vence primero; si no alcanza, sigue con el siguiente
-  - Trazabilidad: poder ver de qué lote salió cada item de una venta (y revertir correctamente al anular)
-  - Alertas: lotes por vencer (ej. 30/15/7 días) y lotes vencidos (bloqueo de venta + reposición)
-  - Reportes: stock desglosado por lote, valorización de stock por costo real de cada lote
-  - Decisiones pendientes de diseño:
-    - ¿El campo `fecha_vencimiento` actual del producto se mantiene o se elimina? (hoy es a nivel producto, no lote)
-    - ¿Productos sin vencimiento también van por lote? (sí, lote sin fecha)
-    - ¿El código de barras del producto se mantiene único o cada lote tiene el suyo? (recomendado: único, el lote es interno)
-    - ¿FEFO aplica también a la salida por ajuste manual de stock? (sí, pero registrando de qué lote)
-  - Impacto grande: modelos `Producto` y `CompraItem` + `VentaItem` + `MovimientoStock` + POS + Compras (recepción) + Reportes + Auditoría
 - **MercadoPago: select de ciudad por provincia** — `app/services/mercadopago_service.py` ya tiene provincia como select (24 valores válidos); falta el segundo select de ciudad/localidad que dependa de la provincia elegida, porque MP rechaza si el `city_name` no es válido
 - **Seguridad clave privada AFIP** — la clave se guarda encriptada en la DB con una key hardcodeada (`"erp-afip-key-encryption-v1"`). Si alguien accede a DB + código fuente puede descifrarla. **Solución propuesta:** no guardar clave privada en DB — solo descargar (botón "Descargar .key" ya existe) y que el usuario la guarde localmente. Alternativa: secrets manager (AWS Secrets Manager, etc.). Requiere re-flujo de setup de AFIP.
 
