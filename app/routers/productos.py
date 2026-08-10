@@ -10,6 +10,9 @@ from app.schemas.producto import (
     ProductoCreate, ProductoUpdate, ProductoOut,
     ProductoLookupRequest, ProductoLookupResponse,
 )
+from app.schemas.producto_proveedor import (
+    ProductoProveedorAsignar, ProductoProveedorUpdate,
+)
 from app.schemas.common import RespuestaData, RespuestaLista
 from app.auth.dependencies import get_current_user, require_role
 from app.models.usuario import Usuario
