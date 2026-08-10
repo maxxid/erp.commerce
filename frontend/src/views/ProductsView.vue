@@ -88,27 +88,53 @@ function clearAllFilters() {
   clearSearch()
 }
 
-const countStockBajo = computed(() => products.value.filter(p => p.stock_actual <= (p.stock_minimo || 5) && p.stock_actual >= 0).length)
-
-const countPrecioDefasado = computed(() => products.value.filter(p => p.precio_venta > 0 && p.precio_costo > 0 && p.precio_venta <= p.precio_costo).length)
-
-const countEnOferta = computed(() => {
-  const ofertasActivas = ofertas.value.filter(o => o.activo)
-  const pids = new Set(ofertasActivas.map(o => o.producto_id))
-  return products.value.filter(p => pids.has(p.id)).length
+const countStockBajo = computed(() => {
+  try {
+    return products.value.filter(p => p && Number(p.stock_actual) <= Number(p.stock_minimo || 5) && Number(p.stock_actual) >= 0).length
+  } catch { return 0 }
 })
 
-const countSinStock = computed(() => products.value.filter(p => p.stock_actual === 0).length)
+const countPrecioDefasado = computed(() => {
+  try {
+    return products.value.filter(p => p && Number(p.precio_venta) > 0 && Number(p.precio_costo) > 0 && Number(p.precio_venta) <= Number(p.precio_costo)).length
+  } catch { return 0 }
+})
 
-const countSinCodigo = computed(() => products.value.filter(p => {
-  const cb = p.codigo_barras
-  return !cb || cb.trim() === '' || cb.startsWith('GEN-') || cb.startsWith('*MANUAL*')
-}).length)
+const countEnOferta = computed(() => {
+  try {
+    const ofertasActivas = Array.isArray(ofertas.value) ? ofertas.value.filter(o => o && o.activo) : []
+    const pids = new Set(ofertasActivas.map(o => o.producto_id))
+    return products.value.filter(p => p && pids.has(p.id)).length
+  } catch { return 0 }
+})
 
-const countPendientes = computed(() => products.value.filter(p => {
-  const cb = p.codigo_barras
-  return cb && (cb.startsWith('GEN-') || cb.startsWith('*MANUAL*'))
-}).length)
+const countSinStock = computed(() => {
+  try {
+    return products.value.filter(p => p && Number(p.stock_actual) === 0).length
+  } catch { return 0 }
+})
+
+const countSinCodigo = computed(() => {
+  try {
+    return products.value.filter(p => {
+      if (!p) return false
+      const cb = p.codigo_barras
+      if (!cb || String(cb).trim() === '') return true
+      const cbs = String(cb).toLowerCase()
+      return cbs.startsWith('gen-') || cbs.startsWith('*manual*')
+    }).length
+  } catch { return 0 }
+})
+
+const countPendientes = computed(() => {
+  try {
+    return products.value.filter(p => {
+      if (!p || !p.codigo_barras) return false
+      const cbs = String(p.codigo_barras).toLowerCase()
+      return cbs.startsWith('gen-') || cbs.startsWith('*manual*')
+    }).length
+  } catch { return 0 }
+})
 
 const showCatQuick = ref(false)
 const newCatNombre = ref('')
@@ -172,54 +198,79 @@ const tableColumns = [
 ]
 
 const filteredProducts = computed(() => {
-  let list = products.value
-  if (filterCategory.value) {
-    list = list.filter(p => p.categoria_id === filterCategory.value)
+  try {
+    let list = Array.isArray(products.value) ? products.value : []
+
+    const safeStr = v => {
+      if (v == null) return ''
+      const s = String(v).toLowerCase()
+      return s === 'null' || s === 'undefined' ? '' : s
+    }
+
+    if (filterCategory.value) {
+      list = list.filter(p => p && p.categoria_id === filterCategory.value)
+    }
+    if (filterStockBajo.value) {
+      list = list.filter(p => p && Number(p.stock_actual) <= Number(p.stock_minimo || 5) && Number(p.stock_actual) >= 0)
+    }
+    if (filterPrecioDefasado.value) {
+      list = list.filter(p => p && Number(p.precio_venta) > 0 && Number(p.precio_costo) > 0 && Number(p.precio_venta) <= Number(p.precio_costo))
+    }
+    if (filterEnOferta.value) {
+      const ofertasActivas = Array.isArray(ofertas.value) ? ofertas.value.filter(o => o && o.activo) : []
+      const pids = new Set(ofertasActivas.map(o => o.producto_id))
+      list = list.filter(p => p && pids.has(p.id))
+    }
+    if (filterSinStock.value) {
+      list = list.filter(p => p && Number(p.stock_actual) === 0)
+    }
+    if (filterSinCodigo.value) {
+      list = list.filter(p => {
+        if (!p) return false
+        const cb = p.codigo_barras
+        return !cb || String(cb).trim() === '' || safeStr(cb).startsWith('gen-') || safeStr(cb).startsWith('*manual*')
+      })
+    }
+    if (filterPendientes.value) {
+      list = list.filter(p => {
+        if (!p) return false
+        const cb = p.codigo_barras
+        if (!cb) return false
+        const cbs = safeStr(cb)
+        return cbs.startsWith('gen-') || cbs.startsWith('*manual*')
+      })
+    }
+    if (hasSearch.value) {
+      const q = safeStr(searchQuery.value).trim()
+      if (q) {
+        list = list.filter(p => {
+          if (!p) return false
+          return safeStr(p.nombre).includes(q)
+              || safeStr(p.marca).includes(q)
+              || safeStr(p.codigo_barras).includes(q)
+              || safeStr(p.categoria_nombre).includes(q)
+              || safeStr(p.observaciones).includes(q)
+        })
+      }
+    }
+    return list
+  } catch (err) {
+    console.error('[ProductsView] Error en filteredProducts, fallback a lista completa:', err)
+    return Array.isArray(products.value) ? products.value : []
   }
-  if (filterStockBajo.value) {
-    list = list.filter(p => p.stock_actual <= (p.stock_minimo || 5) && p.stock_actual >= 0)
-  }
-  if (filterPrecioDefasado.value) {
-    list = list.filter(p => p.precio_venta > 0 && p.precio_costo > 0 && p.precio_venta <= p.precio_costo)
-  }
-  if (filterEnOferta.value) {
-    const ofertasActivas = ofertas.value.filter(o => o.activo)
-    const pids = new Set(ofertasActivas.map(o => o.producto_id))
-    list = list.filter(p => pids.has(p.id))
-  }
-  if (filterSinStock.value) {
-    list = list.filter(p => p.stock_actual === 0)
-  }
-  if (filterSinCodigo.value) {
-    list = list.filter(p => {
-      const cb = p.codigo_barras
-      return !cb || cb.trim() === '' || cb.startsWith('GEN-') || cb.startsWith('*MANUAL*')
-    })
-  }
-  if (filterPendientes.value) {
-    list = list.filter(p => {
-      const cb = p.codigo_barras
-      return cb && (cb.startsWith('GEN-') || cb.startsWith('*MANUAL*'))
-    })
-  }
-  if (hasSearch.value) {
-    const q = searchQuery.value.trim().toLowerCase()
-    list = list.filter(p => {
-      const nombre = (p.nombre || '').toLowerCase()
-      const marca = (p.marca || '').toLowerCase()
-      const codigo = (p.codigo_barras || '').toLowerCase()
-      const cat = (p.categoria_nombre || '').toLowerCase()
-      const obs = (p.observaciones || '').toLowerCase()
-      return nombre.includes(q) || marca.includes(q) || codigo.includes(q) || cat.includes(q) || obs.includes(q)
-    })
-  }
-  return list
 })
 
-const tableRows = computed(() => filteredProducts.value.map(p => {
-  const oferta = ofertas.value.find(o => o.producto_id === p.id && o.activo)
-  return { ...p, categoria: categoryName(p.categoria_id), _oferta: oferta || null }
-}))
+const tableRows = computed(() => {
+  try {
+    return filteredProducts.value.map(p => {
+      const oferta = ofertas.value.find(o => o && o.producto_id === p.id && o.activo)
+      return { ...p, categoria: categoryName(p.categoria_id), _oferta: oferta || null }
+    })
+  } catch (err) {
+    console.error('[ProductsView] Error en tableRows, fallback a filteredProducts:', err)
+    return filteredProducts.value
+  }
+})
 
 function categoryName(catId) {
   const cat = categories.value.find(c => c.id === catId)
@@ -230,26 +281,29 @@ async function fetchProductsData(checkPendientes = false) {
   loading.value = true
   try {
     const [prods, cats, ofs] = await Promise.all([
-      api.get('/api/productos?page_size=200').catch(() => null),
-      api.get('/api/categorias').catch(() => null),
-      api.get('/api/ofertas?page_size=200').catch(() => null)
+      api.get('/api/productos?page_size=200').catch(err => { console.error('[ProductsView] GET /productos:', err); return null }),
+      api.get('/api/categorias').catch(err => { console.error('[ProductsView] GET /categorias:', err); return null }),
+      api.get('/api/ofertas?page_size=200').catch(err => { console.error('[ProductsView] GET /ofertas:', err); return null })
     ])
-    if (prods && prods.length) products.value = prods
-    if (cats && cats.length) categories.value = cats
-    if (ofs && Array.isArray(ofs)) ofertas.value = ofs
+    if (Array.isArray(prods) && prods.length) products.value = prods
+    if (Array.isArray(cats) && cats.length) categories.value = cats
+    if (Array.isArray(ofs)) ofertas.value = ofs
 
-    if (checkPendientes) {
-      const pendientes = prods?.filter(p =>
+    if (checkPendientes && Array.isArray(prods)) {
+      const pendientes = prods.filter(p =>
         (p.codigo_barras && (p.codigo_barras.startsWith('*MANUAL*') || p.codigo_barras.startsWith('GEN-'))) ||
         (p.fuente === 'manual' && p.stock_actual === 0 && !p.precio_costo)
-      ) || []
+      )
       if (pendientes.length) {
         highlightedIds.value = new Set(pendientes.map(p => p.id))
         setTimeout(() => { highlightedIds.value = new Set() }, 3000)
       }
     }
-  } catch { /* fallback to mock */ }
-  loading.value = false
+  } catch (err) {
+    console.error('[ProductsView] fetchProductsData error:', err)
+  } finally {
+    loading.value = false
+  }
 }
 
 onMounted(() => { fetchProductsData(true); fetchProveedores() })
@@ -261,18 +315,20 @@ async function syncProducts() {
   syncing.value = true
   try {
     const [prods, cats, ofs] = await Promise.all([
-      api.get('/api/productos').catch(() => null),
-      api.get('/api/categorias').catch(() => null),
-      api.get('/api/ofertas?page_size=200').catch(() => null)
+      api.get('/api/productos').catch(err => { console.error('[ProductsView] GET /productos:', err); return null }),
+      api.get('/api/categorias').catch(err => { console.error('[ProductsView] GET /categorias:', err); return null }),
+      api.get('/api/ofertas?page_size=200').catch(err => { console.error('[ProductsView] GET /ofertas:', err); return null })
     ])
-    if (prods && prods.length) products.value = prods
-    if (cats && cats.length) categories.value = cats
-    if (ofs && Array.isArray(ofs)) ofertas.value = ofs
+    if (Array.isArray(prods) && prods.length) products.value = prods
+    if (Array.isArray(cats) && cats.length) categories.value = cats
+    if (Array.isArray(ofs)) ofertas.value = ofs
     toast.success('Productos sincronizados')
-  } catch {
+  } catch (err) {
+    console.error('[ProductsView] syncProducts error:', err)
     toast.info('Usando datos locales')
+  } finally {
+    syncing.value = false
   }
-  syncing.value = false
 }
 
 function openCreateModal() {
