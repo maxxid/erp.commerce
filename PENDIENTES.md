@@ -6,7 +6,18 @@
 
 ## ✅ Completados recientemente
 
-### Producto ↔ Proveedor (relación rica) — 08/08/2026
+### Producto ↔ Proveedor (UI rica) — 09/08/2026
+- Componente `ProductoProveedoresManager.vue` (`frontend/src/components/products/ProductoProveedoresManager.vue`)
+  - Lista de proveedores asignados al producto con badge "Principal" e "Inactivo"
+  - Inline: toggle de principal (estrella), toggle de activo, botones editar/quitar
+  - Sub-modal de edición con `codigo_proveedor`, `costo`, `plazo_entrega_dias`, `es_principal`, `activo`, `notas`
+  - Sub-modal de confirmación para quitar
+  - Select inline de "Agregar proveedor" filtrado por disponibles
+- `ProductsView.vue`: en modo edición, el `<select>` simple se reemplaza por el manager (full-width debajo del grid)
+- En modo creación se mantiene el `<select>` simple + quick-create (post-save el manager se ocupa)
+- `codigo_proveedor`, `costo`, `plazo`, CUIT y notas se muestran en cada item
+
+### Producto ↔ Proveedor (backend, relación rica) — 08/08/2026
 - Migración: tabla puente `producto_proveedor` extendida con `codigo_proveedor`, `costo`, `plazo_entrega_dias`, `es_principal`, `activo`, `notas`, `created_at`, `updated_at` (`app/main.py:246-259`)
 - Endpoint `PUT /api/productos/{id}/proveedores/{pid}` para editar la relación (`app/routers/productos.py:400-447`)
   - Marcar `es_principal=true` desmarca los demás del mismo producto (transaccional)
@@ -66,22 +77,13 @@
 
 ## 🟡 En curso (próximo a retomar)
 
-### Producto ↔ Proveedor — UI rica
-El backend ya soporta múltiples proveedores por producto con metadatos, pero la UI en `ProductsView` sigue usando un solo `<select>`. Falta:
-- Tabla/sección en el modal de producto para listar proveedores asignados
-- Botón "Agregar proveedor" con búsqueda rápida y modal mini
-- Edit inline o modal de los campos `codigo_proveedor`, `costo`, `plazo_entrega_dias`, `es_principal`, `activo`, `notas`
-- Badge "Principal" en el item marcado como tal
-- Mostrar `codigo_proveedor` en el detalle del producto y (opcional) en el POS al hacer lookup
-
-**Backend listo:** endpoints GET / POST / PUT / DELETE ya funcionan; solo falta el frontend.
+_(Vacío — siguiente frente a elegir)_
 
 ---
 
 ## 📋 Pendientes activos
 
 ### Alta prioridad
-- **Producto-Proveedor UI** (ver "En curso" arriba)
 - **Gestión de productos POR LOTES + FEFO** — cambio de negocio
   - Registrar productos por **lote** al recibir mercadería (en Compras o Productos), con cantidad, fecha de vencimiento y costo por lote
   - El `stock_actual` del producto pasa a ser la **suma de lotes activos** (no un contador global)
