@@ -6,6 +6,63 @@
 
 ## ✅ Completados recientemente
 
+### Reportes de Caja (Historial de Sesiones) — 10/08/2026
+- **Backend:**
+  - Nuevo endpoint `GET /api/caja/reportes` con filtros por fecha (fecha_inicio, fecha_fin)
+  - Agrupa movimientos en sesiones (apertura → cierre)
+  - Calcula totales de ingresos/egresos por sesión
+  - Detecta discrepancias en cierres por método (esperado vs real)
+  - Incluye información de cierres automáticos
+- **Frontend:**
+  - Nueva sección "Historial de Caja" en CajaView
+  - Filtros rápidos: Hoy, Semana, Mes, Personalizado
+  - Tabla con sesiones: fecha, usuario, apertura, cierre, ingresos, egresos, estado, discrepancias
+  - Badges para cierres automáticos y sesiones con discrepancias
+  - Modal de detalle con:
+    - Info de apertura y cierre (fechas, usuarios, montos, descripciones)
+    - Resumen: total ingresos, egresos, saldo final
+    - Cierres por método con expected vs real vs diferencia
+    - Lista de movimientos (ingresos y egresos) con descripciones
+
+### Mejoras de Caja (Apertura/Cierre) — 10/08/2026
+- **Cierre automático con saldo real:**
+  - Backend calcula saldo actual antes de cerrar automáticamente
+  - Usa zona horaria Argentina (UTC-3) para determinar el "día"
+  - Descripción incluye fecha del día que corresponde
+- **Nuevo endpoint `/api/caja/ultimo-cierre`:**
+  - Devuelve monto, fecha (UTC y local), si fue automático
+- **Apertura mejorada:**
+  - Modal con monto inicial sugerido (del último cierre)
+  - Campo opcional para retiro de efectivo
+  - Campo para motivo del retiro
+  - Cálculo reactivo: monto final = inicial - retiro
+  - Si hay retiro, crea egreso automáticamente vinculado a la apertura
+- **Fix botón login bloqueado:**
+  - `loggingIn` se reseteaba solo en error, no en éxito
+  - Ahora se resetea en ambos casos
+
+### Sincronización entre POS y Products — 10/08/2026
+- **Store Pinia de productos:**
+  - Nuevo store `productos.js` con `productos`, `categorias`, `ofertas`
+  - Funciones: `fetchAll`, `refreshProductos`, `refreshOfertas`
+- **POSView y ProductsView usan el store compartido:**
+  - Después de confirmar venta en POS → `productosStore.refreshProductos()`
+  - Después de guardar/eliminar producto → refresh del store
+  - Ambas vistas ven los cambios inmediatamente
+- **Fix reactividad:**
+  - Cambiado de `storeToRefs` a `computed` properties para mejor reactividad después de logout/login
+
+### POS: buscador de texto null-safe — 10/08/2026
+- El buscador de texto en POS fallaba silenciosamente con campos null (marca/codigo_barras)
+- Fix: usar `(p.marca || '').toLowerCase()` en lugar de `p.marca.toLowerCase()`
+
+### POS: lookup de barcode devolvía precio en blanco — 10/08/2026
+- `POST /api/productos/lookup` omitía `precio_venta` y `stock_actual` cuando encontraba producto local
+- El POS interpretaba `precio_referencia` (null/0) como precio_venta=0 y mostraba panel de carga manual
+- Fix: schema `ProductoLookupResponse` ahora expone `id`, `precio_venta`, `stock_actual`
+- Frontend: si el lookup devuelve `id` (producto real en DB), auto-agrega al carrito
+- POS `onMounted` ahora pide `page_size=200` para que la mayoría de productos queden en caché local
+
 ### BaseModal scroll fix — 10/08/2026
 - `frontend/src/components/ui/BaseModal.vue`:
   - `max-height: calc(100vh - 3rem)` en el contenedor (deja margen para el `py-6` del wrapper)
