@@ -20,6 +20,7 @@ const auth = useAuthStore()
 const toast = useToastStore()
 const route = useRoute()
 
+const searchInput = ref('')
 const searchQuery = ref('')
 const filterCategory = ref(null)
 const filterStockBajo = ref(false)
@@ -47,6 +48,45 @@ const filterEnOferta = ref(false)
 const filterSinStock = ref(false)
 const filterSinCodigo = ref(false)
 const filterPendientes = ref(false)
+
+let searchDebounceTimer = null
+function onSearchInput() {
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+  searchDebounceTimer = setTimeout(() => {
+    searchQuery.value = searchInput.value
+  }, 200)
+}
+
+function clearSearch() {
+  searchInput.value = ''
+  searchQuery.value = ''
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+}
+
+const activeFilterCount = computed(() => {
+  let n = 0
+  if (filterCategory.value) n++
+  if (filterStockBajo.value) n++
+  if (filterPrecioDefasado.value) n++
+  if (filterEnOferta.value) n++
+  if (filterSinStock.value) n++
+  if (filterSinCodigo.value) n++
+  if (filterPendientes.value) n++
+  return n
+})
+
+const hasSearch = computed(() => searchQuery.value.trim().length > 0)
+
+function clearAllFilters() {
+  filterCategory.value = null
+  filterStockBajo.value = false
+  filterPrecioDefasado.value = false
+  filterEnOferta.value = false
+  filterSinStock.value = false
+  filterSinCodigo.value = false
+  filterPendientes.value = false
+  clearSearch()
+}
 
 const countStockBajo = computed(() => products.value.filter(p => p.stock_actual <= (p.stock_minimo || 5) && p.stock_actual >= 0).length)
 
@@ -162,13 +202,16 @@ const filteredProducts = computed(() => {
       return cb && (cb.startsWith('GEN-') || cb.startsWith('*MANUAL*'))
     })
   }
-  if (searchQuery.value.trim()) {
-    const q = searchQuery.value.toLowerCase()
-    list = list.filter(p =>
-      (p.nombre || '').toLowerCase().includes(q) ||
-      (p.marca || '').toLowerCase().includes(q) ||
-      (p.codigo_barras || '').toLowerCase().includes(q)
-    )
+  if (hasSearch.value) {
+    const q = searchQuery.value.trim().toLowerCase()
+    list = list.filter(p => {
+      const nombre = (p.nombre || '').toLowerCase()
+      const marca = (p.marca || '').toLowerCase()
+      const codigo = (p.codigo_barras || '').toLowerCase()
+      const cat = (p.categoria_nombre || '').toLowerCase()
+      const obs = (p.observaciones || '').toLowerCase()
+      return nombre.includes(q) || marca.includes(q) || codigo.includes(q) || cat.includes(q) || obs.includes(q)
+    })
   }
   return list
 })
@@ -514,15 +557,27 @@ async function fetchProveedores() {
 
     <!-- Filters -->
     <div class="flex flex-col sm:flex-row gap-3">
-      <BaseInput
-        v-model="searchQuery"
-        placeholder="Buscar por nombre, código o marca..."
-        class="flex-1"
-      >
-        <template #prefix>
-          <i class="fa-solid fa-magnifying-glass text-slate-400"></i>
-        </template>
-      </BaseInput>
+      <div class="relative flex-1">
+        <BaseInput
+          v-model="searchInput"
+          placeholder="Buscar por nombre, código, marca, categoría u observaciones..."
+          input-class="pl-10"
+          @input="onSearchInput"
+        >
+          <template #prefix>
+            <i class="fa-solid fa-magnifying-glass text-slate-400"></i>
+          </template>
+        </BaseInput>
+        <button
+          v-if="searchInput"
+          type="button"
+          aria-label="Limpiar búsqueda"
+          class="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+          @click="clearSearch"
+        >
+          <i class="fa-solid fa-xmark text-[10px]"></i>
+        </button>
+      </div>
       <BaseSelect
         v-model="filterCategory"
         :options="[{ value: null, label: 'Todas las categorías' }, ...categories.map(c => ({ value: c.id, label: c.nombre }))]"
@@ -533,17 +588,21 @@ async function fetchProveedores() {
     </div>
 
     <!-- Quick filter toggles -->
-    <div class="flex flex-wrap gap-2">
+    <div class="flex flex-wrap items-center gap-2">
       <button
         type="button"
         class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 border flex items-center gap-1.5"
         :class="filterStockBajo
           ? 'bg-red-600 text-white border-red-600 shadow-sm shadow-red-500/20'
           : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'"
-        @click="filterStockBajo = !filterStockBajo; filterPrecioDefasado = false"
+        @click="filterStockBajo = !filterStockBajo"
       >
         <i class="fa-solid fa-triangle-exclamation"></i> Bajo stock
-        <span v-if="countStockBajo > 0" class="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300 rounded-full">{{ countStockBajo }}</span>
+        <span
+          v-if="countStockBajo > 0"
+          class="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded-full"
+          :class="filterStockBajo ? 'bg-white/20 text-white' : 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300'"
+        >{{ countStockBajo }}</span>
       </button>
       <button
         type="button"
@@ -551,10 +610,14 @@ async function fetchProveedores() {
         :class="filterPrecioDefasado
           ? 'bg-amber-500 text-white border-amber-500 shadow-sm shadow-amber-500/20'
           : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'"
-        @click="filterPrecioDefasado = !filterPrecioDefasado; filterStockBajo = false"
+        @click="filterPrecioDefasado = !filterPrecioDefasado"
       >
         <i class="fa-solid fa-dollar-sign"></i> Precio ≤ costo
-        <span v-if="countPrecioDefasado > 0" class="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-300 rounded-full">{{ countPrecioDefasado }}</span>
+        <span
+          v-if="countPrecioDefasado > 0"
+          class="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded-full"
+          :class="filterPrecioDefasado ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-300'"
+        >{{ countPrecioDefasado }}</span>
       </button>
       <button
         type="button"
@@ -565,29 +628,41 @@ async function fetchProveedores() {
         @click="filterEnOferta = !filterEnOferta"
       >
         <i class="fa-solid fa-tag"></i> En oferta
-        <span v-if="countEnOferta > 0" class="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-300 rounded-full">{{ countEnOferta }}</span>
+        <span
+          v-if="countEnOferta > 0"
+          class="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded-full"
+          :class="filterEnOferta ? 'bg-white/20 text-white' : 'bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-300'"
+        >{{ countEnOferta }}</span>
       </button>
       <button
         type="button"
         class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 border flex items-center gap-1.5"
         :class="filterSinStock
-          ? 'bg-slate-600 text-white border-slate-600 shadow-sm shadow-slate-500/20'
+          ? 'bg-slate-700 text-white border-slate-700 shadow-sm shadow-slate-500/20'
           : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'"
         @click="filterSinStock = !filterSinStock"
       >
         <i class="fa-solid fa-circle-xmark"></i> Sin stock
-        <span v-if="countSinStock > 0" class="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300 rounded-full">{{ countSinStock }}</span>
+        <span
+          v-if="countSinStock > 0"
+          class="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded-full"
+          :class="filterSinStock ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200'"
+        >{{ countSinStock }}</span>
       </button>
       <button
         type="button"
         class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 border flex items-center gap-1.5"
         :class="filterSinCodigo
-          ? 'bg-slate-600 text-white border-slate-600 shadow-sm shadow-slate-500/20'
+          ? 'bg-slate-700 text-white border-slate-700 shadow-sm shadow-slate-500/20'
           : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'"
         @click="filterSinCodigo = !filterSinCodigo"
       >
         <i class="fa-solid fa-barcode"></i> Sin código
-        <span v-if="countSinCodigo > 0" class="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300 rounded-full">{{ countSinCodigo }}</span>
+        <span
+          v-if="countSinCodigo > 0"
+          class="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded-full"
+          :class="filterSinCodigo ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200'"
+        >{{ countSinCodigo }}</span>
       </button>
       <button
         type="button"
@@ -598,7 +673,25 @@ async function fetchProveedores() {
         @click="filterPendientes = !filterPendientes"
       >
         <i class="fa-solid fa-clock"></i> Pendientes
-        <span v-if="countPendientes > 0" class="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300 rounded-full">{{ countPendientes }}</span>
+        <span
+          v-if="countPendientes > 0"
+          class="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded-full"
+          :class="filterPendientes ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300'"
+        >{{ countPendientes }}</span>
+      </button>
+
+      <button
+        v-if="activeFilterCount > 0 || hasSearch"
+        type="button"
+        class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 flex items-center gap-1.5 text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 ml-auto"
+        title="Limpiar todos los filtros"
+        @click="clearAllFilters"
+      >
+        <i class="fa-solid fa-filter-circle-xmark"></i>
+        Limpiar filtros
+        <span class="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300">
+          {{ activeFilterCount + (hasSearch ? 1 : 0) }}
+        </span>
       </button>
     </div>
 
@@ -609,7 +702,7 @@ async function fetchProveedores() {
       :loading="loading"
       :row-class="row => highlightedIds.has(row.id) ? 'bg-amber-100/40 dark:bg-amber-900/20' : ''"
       empty-title="No se encontraron productos"
-      empty-text="Intentá con otros filtros o creá uno nuevo."
+      empty-text="Probá limpiar los filtros o ajustá la búsqueda."
       empty-icon="fa-box-open"
     >
       <template #image="{ row }">
@@ -685,8 +778,29 @@ async function fetchProveedores() {
       </template>
     </BaseTable>
 
-    <div class="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
-      {{ filteredProducts.length }} de {{ products.length }} productos
+    <div class="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 font-medium px-1 pt-1">
+      <div class="flex items-center gap-3">
+        <span>
+          <span class="font-bold text-slate-900 dark:text-white">{{ filteredProducts.length }}</span>
+          de <span class="font-semibold">{{ products.length }}</span> producto{{ products.length !== 1 ? 's' : '' }}
+        </span>
+        <span
+          v-if="activeFilterCount > 0 || hasSearch"
+          class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 text-[10px] font-semibold"
+        >
+          <i class="fa-solid fa-filter text-[9px]"></i>
+          {{ activeFilterCount + (hasSearch ? 1 : 0) }} filtro{{ (activeFilterCount + (hasSearch ? 1 : 0)) !== 1 ? 's' : '' }} activo{{ (activeFilterCount + (hasSearch ? 1 : 0)) !== 1 ? 's' : '' }}
+        </span>
+      </div>
+      <button
+        v-if="activeFilterCount > 0 || hasSearch"
+        type="button"
+        class="text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1 transition"
+        @click="clearAllFilters"
+      >
+        <i class="fa-solid fa-filter-circle-xmark"></i>
+        Limpiar
+      </button>
     </div>
 
     <!-- Create/Edit Modal -->
