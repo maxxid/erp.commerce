@@ -915,6 +915,7 @@ import { ref, reactive, computed, watch, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
+import { useProductosStore } from '@/stores/productos'
 import { formatCurrency as fc } from '@/composables/useUtils'
 import api from '@/services/api'
 import { useCajaStore } from '@/stores/caja'
@@ -936,6 +937,7 @@ import { useOfflineSales } from '@/composables/useOfflineSales'
 const auth = useAuthStore()
 const toast = useToastStore()
 const cajaStore = useCajaStore()
+const productosStore = useProductosStore()
 const route = useRoute()
 const { addPendingSale, syncPendingSales } = useOfflineSales()
 const router = useRouter()
@@ -1112,13 +1114,13 @@ const stats = reactive({
   saldo_caja: 72000
 })
 
-const products = ref([])
+const products = productosStore.productos
 
-const categories = ref([])
+const categories = productosStore.categorias
 
 const clientes = ref([])
 
-const ofertas = ref([])
+const ofertas = productosStore.ofertas
 
 const recentTransactions = ref([])
 const editingVentaId = ref(null)
@@ -1155,21 +1157,13 @@ const filteredPOSProducts = computed(() => {
 onMounted(async () => {
   localStorage.setItem('apex_user', JSON.stringify({ nombre: auth.currentUser?.nombre || auth.currentUser?.username || '' }))
   try {
-    const [prods, cats, clis, ofs, cfg] = await Promise.all([
-      api.get('/api/productos?page_size=200').catch(() => null),
-      api.get('/api/categorias').catch(() => null),
+    const [clis, cfg] = await Promise.all([
       api.get('/api/clientes').catch(() => null),
-      api.get('/api/ofertas?page_size=200').catch(() => null),
       api.get('/api/config/ajustes').catch(() => null)
     ])
-    const prodItems = prods?.data || prods || []
-    if (Array.isArray(prodItems)) products.value = prodItems
-    const catItems = cats?.data || cats || []
-    if (Array.isArray(catItems)) categories.value = catItems
+    await productosStore.fetchAll(200)
     const cliItems = clis?.data || clis || []
     if (Array.isArray(cliItems)) clientes.value = cliItems
-    const ofsItems = ofs?.data || ofs || []
-    if (Array.isArray(ofsItems)) ofertas.value = ofsItems
     if (cfg && typeof cfg === 'object') {
       if (cfg.banco_nombre) bankConfig.banco_nombre = cfg.banco_nombre.valor || ''
       if (cfg.banco_titular) bankConfig.banco_titular = cfg.banco_titular.valor || ''
@@ -1847,6 +1841,7 @@ async function confirmarVenta() {
 
   vaciarCarrito()
   confirmando.value = false
+  productosStore.refreshProductos()
   nextTick(() => barcodeInput.value?.focus())
 }
 

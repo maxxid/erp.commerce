@@ -3,6 +3,7 @@ import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
+import { useProductosStore } from '@/stores/productos'
 import { formatCurrency as fc } from '@/composables/useUtils'
 import api from '@/services/api'
 import BaseCard from '@/components/ui/BaseCard.vue'
@@ -19,6 +20,7 @@ import ProductoLotesManager from '@/components/products/ProductoLotesManager.vue
 const auth = useAuthStore()
 const toast = useToastStore()
 const route = useRoute()
+const productosStore = useProductosStore()
 
 const searchInput = ref('')
 const searchQuery = ref('')
@@ -38,7 +40,7 @@ const formError = ref('')
 const highlightedIds = ref(new Set())
 const showBarcodeHint = ref(false)
 
-const ofertas = ref([])
+const ofertas = productosStore.ofertas
 const showOfertaModal = ref(false)
 const editingOferta = ref(null)
 const deleteOfertaTarget = ref(null)
@@ -154,16 +156,9 @@ const defaultOfertaForm = () => ({
 })
 const ofertaForm = reactive(defaultOfertaForm())
 
-const products = ref([
-  { id: 1, codigo_barras: '7791234567890', nombre: 'Coca-Cola 2.25L', marca: 'Coca-Cola', precio_venta: 2800, precio_costo: 2100, categoria_id: 1, stock_actual: 45 },
-  { id: 2, codigo_barras: '7799876543210', nombre: 'Arroz Gallo 1kg', marca: 'Gallo', precio_venta: 1500, precio_costo: 1100, categoria_id: 2, stock_actual: 120 },
-  { id: 3, codigo_barras: '7794561237890', nombre: 'Agua Mineral 1.5L', marca: 'Villa del Sur', precio_venta: 950, precio_costo: 600, categoria_id: 1, stock_actual: 80 }
-])
+const products = productosStore.productos
 
-const categories = ref([
-  { id: 1, nombre: 'Bebidas' },
-  { id: 2, nombre: 'Almacén' }
-])
+const categories = productosStore.categorias
 
 const proveedores = ref([])
 
@@ -280,17 +275,10 @@ function categoryName(catId) {
 async function fetchProductsData(checkPendientes = false) {
   loading.value = true
   try {
-    const [prods, cats, ofs] = await Promise.all([
-      api.get('/api/productos?page_size=200').catch(err => { console.error('[ProductsView] GET /productos:', err); return null }),
-      api.get('/api/categorias').catch(err => { console.error('[ProductsView] GET /categorias:', err); return null }),
-      api.get('/api/ofertas?page_size=200').catch(err => { console.error('[ProductsView] GET /ofertas:', err); return null })
-    ])
-    if (Array.isArray(prods) && prods.length) products.value = prods
-    if (Array.isArray(cats) && cats.length) categories.value = cats
-    if (Array.isArray(ofs)) ofertas.value = ofs
+    await productosStore.fetchAll(200)
 
-    if (checkPendientes && Array.isArray(prods)) {
-      const pendientes = prods.filter(p =>
+    if (checkPendientes && Array.isArray(products.value)) {
+      const pendientes = products.value.filter(p =>
         (p.codigo_barras && (p.codigo_barras.startsWith('*MANUAL*') || p.codigo_barras.startsWith('GEN-'))) ||
         (p.fuente === 'manual' && p.stock_actual === 0 && !p.precio_costo)
       )
@@ -314,14 +302,7 @@ watch(() => route.path, (path) => {
 async function syncProducts() {
   syncing.value = true
   try {
-    const [prods, cats, ofs] = await Promise.all([
-      api.get('/api/productos').catch(err => { console.error('[ProductsView] GET /productos:', err); return null }),
-      api.get('/api/categorias').catch(err => { console.error('[ProductsView] GET /categorias:', err); return null }),
-      api.get('/api/ofertas?page_size=200').catch(err => { console.error('[ProductsView] GET /ofertas:', err); return null })
-    ])
-    if (Array.isArray(prods) && prods.length) products.value = prods
-    if (Array.isArray(cats) && cats.length) categories.value = cats
-    if (Array.isArray(ofs)) ofertas.value = ofs
+    await productosStore.fetchAll(200)
     toast.success('Productos sincronizados')
   } catch (err) {
     console.error('[ProductsView] syncProducts error:', err)
@@ -437,6 +418,7 @@ async function saveProduct() {
     }
 
     closeModal()
+    productosStore.refreshProductos()
   } catch (e) {
     formError.value = e.message || 'Error al guardar'
   }
@@ -458,6 +440,7 @@ async function executeDelete() {
 
     products.value = products.value.filter(p => p.id !== deleteTarget.value.id)
     toast.success('Producto eliminado')
+    productosStore.refreshProductos()
   } catch {
     toast.error('Error al eliminar')
   }
@@ -513,8 +496,7 @@ async function saveOferta() {
       toast.success('Oferta creada')
     }
     closeOfertaModal()
-    const ofs = await api.get('/api/ofertas?page_size=200').catch(() => null)
-    if (ofs && Array.isArray(ofs)) ofertas.value = ofs
+    productosStore.refreshOfertas()
   } catch (e) {
     toast.error(e.message || 'Error al guardar oferta')
   }
@@ -531,7 +513,7 @@ async function executeDeleteOferta() {
   try {
     await api.delete(`/api/ofertas/${deleteOfertaTarget.value.id}`)
     toast.success('Oferta eliminada')
-    ofertas.value = ofertas.value.filter(o => o.id !== deleteOfertaTarget.value.id)
+    productosStore.refreshOfertas()
   } catch {
     toast.error('Error al eliminar oferta')
   }
