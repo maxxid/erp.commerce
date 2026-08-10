@@ -15,6 +15,7 @@ const simple = ref(false)
 const loading = ref(true)
 const alertas = ref([])
 const data = ref({})
+const alertasLotes = ref({})
 
 const mockData = {
   total_productos: 3, valor_stock: 450000, stock_bajo: 1,
@@ -48,14 +49,46 @@ onMounted(() => load())
 
 async function load() {
   loading.value = true
+  alertas.value = []
   try {
-    const resp = await api.get('/api/dashboard/resumen')
+    const [resp, lotesAlert] = await Promise.all([
+      api.get('/api/dashboard/resumen').catch(() => null),
+      api.get('/api/dashboard/alertas-lotes').catch(() => null),
+    ])
     if (resp && resp.total_productos) data.value = resp
     else Object.assign(data.value, mockData)
+    if (lotesAlert) alertasLotes.value = lotesAlert
+    buildLoteAlerts()
   } catch {
     Object.assign(data.value, mockData)
   } finally {
     loading.value = false
+  }
+}
+
+function buildLoteAlerts() {
+  const a = alertasLotes.value
+  if (!a || !a.totales) return
+  const t = a.totales
+  if (t.vencidos > 0) {
+    alertas.value.push({
+      tipo: 'lotes_vencidos',
+      nivel: 'danger',
+      mensaje: `${t.vencidos} lote(s) vencido(s) con stock. Revisá el stock antes de seguir vendiendo.`,
+    })
+  }
+  if (t.por_vencer_7d > 0) {
+    alertas.value.push({
+      tipo: 'lotes_por_vencer_7d',
+      nivel: 'danger',
+      mensaje: `${t.por_vencer_7d} lote(s) vence(n) en los próximos 7 días.`,
+    })
+  } else if (t.por_vencer_15d > 0) {
+    alertas.value.push({
+      tipo: 'lotes_por_vencer_15d',
+      nivel: 'warning',
+      mensaje: `${t.por_vencer_15d} lote(s) vence(n) en los próximos 15 días.`,
+    })
   }
 }
 </script>

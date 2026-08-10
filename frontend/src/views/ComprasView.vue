@@ -257,13 +257,19 @@
 
     <BaseModal v-model="showReceiveModal" :title="'Recibir Mercadería — ' + receiveTarget?.numero_orden" size="2xl">
       <div class="space-y-5">
+        <div class="p-3 bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800/40 rounded-xl text-xs text-brand-700 dark:text-brand-300 flex items-start gap-2">
+          <i class="fa-solid fa-circle-info mt-0.5"></i>
+          <span>Cada producto se ingresa como un <strong>lote</strong>. Si tiene vencimiento, completalo para que se aplique el despacho FEFO (los más viejos primero).</span>
+        </div>
+
         <BaseTable
           :columns="[
             { key: 'producto', label: 'Producto' },
             { key: 'cantidad', label: 'Pedido', align: 'center', width: 'w-20' },
             { key: 'cantidad_recibida', label: 'Recibido', align: 'center', width: 'w-20' },
             { key: 'pendiente', label: 'Pendiente', align: 'center', width: 'w-20' },
-            { key: 'recibir', label: 'Recibir ahora', align: 'center', width: 'w-28' }
+            { key: 'recibir', label: 'Recibir ahora', align: 'center', width: 'w-28' },
+            { key: 'vencimiento', label: 'Vencimiento', align: 'center', width: 'w-44' }
           ]"
           :rows="receiveTarget?.items || []"
           compact
@@ -288,6 +294,15 @@
               size="sm"
               input-class="w-20 text-center font-mono-data"
               @update:modelValue="receiveCantidades[row.id] = Number($event)"
+            />
+          </template>
+          <template #vencimiento="{ row }">
+            <BaseInput
+              :model-value="receiveVencimientos[row.id] || ''"
+              type="date"
+              size="sm"
+              input-class="text-center"
+              @update:modelValue="receiveVencimientos[row.id] = $event"
             />
           </template>
         </BaseTable>
@@ -364,6 +379,7 @@ const receiving = ref(false)
 const saving = ref(false)
 const receiveTarget = ref(null)
 const receiveCantidades = reactive({})
+const receiveVencimientos = reactive({})
 const showVerComentario = ref(false)
 const verComentarioTarget = ref(null)
 const comentarioTexto = ref('')
@@ -674,6 +690,7 @@ async function guardarCompra() {
 function openReceiveModal(compra) {
   receiveTarget.value = compra
   Object.keys(receiveCantidades).forEach(k => delete receiveCantidades[k])
+  Object.keys(receiveVencimientos).forEach(k => delete receiveVencimientos[k])
   compra.items.forEach(item => {
     receiveCantidades[item.id] = item.cantidad - (item.cantidad_recibida || 0)
   })
@@ -689,7 +706,10 @@ async function confirmarRecepcion() {
   }
   receiving.value = true
   try {
-    const payload = { cantidades: { ...receiveCantidades } }
+    const payload = {
+      cantidades: { ...receiveCantidades },
+      vencimientos: { ...receiveVencimientos },
+    }
     await api.put(`/api/compras/${receiveTarget.value.id}/recibir`, payload)
 
     const totalRecibido = Object.values(payload.cantidades).reduce((sum, v) => sum + (Number(v) || 0), 0)

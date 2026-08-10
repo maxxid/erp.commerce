@@ -255,6 +255,120 @@
       </BaseCard>
 
     </div>
+
+    <!-- ==================== STOCK POR LOTE ==================== -->
+    <BaseCard>
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
+            <i class="fa-solid fa-boxes-stacked text-amber-600 text-sm"></i>
+          </div>
+          <div>
+            <h2 class="font-semibold text-slate-900">Stock por Lote</h2>
+            <p class="text-xs text-slate-500">Desglose por lote con valorización al costo real</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <BaseInput
+            v-model="stockLoteSearch"
+            placeholder="Buscar producto..."
+            size="sm"
+            class="w-56"
+            @input="loadStockPorLote"
+          >
+            <template #prefix>
+              <i class="fa-solid fa-magnifying-glass text-slate-400 text-xs"></i>
+            </template>
+          </BaseInput>
+          <BaseButton
+            variant="ghost"
+            size="sm"
+            icon-only
+            title="Sincronizar"
+            :loading="syncingLotes"
+            @click="loadStockPorLote(true)"
+          >
+            <i class="fa-solid fa-arrows-rotate text-xs"></i>
+          </BaseButton>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+        <KpiCard
+          label="Productos con stock"
+          :value="stockPorLote.productos.length"
+          icon="fa-box"
+          icon-color="brand"
+          :animate="false"
+        />
+        <KpiCard
+          label="Lotes activos"
+          :value="stockPorLote.productos.reduce((s, p) => s + p.lotes.length, 0)"
+          icon="fa-layer-group"
+          icon-color="info"
+          :animate="false"
+        />
+        <KpiCard
+          label="Valorización total"
+          :value="formatCurrency(stockPorLote.valor_total_general)"
+          icon="fa-coins"
+          icon-color="success"
+          :animate="false"
+        />
+      </div>
+
+      <div v-if="loadingLotes" class="flex items-center justify-center py-12 text-slate-400 text-sm">
+        <i class="fa-solid fa-circle-notch fa-spin mr-2"></i>
+        Cargando stock por lote...
+      </div>
+      <EmptyState
+        v-else-if="!stockPorLote.productos.length"
+        icon="fa-boxes-stacked"
+        title="Sin stock registrado"
+        text="Recibí mercadería o creá lotes manuales para ver el reporte."
+        compact
+      />
+      <div v-else class="space-y-3 max-h-[500px] overflow-y-auto">
+        <div
+          v-for="prod in stockPorLote.productos"
+          :key="prod.producto_id"
+          class="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-700"
+        >
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2 min-w-0">
+              <i class="fa-solid fa-box text-slate-400 text-sm shrink-0"></i>
+              <div class="min-w-0">
+                <p class="text-sm font-semibold text-slate-900 dark:text-white truncate">{{ prod.producto_nombre }}</p>
+                <p class="text-[10px] text-slate-500 font-mono-data">{{ prod.codigo_barras }}</p>
+              </div>
+            </div>
+            <div class="text-right shrink-0 ml-2">
+              <p class="text-sm font-bold text-slate-900 dark:text-white font-mono-data">{{ prod.stock_total }} u.</p>
+              <p class="text-[10px] text-slate-500 font-mono-data">{{ formatCurrency(prod.valor_total) }}</p>
+            </div>
+          </div>
+          <div class="flex flex-wrap gap-1.5">
+            <span
+              v-for="lote in prod.lotes"
+              :key="lote.id"
+              class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-medium border"
+              :class="[
+                lote.vencido ? 'bg-red-50 text-red-700 border-red-200' :
+                lote.dias_para_vencer != null && lote.dias_para_vencer <= 30 ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                'bg-white text-slate-600 border-slate-200'
+              ]"
+            >
+              <i class="fa-solid fa-cubes text-[8px]"></i>
+              <span class="font-mono-data font-bold">{{ lote.cantidad_actual }}</span>
+              <span v-if="lote.codigo_lote" class="text-slate-500">· {{ lote.codigo_lote }}</span>
+              <span v-if="lote.fecha_vencimiento">
+                · vto {{ new Date(lote.fecha_vencimiento).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' }) }}
+              </span>
+            </span>
+          </div>
+        </div>
+      </div>
+    </BaseCard>
   </div>
 </template>
 
@@ -266,7 +380,9 @@ import { useToastStore } from '@/stores/toasts'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseBadge from '@/components/ui/BaseBadge.vue'
+import BaseInput from '@/components/ui/BaseInput.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
+import KpiCard from '@/components/ui/KpiCard.vue'
 
 const toast = useToastStore()
 
@@ -274,6 +390,32 @@ const syncing = ref(false)
 const syncingWeekly = ref(false)
 const syncingMonthly = ref(false)
 const syncingQuarterly = ref(false)
+
+const stockLoteSearch = ref('')
+const loadingLotes = ref(false)
+const syncingLotes = ref(false)
+const stockPorLote = ref({ productos: [], valor_total_general: 0 })
+
+let stockLoteDebounce = null
+async function loadStockPorLote(force = false) {
+  if (stockLoteDebounce) clearTimeout(stockLoteDebounce)
+  stockLoteDebounce = setTimeout(async () => {
+    if (force) syncingLotes.value = true
+    else loadingLotes.value = true
+    try {
+      const params = new URLSearchParams()
+      if (stockLoteSearch.value.trim()) params.set('search', stockLoteSearch.value.trim())
+      params.set('page_size', '50')
+      const data = await api.get(`/api/lotes/reporte/stock-por-lote?${params}`)
+      stockPorLote.value = data || { productos: [], valor_total_general: 0 }
+    } catch {
+      stockPorLote.value = { productos: [], valor_total_general: 0 }
+    } finally {
+      loadingLotes.value = false
+      syncingLotes.value = false
+    }
+  }, 300)
+}
 
 // ── Mock / fallback data ──────────────────────────────────────────────
 
@@ -474,7 +616,7 @@ async function syncQuarterly(silent = false) {
   syncingQuarterly.value = false
 }
 
-onMounted(() => { syncAll() })
+onMounted(() => { syncAll(); loadStockPorLote() })
 </script>
 
 <style scoped>

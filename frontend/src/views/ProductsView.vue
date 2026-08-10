@@ -14,6 +14,7 @@ import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseTable from '@/components/ui/BaseTable.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import ProductoProveedoresManager from '@/components/products/ProductoProveedoresManager.vue'
+import ProductoLotesManager from '@/components/products/ProductoLotesManager.vue'
 
 const auth = useAuthStore()
 const toast = useToastStore()
@@ -805,6 +806,11 @@ async function fetchProveedores() {
           v-if="editingProduct"
           :producto-id="editingProduct.id"
           :proveedores="proveedores"
+        />
+
+        <ProductoLotesManager
+          v-if="editingProduct"
+          :producto-id="editingProduct.id"
         />
 
         <BaseInput
