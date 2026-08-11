@@ -311,10 +311,13 @@ async function syncProducts() {
   }
 }
 
-function openCreateModal() {
+function openCreateModal(codigoBarras = null) {
   editingProduct.value = null
   formError.value = ''
   Object.assign(form, defaultForm())
+  if (codigoBarras) {
+    form.codigo_barras = codigoBarras
+  }
   showModal.value = true
 }
 
@@ -583,7 +586,7 @@ async function fetchProveedores() {
           <i :class="syncing ? 'fa-solid fa-circle-notch fa-spin' : 'fa-solid fa-arrows-rotate'"></i>
           {{ syncing ? 'Sincronizando...' : 'Sincronizar' }}
         </BaseButton>
-        <BaseButton variant="primary" size="sm" @click="openCreateModal">
+        <BaseButton variant="primary" size="sm" @click="openCreateModal(searchQuery || null)">
           <i class="fa-solid fa-plus"></i> Nuevo Producto
         </BaseButton>
         <BaseButton variant="secondary" size="sm" @click="openCreateOfertaModal()">
