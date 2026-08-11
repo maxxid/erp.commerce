@@ -95,6 +95,39 @@ def marcar_etiquetado(
     return RespuestaData(data={"marcados": count}, message=f"{count} producto(s) marcados como etiquetados")
 
 
+@router.get("/precios-online/{barcode}", response_model=RespuestaData)
+def precios_online(
+    barcode: str,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """Busca precios online en todas las fuentes externas para un código de barras.
+    
+    Devuelve una lista de resultados con precio, fuente y URL directa.
+    """
+    from app.services import lookup_service as lk
+    
+    resultados = lk.comparar_precios(barcode)
+    
+    # Enriquecer con URLs de búsqueda si no tienen URL directa
+    for r in resultados:
+        if not r.get("url"):
+            fuente = r.get("fuente", "").lower()
+            if fuente == "carrefour":
+                r["url"] = f"https://www.carrefour.com.ar/{barcode}?_q={barcode}&map=ft"
+            elif fuente == "vea":
+                r["url"] = f"https://www.vea.com.ar/{barcode}?_q={barcode}&map=ft"
+            elif fuente == "masonline":
+                r["url"] = f"https://www.masonline.com.ar/{barcode}?_q={barcode}&map=ft"
+            elif fuente == "supercoco":
+                r["url"] = f"https://supercoco.com.ar/s/?q={barcode}"
+    
+    return RespuestaData(
+        data=resultados,
+        message=f"{len(resultados)} resultado(s) encontrado(s)"
+    )
+
+
 @router.get("/costos", response_model=RespuestaLista)
 def costos(
     search: Optional[str] = Query(None),
