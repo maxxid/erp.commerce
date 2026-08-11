@@ -487,7 +487,7 @@
               Medio de Pago
               <span class="text-slate-300 dark:text-slate-600 ml-2 font-normal">Atajos: 1-5, ←→, Enter</span>
             </label>
-            <div class="grid grid-cols-5 gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
+            <div class="grid grid-cols-6 gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
               <button
                 v-for="(medio, idx) in mediosPago"
                 :key="medio.value"
@@ -1097,6 +1097,7 @@ const mediosPago = [
   { value: 'transferencia', label: 'Transf.', icon: 'fa-mobile-screen-button' },
   { value: 'mercadopago_qr', label: 'QR MP', icon: 'fa-brands fa-cc-mastercard' },
   { value: 'mercadopago_pos', label: 'POS MP', icon: 'fa-solid fa-mobile-button' },
+  { value: 'smartpoint', label: 'SmartPoint', icon: 'fa-solid fa-cash-register' },
   { value: 'cta_corriente', label: 'Cta. Cte.', icon: 'fa-file-invoice-dollar' }
 ]
 
@@ -1582,7 +1583,7 @@ function addToCart(product, qty = 1, price = null) {
 function handlePagoKeydown(event) {
   const pagos = mediosPago.map(m => m.value)
   const key = event.key
-  if (key >= '1' && key <= '5') {
+  if (key >= '1' && key <= '6') {
     event.preventDefault()
     cart.medio_pago = pagos[parseInt(key) - 1]
   } else if (key === 'ArrowLeft') {
