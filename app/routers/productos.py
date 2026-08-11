@@ -105,7 +105,8 @@ def productos_stock_bajo(
         db.query(Producto)
         .filter(
             Producto.activo == True,
-            (Producto.stock_actual <= Producto.stock_minimo) | (Producto.stock_actual == 0)
+            (Producto.stock_actual == 0) | 
+            ((Producto.stock_actual <= Producto.stock_minimo) & (Producto.stock_minimo > 0))
         )
         .order_by(Producto.stock_actual.asc())
         .all()
