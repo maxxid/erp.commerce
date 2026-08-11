@@ -6,6 +6,13 @@
 
 ## ✅ Completados recientemente
 
+### SmartPoint como Medio de Pago — 11/08/2026
+- Agregado "SmartPoint" como nuevo medio de pago en el POS de ventas
+- Seleccionable en la grilla de medios de pago (ahora 6 opciones en lugar de 5)
+- Funciona como medio de pago directo sin integración con API (para dispositivos físicos prestados)
+- Atajo de teclado actualizado: tecla 6 para seleccionar SmartPoint
+- Las ventas con SmartPoint se registran normalmente en el sistema sin flujo especial de pago
+
 ### Precios Online con Info de Proveedores — 10/08/2026
 - **Mejora en vista "Precios Online":**
   - Al buscar un producto local, ahora muestra info detallada:
