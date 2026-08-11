@@ -92,8 +92,8 @@ async function cargarProductosStockBajo() {
   loadingStockBajo.value = true
   try {
     const resp = await api.get('/api/productos/stock-bajo')
-    if (resp && Array.isArray(resp.data)) {
-      productosStockBajo.value = resp.data
+    if (Array.isArray(resp)) {
+      productosStockBajo.value = resp
     }
   } catch (e) {
     console.error('Error cargando productos con stock bajo:', e)
