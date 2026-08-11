@@ -7,6 +7,7 @@ import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseBadge from '@/components/ui/BaseBadge.vue'
+import BaseModal from '@/components/ui/BaseModal.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 
 const toast = useToastStore()
@@ -18,6 +19,10 @@ const productoInfo = ref(null)
 const mostrarStockBajo = ref(false)
 const productosStockBajo = ref([])
 const loadingStockBajo = ref(false)
+const mostrarProductosProveedor = ref(false)
+const productosProveedor = ref([])
+const proveedorSeleccionado = ref(null)
+const loadingProductosProveedor = ref(false)
 
 const fuentesConocidas = {
   carrefour: { nombre: 'Carrefour', color: 'bg-blue-500', icon: 'fa-store' },
@@ -44,13 +49,20 @@ async function buscarPrecios() {
     const localResp = await api.post('/api/productos/lookup', { barcode })
     
     if (localResp && localResp.id) {
-      // Producto encontrado localmente
-      productoInfo.value = {
-        nombre: localResp.nombre,
-        marca: localResp.marca,
-        precio_local: localResp.precio_venta || localResp.precio_referencia,
-        stock: localResp.stock_actual,
-        imagen: localResp.imagen_url
+      // Obtener info detallada del producto
+      const infoResp = await api.get(`/api/productos/${localResp.id}/info-detallada`)
+      
+      if (infoResp) {
+        productoInfo.value = {
+          id: localResp.id,
+          nombre: infoResp.producto.nombre,
+          marca: infoResp.producto.marca,
+          precio_local: infoResp.producto.precio_venta,
+          stock: infoResp.producto.stock_actual,
+          imagen: infoResp.producto.imagen_url,
+          proveedores: infoResp.proveedores || [],
+          ultima_compra: infoResp.ultima_compra
+        }
       }
     }
 
@@ -109,6 +121,25 @@ function seleccionarProductoStockBajo(producto) {
   buscarPrecios()
 }
 
+async function verProductosProveedor(proveedor) {
+  proveedorSeleccionado.value = proveedor
+  mostrarProductosProveedor.value = true
+  loadingProductosProveedor.value = true
+  productosProveedor.value = []
+  
+  try {
+    const resp = await api.get(`/api/proveedores/${proveedor.id}/productos`)
+    if (Array.isArray(resp)) {
+      productosProveedor.value = resp
+    }
+  } catch (e) {
+    console.error('Error cargando productos del proveedor:', e)
+    toast.error('Error al cargar productos del proveedor')
+  } finally {
+    loadingProductosProveedor.value = false
+  }
+}
+
 function getFuenteInfo(fuente) {
   return fuentesConocidas[fuente?.toLowerCase()] || { 
     nombre: fuente || 'Desconocido', 
@@ -121,6 +152,12 @@ function abrirFuente(url) {
   if (url) {
     window.open(url, '_blank')
   }
+}
+
+function formatFecha(fechaStr) {
+  if (!fechaStr) return ''
+  const fecha = new Date(fechaStr)
+  return fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
 const precioMasBajo = computed(() => {
@@ -279,6 +316,33 @@ const precioMasBajo = computed(() => {
               </BaseBadge>
             </div>
           </div>
+          
+          <!-- Última compra -->
+          <div v-if="productoInfo.ultima_compra" class="mt-3 pt-3 border-t border-slate-100">
+            <div class="flex items-center gap-2 text-xs text-slate-500">
+              <i class="fa-solid fa-clock"></i>
+              <span>Última compra: <strong>{{ formatFecha(productoInfo.ultima_compra.fecha) }}</strong></span>
+              <span v-if="productoInfo.ultima_compra.numero" class="text-slate-400">({{ productoInfo.ultima_compra.numero }})</span>
+            </div>
+          </div>
+          
+          <!-- Proveedores -->
+          <div v-if="productoInfo.proveedores && productoInfo.proveedores.length > 0" class="mt-3 pt-3 border-t border-slate-100">
+            <p class="text-xs text-slate-400 mb-2">Proveedores:</p>
+            <div class="flex flex-wrap gap-2">
+              <button
+                v-for="prov in productoInfo.proveedores"
+                :key="prov.id"
+                @click="verProductosProveedor(prov)"
+                class="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 transition-colors text-xs font-medium text-slate-700"
+              >
+                <i class="fa-solid fa-truck text-slate-500"></i>
+                {{ prov.nombre }}
+                <span v-if="prov.costo" class="text-emerald-600 font-mono-data">({{ fc(prov.costo) }})</span>
+                <BaseBadge v-if="prov.es_principal" variant="warning" size="xs">Principal</BaseBadge>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </BaseCard>
@@ -356,5 +420,54 @@ const precioMasBajo = computed(() => {
       title="Buscá precios online"
       text="Escaneá o ingresá un código de barras para comparar precios en supermercados online"
     />
+
+    <!-- Modal de productos del proveedor -->
+    <BaseModal
+      v-model="mostrarProductosProveedor"
+      :title="`Productos de ${proveedorSeleccionado?.nombre || 'Proveedor'}`"
+      size="lg"
+    >
+      <div v-if="loadingProductosProveedor" class="py-8 text-center">
+        <i class="fa-solid fa-circle-notch animate-spin text-2xl text-slate-400"></i>
+        <p class="text-sm text-slate-500 mt-2">Cargando productos...</p>
+      </div>
+      
+      <div v-else-if="productosProveedor.length === 0" class="py-8 text-center">
+        <i class="fa-solid fa-box-open text-4xl text-slate-300"></i>
+        <p class="text-sm text-slate-500 mt-2">Este proveedor no tiene productos asociados</p>
+      </div>
+      
+      <div v-else class="space-y-3">
+        <div
+          v-for="producto in productosProveedor"
+          :key="producto.id"
+          class="flex items-center gap-4 p-3 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer"
+          @click="barcodeInput.value = producto.codigo_barras; mostrarProductosProveedor = false; buscarPrecios()"
+        >
+          <!-- Imagen -->
+          <div v-if="producto.imagen_url" class="w-12 h-12 rounded-lg overflow-hidden bg-white flex-shrink-0">
+            <img :src="producto.imagen_url" :alt="producto.nombre" class="w-full h-full object-cover" />
+          </div>
+          <div v-else class="w-12 h-12 rounded-lg bg-white flex items-center justify-center flex-shrink-0">
+            <i class="fa-solid fa-box text-slate-400"></i>
+          </div>
+
+          <!-- Info -->
+          <div class="flex-1 min-w-0">
+            <h4 class="font-semibold text-slate-900 text-sm truncate">{{ producto.nombre }}</h4>
+            <p v-if="producto.marca" class="text-xs text-slate-500 truncate">{{ producto.marca }}</p>
+            <p class="text-xs text-slate-400 font-mono mt-1">{{ producto.codigo_barras }}</p>
+          </div>
+
+          <!-- Stock y precio -->
+          <div class="text-right flex-shrink-0">
+            <p class="font-mono-data font-bold text-sm text-slate-900">{{ fc(producto.precio_venta) }}</p>
+            <BaseBadge :variant="producto.stock_actual > 0 ? 'success' : 'danger'" size="xs">
+              Stock: {{ producto.stock_actual }}
+            </BaseBadge>
+          </div>
+        </div>
+      </div>
+    </BaseModal>
   </div>
 </template>

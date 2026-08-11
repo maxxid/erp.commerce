@@ -65,6 +65,57 @@ def obtener(proveedor_id: int, db: Session = Depends(get_db), user: Usuario = De
     return RespuestaData(data=_prov_to_dict(p))
 
 
+@router.get("/{proveedor_id}/productos", response_model=RespuestaLista)
+def productos_de_proveedor(
+    proveedor_id: int,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """Devuelve los productos asociados a un proveedor."""
+    from app.models.producto import Producto, producto_proveedor
+    
+    proveedor = db.query(Proveedor).filter(Proveedor.id == proveedor_id).first()
+    if not proveedor:
+        raise HTTPException(status_code=404, detail="Proveedor no encontrado")
+    
+    # Obtener productos asociados
+    productos = db.query(Producto).join(
+        producto_proveedor, Producto.id == producto_proveedor.c.producto_id
+    ).filter(
+        producto_proveedor.c.proveedor_id == proveedor_id,
+        Producto.activo == True
+    ).all()
+    
+    data = []
+    for p in productos:
+        # Obtener datos de la relación
+        rel_data = db.execute(
+            producto_proveedor.select().where(
+                (producto_proveedor.c.producto_id == p.id) &
+                (producto_proveedor.c.proveedor_id == proveedor_id)
+            )
+        ).first()
+        
+        data.append({
+            "id": p.id,
+            "codigo_barras": p.codigo_barras,
+            "nombre": p.nombre,
+            "marca": p.marca,
+            "precio_venta": p.precio_venta,
+            "precio_costo": p.precio_costo,
+            "stock_actual": p.stock_actual,
+            "imagen_url": p.imagen_url,
+            "costo_proveedor": rel_data.costo if rel_data else None,
+            "codigo_proveedor": rel_data.codigo_proveedor if rel_data else None,
+        })
+    
+    return RespuestaLista(
+        data=data,
+        total=len(data),
+        message=f"{len(data)} producto(s)"
+    )
+
+
 @router.post("", response_model=RespuestaData)
 def crear(data: ProveedorCreate, db: Session = Depends(get_db), user: Usuario = Depends(require_role("admin", "encargado"))):
     p = Proveedor(**data.model_dump())

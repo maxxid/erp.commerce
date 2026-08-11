@@ -95,6 +95,72 @@ def marcar_etiquetado(
     return RespuestaData(data={"marcados": count}, message=f"{count} producto(s) marcados como etiquetados")
 
 
+@router.get("/{producto_id}/info-detallada", response_model=RespuestaData)
+def info_detallada_producto(
+    producto_id: int,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """Devuelve info detallada del producto con proveedores y última fecha de compra."""
+    from app.models.compra import Compra, CompraItem
+    from sqlalchemy import desc
+    
+    producto = producto_service.obtener_producto(db, producto_id)
+    if not producto:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+    
+    # Obtener proveedores con datos de relación
+    proveedores_data = []
+    for prov in producto.proveedores:
+        # Buscar datos de la relación en la tabla puente
+        rel_data = db.execute(
+            producto_proveedor.select().where(
+                (producto_proveedor.c.producto_id == producto_id) &
+                (producto_proveedor.c.proveedor_id == prov.id)
+            )
+        ).first()
+        
+        proveedores_data.append({
+            "id": prov.id,
+            "nombre": prov.nombre,
+            "cuit": prov.cuit,
+            "telefono": prov.telefono,
+            "codigo_proveedor": rel_data.codigo_proveedor if rel_data else None,
+            "costo": rel_data.costo if rel_data else None,
+            "plazo_entrega_dias": rel_data.plazo_entrega_dias if rel_data else None,
+            "es_principal": rel_data.es_principal if rel_data else 0,
+            "activo": rel_data.activo if rel_data else 1,
+        })
+    
+    # Obtener última fecha de compra
+    ultima_compra = db.query(Compra).join(CompraItem).filter(
+        CompraItem.producto_id == producto_id,
+        Compra.estado == "recibida"
+    ).order_by(desc(Compra.fecha)).first()
+    
+    return RespuestaData(
+        data={
+            "producto": {
+                "id": producto.id,
+                "codigo_barras": producto.codigo_barras,
+                "nombre": producto.nombre,
+                "marca": producto.marca,
+                "precio_venta": producto.precio_venta,
+                "precio_costo": producto.precio_costo,
+                "stock_actual": producto.stock_actual,
+                "stock_minimo": producto.stock_minimo,
+                "imagen_url": producto.imagen_url,
+            },
+            "proveedores": proveedores_data,
+            "ultima_compra": {
+                "fecha": ultima_compra.fecha.isoformat() if ultima_compra else None,
+                "numero": ultima_compra.numero if ultima_compra else None,
+                "proveedor_id": ultima_compra.proveedor_id if ultima_compra else None,
+            } if ultima_compra else None
+        }
+    )
+
+
 @router.get("/stock-bajo", response_model=RespuestaLista[ProductoOut])
 def productos_stock_bajo(
     db: Session = Depends(get_db),
