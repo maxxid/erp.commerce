@@ -6,6 +6,20 @@
 
 ## ✅ Completados recientemente
 
+### Precios Online — 10/08/2026
+- **Nueva vista "Precios Online"** para comparar precios en supermercados online
+- **Backend:**
+  - Nuevo endpoint `GET /api/productos/precios-online/{barcode}` que busca en todas las fuentes externas (Carrefour, Vea, Mas Online, Super Coco)
+  - Devuelve precios, nombres, imágenes y URLs directas a cada fuente
+- **Frontend:**
+  - Nueva vista `PreciosOnlineView.vue` con búsqueda por código de barras
+  - Muestra info del producto local si existe (nombre, marca, precio, stock)
+  - Lista de precios online con imágenes, precios y badges de fuente
+  - Destaca el precio más bajo en verde
+  - Botón "Ver en [fuente]" que abre la URL directa del producto en el supermercado
+  - Soporte para descuentos/ofertas visibles
+- **Sidebar:** nuevo tab "Precios Online" entre Compras y Proveedores
+
 ### Reportes de Caja (Historial de Sesiones) — 10/08/2026
 - **Backend:**
   - Nuevo endpoint `GET /api/caja/reportes` con filtros por fecha (fecha_inicio, fecha_fin)
