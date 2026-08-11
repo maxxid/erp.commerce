@@ -6,6 +6,14 @@
 
 ## ✅ Completados recientemente
 
+### Precios Online con Stock Bajo — 10/08/2026
+- **Mejora en vista "Precios Online":**
+  - Nuevo botón "Stock Bajo" que muestra productos sin stock o con stock mínimo
+  - Lista de productos con stock bajo con imagen, nombre, marca, código de barras, stock actual/mínimo y precio local
+  - Al hacer clic en un producto de la lista, busca automáticamente los precios online
+  - Backend: nuevo endpoint `GET /api/productos/stock-bajo` que devuelve productos con stock <= stock_minimo o sin stock
+  - Ordenados por stock ascendente (los más urgentes primero)
+
 ### Precios Online — 10/08/2026
 - **Nueva vista "Precios Online"** para comparar precios en supermercados online
 - **Backend:**
