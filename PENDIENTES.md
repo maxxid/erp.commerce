@@ -6,6 +6,12 @@
 
 ## ✅ Completados recientemente
 
+### Precarga de Código de Barras en Nuevo Producto — 11/08/2026
+- Mejora en el flujo de creación de productos:
+  - Al escanear un código en el buscador de productos y no encontrar resultados, al hacer clic en "Nuevo Producto" se precarga automáticamente el código escaneado en el modal
+  - El botón "Nuevo Producto" ahora pasa el código buscado (si existe) al modal de creación
+  - Facilita el flujo de trabajo con lector de código de barras: escanear → no encontrado → nuevo producto → código ya cargado
+
 ### SmartPoint como Medio de Pago — 11/08/2026
 - Agregado "SmartPoint" como nuevo medio de pago en el POS de ventas
 - Seleccionable en la grilla de medios de pago (ahora 6 opciones en lugar de 5)
