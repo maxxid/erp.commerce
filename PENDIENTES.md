@@ -6,6 +6,16 @@
 
 ## ✅ Completados recientemente
 
+### Precios Online con Info de Proveedores — 10/08/2026
+- **Mejora en vista "Precios Online":**
+  - Al buscar un producto local, ahora muestra info detallada:
+    - **Última fecha de compra** (con número de orden)
+    - **Lista de proveedores** con costo y badge "Principal"
+    - Al hacer clic en un proveedor → modal con todos sus productos asociados
+  - Backend: nuevo endpoint `GET /api/productos/{id}/info-detallada`
+  - Backend: nuevo endpoint `GET /api/proveedores/{id}/productos`
+  - Al hacer clic en un producto del modal del proveedor, busca precios online automáticamente
+
 ### Precios Online con Stock Bajo — 10/08/2026
 - **Mejora en vista "Precios Online":**
   - Nuevo botón "Stock Bajo" que muestra productos sin stock o con stock mínimo
