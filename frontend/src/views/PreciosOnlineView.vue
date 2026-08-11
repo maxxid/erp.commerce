@@ -15,6 +15,9 @@ const barcodeInput = ref('')
 const loading = ref(false)
 const resultados = ref([])
 const productoInfo = ref(null)
+const mostrarStockBajo = ref(false)
+const productosStockBajo = ref([])
+const loadingStockBajo = ref(false)
 
 const fuentesConocidas = {
   carrefour: { nombre: 'Carrefour', color: 'bg-blue-500', icon: 'fa-store' },
@@ -77,6 +80,35 @@ async function buscarPrecios() {
   }
 }
 
+async function toggleStockBajo() {
+  mostrarStockBajo.value = !mostrarStockBajo.value
+  
+  if (mostrarStockBajo.value && productosStockBajo.value.length === 0) {
+    await cargarProductosStockBajo()
+  }
+}
+
+async function cargarProductosStockBajo() {
+  loadingStockBajo.value = true
+  try {
+    const resp = await api.get('/api/productos/stock-bajo')
+    if (resp && Array.isArray(resp.data)) {
+      productosStockBajo.value = resp.data
+    }
+  } catch (e) {
+    console.error('Error cargando productos con stock bajo:', e)
+    toast.error('Error al cargar productos con stock bajo')
+  } finally {
+    loadingStockBajo.value = false
+  }
+}
+
+function seleccionarProductoStockBajo(producto) {
+  barcodeInput.value = producto.codigo_barras
+  mostrarStockBajo.value = false
+  buscarPrecios()
+}
+
 function getFuenteInfo(fuente) {
   return fuentesConocidas[fuente?.toLowerCase()] || { 
     nombre: fuente || 'Desconocido', 
@@ -127,7 +159,16 @@ const precioMasBajo = computed(() => {
             </template>
           </BaseInput>
         </div>
-        <div class="flex items-end">
+        <div class="flex items-end gap-2">
+          <BaseButton 
+            variant="secondary" 
+            size="lg" 
+            :active="mostrarStockBajo"
+            @click="toggleStockBajo"
+          >
+            <i class="fa-solid fa-triangle-exclamation"></i>
+            Stock Bajo
+          </BaseButton>
           <BaseButton 
             variant="primary" 
             size="lg" 
@@ -137,6 +178,82 @@ const precioMasBajo = computed(() => {
             <i :class="loading ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-search'"></i>
             {{ loading ? 'Buscando...' : 'Buscar' }}
           </BaseButton>
+        </div>
+      </div>
+    </BaseCard>
+
+    <!-- Lista de productos con stock bajo -->
+    <BaseCard v-if="mostrarStockBajo" padding="none">
+      <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+        <div>
+          <h3 class="font-bold text-slate-900 text-sm">Productos con Stock Bajo</h3>
+          <p class="text-xs text-slate-500 mt-1">
+            {{ productosStockBajo.length }} producto(s) necesitan reposición
+          </p>
+        </div>
+        <BaseButton 
+          v-if="productosStockBajo.length > 0"
+          variant="ghost" 
+          size="xs"
+          @click="cargarProductosStockBajo"
+          :loading="loadingStockBajo"
+        >
+          <i class="fa-solid fa-refresh"></i>
+        </BaseButton>
+      </div>
+
+      <div v-if="loadingStockBajo" class="p-8 text-center">
+        <i class="fa-solid fa-circle-notch animate-spin text-2xl text-slate-400"></i>
+        <p class="text-sm text-slate-500 mt-2">Cargando productos...</p>
+      </div>
+
+      <div v-else-if="productosStockBajo.length === 0" class="p-8 text-center">
+        <i class="fa-solid fa-check-circle text-4xl text-emerald-500"></i>
+        <p class="text-sm text-slate-500 mt-2">Todos los productos tienen stock suficiente</p>
+      </div>
+
+      <div v-else class="divide-y divide-slate-100 max-h-96 overflow-y-auto">
+        <div 
+          v-for="producto in productosStockBajo" 
+          :key="producto.id"
+          class="p-4 hover:bg-slate-50 transition-colors cursor-pointer"
+          @click="seleccionarProductoStockBajo(producto)"
+        >
+          <div class="flex items-center gap-4">
+            <!-- Imagen -->
+            <div v-if="producto.imagen_url" class="w-12 h-12 rounded-lg overflow-hidden bg-slate-100 flex-shrink-0">
+              <img :src="producto.imagen_url" :alt="producto.nombre" class="w-full h-full object-cover" />
+            </div>
+            <div v-else class="w-12 h-12 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
+              <i class="fa-solid fa-box text-slate-400"></i>
+            </div>
+
+            <!-- Info -->
+            <div class="flex-1 min-w-0">
+              <h4 class="font-semibold text-slate-900 text-sm truncate">{{ producto.nombre }}</h4>
+              <p v-if="producto.marca" class="text-xs text-slate-500 truncate">{{ producto.marca }}</p>
+              <p class="text-xs text-slate-400 font-mono mt-1">{{ producto.codigo_barras }}</p>
+            </div>
+
+            <!-- Stock -->
+            <div class="text-right flex-shrink-0">
+              <BaseBadge 
+                :variant="producto.stock_actual === 0 ? 'danger' : 'warning'" 
+                size="sm"
+              >
+                {{ producto.stock_actual }} / {{ producto.stock_minimo }}
+              </BaseBadge>
+              <p class="text-xs text-slate-400 mt-1">
+                {{ producto.stock_actual === 0 ? 'Sin stock' : 'Stock bajo' }}
+              </p>
+            </div>
+
+            <!-- Precio local -->
+            <div class="text-right flex-shrink-0">
+              <p class="font-mono-data font-bold text-sm text-slate-900">{{ fc(producto.precio_venta) }}</p>
+              <p class="text-xs text-slate-400">Precio local</p>
+            </div>
+          </div>
         </div>
       </div>
     </BaseCard>
@@ -234,7 +351,7 @@ const precioMasBajo = computed(() => {
 
     <!-- Empty state -->
     <EmptyState 
-      v-if="!loading && resultados.length === 0 && !productoInfo"
+      v-if="!loading && resultados.length === 0 && !productoInfo && !mostrarStockBajo"
       icon="fa-globe"
       title="Buscá precios online"
       text="Escaneá o ingresá un código de barras para comparar precios en supermercados online"

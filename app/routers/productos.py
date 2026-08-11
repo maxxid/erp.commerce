@@ -95,6 +95,28 @@ def marcar_etiquetado(
     return RespuestaData(data={"marcados": count}, message=f"{count} producto(s) marcados como etiquetados")
 
 
+@router.get("/stock-bajo", response_model=RespuestaLista[ProductoOut])
+def productos_stock_bajo(
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """Lista productos con stock bajo (<= stock_minimo) o sin stock."""
+    productos = (
+        db.query(Producto)
+        .filter(
+            Producto.activo == True,
+            (Producto.stock_actual <= Producto.stock_minimo) | (Producto.stock_actual == 0)
+        )
+        .order_by(Producto.stock_actual.asc())
+        .all()
+    )
+    return RespuestaLista(
+        data=productos,
+        total=len(productos),
+        message=f"{len(productos)} producto(s) con stock bajo"
+    )
+
+
 @router.get("/precios-online/{barcode}", response_model=RespuestaData)
 def precios_online(
     barcode: str,
