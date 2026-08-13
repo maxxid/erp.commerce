@@ -54,20 +54,20 @@
         :loading="loading"
       >
         <template #nombre="{ row }">
-          <span class="font-medium text-slate-900">{{ row.nombre }}</span>
+          <span class="font-medium text-slate-900 dark:text-slate-100">{{ row.nombre }}</span>
         </template>
         <template #cuit="{ row }">
-          <span class="font-mono-data text-slate-700">{{ row.cuit || '—' }}</span>
+          <span class="font-mono-data text-slate-700 dark:text-slate-300">{{ row.cuit || '—' }}</span>
         </template>
         <template #telefono="{ row }">
-          <span class="text-slate-600">{{ row.telefono || '—' }}</span>
+          <span class="text-slate-600 dark:text-slate-400">{{ row.telefono || '—' }}</span>
         </template>
         <template #email="{ row }">
-          <a v-if="row.email" :href="'mailto:' + row.email" class="text-brand-600 hover:underline">{{ row.email }}</a>
-          <span v-else class="text-slate-400">—</span>
+          <a v-if="row.email" :href="'mailto:' + row.email" class="text-brand-600 dark:text-brand-400 hover:underline">{{ row.email }}</a>
+          <span v-else class="text-slate-400 dark:text-slate-500">—</span>
         </template>
         <template #nombre_contacto="{ row }">
-          <span class="text-slate-600">{{ row.nombre_contacto || '—' }}</span>
+          <span class="text-slate-600 dark:text-slate-400">{{ row.nombre_contacto || '—' }}</span>
         </template>
         <template #activo="{ row }">
           <BaseBadge
