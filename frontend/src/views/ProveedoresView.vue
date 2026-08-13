@@ -35,15 +35,15 @@
       </BaseCard>
       <BaseCard padding="md">
         <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Activos</p>
-        <p class="text-2xl font-mono-data font-bold text-emerald-600 mt-1">{{ suppliers.filter(s => s.active).length }}</p>
+        <p class="text-2xl font-mono-data font-bold text-emerald-600 mt-1">{{ suppliers.filter(s => s.activo).length }}</p>
       </BaseCard>
       <BaseCard padding="md">
         <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Inactivos</p>
-        <p class="text-2xl font-mono-data font-bold text-red-500 mt-1">{{ suppliers.filter(s => !s.active).length }}</p>
+        <p class="text-2xl font-mono-data font-bold text-red-500 mt-1">{{ suppliers.filter(s => !s.activo).length }}</p>
       </BaseCard>
       <BaseCard padding="md">
         <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Último agregado</p>
-        <p class="text-sm font-medium text-slate-900 mt-1 truncate">{{ suppliers[suppliers.length - 1]?.name || '—' }}</p>
+        <p class="text-sm font-medium text-slate-900 mt-1 truncate">{{ ultimoAgregado?.nombre || '—' }}</p>
       </BaseCard>
     </div>
 
@@ -51,30 +51,31 @@
       <BaseTable
         :columns="columns"
         :rows="suppliers"
-        :loading="false"
+        :loading="loading"
       >
-        <template #name="{ row }">
-          <span class="font-medium text-slate-900">{{ row.name }}</span>
+        <template #nombre="{ row }">
+          <span class="font-medium text-slate-900">{{ row.nombre }}</span>
         </template>
         <template #cuit="{ row }">
-          <span class="font-mono-data text-slate-700">{{ row.cuit }}</span>
+          <span class="font-mono-data text-slate-700">{{ row.cuit || '—' }}</span>
         </template>
-        <template #phone="{ row }">
-          <span class="text-slate-600">{{ row.phone }}</span>
+        <template #telefono="{ row }">
+          <span class="text-slate-600">{{ row.telefono || '—' }}</span>
         </template>
         <template #email="{ row }">
-          <a :href="'mailto:' + row.email" class="text-brand-600 hover:underline">{{ row.email }}</a>
+          <a v-if="row.email" :href="'mailto:' + row.email" class="text-brand-600 hover:underline">{{ row.email }}</a>
+          <span v-else class="text-slate-400">—</span>
         </template>
-        <template #contact="{ row }">
-          <span class="text-slate-600">{{ row.contact }}</span>
+        <template #nombre_contacto="{ row }">
+          <span class="text-slate-600">{{ row.nombre_contacto || '—' }}</span>
         </template>
-        <template #active="{ row }">
+        <template #activo="{ row }">
           <BaseBadge
-            :variant="row.active ? 'success' : 'danger'"
+            :variant="row.activo ? 'success' : 'danger'"
             size="sm"
             dot
           >
-            {{ row.active ? 'Activo' : 'Inactivo' }}
+            {{ row.activo ? 'Activo' : 'Inactivo' }}
           </BaseBadge>
         </template>
         <template #actions="{ row }">
@@ -98,7 +99,7 @@
               title="Cambiar estado"
             >
               <i v-if="togglingId === row.id" class="fa-solid fa-circle-notch animate-spin"></i>
-              <i v-else :class="row.active ? 'fa-solid fa-circle-xmark' : 'fa-solid fa-circle-check'"></i>
+              <i v-else :class="row.activo ? 'fa-solid fa-circle-xmark' : 'fa-solid fa-circle-check'"></i>
             </BaseButton>
           </div>
         </template>
@@ -106,14 +107,14 @@
     </BaseCard>
 
     <BaseModal
-      v-model="showModal"
+      :model-value="showModal"
       :title="editingSupplier ? 'Editar proveedor' : 'Nuevo proveedor'"
       size="lg"
-      @close="showModal = false"
+      @update:model-value="showModal = $event"
     >
       <form @submit.prevent="saveSupplier" class="space-y-4">
         <BaseInput
-          v-model="form.name"
+          v-model="form.nombre"
           label="Nombre / Razón social"
           type="text"
           placeholder="Nombre del proveedor"
@@ -125,28 +126,24 @@
           type="text"
           placeholder="XX-XXXXXXXX-X"
           input-class="font-mono-data"
-          required
         />
         <BaseInput
-          v-model="form.phone"
+          v-model="form.telefono"
           label="Teléfono"
           type="text"
           placeholder="+54 11 1234-5678"
-          required
         />
         <BaseInput
           v-model="form.email"
           label="Email"
           type="email"
           placeholder="email@proveedor.com"
-          required
         />
         <BaseInput
-          v-model="form.contact"
+          v-model="form.nombre_contacto"
           label="Persona de contacto"
           type="text"
           placeholder="Nombre del contacto"
-          required
         />
         <div class="flex justify-end gap-3 pt-2">
           <BaseButton
@@ -174,8 +171,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
-import { formatCurrency } from '@/composables/useUtils'
+import { ref, reactive, computed, onMounted } from 'vue'
 import api from '@/services/api'
 import { useToastStore } from '@/stores/toasts'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -184,29 +180,23 @@ import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseTable from '@/components/ui/BaseTable.vue'
 import BaseBadge from '@/components/ui/BaseBadge.vue'
-import EmptyState from '@/components/ui/EmptyState.vue'
 
 const toast = useToastStore()
 
 const syncing = ref(false)
 const saving = ref(false)
 const togglingId = ref(null)
+const loading = ref(true)
 
-const suppliers = ref([
-  { id: 1, name: 'Frigorífico Las Pampas SA', cuit: '30-51234567-8', phone: '+54 11 4321-9876', email: 'ventas@frigopampas.com.ar', contact: 'Carlos Méndez', active: true },
-  { id: 2, name: 'Distribuidora Bebidas Norte', cuit: '33-99887766-5', phone: '+54 11 4678-2345', email: 'pedidos@bebidasnorte.com.ar', contact: 'Lucía Ramírez', active: true },
-  { id: 3, name: 'Lácteos Santa Rosa SRL', cuit: '30-77654321-9', phone: '+54 11 3890-1122', email: 'info@lacteosantarosa.com.ar', contact: 'Jorge Peralta', active: true },
-  { id: 4, name: 'Envasados del Sur', cuit: '27-33445566-1', phone: '+54 11 5555-7890', email: 'admin@envasadossur.com.ar', contact: 'Marina Díaz', active: false },
-  { id: 5, name: 'Panificadora El Trigo', cuit: '20-12349876-3', phone: '+54 11 6123-4567', email: 'ventas@eltrigo.com.ar', contact: 'Roberto Suárez', active: true },
-])
+const suppliers = ref([])
 
 const columns = [
-  { key: 'name', label: 'Nombre' },
+  { key: 'nombre', label: 'Nombre' },
   { key: 'cuit', label: 'CUIT' },
-  { key: 'phone', label: 'Teléfono' },
+  { key: 'telefono', label: 'Teléfono' },
   { key: 'email', label: 'Email' },
-  { key: 'contact', label: 'Contacto' },
-  { key: 'active', label: 'Estado' },
+  { key: 'nombre_contacto', label: 'Contacto' },
+  { key: 'activo', label: 'Estado' },
   { key: 'actions', label: 'Acciones' },
 ]
 
@@ -214,67 +204,111 @@ const showModal = ref(false)
 const editingSupplier = ref(null)
 
 const form = reactive({
-  name: '',
+  nombre: '',
   cuit: '',
-  phone: '',
+  telefono: '',
   email: '',
-  contact: '',
+  nombre_contacto: '',
 })
 
-onMounted(async () => {
-  try {
-    const data = await api.get('/api/proveedores')
-    if (data && data.length) suppliers.value = data
-  } catch { /* fallback to mock */ }
+const ultimoAgregado = computed(() => {
+  if (!suppliers.value.length) return null
+  return suppliers.value
+    .filter(s => s.created_at)
+    .reduce((max, s) => !max || new Date(s.created_at) > new Date(max.created_at) ? s : max, null)
+    || suppliers.value[suppliers.value.length - 1]
 })
+
+async function fetchProveedores() {
+  loading.value = true
+  try {
+    const data = await api.get('/api/proveedores?page_size=200')
+    suppliers.value = Array.isArray(data) ? data : []
+  } catch (e) {
+    toast.error('No se pudieron cargar los proveedores')
+    suppliers.value = []
+  } finally {
+    loading.value = false
+  }
+}
 
 async function syncProveedores() {
   syncing.value = true
   try {
-    const data = await api.get('/api/proveedores')
-    if (data && data.length) suppliers.value = data
-  } catch { /* fallback to mock */ }
-  syncing.value = false
+    const data = await api.get('/api/proveedores?page_size=200')
+    suppliers.value = Array.isArray(data) ? data : []
+    toast.success(`${suppliers.value.length} proveedor(es) sincronizados`)
+  } catch (e) {
+    toast.error('No se pudieron sincronizar los proveedores')
+  } finally {
+    syncing.value = false
+  }
 }
+
+onMounted(fetchProveedores)
 
 function openCreateModal() {
   editingSupplier.value = null
-  form.name = ''
+  form.nombre = ''
   form.cuit = ''
-  form.phone = ''
+  form.telefono = ''
   form.email = ''
-  form.contact = ''
+  form.nombre_contacto = ''
   showModal.value = true
 }
 
 function openEditModal(supplier) {
   editingSupplier.value = supplier
-  form.name = supplier.name
-  form.cuit = supplier.cuit
-  form.phone = supplier.phone
-  form.email = supplier.email
-  form.contact = supplier.contact
+  form.nombre = supplier.nombre || ''
+  form.cuit = supplier.cuit || ''
+  form.telefono = supplier.telefono || ''
+  form.email = supplier.email || ''
+  form.nombre_contacto = supplier.nombre_contacto || ''
   showModal.value = true
 }
 
 async function saveSupplier() {
-  saving.value = true
-  if (editingSupplier.value) {
-    Object.assign(editingSupplier.value, { ...form })
-  } else {
-    suppliers.value.push({
-      id: suppliers.value.length + 1,
-      ...form,
-      active: true,
-    })
+  if (!form.nombre.trim()) {
+    toast.error('El nombre es obligatorio')
+    return
   }
-  showModal.value = false
-  saving.value = false
+  saving.value = true
+  try {
+    const payload = {
+      nombre: form.nombre.trim(),
+      cuit: form.cuit.trim() || null,
+      telefono: form.telefono.trim() || null,
+      email: form.email.trim() || null,
+      nombre_contacto: form.nombre_contacto.trim() || null,
+    }
+    if (editingSupplier.value) {
+      const updated = await api.put(`/api/proveedores/${editingSupplier.value.id}`, payload)
+      const idx = suppliers.value.findIndex(s => s.id === editingSupplier.value.id)
+      if (idx !== -1) suppliers.value[idx] = { ...suppliers.value[idx], ...updated }
+      toast.success('Proveedor actualizado')
+    } else {
+      const created = await api.post('/api/proveedores', payload)
+      suppliers.value.push(created)
+      toast.success(`Proveedor "${created.nombre}" creado`)
+    }
+    showModal.value = false
+  } catch (e) {
+    toast.error(e?.response?.data?.detail || e?.data?.detail || e.message || 'Error al guardar proveedor')
+  } finally {
+    saving.value = false
+  }
 }
 
 async function toggleActive(supplier) {
   togglingId.value = supplier.id
-  supplier.active = !supplier.active
-  togglingId.value = null
+  try {
+    const updated = await api.put(`/api/proveedores/${supplier.id}`, { activo: !supplier.activo })
+    const idx = suppliers.value.findIndex(s => s.id === supplier.id)
+    if (idx !== -1) suppliers.value[idx] = { ...suppliers.value[idx], ...updated }
+  } catch (e) {
+    toast.error(e?.response?.data?.detail || e?.data?.detail || e.message || 'Error al cambiar estado')
+  } finally {
+    togglingId.value = null
+  }
 }
 </script>
