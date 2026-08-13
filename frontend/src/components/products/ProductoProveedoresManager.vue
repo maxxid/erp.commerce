@@ -55,7 +55,8 @@ async function load() {
   try {
     const data = await api.get(`/api/productos/${props.productoId}/proveedores`)
     items.value = Array.isArray(data) ? data : []
-  } catch {
+  } catch (e) {
+    console.error('[ProductoProveedoresManager] load failed:', e)
     items.value = []
   }
   loading.value = false

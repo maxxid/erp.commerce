@@ -490,6 +490,7 @@ def listar_proveedores_producto(
     from app.schemas.producto_proveedor import ProductoProveedorOut
     from sqlalchemy import select
     stmt = select(
+        producto_proveedor.c.proveedor_id,
         producto_proveedor.c.codigo_proveedor,
         producto_proveedor.c.costo,
         producto_proveedor.c.plazo_entrega_dias,

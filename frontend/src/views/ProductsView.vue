@@ -568,9 +568,12 @@ async function quickCreateProveedor() {
 
 async function fetchProveedores() {
   try {
-    const data = await api.get('/api/proveedores')
-    if (data && data.length) proveedores.value = data
-  } catch { /* fallback to mock */ }
+    const data = await api.get('/api/proveedores?page_size=200')
+    proveedores.value = Array.isArray(data) ? data : []
+  } catch (e) {
+    toast.error('No se pudieron cargar los proveedores')
+    proveedores.value = []
+  }
 }
 </script>
 
