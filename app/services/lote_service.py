@@ -12,8 +12,12 @@ from typing import Optional, List, Tuple
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
-from app.models.lote import Lote
+from app.models.lote import Lote, _fecha_naive
 from app.models.producto import Producto
+
+
+def _now_naive() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def _recalcular_stock_producto(db: Session, producto_id: int) -> float:
@@ -132,7 +136,7 @@ def desactivar_lote(db: Session, lote_id: int) -> Lote:
 
 def lotes_por_vencer(db: Session, dias: int = 30) -> List[Lote]:
     """Lotes activos con stock > 0 cuya fecha de vencimiento está dentro de `dias` días."""
-    limite = datetime.now(timezone.utc) + timedelta(days=dias)
+    limite = _now_naive() + timedelta(days=dias)
     return (
         db.query(Lote)
         .filter(
@@ -148,7 +152,7 @@ def lotes_por_vencer(db: Session, dias: int = 30) -> List[Lote]:
 
 def lotes_vencidos(db: Session) -> List[Lote]:
     """Lotes activos con stock > 0 ya vencidos."""
-    ahora = datetime.now(timezone.utc)
+    ahora = _now_naive()
     return (
         db.query(Lote)
         .filter(
@@ -164,7 +168,7 @@ def lotes_vencidos(db: Session) -> List[Lote]:
 
 def resumen_producto(db: Session, producto_id: int) -> dict:
     """Resumen de stock por producto: total, lotes activos, alertas."""
-    ahora = datetime.now(timezone.utc)
+    ahora = _now_naive()
     limite_30 = ahora + timedelta(days=30)
 
     lotes = (

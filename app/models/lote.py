@@ -17,6 +17,15 @@ from datetime import datetime, timezone
 from app.database import Base
 
 
+def _fecha_naive(fecha):
+    """SQLite devuelve datetimes naive; compara contra UTC naive."""
+    if fecha is None:
+        return None
+    if fecha.tzinfo is not None:
+        return fecha.astimezone(timezone.utc).replace(tzinfo=None)
+    return fecha
+
+
 class Lote(Base):
     __tablename__ = "lotes"
 
@@ -51,13 +60,13 @@ class Lote(Base):
     def vencido(self) -> bool:
         if not self.fecha_vencimiento:
             return False
-        return self.fecha_vencimiento < datetime.now(timezone.utc)
+        return _fecha_naive(self.fecha_vencimiento) < datetime.now(timezone.utc).replace(tzinfo=None)
 
     @property
     def dias_para_vencer(self):
         if not self.fecha_vencimiento:
             return None
-        delta = self.fecha_vencimiento - datetime.now(timezone.utc)
+        delta = _fecha_naive(self.fecha_vencimiento) - datetime.now(timezone.utc).replace(tzinfo=None)
         return int(delta.total_seconds() // 86400)
 
     def __repr__(self):
