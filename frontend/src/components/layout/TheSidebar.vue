@@ -68,7 +68,7 @@ function toggleTheme() {
 
 async function fetchBadgeCounts() {
   try {
-    const prods = await api.get('/api/productos?page_size=200')
+    const prods = await api.get('/api/productos?page_size=100000')
     if (prods && Array.isArray(prods)) {
       pendientesCount.value = prods.filter(p =>
         (p.codigo_barras && (p.codigo_barras.startsWith('*MANUAL*') || p.codigo_barras.startsWith('GEN-'))) ||

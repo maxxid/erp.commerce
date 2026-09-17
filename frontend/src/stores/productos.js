@@ -8,12 +8,12 @@ export const useProductosStore = defineStore('productos', () => {
   const ofertas = ref([])
   const lastSync = ref(0)
 
-  async function fetchAll(pageSize = 200) {
+  async function fetchAll(pageSize = 100000) {
     try {
       const [prods, cats, ofs] = await Promise.all([
         api.get(`/api/productos?page_size=${pageSize}`).catch(() => null),
         api.get('/api/categorias').catch(() => null),
-        api.get('/api/ofertas?page_size=200').catch(() => null)
+        api.get('/api/ofertas?page_size=100000').catch(() => null)
       ])
       if (Array.isArray(prods)) productos.value = prods
       if (Array.isArray(cats)) categorias.value = cats
@@ -24,7 +24,7 @@ export const useProductosStore = defineStore('productos', () => {
 
   async function refreshProductos() {
     try {
-      const prods = await api.get('/api/productos?page_size=200').catch(() => null)
+      const prods = await api.get('/api/productos?page_size=100000').catch(() => null)
       if (Array.isArray(prods)) productos.value = prods
       lastSync.value = Date.now()
     } catch { /* fallback */ }
@@ -32,7 +32,7 @@ export const useProductosStore = defineStore('productos', () => {
 
   async function refreshOfertas() {
     try {
-      const ofs = await api.get('/api/ofertas?page_size=200').catch(() => null)
+      const ofs = await api.get('/api/ofertas?page_size=100000').catch(() => null)
       if (Array.isArray(ofs)) ofertas.value = ofs
     } catch { /* fallback */ }
   }

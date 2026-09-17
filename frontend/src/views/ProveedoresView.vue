@@ -222,7 +222,7 @@ const ultimoAgregado = computed(() => {
 async function fetchProveedores() {
   loading.value = true
   try {
-    const data = await api.get('/api/proveedores?page_size=200')
+    const data = await api.get('/api/proveedores?page_size=100000')
     suppliers.value = Array.isArray(data) ? data : []
   } catch (e) {
     toast.error('No se pudieron cargar los proveedores')
@@ -235,7 +235,7 @@ async function fetchProveedores() {
 async function syncProveedores() {
   syncing.value = true
   try {
-    const data = await api.get('/api/proveedores?page_size=200')
+    const data = await api.get('/api/proveedores?page_size=100000')
     suppliers.value = Array.isArray(data) ? data : []
     toast.success(`${suppliers.value.length} proveedor(es) sincronizados`)
   } catch (e) {

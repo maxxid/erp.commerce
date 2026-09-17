@@ -456,7 +456,7 @@ async function fetchProveedores() {
 
 async function fetchProductosCatalogo() {
   try {
-    const data = await api.get('/api/productos?page_size=200')
+    const data = await api.get('/api/productos?page_size=100000')
     if (data && data.length) productosCatalogo.value = data
   } catch { /* fallback to mock */ }
 }

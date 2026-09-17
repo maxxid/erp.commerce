@@ -1160,7 +1160,7 @@ onMounted(async () => {
       api.get('/api/clientes').catch(() => null),
       api.get('/api/config/ajustes').catch(() => null)
     ])
-    await productosStore.fetchAll(200)
+    await productosStore.fetchAll()
     const cliItems = clis?.data || clis || []
     if (Array.isArray(cliItems)) clientes.value = cliItems
     if (cfg && typeof cfg === 'object') {

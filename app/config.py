@@ -19,7 +19,7 @@ class Settings:
     # JWT
     JWT_SECRET: str = os.getenv("JWT_SECRET", "cambiar-en-produccion-uso-clave-segura")
     JWT_ALGORITHM: str = "HS256"
-    JWT_EXPIRE_MINUTES: int = int(os.getenv("JWT_EXPIRE_MINUTES", "480"))  # 8 horas
+    JWT_EXPIRE_MINUTES: int = int(os.getenv("JWT_EXPIRE_MINUTES", "1200"))  # 20 horas (jornada + cierre caja)
 
     # CORS
     CORS_ORIGINS: list = ["*"]  # En producción, restringir al dominio real

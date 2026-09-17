@@ -47,7 +47,7 @@ async function load() {
   loading.value = true
   try {
     const [l, r] = await Promise.all([
-      api.get(`/api/lotes?producto_id=${props.productoId}&page_size=200`),
+      api.get(`/api/lotes?producto_id=${props.productoId}&page_size=100000`),
       api.get(`/api/lotes/producto/${props.productoId}/resumen`),
     ])
     lotes.value = Array.isArray(l) ? l : []

@@ -274,7 +274,7 @@ function categoryName(catId) {
 async function fetchProductsData(checkPendientes = false) {
   loading.value = true
   try {
-    await productosStore.fetchAll(200)
+    await productosStore.fetchAll()
 
     if (checkPendientes && Array.isArray(products.value)) {
       const pendientes = products.value.filter(p =>
@@ -301,7 +301,7 @@ watch(() => route.path, (path) => {
 async function syncProducts() {
   syncing.value = true
   try {
-    await productosStore.fetchAll(200)
+    await productosStore.fetchAll()
     toast.success('Productos sincronizados')
   } catch (err) {
     console.error('[ProductsView] syncProducts error:', err)
@@ -568,7 +568,7 @@ async function quickCreateProveedor() {
 
 async function fetchProveedores() {
   try {
-    const data = await api.get('/api/proveedores?page_size=200')
+    const data = await api.get('/api/proveedores?page_size=100000')
     proveedores.value = Array.isArray(data) ? data : []
   } catch (e) {
     toast.error('No se pudieron cargar los proveedores')

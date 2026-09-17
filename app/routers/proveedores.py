@@ -38,7 +38,7 @@ class ProveedorUpdate(BaseModel):
 def listar(
     search: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=200),
+    page_size: int = Query(50, ge=1, le=100000),
     db: Session = Depends(get_db),
     user: Usuario = Depends(get_current_user),
 ):

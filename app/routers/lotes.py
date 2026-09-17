@@ -50,7 +50,7 @@ def listar(
     solo_activos: bool = Query(True),
     solo_con_stock: bool = Query(False),
     page: int = Query(1, ge=1),
-    page_size: int = Query(100, ge=1, le=500),
+    page_size: int = Query(100, ge=1, le=100000),
     db: Session = Depends(get_db),
     user: Usuario = Depends(get_current_user),
 ):
