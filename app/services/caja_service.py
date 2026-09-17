@@ -235,17 +235,23 @@ def cerrar_metodo(
         .first()
     )
     if ya_cerrado:
-        # Verificar que el cierre no haya sido después de la última apertura
-        desde_apertura = True
+        # Caminar desde ya_cerrado hacia registros más viejos:
+        # si se encuentra un "apertura" primero → pertenece a la sesión actual
+        # si se encuentra un "cierre" total primero → es de una sesión anterior
+        desde_apertura = False
         movs = (
             db.query(MovimientoCaja)
             .filter(MovimientoCaja.sucursal_id == sucursal_id)
             .order_by(MovimientoCaja.id.desc())
             .all()
         )
+        found = False
         for m in movs:
             if m.id == ya_cerrado.id:
-                break
+                found = True
+                continue
+            if not found:
+                continue
             if m.tipo == "cierre" and not m.medio_pago:
                 desde_apertura = False
                 break
@@ -439,25 +445,27 @@ def obtener_resumen_por_medio_pago(db: Session, sucursal_id: int = 1) -> dict:
 
     movimientos = (
         db.query(MovimientoCaja)
-        .filter(
-            MovimientoCaja.sucursal_id == sucursal_id,
-            MovimientoCaja.tipo == "ingreso",
-            MovimientoCaja.referencia_tipo == "venta",
-        )
+        .filter(MovimientoCaja.sucursal_id == sucursal_id)
         .order_by(MovimientoCaja.id.desc())
         .all()
     )
 
     desglose = {"efectivo": 0, "debito": 0, "credito": 0, "transferencia": 0}
+    egresos_total = 0
     for m in movimientos:
+        # Cierre total: fin de la sesión actual
         if m.tipo == "cierre" and not m.medio_pago:
             break
-        if m.tipo == "ingreso" and m.referencia_tipo == "venta":
+        # Apertura: fin del ciclo de la sesión actual
+        if m.tipo == "apertura":
+            break
+        if m.tipo == "ingreso":
             mp = m.medio_pago or "efectivo"
-            if mp in desglose:
-                desglose[mp] += m.monto
-            else:
+            if m.referencia_tipo == "venta":
                 desglose[mp] = desglose.get(mp, 0) + m.monto
+        elif m.tipo == "egreso":
+            egresos_total += m.monto
+        # cierre_parcial es informativo, no afecta el desglose
 
     # Ventas en cta_corriente (no generan MovimientoCaja, van directo a Venta)
     cta_corriente_total = 0.0
@@ -475,13 +483,6 @@ def obtener_resumen_por_medio_pago(db: Session, sucursal_id: int = 1) -> dict:
         # Solo contar las que están después de la última apertura
         if _es_posterior_a_apertura(db, v.id, sucursal_id):
             cta_corriente_total += v.total
-
-    egresos_total = 0
-    for m in movimientos:
-        if m.tipo == "cierre" and not m.medio_pago:
-            break
-        if m.tipo == "egreso":
-            egresos_total += m.monto
 
     return {
         "desglose": desglose,

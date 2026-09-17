@@ -6,6 +6,13 @@
 
 ## ✅ Completados recientemente
 
+### Fix Arqueo de Caja — 14/09/2026
+- **Bug:** al cerrar caja daba error "método ya fue cerrado en esta sesión" cuando en realidad no había cierre previo (tomaba `cierre_parcial` de sesiones anteriores como de la sesión actual)
+- **Fix backend (`caja_service.py`):**
+  - `cerrar_metodo()`: el chequeo de sesión ahora camina desde el `cierre_parcial` hacia registros más viejos (apertura/cierre total) en vez de desde el más nuevo
+  - `obtener_resumen_por_medio_pago()`: ahora cuenta solo la sesión actual (antes sumaba ventas de todas las sesiones) y `total_egresos` ya no devolvía siempre 0
+- **Fix frontend (`CajaView.vue`):** confirmación explícita al cerrar sin montos en ningún método + `fetchEstado()` al cerrar o ante error para no quedar con estado desactualizado
+
 ### Precarga de Código de Barras en Nuevo Producto — 11/08/2026
 - Mejora en el flujo de creación de productos:
   - Al escanear un código en el buscador de productos y no encontrar resultados, al hacer clic en "Nuevo Producto" se precarga automáticamente el código escaneado en el modal

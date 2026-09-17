@@ -837,6 +837,12 @@ async function initCierreCaja() {
 }
 
 async function confirmarCierreCaja() {
+  const metodosConMonto = metodosArqueo.filter(m => m.montoReal && m.montoReal > 0 && !m.cerrado)
+  if (metodosConMonto.length === 0) {
+    const confirmar = confirm('No ingresaste montos en ningún método de pago. El cierre se hará sin arqueo por método (solo cierre total). ¿Continuar?')
+    if (!confirmar) return
+  }
+
   closing.value = true
   try {
     for (const metodo of metodosArqueo) {
@@ -852,6 +858,7 @@ async function confirmarCierreCaja() {
     }
 
     await api.post('/api/caja/cierre-total', { comentario: cierreComentario.value || '' })
+    await cajaStore.fetchEstado()
     showCierreModal.value = false
     toast.success('Jornada finalizada. Hasta luego.')
     playCloseCash()
@@ -859,6 +866,7 @@ async function confirmarCierreCaja() {
     router.push('/login')
   } catch (e) {
     toast.error('Error al cerrar caja: ' + (e?.data?.detail || e?.message || ''))
+    await cajaStore.fetchEstado()
   } finally {
     closing.value = false
   }
