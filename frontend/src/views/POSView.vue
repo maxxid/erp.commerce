@@ -314,6 +314,7 @@
               v-for="p in filteredPOSProducts"
               :key="p.id"
               type="button"
+              :title="p.nombre"
               class="group relative text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-3 rounded-xl shadow-sm transition-all duration-200 ease-out-expo hover:shadow-md hover:border-brand-300 dark:hover:border-brand-700 hover:-translate-y-0.5 active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-brand-500/40"
               @click="addToCart(p)"
             >
@@ -323,7 +324,7 @@
                 </div>
                 <p class="text-xs font-bold text-slate-900 dark:text-white truncate leading-tight">{{ p.nombre }}</p>
               </div>
-              <p class="text-[10px] text-slate-400 dark:text-slate-500 truncate">{{ p.marca }}</p>
+              <p class="text-[10px] text-slate-400 dark:text-slate-500 truncate" :title="p.marca">{{ p.marca }}</p>
               <div class="flex items-center justify-between mt-2">
                 <span class="text-sm font-bold font-mono-data text-brand-600 dark:text-brand-400">
                   {{ fc(p.tipo_venta === 'kilo' ? p.precio_por_kilo : p.precio_venta) }}
