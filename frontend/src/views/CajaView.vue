@@ -580,10 +580,10 @@ const totalEsperado = computed(() => metodosArqueo.reduce((sum, m) => sum + m.es
 const totalReal = computed(() => metodosArqueo.reduce((sum, m) => sum + (m.montoReal || 0), 0))
 const diferenciaTotal = computed(() => totalReal.value - totalEsperado.value)
 
-const ingresosHoy = computed(() => movements.value.filter(m => m.tipo === 'Ingreso').reduce((sum, m) => sum + m.monto, 0))
-const egresosHoy = computed(() => movements.value.filter(m => m.tipo === 'Egreso').reduce((sum, m) => sum + m.monto, 0))
-const movimientosIngresos = computed(() => movements.value.filter(m => m.tipo === 'Ingreso').length)
-const movimientosEgresos = computed(() => movements.value.filter(m => m.tipo === 'Egreso').length)
+const ingresosHoy = computed(() => movements.value.filter(m => m.tipo === 'Ingreso' && esDeHoy(m)).reduce((sum, m) => sum + m.monto, 0))
+const egresosHoy = computed(() => movements.value.filter(m => m.tipo === 'Egreso' && esDeHoy(m)).reduce((sum, m) => sum + m.monto, 0))
+const movimientosIngresos = computed(() => movements.value.filter(m => m.tipo === 'Ingreso' && esDeHoy(m)).length)
+const movimientosEgresos = computed(() => movements.value.filter(m => m.tipo === 'Egreso' && esDeHoy(m)).length)
 
 const metodosPago = [
   { label: 'Efectivo', valor: 'efectivo' },
@@ -722,18 +722,43 @@ onMounted(async () => {
 async function fetchMovimientos() {
   try {
     const data = await api.get('/api/caja/movimientos')
-    if (data && data.length) movements.value = data
+    if (data && data.length) {
+      movements.value = data.map(m => ({
+        id: m.id,
+        fecha: m.created_at,
+        tipo: (m.tipo || '').toLowerCase() === 'ingreso' ? 'Ingreso'
+            : (m.tipo || '').toLowerCase() === 'egreso' ? 'Egreso' : m.tipo,
+        monto: m.monto,
+        metodo: m.medio_pago || '',
+        comentario: m.descripcion || '',
+        created_at: m.created_at,
+      }))
+    }
   } catch { /* fallback to mock */ }
+}
+
+function esDeHoy(m) {
+  const f = new Date(m.created_at || m.fecha)
+  if (isNaN(f.getTime())) return true
+  const ahora = new Date()
+  return f.getFullYear() === ahora.getFullYear() &&
+    f.getMonth() === ahora.getMonth() &&
+    f.getDate() === ahora.getDate()
 }
 
 async function fetchResumen() {
   try {
     const data = await api.get('/api/caja/resumen')
     if (data) {
-      cajaStore.saldo_actual = data.saldo_actual ?? cajaStore.saldo_actual
       cajaResumen.metodos_cerrados = data.metodos_cerrados || []
+      if (data.desglose) {
+        cajaStore.saldo_actual = (data.desglose.efectivo || 0) +
+          (data.desglose.debito || 0) + (data.desglose.credito || 0) +
+          (data.desglose.transferencia || 0)
+      }
     }
   } catch { /* fallback to mock */ }
+  await cajaStore.fetchEstado()
 }
 
 async function syncData() {
