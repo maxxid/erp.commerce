@@ -24,6 +24,8 @@ const mockData = {
   ticket_promedio: 4400, medio_favorito: 'efectivo',
   tendencia: 12, margen_bruto_hoy: 8000, margen_bruto_mes: 8000,
   margen_pct_hoy: 36, margen_pct_mes: 36,
+  margen_bruto_semana: 24000, margen_bruto_trimestre: 65000,
+  margen_pct_semana: 34, margen_pct_trimestre: 33,
   ventas_7_dias: { valores: [5000, 8000, 3000, 12000, 6000, 9000, 7000], labels: ['Lun','Mar','Mie','Jue','Vie','Sab','Dom'] },
   ventas_por_hora: { valores: [0,0,0,2,1,0,3,5,8,6,4,2,0,0,1,3,5,4,2,1,0,0,0,0], labels: Array.from({ length: 24 }, (_, i) => i + 'h') },
   top_productos_mes: [
@@ -155,7 +157,9 @@ function buildLoteAlerts() {
       <KpiCard label="Ventas Hoy" :value="data.ventas_hoy || 0" prefix="$" :loading="loading" icon="fa-sack-dollar" icon-color="success" :sublabel="(data.cant_ventas_hoy || 0) + ' tickets'" />
       <KpiCard label="Ventas Mes" :value="data.ventas_mes || 0" prefix="$" :loading="loading" icon="fa-chart-line" icon-color="brand" :sublabel="(data.cant_ventas_mes || 0) + ' tickets'" />
       <KpiCard label="Ganancia Hoy" :value="data.margen_bruto_hoy || 0" prefix="$" :loading="loading" :sublabel="(data.margen_pct_hoy || 0) + '% de margen'" icon="fa-coins" icon-color="warning" />
+      <KpiCard label="Ganancia Semana" :value="data.margen_bruto_semana || 0" prefix="$" :loading="loading" :sublabel="(data.margen_pct_semana || 0) + '% de margen'" icon="fa-coins" icon-color="warning" />
       <KpiCard label="Ganancia Mes" :value="data.margen_bruto_mes || 0" prefix="$" :loading="loading" :sublabel="(data.margen_pct_mes || 0) + '% de margen'" icon="fa-coins" icon-color="warning" />
+      <KpiCard label="Ganancia Trim." :value="data.margen_bruto_trimestre || 0" prefix="$" :loading="loading" :sublabel="(data.margen_pct_trimestre || 0) + '% de margen'" icon="fa-coins" icon-color="warning" />
       <KpiCard label="Ticket Prom." :value="data.ticket_promedio || 0" prefix="$" :loading="loading" icon="fa-receipt" icon-color="info" :sublabel="'Medio: ' + (data.medio_favorito || '—')" />
       <KpiCard label="Stock" :value="data.valor_stock || 0" prefix="$" :loading="loading" icon="fa-boxes-stacked" icon-color="warning" :sublabel="(data.total_productos || 0) + ' productos'" />
       <KpiCard label="Stock Crítico" :value="data.stock_bajo || 0" :loading="loading" icon="fa-triangle-exclamation" icon-color="danger" sublabel="bajo mínimo" />

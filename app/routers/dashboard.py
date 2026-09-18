@@ -34,6 +34,12 @@ def _inicio_semana(d=None):
     return (d - timedelta(days=d.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
 
 
+def _inicio_trimestre(d=None):
+    d = d or HOY()
+    trimestre = ((d.month - 1) // 3) * 3 + 1
+    return d.replace(month=trimestre, day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
 def _fmt_dt(dt):
     return dt.isoformat() if dt else None
 
@@ -74,12 +80,24 @@ def resumen(db: Session = Depends(get_db), user: Usuario = Depends(get_current_u
         Venta.estado == "confirmada", Venta.fecha >= inicio_mes).scalar() or 0
 
     # Margen bruto
+    inicio_semana = _inicio_semana()
+    inicio_trimestre = _inicio_trimestre()
     costo_hoy = _costo_ventas(db, hoy)
     costo_mes = _costo_ventas(db, inicio_mes)
+    costo_semana = _costo_ventas(db, inicio_semana)
+    costo_trimestre = _costo_ventas(db, inicio_trimestre)
     margen_hoy = ventas_hoy - costo_hoy
     margen_mes = ventas_mes - costo_mes
+    ventas_semana = db.query(func.coalesce(func.sum(Venta.total), 0)).filter(
+        Venta.estado == "confirmada", Venta.fecha >= inicio_semana).scalar() or 0
+    ventas_trimestre = db.query(func.coalesce(func.sum(Venta.total), 0)).filter(
+        Venta.estado == "confirmada", Venta.fecha >= inicio_trimestre).scalar() or 0
+    margen_semana = ventas_semana - costo_semana
+    margen_trimestre = ventas_trimestre - costo_trimestre
     margen_pct_hoy = round((margen_hoy / max(ventas_hoy, 1)) * 100, 1)
     margen_pct_mes = round((margen_mes / max(ventas_mes, 1)) * 100, 1)
+    margen_pct_semana = round((margen_semana / max(ventas_semana, 1)) * 100, 1)
+    margen_pct_trimestre = round((margen_trimestre / max(ventas_trimestre, 1)) * 100, 1)
 
     # Tendencia semanal
     ventas_semana_actual = db.query(func.coalesce(func.sum(Venta.total), 0)).filter(
@@ -150,6 +168,8 @@ def resumen(db: Session = Depends(get_db), user: Usuario = Depends(get_current_u
         "medio_favorito": medio_favorito,
         "margen_bruto_hoy": margen_hoy, "margen_bruto_mes": margen_mes,
         "margen_pct_hoy": margen_pct_hoy, "margen_pct_mes": margen_pct_mes,
+        "margen_bruto_semana": margen_semana, "margen_bruto_trimestre": margen_trimestre,
+        "margen_pct_semana": margen_pct_semana, "margen_pct_trimestre": margen_pct_trimestre,
         "ventas_7_dias": {"labels": dias_labels, "valores": dias_valores},
         "ventas_por_hora": {"labels": horas_labels, "valores": horas_valores},
         "top_productos_mes": top_productos,
