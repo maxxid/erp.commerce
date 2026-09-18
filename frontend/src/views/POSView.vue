@@ -297,10 +297,23 @@
           >
             {{ cat.nombre }}
           </button>
+          <button
+            type="button"
+            :title="posVistaProductos === 'grilla' ? 'Ver en lista' : 'Ver en grilla'"
+            class="px-3 py-1.5 ml-auto rounded-lg text-xs font-semibold transition-all duration-200 border bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-brand-300 dark:hover:border-brand-600 hover:text-brand-600 dark:hover:text-brand-400"
+            @click="posVistaProductos = posVistaProductos === 'grilla' ? 'lista' : 'grilla'"
+          >
+            <i :class="posVistaProductos === 'grilla' ? 'fa-solid fa-list' : 'fa-solid fa-table-cells'" class="mr-1"></i>
+            {{ posVistaProductos === 'grilla' ? 'Lista' : 'Grilla' }}
+          </button>
         </div>
 
         <!-- Product grid -->
-        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[520px] overflow-y-auto pr-1">
+        <div
+          :class="posVistaProductos === 'grilla'
+            ? 'grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[520px] overflow-y-auto pr-1'
+            : 'grid grid-cols-1 gap-2 max-h-[520px] overflow-y-auto pr-1'"
+        >
           <TransitionGroup
             enter-active-class="transition duration-200 ease-out-expo"
             enter-from-class="opacity-0 scale-95"
@@ -318,24 +331,28 @@
               class="group relative text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-3 rounded-xl shadow-sm transition-all duration-200 ease-out-expo hover:shadow-md hover:border-brand-300 dark:hover:border-brand-700 hover:-translate-y-0.5 active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-brand-500/40"
               @click="addToCart(p)"
             >
-              <div class="flex items-center gap-2 mb-2">
+              <div :class="posVistaProductos === 'lista' ? 'flex items-center gap-3' : ''">
                 <div class="w-9 h-9 rounded-lg bg-brand-50 dark:bg-brand-900/30 flex items-center justify-center text-brand-600 dark:text-brand-400 shrink-0 group-hover:scale-105 transition-transform">
                   <i class="fa-solid fa-box text-xs"></i>
                 </div>
-                <p class="text-xs font-bold text-slate-900 dark:text-white truncate leading-tight">{{ p.nombre }}</p>
-              </div>
-              <p class="text-[10px] text-slate-400 dark:text-slate-500 truncate" :title="p.marca">{{ p.marca }}</p>
-              <div class="flex items-center justify-between mt-2">
-                <span class="text-sm font-bold font-mono-data text-brand-600 dark:text-brand-400">
-                  {{ fc(p.tipo_venta === 'kilo' ? p.precio_por_kilo : p.precio_venta) }}
-                  <span v-if="p.tipo_venta === 'kilo'" class="text-[9px] text-amber-500">/kg</span>
-                </span>
-                <BaseBadge
-                  :variant="p.stock_actual <= 5 ? 'danger' : 'default'"
-                  size="xs"
-                >
-                  {{ p.stock_actual }} u
-                </BaseBadge>
+                <p class="text-xs font-bold text-slate-900 dark:text-white truncate leading-tight" :class="posVistaProductos === 'lista' ? 'flex-1' : ''">
+                  {{ p.nombre }}
+                  <span v-if="p.marca" class="text-[10px] font-normal text-slate-400 dark:text-slate-500 block truncate">{{ p.marca }}</span>
+                </p>
+                <div :class="posVistaProductos === 'lista'
+                  ? 'flex items-center gap-3 shrink-0'
+                  : 'flex items-center justify-between gap-3 mt-2'">
+                  <span class="text-sm font-bold font-mono-data text-brand-600 dark:text-brand-400">
+                    {{ fc(p.tipo_venta === 'kilo' ? p.precio_por_kilo : p.precio_venta) }}
+                    <span v-if="p.tipo_venta === 'kilo'" class="text-[9px] text-amber-500">/kg</span>
+                  </span>
+                  <BaseBadge
+                    :variant="p.stock_actual <= 5 ? 'danger' : 'default'"
+                    size="xs"
+                  >
+                    {{ p.stock_actual }} u
+                  </BaseBadge>
+                </div>
               </div>
             </button>
           </TransitionGroup>
@@ -1036,6 +1053,7 @@ const posLookupCode = ref('')
 const posTextSearch = ref('')
 const selectedPOSCategory = ref(null)
 const filterPorKilo = ref(false)
+const posVistaProductos = ref('grilla') // 'grilla' | 'lista'
 const confirmando = ref(false)
 const showTicket = ref(false)
 
