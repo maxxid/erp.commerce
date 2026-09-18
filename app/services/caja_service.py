@@ -32,41 +32,53 @@ def _a_local(dt: datetime) -> datetime:
 
 
 def caja_abierta(db: Session, sucursal_id: int = 1) -> bool:
-    """Verifica si hay una caja abierta (sin cierre total).
-    
+    """Verifica si hay una caja abierta (sin cierre total posterior a una apertura).
+
     Auto-cierre: si la apertura fue en un día diferente al actual (hora Argentina),
     cierra automáticamente con el saldo real.
     """
-    ultimo = (
+    movimientos = (
         db.query(MovimientoCaja)
         .filter(MovimientoCaja.sucursal_id == sucursal_id)
         .order_by(MovimientoCaja.id.desc())
-        .first()
+        .all()
     )
-    # Caja cerrada si el último movimiento es "cierre" sin medio_pago (cierre total)
-    if ultimo and ultimo.tipo == "cierre" and not ultimo.medio_pago:
-        return False
-    if ultimo is None:
-        return False
-    # Si es apertura o cierre_parcial, está abierta
-    if ultimo.tipo == "apertura":
-        # Verificar si la apertura fue en un día diferente al actual (hora Argentina)
-        apertura_fecha = ultimo.created_at
-        if apertura_fecha:
-            # Convertir a datetime si es string
-            if isinstance(apertura_fecha, str):
-                try:
-                    apertura_fecha = datetime.fromisoformat(apertura_fecha.replace('Z', '+00:00'))
-                except:
-                    return True
-            apertura_local = _a_local(apertura_fecha)
-            ahora_local = _ahora_local()
-            # Comparar fechas (día, mes, año) en hora local
-            if apertura_local.date() != ahora_local.date():
-                # Auto-cierre: crear movimiento de cierre automático con saldo real
-                _cierre_automatico(db, sucursal_id, ultimo)
+    # Escanear desde el movimiento más reciente hacia atrás
+    for m in movimientos:
+        # Cierre total: la caja quedó cerrada
+        if m.tipo == "cierre" and not m.medio_pago:
+            return False
+        # Apertura: caja abierta, verificar auto-cierre por cambio de día
+        if m.tipo == "apertura":
+            if _cierre_por_cambio_dia(db, sucursal_id, m):
                 return False
-    return True
+            return True
+    # Sin aperturas ni cierres registrados: caja cerrada
+    return False
+
+
+def _cierre_por_cambio_dia(db: Session, sucursal_id: int, apertura: MovimientoCaja) -> bool:
+    """True si la apertura fue en un día calendario distinto al actual (hora Argentina).
+
+    En ese caso realiza el auto-cierre y devuelve True.
+    """
+    apertura_fecha = apertura.created_at
+    if not apertura_fecha:
+        return False
+    # Convertir a datetime si es string
+    if isinstance(apertura_fecha, str):
+        try:
+            apertura_fecha = datetime.fromisoformat(apertura_fecha.replace('Z', '+00:00'))
+        except Exception:
+            return False
+    apertura_local = _a_local(apertura_fecha)
+    ahora_local = _ahora_local()
+    # Comparar fechas (día, mes, año) en hora local
+    if apertura_local.date() != ahora_local.date():
+        # Auto-cierre: crear movimiento de cierre automático con saldo real
+        _cierre_automatico(db, sucursal_id, apertura)
+        return True
+    return False
 
 
 def _cierre_automatico(db: Session, sucursal_id: int, apertura: MovimientoCaja):
