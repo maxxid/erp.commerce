@@ -145,6 +145,7 @@ function buildLoteAlerts() {
     <!-- KPIs -->
     <div v-if="simple" class="grid grid-cols-2 md:grid-cols-4 gap-4">
       <KpiCard label="Ventas Hoy" :value="data.ventas_hoy || 0" prefix="$" :loading="loading" icon="fa-sack-dollar" icon-color="success" :sublabel="(data.cant_ventas_hoy || 0) + ' tickets'" />
+      <KpiCard label="Ganancia Hoy" :value="data.margen_bruto_hoy || 0" prefix="$" :loading="loading" :sublabel="(data.margen_pct_hoy || 0) + '% de margen'" icon="fa-coins" icon-color="warning" />
       <KpiCard label="Efectivo Hoy" :value="data.efectivo_hoy || 0" prefix="$" :loading="loading" icon="fa-money-bill-wave" icon-color="brand" />
       <KpiCard label="Transferencia" :value="data.transferencia_hoy || 0" prefix="$" :loading="loading" icon="fa-mobile-screen-button" icon-color="info" />
       <KpiCard label="Stock Crítico" :value="data.stock_bajo || 0" :loading="loading" icon="fa-triangle-exclamation" icon-color="danger" sublabel="bajo mínimo" />
@@ -153,6 +154,8 @@ function buildLoteAlerts() {
     <div v-else class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
       <KpiCard label="Ventas Hoy" :value="data.ventas_hoy || 0" prefix="$" :loading="loading" icon="fa-sack-dollar" icon-color="success" :sublabel="(data.cant_ventas_hoy || 0) + ' tickets'" />
       <KpiCard label="Ventas Mes" :value="data.ventas_mes || 0" prefix="$" :loading="loading" icon="fa-chart-line" icon-color="brand" :sublabel="(data.cant_ventas_mes || 0) + ' tickets'" />
+      <KpiCard label="Ganancia Hoy" :value="data.margen_bruto_hoy || 0" prefix="$" :loading="loading" :sublabel="(data.margen_pct_hoy || 0) + '% de margen'" icon="fa-coins" icon-color="warning" />
+      <KpiCard label="Ganancia Mes" :value="data.margen_bruto_mes || 0" prefix="$" :loading="loading" :sublabel="(data.margen_pct_mes || 0) + '% de margen'" icon="fa-coins" icon-color="warning" />
       <KpiCard label="Ticket Prom." :value="data.ticket_promedio || 0" prefix="$" :loading="loading" icon="fa-receipt" icon-color="info" :sublabel="'Medio: ' + (data.medio_favorito || '—')" />
       <KpiCard label="Stock" :value="data.valor_stock || 0" prefix="$" :loading="loading" icon="fa-boxes-stacked" icon-color="warning" :sublabel="(data.total_productos || 0) + ' productos'" />
       <KpiCard label="Stock Crítico" :value="data.stock_bajo || 0" :loading="loading" icon="fa-triangle-exclamation" icon-color="danger" sublabel="bajo mínimo" />
