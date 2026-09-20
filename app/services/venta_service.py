@@ -139,6 +139,7 @@ def confirmar_venta(
     db: Session,
     venta: Venta,
     medio_pago: str = "efectivo",
+    efectivo_pagado: float = 0.0,
     descuento: float = 0.0,
     usuario_id: Optional[int] = None,
 ) -> Venta:
@@ -150,6 +151,11 @@ def confirmar_venta(
     4. Registra ingreso en caja si la caja está abierta
     5. Si es cta_corriente, actualiza saldo del cliente
     6. Cambia estado a "confirmada"
+
+    Args:
+        efectivo_pagado: Parte de la venta abonada en efectivo (pago mixto).
+            Solo aplica cuando medio_pago != "efectivo". Ese monto se registra
+            en caja como efectivo y el resto bajo el medio_pago indicado.
 
     Raises:
         ValueError: Si no hay stock, la caja no está abierta, o excede límite crédito.
@@ -239,16 +245,30 @@ def confirmar_venta(
     # Registrar ingreso en caja (solo si no es cta_corriente, porque la plata
     # no entra físicamente en ese caso)
     if medio_pago != "cta_corriente":
-        caja_service.registrar_ingreso(
-            db,
-            monto=venta.total,
-            descripcion=f"Venta {venta.numero}",
-            usuario_id=uid,
-            referencia_tipo="venta",
-            referencia_id=venta.id,
-            sucursal_id=venta.sucursal_id,
-            medio_pago=medio_pago,
-        )
+        efectivo_parte = min(max(float(efectivo_pagado or 0), 0.0), venta.total) if medio_pago != "efectivo" else 0.0
+        resto_parte = venta.total - efectivo_parte
+        if efectivo_parte > 0:
+            caja_service.registrar_ingreso(
+                db,
+                monto=efectivo_parte,
+                descripcion=f"Venta {venta.numero} (efectivo)",
+                usuario_id=uid,
+                referencia_tipo="venta",
+                referencia_id=venta.id,
+                sucursal_id=venta.sucursal_id,
+                medio_pago="efectivo",
+            )
+        if resto_parte > 0:
+            caja_service.registrar_ingreso(
+                db,
+                monto=resto_parte,
+                descripcion=f"Venta {venta.numero}",
+                usuario_id=uid,
+                referencia_tipo="venta",
+                referencia_id=venta.id,
+                sucursal_id=venta.sucursal_id,
+                medio_pago=medio_pago,
+            )
 
     db.commit()
     db.refresh(venta)

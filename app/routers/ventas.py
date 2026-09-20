@@ -71,6 +71,7 @@ class VentaItemAdd(BaseModel):
 
 class VentaConfirmar(BaseModel):
     medio_pago: str = "efectivo"
+    efectivo_pagado: float = 0.0
     descuento: float = 0.0
     descuento_tipo: Optional[str] = Field(None, description="Tipo de descuento: 'manual' o 'automatico'")
     cliente_id: Optional[int] = None
@@ -223,7 +224,7 @@ def confirmar(
         db.commit()
     try:
         venta = venta_service.confirmar_venta(
-            db, venta, data.medio_pago, data.descuento, user.id
+            db, venta, data.medio_pago, data.efectivo_pagado, data.descuento, user.id
         )
         auditoria_service.registrar(db, user.id, "venta_confirmada", venta.id, venta.numero,
                                      {"medio_pago": data.medio_pago, "total": venta.total, "items": len(venta.items), "descuento": data.descuento, "hora": datetime.now().strftime("%H:%M")})

@@ -492,6 +492,50 @@
             </div>
           </div>
 
+          <div v-if="mostrarPagoMixto" class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 p-3">
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase">
+                <i class="fa-solid fa-money-bill-wave text-emerald-500 mr-1"></i>Paga en efectivo
+              </label>
+              <span v-if="efectivoPagadoNum.value > 0" class="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                <i class="fa-solid fa-circle-check mr-0.5"></i>Resto a abonar: <span class="font-mono-data font-bold">{{ fc(restoMedio) }}</span>
+              </span>
+            </div>
+            <div class="flex gap-2 items-center">
+              <div class="relative flex-1">
+                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">$</span>
+                <input
+                  v-model="cart.efectivo_pagado"
+                  type="text"
+                  inputmode="decimal"
+                  placeholder="Cuánto paga en efectivo"
+                  class="w-full pl-7 pr-3 py-2 text-sm font-bold font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:border-emerald-500 dark:focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
+                  @input="cart.efectivo_pagado = String(cart.efectivo_pagado).replace(/[^\d.,]/g, '')"
+                >
+              </div>
+              <span class="text-xs font-semibold text-slate-400 shrink-0">/ {{ fc(cart.total) }}</span>
+            </div>
+            <div class="flex flex-wrap gap-1.5 mt-2">
+              <button
+                v-for="s in sugerenciasPagoMixto()"
+                :key="s"
+                type="button"
+                class="px-2.5 py-1 text-[10px] font-semibold rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-emerald-400 dark:hover:border-emerald-500 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                @click="autoCompletarEfectivoMixto(s)"
+              >
+                {{ fc(s) }} efvo.
+              </button>
+              <button
+                v-if="cart.efectivo_pagado"
+                type="button"
+                class="px-2.5 py-1 text-[10px] font-semibold rounded-lg bg-transparent border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors ml-auto"
+                @click="cart.efectivo_pagado = ''"
+              >
+                <i class="fa-solid fa-rotate-left mr-0.5"></i>Limpiar
+              </button>
+            </div>
+          </div>
+
           <hr class="border-slate-100 dark:border-slate-800">
 
           <div class="flex justify-between items-end">
@@ -1265,6 +1309,7 @@ const mediosPago = [
    total: 0,
    descuento: 0,
    recibido: '',
+   efectivo_pagado: '',
    medio_pago: 'efectivo',
    cliente_id: '',
    comprador_cuit: ''
@@ -1290,6 +1335,20 @@ const falta = computed(() => {
   return Math.max(0, cart.total - recibidoNum.value)
 })
 
+const efectivoPagadoNum = computed(() => parseFloat(String(cart.efectivo_pagado).replace(',', '.')) || 0)
+const restoMedio = computed(() => {
+  if (cart.medio_pago === 'efectivo' || cart.medio_pago === 'cta_corriente') return 0
+  return Math.max(0, cart.total - efectivoPagadoNum.value)
+})
+const mostrarPagoMixto = computed(() => cart.medio_pago !== 'efectivo' && cart.medio_pago !== 'cta_corriente' && cart.total > 0)
+
+function sugerenciasPagoMixto() {
+  if (cart.total <= 0) return []
+  const mitades = [Math.ceil(cart.total * 0.5), Math.ceil(cart.total * 0.75)]
+  const unicas = [...new Set(mitades)].filter(v => v > 0 && v < cart.total)
+  return unicas
+}
+
 function sugerenciasRecibido() {
   if (cart.total <= 0) return []
   const billetes = [100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000]
@@ -1307,6 +1366,10 @@ function sugerenciasRecibido() {
 
 function autoCompletarRecibido(valor) {
   cart.recibido = String(valor)
+}
+
+function autoCompletarEfectivoMixto(valor) {
+  cart.efectivo_pagado = String(valor)
 }
 
 function vaciarRecibido() {
@@ -1877,6 +1940,7 @@ function vaciarCarrito() {
   cart.descuento = 0
   cart.cliente_id = ''
   cart.recibido = ''
+  cart.efectivo_pagado = ''
 }
 
 function updateCartQty(idx, qty) {
@@ -1929,6 +1993,10 @@ async function confirmarVenta() {
   }
   if (cart.medio_pago === 'efectivo' && cart.recibido && recibidoNum.value < cart.total) {
     toast.error(`El efectivo recibido no alcanza: faltan ${fc(falta.value)}`)
+    return
+  }
+  if (mostrarPagoMixto.value && cart.efectivo_pagado && efectivoPagadoNum.value >= cart.total) {
+    toast.error('Si paga todo en efectivo, seleccioná el medio Efectivo directamente')
     return
   }
   if (!cajaStore.abierta) {
@@ -2007,6 +2075,7 @@ async function confirmarVenta() {
 
       const confirmResp = await api.put(`/api/ventas/${ventaId}/confirmar`, {
         medio_pago: cart.medio_pago,
+        efectivo_pagado: mostrarPagoMixto.value ? efectivoPagadoNum.value : 0,
         descuento: cart.descuento || 0,
         cliente_id: cart.cliente_id || undefined,
         comprador_cuit: cart.comprador_cuit || undefined
