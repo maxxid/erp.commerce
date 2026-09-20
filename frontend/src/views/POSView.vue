@@ -523,6 +523,55 @@
             </div>
           </div>
 
+          <div v-if="cart.medio_pago === 'efectivo' && cart.total > 0" class="rounded-xl border-2 border-emerald-200 dark:border-emerald-800/60 bg-emerald-50 dark:bg-emerald-950/30 p-4 transition-all duration-300">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-wider">
+                <i class="fa-solid fa-money-bill-wave mr-1"></i>Recibo con
+              </span>
+              <span class="text-[10px] text-emerald-600/70 dark:text-emerald-400/60 font-medium" v-if="vuelto > 0">
+                Cambio: <span class="font-mono-data font-bold">{{ fc(vuelto) }}</span>
+              </span>
+              <span v-else-if="falta > 0" class="text-[10px] text-red-500 font-medium">
+                <i class="fa-solid fa-circle-exclamation mr-0.5"></i>Faltan {{ fc(falta) }}
+              </span>
+              <span v-else class="text-[10px] text-emerald-500 font-medium">Monto exacto</span>
+            </div>
+
+            <div class="flex gap-2">
+              <div class="relative flex-1">
+                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-600 dark:text-emerald-400 text-sm font-bold">$</span>
+                <input
+                  v-model="cart.recibido"
+                  type="text"
+                  inputmode="decimal"
+                  placeholder="0"
+                  class="w-full pl-7 pr-3 py-2.5 text-lg font-bold font-mono-data bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 rounded-xl text-emerald-900 dark:text-white focus:border-emerald-500 dark:focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
+                  @input="cart.recibido = String(cart.recibido).replace(/[^\d.,]/g, '')"
+                >
+              </div>
+            </div>
+
+            <div class="flex flex-wrap gap-1.5 mt-3">
+              <button
+                v-for="s in sugerenciasRecibido()"
+                :key="s"
+                type="button"
+                class="px-2.5 py-1 text-[10px] font-semibold rounded-lg bg-white dark:bg-slate-800 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
+                @click="autoCompletarRecibido(s)"
+              >
+                {{ fc(s) }}
+              </button>
+              <button
+                v-if="cart.recibido"
+                type="button"
+                class="px-2.5 py-1 text-[10px] font-semibold rounded-lg bg-transparent border border-red-300 dark:border-red-800 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors ml-auto"
+                @click="vaciarRecibido"
+              >
+                <i class="fa-solid fa-rotate-left mr-0.5"></i>Limpiar
+              </button>
+            </div>
+          </div>
+
           <div v-if="cart.medio_pago === 'transferencia' && (bankConfig.banco_nombre || bankConfig.banco_alias)" class="p-3 bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 rounded-xl">
             <p class="text-[10px] font-bold text-sky-700 dark:text-sky-300 mb-2">
               <i class="fa-solid fa-building-columns mr-1"></i>Datos para Transferencia
@@ -1215,6 +1264,7 @@ const mediosPago = [
    subtotal: 0,
    total: 0,
    descuento: 0,
+   recibido: '',
    medio_pago: 'efectivo',
    cliente_id: '',
    comprador_cuit: ''
@@ -1229,6 +1279,39 @@ const stats = reactive({
 })
 
 const clientes = ref([])
+
+const recibidoNum = computed(() => parseFloat(String(cart.recibido).replace(',', '.')) || 0)
+const vuelto = computed(() => {
+  if (cart.medio_pago !== 'efectivo' || recibidoNum.value <= 0) return 0
+  return Math.max(0, recibidoNum.value - cart.total)
+})
+const falta = computed(() => {
+  if (cart.medio_pago !== 'efectivo' || recibidoNum.value <= 0) return 0
+  return Math.max(0, cart.total - recibidoNum.value)
+})
+
+function sugerenciasRecibido() {
+  if (cart.total <= 0) return []
+  const billetes = [100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000]
+  const total = Math.ceil(cart.total)
+  const sug = []
+  for (const b of billetes) {
+    if (b >= total && !sug.includes(b)) sug.push(b)
+  }
+  if (cart.total <= 20000) {
+    const exacto = cart.total
+    if (!sug.includes(exacto) && exacto > 0) sug.unshift(exacto)
+  }
+  return sug.slice(0, 5)
+}
+
+function autoCompletarRecibido(valor) {
+  cart.recibido = String(valor)
+}
+
+function vaciarRecibido() {
+  cart.recibido = ''
+}
 
 const recentTransactions = ref([])
 const editingVentaId = ref(null)
@@ -1793,6 +1876,7 @@ function vaciarCarrito() {
   recalcCart()
   cart.descuento = 0
   cart.cliente_id = ''
+  cart.recibido = ''
 }
 
 function updateCartQty(idx, qty) {
@@ -1841,6 +1925,10 @@ function removeFromCart(idx) {
 async function confirmarVenta() {
   if (!cart.items.length || cart.total <= 0) {
     if (!cart.items.length) toast.warning('El carrito está vacío')
+    return
+  }
+  if (cart.medio_pago === 'efectivo' && cart.recibido && recibidoNum.value < cart.total) {
+    toast.error(`El efectivo recibido no alcanza: faltan ${fc(falta.value)}`)
     return
   }
   if (!cajaStore.abierta) {
