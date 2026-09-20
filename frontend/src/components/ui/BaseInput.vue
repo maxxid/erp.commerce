@@ -44,7 +44,7 @@ function onInput(e) {
       :for="inputId"
       class="block mb-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300"
     >
-      {{ label }}
+      <slot name="label">{{ label }}</slot>
       <span v-if="required" class="text-red-500 ml-0.5">*</span>
     </label>
     <div class="relative">
