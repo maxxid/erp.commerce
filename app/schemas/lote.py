@@ -21,6 +21,7 @@ class LoteUpdate(BaseModel):
     codigo_lote: Optional[str] = Field(None, max_length=50)
     fecha_fabricacion: Optional[datetime] = None
     fecha_vencimiento: Optional[datetime] = None
+    cantidad_actual: Optional[float] = Field(None, ge=0, description="Ajuste directo de stock del lote (mermas, correcciones). Recalcula el stock del producto.")
     costo: Optional[float] = Field(None, ge=0)
     activo: Optional[bool] = None
     notas: Optional[str] = None

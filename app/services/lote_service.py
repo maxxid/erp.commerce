@@ -100,7 +100,13 @@ def crear_lote(
 
 
 def actualizar_lote(db: Session, lote_id: int, data: dict) -> Lote:
-    """Edita metadatos del lote. No se puede cambiar cantidad_actual desde acá."""
+    """Edita metadatos del lote. Si llega `cantidad_actual`, ajusta el stock
+    del lote de forma directa (mermas, correcciones), recalcula el stock del
+    producto y registra el MovimientoStock como auditoría.
+
+    Raises:
+        ValueError: Si se intenta ajustar stock por debajo de 0.
+    """
     lote = obtener_lote(db, lote_id)
     if not lote:
         raise ValueError(f"Lote {lote_id} no encontrado")
@@ -112,6 +118,41 @@ def actualizar_lote(db: Session, lote_id: int, data: dict) -> Lote:
     for campo in campos_editables:
         if campo in data and data[campo] is not None:
             setattr(lote, campo, data[campo])
+
+    if "cantidad_actual" in data and data["cantidad_actual"] is not None:
+        nueva = float(data["cantidad_actual"])
+        actual = float(lote.cantidad_actual or 0)
+        if nueva < 0:
+            raise ValueError("La cantidad de un lote no puede ser negativa")
+        if nueva != actual:
+            from app.models.movimiento_stock import MovimientoStock
+
+            producto = db.query(Producto).filter(Producto.id == lote.producto_id).first()
+            stock_anterior = producto.stock_actual if producto else None
+
+            diferencia = nueva - actual
+            lote.cantidad_actual = nueva
+
+            nuevo_stock = _recalcular_stock_producto(db, lote.producto_id)
+            if producto is not None and stock_anterior is not None:
+                from app.models.usuario import Usuario
+                usuario_activo = (
+                    db.query(Usuario).filter(Usuario.activo == True)
+                    .order_by(Usuario.id).first()
+                )
+                movimiento = MovimientoStock(
+                    producto_id=lote.producto_id,
+                    lote_id=lote.id,
+                    tipo="ajuste",
+                    cantidad=abs(diferencia),
+                    stock_anterior=stock_anterior,
+                    stock_resultante=nuevo_stock,
+                    referencia_tipo="ajuste_lote",
+                    referencia_id=lote.id,
+                    usuario_id=usuario_activo.id if usuario_activo else 1,
+                    notas=f"Ajuste de lote: {actual} → {nueva} ({data.get('notas') or 'corrección manual'})",
+                )
+                db.add(movimiento)
 
     db.commit()
     db.refresh(lote)

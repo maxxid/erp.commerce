@@ -25,6 +25,7 @@ const editForm = reactive({
   codigo_lote: '',
   fecha_vencimiento: '',
   fecha_fabricacion: '',
+  cantidad_actual: null,
   costo: null,
   activo: true,
   notas: '',
@@ -83,20 +84,28 @@ function openEdit(lote) {
     codigo_lote: lote.codigo_lote || '',
     fecha_vencimiento: lote.fecha_vencimiento ? lote.fecha_vencimiento.slice(0, 10) : '',
     fecha_fabricacion: lote.fecha_fabricacion ? lote.fecha_fabricacion.slice(0, 10) : '',
+    cantidad_actual: lote.cantidad_actual ?? null,
     costo: lote.costo ?? null,
     activo: lote.activo,
     notas: lote.notas || '',
   })
 }
 
-function closeEdit() {
-  editing.value = null
-}
-
+let lastCantidadActual = null
 async function saveEdit() {
   if (!editing.value) return
   saving.value = true
   try {
+    let cantidad_payload = null
+    if (editForm.cantidad_actual != null && editForm.cantidad_actual !== '') {
+      const num = Number(editForm.cantidad_actual)
+      if (num < 0 || isNaN(num)) {
+        toast.error('La cantidad debe ser un número mayor o igual a 0')
+        saving.value = false
+        return
+      }
+      cantidad_payload = num
+    }
     const payload = {
       codigo_lote: editForm.codigo_lote || null,
       fecha_vencimiento: editForm.fecha_vencimiento ? new Date(editForm.fecha_vencimiento).toISOString() : null,
@@ -105,6 +114,7 @@ async function saveEdit() {
       activo: editForm.activo,
       notas: editForm.notas || null,
     }
+    if (cantidad_payload != null) payload.cantidad_actual = cantidad_payload
     await api.put(`/api/lotes/${editing.value.id}`, payload)
     await load()
     toast.success('Lote actualizado')
@@ -305,6 +315,26 @@ async function executeRemove() {
           min="0"
           input-class="font-mono-data text-right"
         />
+
+        <div class="rounded-xl border border-amber-200 dark:border-amber-700/50 bg-amber-50/60 dark:bg-amber-900/10 p-3">
+          <label class="block mb-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300">
+            Cantidad en stock
+            <span class="ml-1 text-[10px] font-normal text-amber-600 dark:text-amber-400">
+              (ajuste puntual: mermas, vencidos, correcciones)
+            </span>
+          </label>
+          <input
+            v-model.number="editForm.cantidad_actual"
+            type="number"
+            step="0.01"
+            min="0"
+            inputmode="decimal"
+            class="w-full px-3.5 py-2.5 text-sm font-mono-data text-right bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none transition"
+          />
+          <p v-if="editing" class="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+            Actual: <strong class="font-mono-data">{{ editing.cantidad_actual }}</strong>. Al dejarlo en <strong class="font-mono-data">0</strong> podrás desactivar o eliminar el lote. Queda registrado como movimiento de stock.
+          </p>
+        </div>
 
         <div>
           <label class="block mb-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300">Notas</label>
