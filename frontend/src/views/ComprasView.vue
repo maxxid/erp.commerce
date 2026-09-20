@@ -132,15 +132,15 @@
             <span class="text-[10px] text-slate-400">{{ nuevaCompra.items.length }} producto(s)</span>
           </div>
 
-          <div class="bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden max-h-[420px] flex flex-col">
-            <div class="grid grid-cols-12 gap-2 px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wide border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 shrink-0 sticky top-0 z-10">
+          <div class="bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+            <div class="grid grid-cols-12 gap-2 px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wide border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
               <span class="col-span-4">Producto</span>
               <span class="col-span-3">Código de Barras</span>
               <span class="col-span-2 text-center">Cantidad</span>
               <span class="col-span-2 text-right">Precio</span>
               <span class="col-span-1"></span>
             </div>
-            <div class="flex-1 overflow-y-auto min-h-0 overscroll-contain">
+            <div class="max-h-[400px] overflow-y-auto overscroll-contain">
 
             <TransitionGroup
               name="item-row"
@@ -589,7 +589,10 @@ function focusUltimaFila() {
   if (idx < 0) return
   nextTick(() => {
     const el = itemRefs[idx]
-    if (el && el.focus) el.focus()
+    if (el && el.focus) {
+      el.focus()
+      el.scrollIntoView({ block: 'nearest' })
+    }
   })
 }
 
@@ -604,6 +607,9 @@ function onProductoInput(idx, event) {
   )
   if (prodEncontrado) {
     rellenarDesdeCatalogo(idx, prodEncontrado)
+  }
+  if (idx === nuevaCompra.items.length - 1 && val) {
+    asegurarFilaVacia()
   }
 }
 
