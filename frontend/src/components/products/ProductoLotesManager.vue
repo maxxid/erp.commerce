@@ -91,7 +91,10 @@ function openEdit(lote) {
   })
 }
 
-let lastCantidadActual = null
+function closeEdit() {
+  editing.value = null
+}
+
 async function saveEdit() {
   if (!editing.value) return
   saving.value = true

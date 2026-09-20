@@ -147,7 +147,7 @@ def info_detallada_producto(
                 "marca": producto.marca,
                 "precio_venta": producto.precio_venta,
                 "precio_costo": producto.precio_costo,
-                "stock_actual": producto.stock_actual,
+                "stock_actual": producto_service._suma_lotes_activos(db, producto.id),
                 "stock_minimo": producto.stock_minimo,
                 "imagen_url": producto.imagen_url,
             },
@@ -166,17 +166,19 @@ def productos_stock_bajo(
     db: Session = Depends(get_db),
     user: Usuario = Depends(get_current_user),
 ):
-    """Lista productos con stock bajo (<= stock_minimo) o sin stock."""
-    productos = (
-        db.query(Producto)
-        .filter(
-            Producto.activo == True,
-            (Producto.stock_actual == 0) | 
-            ((Producto.stock_actual <= Producto.stock_minimo) & (Producto.stock_minimo > 0))
-        )
-        .order_by(Producto.stock_actual.asc())
-        .all()
-    )
+    """Lista productos con stock bajo (<= stock_minimo) o sin stock.
+    El stock se calcula siempre como suma de lotes activos."""
+    from app.services import producto_service
+
+    productos = db.query(Producto).filter(Producto.activo == True).all()
+    for p in productos:
+        p.stock_actual = producto_service._suma_lotes_activos(db, p.id)
+
+    productos = [
+        p for p in productos
+        if p.stock_actual == 0 or (p.stock_actual <= (p.stock_minimo or 0) and (p.stock_minimo or 0) > 0)
+    ]
+    productos.sort(key=lambda p: p.stock_actual)
     return RespuestaLista(
         data=productos,
         total=len(productos),
@@ -279,6 +281,7 @@ def obtener(
     producto = producto_service.obtener_producto(db, producto_id)
     if not producto:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
+    producto.stock_actual = producto_service._suma_lotes_activos(db, producto.id)
     return RespuestaData(data=producto)
 
 
@@ -375,6 +378,7 @@ def lookup(
 
     local = producto_service.obtener_por_barcode(db, barcode)
     if local:
+        stock_real = producto_service._suma_lotes_activos(db, local.id)
         result = ProductoLookupResponse(
             id=local.id,
             codigo_barras=local.codigo_barras,
@@ -383,7 +387,7 @@ def lookup(
             descripcion=local.descripcion,
             precio_referencia=local.precio_referencia,
             precio_venta=local.precio_venta,
-            stock_actual=local.stock_actual,
+            stock_actual=stock_real,
             imagen_url=local.imagen_url,
             sku=local.sku,
             propiedades=local.propiedades,

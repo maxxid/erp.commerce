@@ -1004,12 +1004,19 @@ async function fetchProveedores() {
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <BaseInput
             v-model.number="form.stock_actual"
-            label="Stock Inicial"
+            :label="editingProduct ? 'Stock (según lotes)' : 'Stock Inicial'"
             type="number"
             min="0"
-            required
+            :required="!editingProduct"
+            :disabled="!!editingProduct"
             input-class="font-mono-data text-right"
-          />
+          >
+            <template v-if="editingProduct" #hint>
+              <span class="text-[10px] text-emerald-600 dark:text-emerald-400">
+                Calculado desde los lotes. Editalo en la pestaña Lotes.
+              </span>
+            </template>
+          </BaseInput>
           <BaseInput
             v-model.number="form.stock_minimo"
             label="Stock Mínimo"

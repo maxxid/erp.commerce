@@ -53,6 +53,18 @@ def listar_productos(
         .all()
     )
 
+    # El stock siempre es la suma de los lotes activos, nunca un dato editable.
+    if productos:
+        ids = [p.id for p in productos]
+        sumas = dict(
+            db.query(Lote.producto_id, func.sum(Lote.cantidad_actual))
+            .filter(Lote.producto_id.in_(ids), Lote.activo == True)
+            .group_by(Lote.producto_id)
+            .all()
+        )
+        for p in productos:
+            p.stock_actual = float(sumas.get(p.id, 0) or 0)
+
     return productos, total
 
 
@@ -106,11 +118,9 @@ def crear_producto(db: Session, data: dict) -> Producto:
 def actualizar_producto(db: Session, producto: Producto, data: dict) -> Producto:
     """Actualiza campos de un producto existente.
 
-    Si viene stock_actual, lo maneja via stock_service.ajustar_stock()
-    para generar MovimientoStock. Requiere usuario_id en data.
+    El stock NO se edita aquí: es siempre la suma de los lotes activos.
+    Se ignora cualquier `stock_actual` enviado y se recalcula desde lotes.
     """
-    from app.services import stock_service
-
     updatable = [
         "nombre", "marca", "descripcion", "codigo_barras", "precio_referencia", "precio_costo",
         "precio_venta", "precio_etiqueta", "imagen_url", "sku", "propiedades", "fuente",
@@ -121,22 +131,10 @@ def actualizar_producto(db: Session, producto: Producto, data: dict) -> Producto
         if field in data and data[field] is not None:
             setattr(producto, field, data[field])
 
-    if "stock_actual" in data and data["stock_actual"] is not None:
-        nuevo_stock = data["stock_actual"]
-        usuario_id = data.get("usuario_id")
-        notas = data.get("notas")
-        if usuario_id:
-            diff = nuevo_stock - _suma_lotes_activos(db, producto.id)
-            if diff != 0:
-                tipo = "entrada" if diff > 0 else "salida"
-                stock_service.ajustar_stock_por_lote(
-                    db, producto.id, diff, tipo, usuario_id,
-                    referencia_tipo="ajuste_manual",
-                    notas=notas,
-                )
-
     if "activo" in data:
         producto.activo = data["activo"]
+
+    producto.stock_actual = _suma_lotes_activos(db, producto.id)
 
     db.commit()
     db.refresh(producto)
@@ -147,8 +145,13 @@ def guardar_desde_lookup(db: Session, data: dict) -> Producto:
     """Guarda un producto desde los datos del lookup (crea o actualiza).
 
     Si ya existe un producto con ese código de barras, lo actualiza.
-    Si no, lo crea.
+    Si no, lo crea. La cantidad va a un lote AJUSTE; el stock cache
+    queda sincronizado con los lotes.
     """
+    from app.services import lote_service
+
+    cantidad = float(data.get("cantidad") or 0)
+
     existente = obtener_por_barcode(db, data["codigo_barras"])
     if existente:
         updatable = [
@@ -163,9 +166,14 @@ def guardar_desde_lookup(db: Session, data: dict) -> Producto:
         if data.get("categoria"):
             cat = _obtener_o_crear_categoria(db, data["categoria"])
             existente.categoria_id = cat.id
-        existente.stock_actual = data.get("cantidad", existente.stock_actual)
         db.commit()
         db.refresh(existente)
+        if cantidad > 0:
+            lote_service.crear_lote(
+                db, producto_id=existente.id, codigo_lote="AJUSTE",
+                cantidad=cantidad, notas="Stock desde lookup",
+            )
+        existente.stock_actual = _suma_lotes_activos(db, existente.id)
         return existente
     else:
         cat_id = None
@@ -184,11 +192,17 @@ def guardar_desde_lookup(db: Session, data: dict) -> Producto:
             propiedades=data.get("propiedades"),
             fuente=data.get("fuente", "manual"),
             categoria_id=cat_id,
-            stock_actual=data.get("cantidad", 0),
+            stock_actual=0,
         )
         db.add(producto)
         db.commit()
         db.refresh(producto)
+        if cantidad > 0:
+            lote_service.crear_lote(
+                db, producto_id=producto.id, codigo_lote="AJUSTE",
+                cantidad=cantidad, notas="Stock desde lookup",
+            )
+        producto.stock_actual = _suma_lotes_activos(db, producto.id)
         return producto
 
 
