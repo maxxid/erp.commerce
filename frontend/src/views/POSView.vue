@@ -103,28 +103,32 @@
               Código de Barras
               <span class="relative inline-flex align-middle">
                 <button
+                  ref="barcodeHelpBtn"
                   type="button"
                   class="ml-1 w-4 h-4 rounded-full bg-slate-200 dark:bg-slate-700 text-[10px] font-bold leading-none text-slate-500 dark:text-slate-300 hover:bg-brand-500 hover:text-white transition-colors cursor-help"
-                  @mouseenter="showBarcodeHelp = true"
-                  @mouseleave="showBarcodeHelp = false"
-                  @focus="showBarcodeHelp = true"
-                  @blur="showBarcodeHelp = false"
+                  @mouseenter="openBarcodeHelp"
+                  @mouseleave="closeBarcodeHelp"
+                  @focus="openBarcodeHelp"
+                  @blur="closeBarcodeHelp"
                   @click.stop
                 >
                   ?
                 </button>
-                <div
-                  v-show="showBarcodeHelp"
-                  class="absolute left-0 top-full mt-1 w-[260px] z-50 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg p-3 text-slate-600 dark:text-slate-300 text-xs leading-relaxed pointer-events-none"
-                >
-                  <p class="font-semibold text-slate-800 dark:text-slate-100 mb-1.5"><i class="fa-solid fa-barcode mr-1 text-brand-500"></i>¿Qué puedo hacer acá?</p>
-                  <ul class="space-y-1.5 list-none">
-                    <li><i class="fa-solid fa-wand-magic-sparkles text-emerald-500 mr-1.5"></i><strong>Escanear o escribir</strong> un código y Enter: agrega directo al carrito.</li>
-                    <li><i class="fa-solid fa-bolt text-amber-500 mr-1.5"></i>Si el código es <strong>inventado</strong>, busca en la base y por internet, y te ofrece crearlo.</li>
-                    <li><i class="fa-solid fa-plus text-brand-500 mr-1.5"></i>Creación rápida: escribí <code class="font-mono bg-slate-100 dark:bg-slate-700 px-1 rounded">*Nombre*Precio</code> y Enter. Ej: <code class="font-mono bg-slate-100 dark:bg-slate-700 px-1 rounded">*GATORADE 750ml*2500</code></li>
-                    <li><i class="fa-solid fa-rotate-right text-slate-400 mr-1.5"></i>Los últimos códigos quedan como <strong>etiquetas</strong> debajo para rescatar rápido.</li>
-                  </ul>
-                </div>
+                <Teleport to="body">
+                  <div
+                    v-show="showBarcodeHelp && barcodeHelpPos.left !== null"
+                    :style="{ top: barcodeHelpPos.top + 'px', left: barcodeHelpPos.left + 'px' }"
+                    class="fixed z-[100] w-[240px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg p-3 text-slate-600 dark:text-slate-300 text-xs leading-relaxed pointer-events-none"
+                  >
+                    <p class="font-semibold text-slate-800 dark:text-slate-100 mb-1.5"><i class="fa-solid fa-barcode mr-1 text-brand-500"></i>Uso del campo</p>
+                    <ul class="space-y-1 list-none">
+                      <li><i class="fa-solid fa-wand-magic-sparkles text-emerald-500 mr-1"></i>Escaneá un código: se agrega solo al carrito.</li>
+                      <li><i class="fa-solid fa-bolt text-amber-500 mr-1"></i>Si no existe, se busca online y podés crearlo.</li>
+                      <li><i class="fa-solid fa-plus text-brand-500 mr-1"></i>Alta rápida: <code class="font-mono bg-slate-100 dark:bg-slate-700 px-1 rounded">*Nombre*Precio</code> + Enter.</li>
+                      <li><i class="fa-solid fa-rotate-right text-slate-400 mr-1"></i>Lo escaneado queda en "Escaneos Recientes".</li>
+                    </ul>
+                  </div>
+                </Teleport>
               </span>
             </template>
             <template #prefix>
@@ -1194,7 +1198,22 @@ const showSusWarning = ref(true)
 
 const textSearchRef = ref(null)
 const barcodeInput = ref(null)
+const barcodeHelpBtn = ref(null)
 const showBarcodeHelp = ref(false)
+const barcodeHelpPos = reactive({ top: null, left: null })
+
+function openBarcodeHelp() {
+  const el = barcodeHelpBtn.value
+  if (!el) return
+  const rect = el.getBoundingClientRect()
+  barcodeHelpPos.top = rect.bottom + 6
+  barcodeHelpPos.left = Math.max(8, Math.min(rect.left, window.innerWidth - 248))
+  showBarcodeHelp.value = true
+}
+
+function closeBarcodeHelp() {
+  showBarcodeHelp.value = false
+}
 
 // Missing product dialog states
 const showMissingDialog = ref(false)
