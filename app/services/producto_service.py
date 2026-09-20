@@ -2,9 +2,20 @@
 
 from typing import Optional, List
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 from app.models.producto import Producto
 from app.models.categoria import Categoria
+from app.models.lote import Lote
+
+
+def _suma_lotes_activos(db: Session, producto_id: int) -> float:
+    """Suma de cantidad_actual de los lotes activos de un producto."""
+    total = (
+        db.query(func.coalesce(func.sum(Lote.cantidad_actual), 0.0))
+        .filter(Lote.producto_id == producto_id, Lote.activo == True)
+        .scalar()
+    )
+    return float(total or 0)
 
 
 def listar_productos(
@@ -80,6 +91,15 @@ def crear_producto(db: Session, data: dict) -> Producto:
     db.add(producto)
     db.commit()
     db.refresh(producto)
+    if cantidad_inicial > 0:
+        from app.services import lote_service
+        lote_service.crear_lote(
+            db,
+            producto_id=producto.id,
+            codigo_lote="AJUSTE",
+            cantidad=cantidad_inicial,
+            notas="Stock inicial de alta",
+        )
     return producto
 
 
@@ -104,15 +124,16 @@ def actualizar_producto(db: Session, producto: Producto, data: dict) -> Producto
     if "stock_actual" in data and data["stock_actual"] is not None:
         nuevo_stock = data["stock_actual"]
         usuario_id = data.get("usuario_id")
-        diff = nuevo_stock - producto.stock_actual
-        if diff != 0 and usuario_id:
-            tipo = "entrada" if diff > 0 else "salida"
-            notas = data.get("notas")
-            stock_service.ajustar_stock(
-                db, producto.id, diff, tipo, usuario_id,
-                referencia_tipo="ajuste_manual",
-                notas=notas,
-            )
+        notas = data.get("notas")
+        if usuario_id:
+            diff = nuevo_stock - _suma_lotes_activos(db, producto.id)
+            if diff != 0:
+                tipo = "entrada" if diff > 0 else "salida"
+                stock_service.ajustar_stock_por_lote(
+                    db, producto.id, diff, tipo, usuario_id,
+                    referencia_tipo="ajuste_manual",
+                    notas=notas,
+                )
 
     if "activo" in data:
         producto.activo = data["activo"]
