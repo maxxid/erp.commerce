@@ -494,8 +494,8 @@
 
           <div v-if="mostrarPagoMixto" class="flex items-center gap-2">
             <div class="flex items-center gap-1 shrink-0">
-              <i class="fa-solid fa-money-bill-wave text-emerald-500 text-[10px]"></i>
-              <span class="text-[10px] font-bold text-slate-500 dark:text-slate-400">Paga en efectivo</span>
+              <i class="fa-solid fa-money-bill-wave text-emerald-500 text-xs"></i>
+              <span class="text-sm font-semibold text-slate-500 dark:text-slate-400">Paga en efectivo</span>
             </div>
             <div class="relative flex-1 min-w-0">
               <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">$</span>
@@ -508,7 +508,7 @@
                 @input="cart.efectivo_pagado = String(cart.efectivo_pagado).replace(/[^\d.,]/g, '')"
               >
             </div>
-            <span v-if="efectivoPagadoNum > 0" class="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 shrink-0 text-right leading-tight">
+            <span v-if="efectivoPagadoNum > 0" class="text-sm font-semibold text-emerald-600 dark:text-emerald-400 shrink-0 text-right leading-tight">
               Resto: <span class="font-mono-data font-bold">{{ fc(restoMedio) }}</span>
             </span>
           </div>
