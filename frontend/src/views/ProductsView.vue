@@ -53,6 +53,7 @@ const deletingOferta = ref(false)
 const filterEnOferta = ref(false)
 const filterSinStock = ref(false)
 const filterSinCodigo = ref(false)
+const filterPorVencer = ref(false)
 
 let searchDebounceTimer = null
 function onSearchInput() {
@@ -77,6 +78,7 @@ const activeFilterCount = computed(() => {
   if (filterSinStock.value) n++
   if (filterSinCodigo.value) n++
   if (filterPendientes.value) n++
+  if (filterPorVencer.value) n++
   return n
 })
 
@@ -90,6 +92,7 @@ function clearAllFilters() {
   filterSinStock.value = false
   filterSinCodigo.value = false
   filterPendientes.value = false
+  filterPorVencer.value = false
   clearSearch()
 }
 
@@ -141,6 +144,38 @@ const countPendientes = computed(() => {
   } catch { return 0 }
 })
 
+const vencimientos = ref([])
+const diasVencimientoFiltro = ref(30)
+
+const vtoMap = computed(() => {
+  const m = {}
+  for (const l of vencimientos.value) {
+    const pid = l.producto_id
+    if (pid == null) continue
+    if (!m[pid]) m[pid] = { fecha: null, dias: null, vencido: false, cantidad: 0 }
+    const cur = m[pid]
+    if (l.vencido) cur.vencido = true
+    if (l.dias_para_vencer == null) continue
+    if (cur.dias == null || l.dias_para_vencer < cur.dias) {
+      cur.dias = l.dias_para_vencer
+      cur.fecha = l.fecha_vencimiento
+    }
+    cur.cantidad += Number(l.cantidad_actual) || 0
+  }
+  return m
+})
+
+const vtoUrgencia = (dias, vencido) => {
+  if (vencido || (dias != null && dias <= 0)) return 'danger'
+  if (dias != null && dias <= 7) return 'warning'
+  if (dias != null && dias <= 15) return 'amber'
+  return 'info'
+}
+
+const countPorVencer = computed(() => {
+  try { return Object.keys(vtoMap.value).length } catch { return 0 }
+})
+
 const showCatQuick = ref(false)
 const newCatNombre = ref('')
 const showProvQuick = ref(false)
@@ -186,6 +221,7 @@ const tableColumns = [
   { key: 'precio_costo', label: 'Costo', align: 'right' },
   { key: 'precio_venta', label: 'Precio', align: 'right' },
   { key: 'stock_actual', label: 'Stock', align: 'right' },
+  { key: 'vencimiento', label: 'Vto.', align: 'center', width: 'w-36' },
   { key: 'categoria', label: 'Categoría' },
   { key: 'oferta', label: 'Oferta', align: 'center', width: 'w-24' },
   { key: 'acciones', label: '', align: 'right', width: 'w-24' }
@@ -234,6 +270,18 @@ const filteredProducts = computed(() => {
         return cbs.startsWith('gen-') || cbs.startsWith('*manual*')
       })
     }
+    if (filterPorVencer.value) {
+      list = list.filter(p => p && vtoMap.value[p.id])
+      list = [...list].sort((a, b) => {
+        const va = vtoMap.value[a.id]
+        const vb = vtoMap.value[b.id]
+        if (!va) return 1
+        if (!vb) return -1
+        const da = va.vencido ? -1 : (va.dias ?? 9999)
+        const db = vb.vencido ? -1 : (vb.dias ?? 9999)
+        return da - db
+      })
+    }
     if (hasSearch.value) {
       const q = safeStr(searchQuery.value).trim()
       if (q) {
@@ -258,7 +306,7 @@ const tableRows = computed(() => {
   try {
     return filteredProducts.value.map(p => {
       const oferta = ofertas.value.find(o => o && o.producto_id === p.id && o.activo)
-      return { ...p, categoria: categoryName(p.categoria_id), _oferta: oferta || null }
+      return { ...p, categoria: categoryName(p.categoria_id), _oferta: oferta || null, _vto: vtoMap.value[p.id] || null }
     })
   } catch (err) {
     console.error('[ProductsView] Error en tableRows, fallback a filteredProducts:', err)
@@ -271,10 +319,29 @@ function categoryName(catId) {
   return cat ? cat.nombre : '\u2014'
 }
 
+function fmtVto(vto) {
+  if (!vto || !vto.fecha) return '—'
+  try {
+    const d = new Date(vto.fecha)
+    const fecha = d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
+    if (vto.vencido) return `${fecha} · VTO!!`
+    if (vto.dias != null && vto.dias <= 0) return `${fecha} · HOY`
+    return `${fecha} · ${Number(vto.cantidad) || 0}u`
+  } catch {
+    return '—'
+  }
+}
+
 async function fetchProductsData(checkPendientes = false) {
   loading.value = true
   try {
-    await productosStore.fetchAll()
+    const [res, alertas] = await Promise.all([
+      productosStore.fetchAll(),
+      api.get(`/api/lotes/alertas?dias=${diasVencimientoFiltro.value}`).catch(() => null)
+    ])
+    if (alertas) {
+      vencimientos.value = [...(alertas.por_vencer || []), ...(alertas.vencidos || [])]
+    }
 
     if (checkPendientes && Array.isArray(products.value)) {
       const pendientes = products.value.filter(p =>
@@ -710,6 +777,21 @@ async function fetchProveedores() {
       <button
         type="button"
         class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 border flex items-center gap-1.5"
+        :class="filterPorVencer
+          ? 'bg-amber-500 text-white border-amber-500 shadow-sm shadow-amber-500/20'
+          : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'"
+        @click="filterPorVencer = !filterPorVencer"
+      >
+        <i class="fa-solid fa-hourglass-half"></i> Por vencer <span class="text-[9px] opacity-70">{{ diasVencimientoFiltro }}d</span>
+        <span
+          v-if="countPorVencer > 0"
+          class="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded-full"
+          :class="filterPorVencer ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-300'"
+        >{{ countPorVencer }}</span>
+      </button>
+      <button
+        type="button"
+        class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 border flex items-center gap-1.5"
         :class="filterPendientes
           ? 'bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-500/20'
           : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'"
@@ -778,6 +860,21 @@ async function fetchProveedores() {
         >
           {{ row.stock_actual }}
         </BaseBadge>
+      </template>
+      <template #vencimiento="{ row }">
+        <div v-if="row._vto" class="flex items-center justify-center">
+          <BaseBadge
+            :variant="vtoUrgencia(row._vto.dias, row._vto.vencido)"
+            size="xs"
+            :dot="true"
+            title="Lote por vencer"
+          >
+            <span class="font-mono-data font-bold leading-tight">
+              {{ fmtVto(row._vto) }}
+            </span>
+          </BaseBadge>
+        </div>
+        <span v-else class="text-slate-300 dark:text-slate-600 text-xs">—</span>
       </template>
       <template #categoria="{ row }">
         <span class="text-xs text-slate-500 dark:text-slate-400">{{ row.categoria }}</span>

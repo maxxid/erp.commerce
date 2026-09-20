@@ -15,6 +15,7 @@ const sizeClass = {
 const variantClass = {
   default: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
   brand: 'bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300',
+  amber: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
   success: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
   warning: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
   danger: 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300',
@@ -24,6 +25,7 @@ const variantClass = {
 const dotClass = {
   default: 'bg-slate-400',
   brand: 'bg-brand-500',
+  amber: 'bg-amber-500',
   success: 'bg-emerald-500',
   warning: 'bg-amber-500',
   danger: 'bg-red-500',
