@@ -46,7 +46,8 @@ class CompraCreate(BaseModel):
     proveedor_id: int
     sucursal_id: int = 1
     notas: Optional[str] = None
-    items: Optional[List[dict]] = Field(default_factory=list, description="Lista de items: {codigo_barras, cantidad, precio}")
+    recibir_directo: bool = False
+    items: Optional[List[dict]] = Field(default_factory=list, description="Lista de items: {codigo_barras, producto, cantidad, precio, categoria_id, vencimiento}")
 
 
 class CompraItemAdd(BaseModel):
@@ -90,12 +91,21 @@ def crear(
 
     from app.models.compra import CompraItem
     from app.services.compra_service import _recalcular_totales
+    from app.services import producto_service
+
+    vencimientos = {}
+    productos_creados = 0
+    items_ids = []
 
     for item_data in (data.items or []):
         codigo = item_data.get("codigo_barras", "") or ""
         nombre_prod = item_data.get("producto", "") or ""
         cantidad = float(item_data.get("cantidad", 1) or 1)
         precio = float(item_data.get("precio", 0) or 0)
+        categoria_id = item_data.get("categoria_id")
+
+        if not codigo and not nombre_prod:
+            continue
 
         producto_id = None
         prod = None
@@ -103,10 +113,32 @@ def crear(
             prod = db.query(Producto).filter(Producto.codigo_barras == codigo).first()
         if not prod and nombre_prod:
             prod = db.query(Producto).filter(Producto.nombre.ilike(nombre_prod)).first()
-        if prod:
+
+        if not prod:
+            # Producto nuevo: se crea al vuelo con la categoría elegida (o General)
+            nuevo_data = {"nombre": nombre_prod or (codigo or "Producto s/n")}
+            if codigo:
+                nuevo_data["codigo_barras"] = codigo
+            if not categoria_id:
+                from app.models.categoria import Categoria
+                general = db.query(Categoria).filter(Categoria.nombre == "General").first()
+                if not general:
+                    general = Categoria(nombre="General")
+                    db.add(general)
+                    db.flush()
+                categoria_id = general.id
+            nuevo_data["categoria_id"] = categoria_id
+            if precio > 0:
+                nuevo_data["precio_costo"] = precio
+            nuevo_data["fuente"] = "manual"
+            prod = producto_service.crear_producto(db, nuevo_data)
+            productos_creados += 1
             producto_id = prod.id
 
-        if producto_id and cantidad > 0 and precio > 0:
+        if producto_id is None and prod:
+            producto_id = prod.id
+
+        if producto_id and cantidad > 0:
             subtotal = cantidad * precio
             item = CompraItem(
                 compra_id=c.id,
@@ -117,6 +149,11 @@ def crear(
                 subtotal=subtotal,
             )
             db.add(item)
+            db.flush()
+            items_ids.append(item.id)
+            venc = item_data.get("vencimiento")
+            if venc:
+                vencimientos[str(item.id)] = venc
             prod.stock_transito = (prod.stock_transito or 0) + cantidad
 
     db.flush()
@@ -124,7 +161,18 @@ def crear(
     db.commit()
     db.refresh(c)
 
-    return RespuestaData(data=_compra_to_dict(c), message=f"Compra {c.numero} creada")
+    if data.recibir_directo and items_ids:
+        c = compra_service.recibir_compra(
+            db, c, user.id, cantidades=None, vencimientos=vencimientos
+        )
+
+    msg = f"Compra {c.numero} creada"
+    if data.recibir_directo and c.estado == "recibida":
+        msg = f"Compra {c.numero} recibida"
+    if productos_creados:
+        msg += f" · {productos_creados} producto(s) nuevo(s)"
+
+    return RespuestaData(data=_compra_to_dict(c), message=msg)
 
 
 @router.post("/{compra_id}/items", response_model=RespuestaData)

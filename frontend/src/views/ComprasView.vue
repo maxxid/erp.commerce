@@ -102,8 +102,13 @@
       </BaseTable>
     </BaseCard>
 
-    <BaseModal v-model="showModalCompra" title="Nueva Orden de Compra" size="2xl">
+    <BaseModal v-model="showModalCompra" title="Cargar Mercadería" size="2xl">
       <div class="space-y-5">
+        <div class="p-3 bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800/40 rounded-xl text-xs text-brand-700 dark:text-brand-300 flex items-start gap-2">
+          <i class="fa-solid fa-circle-info mt-0.5"></i>
+          <span>Un solo paso: escaneás o escribís los productos, y al dar <strong>Guardar</strong> la mercadería entra directo al stock como <strong>lote</strong> (con vencimiento si lo cargás). Los productos nuevos se crean automáticamente con la categoría que elijas.</span>
+        </div>
+
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <BaseSelect
             label="Proveedor"
@@ -147,11 +152,8 @@
               leave-to-class="opacity-0"
               move-class="transition duration-200 ease-out-expo"
             >
-              <div
-                v-for="(item, idx) in nuevaCompra.items"
-                :key="item._key"
-                class="grid grid-cols-12 gap-2 px-3 py-2 items-center border-b border-slate-100 dark:border-slate-700/50 hover:bg-white dark:hover:bg-slate-800/80 transition-colors"
-              >
+              <div v-for="(item, idx) in nuevaCompra.items" :key="item._key" class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50 hover:bg-white dark:hover:bg-slate-800/70 transition-colors">
+          <div class="grid grid-cols-12 gap-2 items-center">
                 <!-- Producto combobox -->
                 <div class="col-span-4">
                   <input
@@ -220,7 +222,33 @@
                     <i class="fa-solid fa-trash text-[10px]"></i>
                   </button>
                 </div>
-              </div>
+          </div>
+
+          <!-- Segunda fila: vencimiento + categoría si es producto nuevo -->
+          <div class="flex flex-wrap items-center gap-3 mt-2 ml-0.5">
+            <div class="flex items-center gap-2">
+              <label class="text-[9px] uppercase tracking-wide font-bold text-slate-400">Vencimiento</label>
+              <input
+                v-model="item.vencimiento"
+                type="date"
+                class="px-2 py-1 text-[11px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition"
+              />
+            </div>
+
+            <div v-if="esNuevoProducto(item)" class="flex items-center gap-2">
+              <label class="text-[9px] uppercase tracking-wide font-bold text-amber-500">Categoría</label>
+              <select
+                v-model="item.categoria_id"
+                class="px-2 py-1 text-[11px] bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none transition"
+              >
+                <option :value="null">Seleccionar...</option>
+                <option v-for="cat in categorias" :key="cat.id" :value="cat.id">{{ cat.nombre }}</option>
+              </select>
+              <BaseBadge variant="warning" size="xs" v-if="esNuevoProducto(item)">Nuevo</BaseBadge>
+            </div>
+            <span v-else class="text-[9px] text-slate-400">Producto existente — se actualizará su costo</span>
+          </div>
+        </div>
             </TransitionGroup>
 
             <datalist id="productos-datalist">
@@ -248,8 +276,8 @@
             Cancelar
           </BaseButton>
           <BaseButton variant="primary" class="flex-1" :disabled="saving" @click="guardarCompra">
-            <i :class="saving ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-check'"></i>
-            {{ saving ? 'Guardando...' : 'Guardar Orden' }}
+            <i :class="saving ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-boxes-packing'"></i>
+            {{ saving ? 'Guardando...' : 'Guardar y Recibir' }}
           </BaseButton>
         </div>
       </div>
@@ -367,6 +395,7 @@ const toast = useToastStore()
 
 const proveedores = ref([])
 const productosCatalogo = ref([])
+const categorias = ref([])
 const itemRefs = reactive({})
 let _itemCounter = 0
 
@@ -399,10 +428,23 @@ function _nuevoItem(producto = '', codigo_barras = '', cantidad = 1, precio = 0)
     codigo_barras,
     cantidad,
     precio,
+    vencimiento: '',
+    categoria_id: null,
     _scanning: false,
     _barcodeEdited: false,
     _cantidadFocused: false,
   }
+}
+
+function esNuevoProducto(item) {
+  if (!item) return false
+  const nombre = (item.producto || '').trim().toLowerCase()
+  const code = (item.codigo_barras || '').trim()
+  const existe = productosCatalogo.value.some(p =>
+    (code && p.codigo_barras === code) ||
+    (nombre && p.nombre && p.nombre.toLowerCase() === nombre)
+  )
+  return !existe && (!!nombre || !!code)
 }
 
 const totalCompra = computed(() =>
@@ -410,7 +452,7 @@ const totalCompra = computed(() =>
 )
 
 onMounted(async () => {
-  await Promise.all([fetchCompras(), fetchProveedores(), fetchProductosCatalogo()])
+  await Promise.all([fetchCompras(), fetchProveedores(), fetchProductosCatalogo(), fetchCategorias()])
 })
 
 async function fetchCompras() {
@@ -461,10 +503,17 @@ async function fetchProductosCatalogo() {
   } catch { /* fallback to mock */ }
 }
 
+async function fetchCategorias() {
+  try {
+    const data = await api.get('/api/categorias')
+    if (data && data.length) categorias.value = data
+  } catch { /* fallback to mock */ }
+}
+
 async function syncData() {
   syncing.value = true
   try {
-    await Promise.all([fetchCompras(), fetchProveedores(), fetchProductosCatalogo()])
+    await Promise.all([fetchCompras(), fetchProveedores(), fetchProductosCatalogo(), fetchCategorias()])
     toast.success('Datos sincronizados')
   } catch {
     toast.warning('Error al sincronizar')
@@ -634,9 +683,15 @@ async function guardarCompra() {
     toast.warning('Seleccioná un proveedor')
     return
   }
-  const itemsValidos = nuevaCompra.items.filter(i => i.producto.trim())
+  const itemsValidos = nuevaCompra.items.filter(i => (i.producto || '').trim() || (i.codigo_barras || '').trim())
   if (!itemsValidos.length) {
     toast.warning('Agregá al menos un ítem')
+    return
+  }
+  // Validar categoría para productos nuevos
+  const sinCategoria = itemsValidos.filter(i => esNuevoProducto(i) && !i.categoria_id)
+  if (sinCategoria.length) {
+    toast.warning(`Elegí la categoría para: ${sinCategoria.map(i => i.producto || i.codigo_barras).join(', ')}`)
     return
   }
   saving.value = true
@@ -644,42 +699,25 @@ async function guardarCompra() {
     const payload = {
       proveedor_id: nuevaCompra.proveedor_id,
       notas: nuevaCompra.notas,
+      recibir_directo: true,
       items: itemsValidos.map(i => ({
         producto: i.producto,
         codigo_barras: i.codigo_barras || '',
         cantidad: i.cantidad || 1,
         precio: i.precio || 0,
+        categoria_id: i.categoria_id || null,
+        vencimiento: i.vencimiento || null,
       })),
     }
     const resp = await api.post('/api/compras', payload)
     if (resp && resp.id) {
-      toast.success(`Orden ${resp.numero || 'creada'}`)
+      toast.success(resp.message || `Compra ${resp.numero || ''} recibida`)
     } else {
-      const proveedor = proveedores.value.find(p => p.id === nuevaCompra.proveedor_id)
-      compras.value.push({
-        id: Date.now(),
-        numero_orden: 'OC-' + String(compras.value.length + 1).padStart(3, '0'),
-        proveedor: proveedor ? proveedor.nombre : '—',
-        total: totalCompra.value,
-        estado: 'pendiente',
-        fecha: new Date().toLocaleDateString('es-AR'),
-        fecha_hora: new Date().toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }),
-        notas: '',
-        total_cantidad: itemsValidos.reduce((s, i) => s + i.cantidad, 0),
-        total_pendiente: itemsValidos.reduce((s, i) => s + i.cantidad, 0),
-        items: itemsValidos.map(i => ({
-          id: Date.now() + Math.random(),
-          producto: i.producto,
-          cantidad: i.cantidad,
-          precio: i.precio,
-          subtotal: i.cantidad * i.precio,
-          cantidad_recibida: 0,
-        })),
-      })
-      toast.success('Orden de compra creada')
+      toast.success('Mercadería cargada y recibida')
     }
     showModalCompra.value = false
     await fetchCompras()
+    await fetchProductosCatalogo()
   } catch (e) {
     toast.error(e.message || 'Error al guardar compra')
   } finally {
