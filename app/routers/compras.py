@@ -119,6 +119,8 @@ def crear(
             nuevo_data = {"nombre": nombre_prod or (codigo or "Producto s/n")}
             if codigo:
                 nuevo_data["codigo_barras"] = codigo
+            if item_data.get("marca"):
+                nuevo_data["marca"] = item_data.get("marca")
             if not categoria_id:
                 from app.models.categoria import Categoria
                 general = db.query(Categoria).filter(Categoria.nombre == "General").first()
@@ -130,6 +132,8 @@ def crear(
             nuevo_data["categoria_id"] = categoria_id
             if precio > 0:
                 nuevo_data["precio_costo"] = precio
+            if item_data.get("precio_venta"):
+                nuevo_data["precio_venta"] = item_data.get("precio_venta")
             nuevo_data["fuente"] = "manual"
             prod = producto_service.crear_producto(db, nuevo_data)
             productos_creados += 1

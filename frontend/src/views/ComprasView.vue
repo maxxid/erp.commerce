@@ -132,14 +132,15 @@
             <span class="text-[10px] text-slate-400">{{ nuevaCompra.items.length }} producto(s)</span>
           </div>
 
-          <div class="bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-            <div class="grid grid-cols-12 gap-2 px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wide border-b border-slate-200 dark:border-slate-700">
+          <div class="bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden max-h-[420px] flex flex-col">
+            <div class="grid grid-cols-12 gap-2 px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wide border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 shrink-0 sticky top-0 z-10">
               <span class="col-span-4">Producto</span>
               <span class="col-span-3">Código de Barras</span>
               <span class="col-span-2 text-center">Cantidad</span>
               <span class="col-span-2 text-right">Precio</span>
               <span class="col-span-1"></span>
             </div>
+            <div class="flex-1 overflow-y-auto min-h-0 overscroll-contain">
 
             <TransitionGroup
               name="item-row"
@@ -224,7 +225,7 @@
                 </div>
           </div>
 
-          <!-- Segunda fila: vencimiento + categoría si es producto nuevo -->
+          <!-- Segunda fila: vencimiento + categoría + datos del producto nuevo -->
           <div class="flex flex-wrap items-center gap-3 mt-2 ml-0.5">
             <div class="flex items-center gap-2">
               <label class="text-[9px] uppercase tracking-wide font-bold text-slate-400">Vencimiento</label>
@@ -235,17 +236,39 @@
               />
             </div>
 
-            <div v-if="esNuevoProducto(item)" class="flex items-center gap-2">
-              <label class="text-[9px] uppercase tracking-wide font-bold text-amber-500">Categoría</label>
-              <select
-                v-model="item.categoria_id"
-                class="px-2 py-1 text-[11px] bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none transition"
-              >
-                <option :value="null">Seleccionar...</option>
-                <option v-for="cat in categorias" :key="cat.id" :value="cat.id">{{ cat.nombre }}</option>
-              </select>
-              <BaseBadge variant="warning" size="xs" v-if="esNuevoProducto(item)">Nuevo</BaseBadge>
-            </div>
+            <template v-if="esNuevoProducto(item)">
+              <div class="flex items-center gap-2">
+                <label class="text-[9px] uppercase tracking-wide font-bold text-amber-500">Marca</label>
+                <input
+                  v-model="item.marca"
+                  type="text"
+                  placeholder="Opcional"
+                  class="w-28 px-2 py-1 text-[11px] bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none transition"
+                />
+              </div>
+              <div class="flex items-center gap-2">
+                <label class="text-[9px] uppercase tracking-wide font-bold text-amber-500">P. Venta</label>
+                <input
+                  v-model.number="item.precio_venta"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  class="w-24 px-2 py-1 text-[11px] bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none transition"
+                />
+              </div>
+              <div class="flex items-center gap-2">
+                <label class="text-[9px] uppercase tracking-wide font-bold text-amber-500">Categoría</label>
+                <select
+                  v-model="item.categoria_id"
+                  class="px-2 py-1 text-[11px] bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none transition"
+                >
+                  <option :value="null">Seleccionar...</option>
+                  <option v-for="cat in categorias" :key="cat.id" :value="cat.id">{{ cat.nombre }}</option>
+                </select>
+                <BaseBadge variant="warning" size="xs">Nuevo</BaseBadge>
+              </div>
+            </template>
             <span v-else class="text-[9px] text-slate-400">Producto existente — se actualizará su costo</span>
           </div>
         </div>
@@ -261,6 +284,7 @@
               <p class="text-xs text-slate-400 dark:text-slate-500">
                 Escribí un nombre, elegí de la lista, o escaneá un código de barras para empezar
               </p>
+            </div>
             </div>
           </div>
 
@@ -428,6 +452,8 @@ function _nuevoItem(producto = '', codigo_barras = '', cantidad = 1, precio = 0)
     codigo_barras,
     cantidad,
     precio,
+    marca: '',
+    precio_venta: 0,
     vencimiento: '',
     categoria_id: null,
     _scanning: false,
@@ -705,6 +731,8 @@ async function guardarCompra() {
         codigo_barras: i.codigo_barras || '',
         cantidad: i.cantidad || 1,
         precio: i.precio || 0,
+        marca: i.marca || '',
+        precio_venta: i.precio_venta || 0,
         categoria_id: i.categoria_id || null,
         vencimiento: i.vencimiento || null,
       })),
