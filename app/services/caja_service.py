@@ -5,7 +5,9 @@ Reglas de negocio:
 - Para vender, la caja debe estar abierta.
 - Cada medio de pago se cierra independientemente con su propio arqueo.
 - Cierre total = cierra todos los métodos pendientes de una vez.
-- La caja solo se cierra manualmente (no hay auto-cierre por cambio de día).
+- Auto-cierre por cambio de día: si la última apertura quedó sin cierre total y
+  correspondía a un día anterior (zona horaria Argentina), se registra un cierre
+  total automático para que cada jornada arranque con la caja cerrada.
 """
 
 from typing import Optional, List, Tuple
@@ -31,10 +33,20 @@ def _a_local(dt: datetime) -> datetime:
     return dt.astimezone(TZ_AR)
 
 
-def caja_abierta(db: Session, sucursal_id: int = 1) -> bool:
-    """Verifica si hay una caja abierta (sin cierre total posterior a una apertura).
+def _es_apertura_del_dia_actual(fecha_utc: Optional[datetime]) -> bool:
+    """True si la fecha (UTC) corresponde al día actual en zona Argentina."""
+    if fecha_utc is None:
+        return False
+    return _a_local(fecha_utc).date() == _ahora_local().date()
 
-    La caja solo se cierra manualmente (cierre total). No hay auto-cierre por cambio de día.
+
+def caja_abierta(db: Session, sucursal_id: int = 1) -> bool:
+    """Verifica si hay una caja abierta para la jornada actual.
+
+    - Cierre total manual: la caja queda cerrada.
+    - Apertura del día actual (zona Argentina): caja abierta.
+    - Apertura de un día anterior sin cierre total posterior: se considera
+      automáticamente cerrada por cambio de día (caja cerrada para hoy).
     """
     movimientos = (
         db.query(MovimientoCaja)
@@ -47,11 +59,54 @@ def caja_abierta(db: Session, sucursal_id: int = 1) -> bool:
         # Cierre total: la caja quedó cerrada
         if m.tipo == "cierre" and not m.medio_pago:
             return False
-        # Apertura: caja abierta
+        # Apertura: caja abierta solo si corresponde al día actual
         if m.tipo == "apertura":
-            return True
+            return _es_apertura_del_dia_actual(m.created_at)
     # Sin aperturas ni cierres registrados: caja cerrada
     return False
+
+
+def cerrar_sesion_anterior_automaticamente(db: Session, sucursal_id: int = 1) -> bool:
+    """Registra un cierre total automático si la última apertura quedó abierta
+    un día anterior (zona Argentina). Devuelve True si se registró el cierre.
+
+    Mantiene el historial consistente: cada jornada queda cerrada aunque el
+    operador se haya olvidado de hacer el cierre manual al salir.
+    """
+    movimientos = (
+        db.query(MovimientoCaja)
+        .filter(MovimientoCaja.sucursal_id == sucursal_id)
+        .order_by(MovimientoCaja.id.desc())
+        .all()
+    )
+    apertura = None
+    for m in movimientos:
+        # Si hay un cierre total reciente, no hay sesión abierta previa
+        if m.tipo == "cierre" and not m.medio_pago:
+            return False
+        if m.tipo == "apertura":
+            apertura = m
+            break
+    if apertura is None:
+        return False
+    if _es_apertura_del_dia_actual(apertura.created_at):
+        return False
+
+    desglose = obtener_resumen_por_medio_pago(db, sucursal_id)
+    total = desglose["total_ingresos"]
+    desc = f"Cierre automático por cambio de día. Total ingresos: ${total:,.2f}"
+    cierre = MovimientoCaja(
+        tipo="cierre",
+        monto=total,
+        descripcion=desc,
+        medio_pago=None,
+        usuario_id=apertura.usuario_id,
+        sucursal_id=sucursal_id,
+    )
+    db.add(cierre)
+    db.commit()
+    db.refresh(cierre)
+    return True
 
 
 def abrir_caja(
@@ -77,6 +132,8 @@ def abrir_caja(
     Raises:
         ValueError: Si ya hay una caja abierta.
     """
+    # Auto-cierre por cambio de día antes de abrir una nueva jornada
+    cerrar_sesion_anterior_automaticamente(db, sucursal_id)
     if caja_abierta(db, sucursal_id):
         raise ValueError("Ya hay una caja abierta. Ciérrela primero.")
 
@@ -180,7 +237,7 @@ def cerrar_metodo(
 
     diferencia = monto_real - esperado
 
-    # Verificar que no esté ya cerrado este método en esta sesión
+    # Verificar que no esté ya cerrado este método en la sesión actual
     ya_cerrado = (
         db.query(MovimientoCaja)
         .filter(
@@ -192,30 +249,8 @@ def cerrar_metodo(
         .first()
     )
     if ya_cerrado:
-        # Caminar desde ya_cerrado hacia registros más viejos:
-        # si se encuentra un "apertura" primero → pertenece a la sesión actual
-        # si se encuentra un "cierre" total primero → es de una sesión anterior
-        desde_apertura = False
-        movs = (
-            db.query(MovimientoCaja)
-            .filter(MovimientoCaja.sucursal_id == sucursal_id)
-            .order_by(MovimientoCaja.id.desc())
-            .all()
-        )
-        found = False
-        for m in movs:
-            if m.id == ya_cerrado.id:
-                found = True
-                continue
-            if not found:
-                continue
-            if m.tipo == "cierre" and not m.medio_pago:
-                desde_apertura = False
-                break
-            if m.tipo == "apertura":
-                desde_apertura = True
-                break
-        if desde_apertura:
+        apertura_sesion = _apertura_sesion_actual(db, sucursal_id)
+        if apertura_sesion and ya_cerrado.id > apertura_sesion.id:
             raise ValueError(f"El método '{medio_pago}' ya fue cerrado en esta sesión.")
 
     desc = f"Cierre {medio_pago}. Esperado: ${esperado:,.2f}. Diferencia: ${diferencia:,.2f}"
@@ -349,6 +384,9 @@ def obtener_saldo_actual(db: Session, sucursal_id: int = 1) -> float:
 
 def obtener_estado_caja(db: Session, sucursal_id: int = 1) -> dict:
     """Devuelve el estado actual de la caja."""
+    # Auto-cierre por cambio de día: si la última apertura es de un día anterior,
+    # registrar el cierre automático para que hoy la caja arranque cerrada.
+    cerrar_sesion_anterior_automaticamente(db, sucursal_id)
     abierta = caja_abierta(db, sucursal_id)
     saldo = obtener_saldo_actual(db, sucursal_id) if abierta else 0.0
     metodos_cerrados = _metodos_ya_cerrados(db, sucursal_id) if abierta else []
@@ -475,6 +513,22 @@ def _es_posterior_a_apertura(db: Session, referencia_id: int, sucursal_id: int) 
         .first()
     )
     return not cierre
+
+
+def _apertura_sesion_actual(db: Session, sucursal_id: int = 1) -> Optional[MovimientoCaja]:
+    """Devuelve la apertura de la sesión actual (la más reciente sin cierre total posterior)."""
+    movimientos = (
+        db.query(MovimientoCaja)
+        .filter(MovimientoCaja.sucursal_id == sucursal_id)
+        .order_by(MovimientoCaja.id.desc())
+        .all()
+    )
+    for m in movimientos:
+        if m.tipo == "cierre" and not m.medio_pago:
+            return None
+        if m.tipo == "apertura":
+            return m
+    return None
 
 
 def _obtener_monto_apertura(db: Session, sucursal_id: int = 1) -> float:
