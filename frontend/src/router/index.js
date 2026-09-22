@@ -10,6 +10,7 @@ const routes = [
   { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue'), meta: { guest: true } },
   { path: '/dashboard', name: 'dashboard', component: () => import('@/views/DashboardView.vue') },
   { path: '/pos', name: 'pos', component: () => import('@/views/POSView.vue') },
+  { path: '/cobrar', name: 'cobrar', component: () => import('@/views/CobroMovilView.vue'), meta: { bare: true, mobile: true } },
   { path: '/products', name: 'products', component: () => import('@/views/ProductsView.vue') },
   { path: '/caja', name: 'caja', component: () => import('@/views/CajaView.vue'), meta: { roles: ['admin', 'cajero'] } },
   { path: '/ventas', name: 'ventas', component: () => import('@/views/VentasView.vue') },

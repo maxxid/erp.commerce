@@ -153,7 +153,8 @@ onUnmounted(() => {
       </div>
 
       <template v-else key="app">
-        <div class="flex-1 flex w-full min-h-screen">
+        <router-view v-if="$route.meta.bare" />
+        <div v-else class="flex-1 flex w-full min-h-screen">
           <TheSidebar @navigate="handleNavigate" />
           <main class="flex-1 flex flex-col min-w-0 overflow-hidden">
             <TheHeader
