@@ -1,5 +1,20 @@
 # Deploy & Mantenimiento
 
+## Cómo funciona (IMPORTANTE - leído con sangre)
+
+- **NO hay Vercel ni Supabase vinculados a este proyecto.** El frontend NO se despliega con git push hacia una plataforma externa.
+- El **mismo servidor** (`erp-comercio`, systemd + uvicorn) sirve backend **y** frontend: las rutas `/app/*` se sirven desde `frontend/dist/` (estático). Verificado: `GET /app/sw.js` responde 200 desde uvicorn.
+- Flujo: **build en la PC local (Windows) → commit + push → `git pull` en el servidor**. El `dist/` se sube a git y el server lo toma con el pull.
+- Conclusión: si el `git log -1` del servidor no tiene el último commit local, el cambio no está en producción.
+
+## Cómo verificar la versión desplegada
+
+```bash
+cd /opt/erp-comercio
+git log --oneline -3              # ¿está el último commit?
+ls frontend/dist/index.html       # ¿existe el build nuevo?
+```
+
 ## Pull y Restart
 
 Frontend (solo frontend, no reinicia backend):
@@ -56,6 +71,14 @@ node ./node_modules/vite/bin/vite.js build
 ```
 
 Luego commit y push - el dist/ se sube a git y el server hace pull.
+
+## Nuevas dependencias npm (frontend)
+
+Si localmente se corrió `npm install <paquete>` (ej: `qrcode`), el `package.json` y `package-lock.json` se suben con el commit. En el server NO hace falta instalar cuando el `dist/` ya está compilado y commiteado (se sirve estático). Solo importaría si se compila en el server.
+
+## Cambios de backend que ya se aplicaron (requieren restart)
+
+- **Auto-cierre de caja por cambio de día** (`app/services/caja_service.py`, commit `700bd6c`): si quedó una caja de ayer sin cierre total, se cierra sola al consultar estado o abrir caja hoy; `cerrar_metodo` ya no tira "ya fue cerrado en esta sesión" por cierres de días previos.
 
 ## MercadoPago - URL API Sandbox
 
