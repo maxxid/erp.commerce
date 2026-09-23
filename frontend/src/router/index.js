@@ -37,7 +37,7 @@ router.beforeEach((to, from) => {
   const auth = useAuthStore()
 
   if (!auth.authenticated && !to.meta.guest) {
-    return '/login'
+    return { path: '/login', query: { redirect: to.fullPath } }
   }
   if (auth.authenticated && to.meta.guest) {
     return '/dashboard'

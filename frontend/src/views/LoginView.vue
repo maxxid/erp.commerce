@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
 import BaseInput from '@/components/ui/BaseInput.vue'
@@ -10,13 +10,14 @@ import BaseBadge from '@/components/ui/BaseBadge.vue'
 const auth = useAuthStore()
 const toast = useToastStore()
 const router = useRouter()
+const route = useRoute()
 
 const showPassword = ref(false)
 const copied = ref(false)
 
 onMounted(() => {
   if (auth.authenticated) {
-    router.replace('/dashboard')
+    router.replace(route.query.redirect || '/dashboard')
   }
 })
 
@@ -30,7 +31,8 @@ async function doLogin() {
   const ok = await auth.handleLogin()
   if (ok) {
     toast.success(`Bienvenido, ${auth.currentUser?.nombre || auth.loginForm.username}`)
-    router.push('/dashboard')
+    const redirect = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/') ? route.query.redirect : '/dashboard'
+    router.push(redirect)
   }
 }
 
