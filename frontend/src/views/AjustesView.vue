@@ -87,6 +87,7 @@ const config = ref({
   qr_interop_cuenta: '',
   qr_interop_nombre: '',
   qr_interop_ciudad: '',
+  qr_interop_mcc: '9700',
 })
 
 const facturaAuto = ref({
@@ -181,6 +182,7 @@ const descs = {
   qr_interop_cuenta: 'CBU (22) o CVU (23), o alias de la cuenta donde llega el pago',
   qr_interop_nombre: 'Nombre corto del comercio que se muestra en el QR (máx. 25 caracteres)',
   qr_interop_ciudad: 'Ciudad del comercio (opcional, máx. 15 caracteres)',
+  qr_interop_mcc: 'Código de categoría del comercio (MCC, 4 dígitos). "9700" es el valor estándar de los QRs de transferencia',
   factura_auto_efectivo: 'Emitir factura electrónica automáticamente al cobrar en efectivo',
   factura_auto_debito: 'Emitir factura electrónica automáticamente al cobrar con débito',
   factura_auto_credito: 'Emitir factura electrónica automáticamente al cobrar con crédito',
@@ -192,7 +194,7 @@ const descs = {
 
 const MP_KEYS = ['mercadopago_enabled', 'mercadopago_access_token', 'mercadopago_user_id', 'mercadopago_store_id', 'mercadopago_external_store_id', 'mercadopago_external_pos_id', 'mercadopago_pos_id_qr', 'mercadopago_pos_id_smart', 'mercadopago_mode', 'mercadopago_qr_fijo_url', 'mercadopago_qr_fijo_modo', 'mercadopago_webhook_secret']
 
-const QR_INTEROP_KEYS = ['qr_interop_cuit', 'qr_interop_cuenta', 'qr_interop_nombre', 'qr_interop_ciudad']
+const QR_INTEROP_KEYS = ['qr_interop_cuit', 'qr_interop_cuenta', 'qr_interop_nombre', 'qr_interop_ciudad', 'qr_interop_mcc']
 
 const VENTAS_KEYS = ['factura_auto_efectivo', 'factura_auto_debito', 'factura_auto_credito', 'factura_auto_transferencia', 'factura_auto_cta_corriente', 'factura_auto_mercadopago_qr', 'factura_auto_mercadopago_pos']
 
@@ -953,6 +955,8 @@ onMounted(loadConfig)
         <BaseInput v-model="config.qr_interop_nombre" label="Nombre del comercio *" placeholder="Ej: MI NEGOCIO" hint="Se muestra en el QR. Sin acentos, máx. 25 caracteres" />
 
         <BaseInput v-model="config.qr_interop_ciudad" label="Ciudad (opcional)" placeholder="Ej: MAR DEL PLATA" hint="Máx. 15 caracteres" />
+
+        <BaseInput v-model="config.qr_interop_mcc" label="MCC (código de categoría) (opcional)" placeholder="Ej: 9700" hint="4 dígitos. Default 9700: comercio sin categoría específica" />
 
         <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded p-3">
           <p class="text-xs text-amber-700 dark:text-amber-300">

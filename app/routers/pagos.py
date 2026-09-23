@@ -114,7 +114,7 @@ def crear_orden_interoperable(
     inmediata (PCT) a la CBU/CVU codificada en el campo 51.
 
     Requiere configurarlo en Ajustes: qr_interop_cuit, qr_interop_cuenta,
-    qr_interop_nombre y opcionalmente qr_interop_ciudad.
+    qr_interop_nombre y opcionalmente qr_interop_ciudad y qr_interop_mcc.
     """
     from app.services import config_service, venta_service
     from app.services import qr_interop_service
@@ -132,6 +132,7 @@ def crear_orden_interoperable(
     cuenta = config_service.get_config(db, "qr_interop_cuenta") or ""
     nombre = config_service.get_config(db, "qr_interop_nombre") or ""
     ciudad = config_service.get_config(db, "qr_interop_ciudad") or ""
+    mcc = config_service.get_config(db, "qr_interop_mcc") or "9700"
 
     if not cuit or not cuenta or not nombre:
         raise HTTPException(
@@ -147,6 +148,7 @@ def crear_orden_interoperable(
             nombre_comercio=nombre,
             ciudad=ciudad,
             dinamico=True,
+            mcc=mcc,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
