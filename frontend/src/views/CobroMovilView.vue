@@ -47,7 +47,7 @@ const mediosPago = [
   { value: 'efectivo', label: 'Efectivo', icon: 'fa-money-bill-wave' },
   { value: 'transferencia', label: 'Transferencia', icon: 'fa-mobile-screen-button' },
   { value: 'mercadopago_qr', label: 'QR MercadoPago', icon: 'fa-qrcode' },
-  { value: 'qr_interoperable', label: 'QR Transferencia', icon: 'fa-wallet' },
+  { value: 'qr_interoperable', label: 'QR BCRA', icon: 'fa-wallet' },
   { value: 'smartpoint', label: 'SmartPoint', icon: 'fa-cash-register' },
   { value: 'cta_corriente', label: 'Cuenta corriente', icon: 'fa-file-invoice-dollar' }
 ]

@@ -556,9 +556,9 @@
           <div ref="pagoSection" tabindex="0" @keydown="handlePagoKeydown">
             <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase block mb-2">
               Medio de Pago
-              <span class="text-slate-300 dark:text-slate-600 ml-2 font-normal">Atajos: 1-5, ←→, Enter</span>
+              <span class="text-slate-300 dark:text-slate-600 ml-2 font-normal">Atajos: 1-7, ←→, Enter</span>
             </label>
-            <div class="grid grid-cols-6 gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
+            <div class="grid grid-cols-4 sm:grid-cols-7 gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
               <button
                 v-for="(medio, idx) in mediosPago"
                 :key="medio.value"
@@ -908,6 +908,54 @@
     </div>
   </BaseModal>
 
+  <!-- QR interoperable BCRA Modal -->
+  <BaseModal v-model="qiModal" title="Cobro con QR BCRA (todas las billeteras)" size="md" :close-on-esc="false" :close-on-backdrop="false">
+    <div v-if="qiLoading" class="text-center py-8">
+      <div class="w-16 h-16 rounded-2xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center mx-auto mb-4">
+        <i class="fa-solid fa-circle-notch fa-spin text-blue-500 text-2xl"></i>
+      </div>
+      <p class="text-sm font-semibold text-slate-700 dark:text-slate-200">Generando código QR...</p>
+    </div>
+
+    <div v-else-if="qiError" class="text-center py-8">
+      <div class="w-16 h-16 rounded-2xl bg-red-50 dark:bg-red-900/20 flex items-center justify-center mx-auto mb-4">
+        <i class="fa-solid fa-circle-xmark text-red-500 text-2xl"></i>
+      </div>
+      <p class="text-sm font-semibold text-red-700 dark:text-red-300 mb-2">Error al generar QR</p>
+      <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">{{ qiError }}</p>
+      <BaseButton variant="secondary" @click="qiModal = false">Cerrar</BaseButton>
+    </div>
+
+    <div v-else-if="qiData" class="text-center">
+      <div class="mb-4">
+        <p class="text-lg font-bold text-slate-900 dark:text-white">{{ fc(qiData.monto) }}</p>
+        <p class="text-xs text-slate-500 dark:text-slate-400">Venta #{{ qiData.venta_numero }}</p>
+      </div>
+
+      <div v-if="qiData.qr_image_url" class="bg-white rounded-xl p-4 inline-block mb-4">
+        <img :src="qiData.qr_image_url" alt="QR BCRA" class="w-48 h-48 mx-auto" />
+      </div>
+      <div v-else-if="qiData.qr_data" class="bg-white rounded-xl p-4 inline-block mb-4">
+        <p class="text-xs font-mono text-slate-600 break-all">{{ qiData.qr_data }}</p>
+      </div>
+
+      <div class="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-4 mb-4">
+        <p class="text-xs text-emerald-700 dark:text-emerald-300">
+          <i class="fa-solid fa-mobile-screen-button mr-1"></i>
+          El cliente lo paga con cualquier billetera (Brubank, Personal Pay, MODO, MP). La transferencia
+          llega directo a tu CBU/CVU. Confirmá el cobro cuando lo veas acreditado.
+        </p>
+      </div>
+
+      <div class="flex items-center justify-center gap-3">
+        <BaseButton variant="secondary" :disabled="qiConfirmando" @click="cancelQi">Cancelar</BaseButton>
+        <BaseButton variant="primary" :loading="qiConfirmando" @click="confirmarQi">
+          <i class="fa-solid fa-check mr-1"></i> Ya me pagaron
+        </BaseButton>
+      </div>
+    </div>
+  </BaseModal>
+
   <!-- MercadoPago QR Modal -->
   <BaseModal v-model="mpQrModal" title="Cobro con MercadoPago QR" size="md" :close-on-esc="false" :close-on-backdrop="false">
     <div v-if="mpQrLoading" class="text-center py-8">
@@ -1184,6 +1232,15 @@ const mpPosPollingInterval = ref(null)
 const mpPosVentaId = ref(null)
 const mpPosOrderId = ref(null)
 
+// QR interoperable BCRA (cualquier billetera) states
+const qiModal = ref(false)
+const qiLoading = ref(false)
+const qiData = ref(null)
+const qiError = ref('')
+const qiConfirmando = ref(false)
+let qiVentaId = null
+let qiVentaNumero = ''
+
 const showStatsPanel = ref(true)
 const showRecallDropdown = ref(false)
 const ticketData = reactive({ items: [], numero: '', fecha: '', total: 0, descuento: 0, medio_pago: '', cliente: '', sucursal: '', venta_id: null })
@@ -1323,6 +1380,7 @@ const mediosPago = [
   { value: 'efectivo', label: 'Efectivo', icon: 'fa-money-bill-wave' },
   { value: 'transferencia', label: 'Transf.', icon: 'fa-mobile-screen-button' },
   { value: 'mercadopago_qr', label: 'QR MP', icon: 'fa-brands fa-cc-mastercard' },
+  { value: 'qr_interop', label: 'QR BCRA', icon: 'fa-wallet' },
   { value: 'mercadopago_pos', label: 'POS MP', icon: 'fa-solid fa-mobile-button' },
   { value: 'smartpoint', label: 'SmartPoint', icon: 'fa-solid fa-cash-register' },
   { value: 'cta_corriente', label: 'Cta. Cte.', icon: 'fa-file-invoice-dollar' }
@@ -1900,7 +1958,7 @@ function addToCart(product, qty = 1, price = null) {
 function handlePagoKeydown(event) {
   const pagos = mediosPago.map(m => m.value)
   const key = event.key
-  if (key >= '1' && key <= '6') {
+  if (key >= '1' && key <= '7') {
     event.preventDefault()
     cart.medio_pago = pagos[parseInt(key) - 1]
   } else if (key === 'ArrowLeft') {
@@ -2083,6 +2141,16 @@ async function confirmarVenta() {
         const montoQr = cart.total
         vaciarCarrito()
         await iniciarPagoMpPos(ventaId, ventaNumero, montoQr)
+        nextTick(() => barcodeInput.value?.focus())
+        return
+      }
+
+      if (cart.medio_pago === 'qr_interop') {
+        confirmando.value = false
+        const montoQi = mostrarPagoMixto.value ? restoMedio.value : cart.total
+        const efectivoQi = mostrarPagoMixto.value ? efectivoPagadoNum.value : 0
+        vaciarCarrito()
+        await iniciarPagoQi(ventaId, ventaNumero, montoQi, efectivoQi)
         nextTick(() => barcodeInput.value?.focus())
         return
       }
@@ -2403,6 +2471,113 @@ function cancelMpQr() {
   mpQrData.value = null
   mpVentaId.value = null
   mpOrderId.value = null
+  toast.info('Cobro con QR cancelado')
+}
+
+// QR interoperable BCRA functions
+async function iniciarPagoQi(ventaId, ventaNumero, monto, efectivoPagadoExtra) {
+  qiLoading.value = true
+  qiError.value = ''
+  qiData.value = null
+  qiVentaId = ventaId
+  qiVentaNumero = ventaNumero
+  qiModal.value = true
+
+  try {
+    const resp = await api.post('/api/pagos/interoperable/crear-orden', {
+      venta_id: ventaId,
+      monto: monto
+    })
+    if (resp && resp.success) {
+      qiData.value = {
+        qr_data: resp.qr_data,
+        qr_image_url: generarQrImageUrl(resp.qr_data, 400),
+        monto: monto,
+        venta_numero: ventaNumero,
+        efectivo_pagado: efectivoPagadoExtra || 0
+      }
+    } else {
+      throw new Error(resp?.detail || 'Error al crear la orden')
+    }
+  } catch (e) {
+    qiError.value = e.response?.data?.detail || e.data?.detail || e.message || 'Error desconocido'
+  } finally {
+    qiLoading.value = false
+  }
+}
+
+async function confirmarQi() {
+  if (!qiVentaId) return
+  qiConfirmando.value = true
+  try {
+    const qiMonto = qiData.value?.monto || 0
+    const efectivoExtra = qiData.value?.efectivo_pagado || 0
+    const resp = await api.put(`/api/ventas/${qiVentaId}/confirmar`, {
+      medio_pago: 'transferencia',
+      efectivo_pagado: efectivoExtra,
+      descuento: 0,
+      cliente_id: undefined,
+      comprador_cuit: undefined
+    })
+    qiModal.value = false
+    toast.success(`Pago por transferencia confirmado. Total: ${fc(resp?.total || qiMonto)}`)
+    playSale()
+    firstSaleOfDay()
+
+    const venta = await api.get(`/api/ventas/${qiVentaId}`)
+    const v = venta?.data || venta
+    if (v && v.numero) {
+      ticketData.numero = v.numero
+      ticketData.fecha = new Date().toLocaleString('es-AR')
+      ticketData.items = v.items || []
+      ticketData.total = v.total
+      ticketData.descuento = v.descuento || 0
+      ticketData.medio_pago = 'transferencia'
+      ticketData.cliente = v.cliente_nombre || ''
+      ticketData.venta_id = qiVentaId
+      showTicket.value = true
+
+      stats.ventas_hoy += v.total
+      stats.tickets_hoy += 1
+      stats.ticket_promedio = Math.round(stats.ventas_hoy / stats.tickets_hoy)
+      stats.saldo_caja += v.total
+
+      recentTransactions.value.unshift({
+        id: qiVentaId,
+        ventaNumero: v.numero,
+        cliente: v.cliente_nombre || null,
+        total: v.total,
+        subtotal: v.subtotal,
+        descuento: v.descuento || 0,
+        medio_pago: 'transferencia',
+        items: (v.items || []).map(i => ({
+          producto_id: i.producto_id,
+          nombre: i.producto_nombre,
+          cantidad: i.cantidad,
+          precio_unitario: i.precio_unitario
+        })),
+        itemCount: v.items ? v.items.length : 0,
+        hora: new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }),
+        createdAt: Date.now()
+      })
+      if (recentTransactions.value.length > 20) recentTransactions.value.pop()
+    }
+    qiVentaId = null
+  } catch (e) {
+    toast.error(e.response?.data?.detail || e.data?.detail || e.message || 'Error confirmando el pago')
+  } finally {
+    qiConfirmando.value = false
+  }
+}
+
+function cancelQi() {
+  qiModal.value = false
+  qiData.value = null
+  if (qiVentaId) {
+    api.put(`/api/ventas/${qiVentaId}/anular`).catch(() => {})
+    qiVentaId = null
+  }
+  qiVentaNumero = ''
   toast.info('Cobro con QR cancelado')
 }
 
