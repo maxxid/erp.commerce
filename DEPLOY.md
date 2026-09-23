@@ -82,6 +82,6 @@ Si localmente se corrió `npm install <paquete>` (ej: `qrcode`), el `package.jso
 
 ## MercadoPago - URL API Sandbox
 
-**Importante:** MercadoPago ya no usa `api.sandbox.mercadopago.com`. El sandbox ahora usa el mismo dominio `api.mercadopago.com` - el ambiente se determina por el access token (`APP_USR-` = sandbox, `APP_PROD-` = producción).
+**Importante:** MercadoPago ya no usa `api.sandbox.mercadopago.com`. El sandbox ahora usa el mismo dominio `api.mercadopago.com` - el ambiente se determina por el access token: `TEST-...` = pruebas/prueba, `APP_USR-...` = producción (cobros reales).
 
 Si falla `crear-sucursal` o `crear-caja` con error DNS, verificar que `_get_api_base()` en `mercadopago_service.py` use solo `https://api.mercadopago.com`.

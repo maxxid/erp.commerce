@@ -72,7 +72,7 @@ def crear_orden_qr(
     if not external_pos_id:
         raise ValueError("No se encontró external_pos_id. Creá una caja primero en Ajustes.")
 
-    modo = modo_qr or config.get("qr_fijo_modo") or "dinamico"
+    modo = modo_qr or "dinamico"
     modo_map = {"dinamico": "dynamic", "estatico": "static", "hibrido": "hybrid"}
     modo_mp = modo_map.get(modo, "dynamic")
 
