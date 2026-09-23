@@ -7,6 +7,7 @@ import { useProductosStore } from '@/stores/productos'
 import { useCajaStore } from '@/stores/caja'
 import { formatCurrency as fc } from '@/composables/useUtils'
 import api from '@/services/api'
+import QRCode from 'qrcode'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
@@ -73,7 +74,18 @@ const filteredProducts = computed(() => {
 
 onMounted(async () => {
   cajaStore.fetchEstado()
-  await Promise.all([productosStore.fetchAll(), api.get('/api/config/ajustes').then(r => { mpConfig.value = r || {} }).catch(() => {})])
+  await Promise.all([
+    productosStore.fetchAll(),
+    api.get('/api/config/ajustes').then(cfg => {
+      if (cfg && typeof cfg === 'object') {
+        mpConfig.value = {
+          mercadopago_qr_fijo_url: cfg.mercadopago_qr_fijo_url?.valor || '',
+          mercadopago_qr_fijo_modo: cfg.mercadopago_qr_fijo_modo?.valor || 'dinamico'
+        }
+      }
+      return cfg
+    }).catch(() => {})
+  ])
   cargando.value = false
 })
 
@@ -404,9 +416,10 @@ async function iniciarQr() {
       descripcion: `Venta ${ventaId}`
     })
     if (resp && resp.success) {
+      const qrDataUrl = resp.qr_data ? await QRCode.toDataURL(resp.qr_data, { width: 480, margin: 2 }) : ''
       mpData.value = {
         tipo: 'dinamico',
-        image_url: `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(resp.qr_data)}`,
+        image_url: qrDataUrl,
         order_id: resp.order_id,
         monto: cart.total
       }
