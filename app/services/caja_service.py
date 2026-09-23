@@ -98,8 +98,10 @@ def cerrar_sesion_anterior_automaticamente(db: Session, sucursal_id: int = 1) ->
     cierre = MovimientoCaja(
         tipo="cierre",
         monto=total,
+        monto_esperado=total,
         descripcion=desc,
         medio_pago=None,
+        fue_automatico=True,
         usuario_id=apertura.usuario_id,
         sucursal_id=sucursal_id,
     )
@@ -198,10 +200,12 @@ def obtener_ultimo_cierre(db: Session, sucursal_id: int = 1) -> Optional[dict]:
     fecha_local = _a_local(fecha_utc) if fecha_utc else None
     
     # Detectar si fue automático por la descripción
-    fue_automatico = "automático" in (ultimo_cierre.descripcion or "").lower()
+    fue_automatico = bool(ultimo_cierre.fue_automatico) or "automático" in (ultimo_cierre.descripcion or "").lower()
     
     return {
         "monto": ultimo_cierre.monto or 0.0,
+        "monto_esperado": ultimo_cierre.monto_esperado or ultimo_cierre.monto,
+        "monto_confirmado": ultimo_cierre.monto_confirmado,
         "fecha_utc": fecha_utc.isoformat() if fecha_utc else None,
         "fecha_local": fecha_local.isoformat() if fecha_local else None,
         "fecha_local_str": fecha_local.strftime("%d/%m/%Y %H:%M") if fecha_local else None,
@@ -209,6 +213,48 @@ def obtener_ultimo_cierre(db: Session, sucursal_id: int = 1) -> Optional[dict]:
         "fue_automatico": fue_automatico,
         "usuario_id": ultimo_cierre.usuario_id,
     }
+
+
+def confirmar_cierre(
+    db: Session,
+    cierre_id: int,
+    monto_confirmado: float,
+    usuario_id: int,
+    comentario: str = "",
+    sucursal_id: int = 1,
+) -> MovimientoCaja:
+    """Confirma (o ajusta) un cierre de caja con el monto real contado.
+
+    Conserva siempre el monto esperado (cálculo del sistema) y guarda aparte
+    el monto confirmado más el autor y la fecha. Sirve tanto para cierres
+    automáticos por cambio de día como para cierres manuales que requieren
+    conciliación posterior.
+    """
+    cierre = (
+        db.query(MovimientoCaja)
+        .filter(
+            MovimientoCaja.id == cierre_id,
+            MovimientoCaja.sucursal_id == sucursal_id,
+            MovimientoCaja.tipo == "cierre",
+            MovimientoCaja.medio_pago == None,  # cierre total
+        )
+        .first()
+    )
+    if not cierre:
+        raise ValueError("Cierre no encontrado o no corresponde a un cierre total.")
+
+    if monto_confirmado < 0:
+        raise ValueError("El monto confirmado no puede ser negativo.")
+
+    cierre.monto_confirmado = float(monto_confirmado)
+    cierre.confirmado_por_id = usuario_id
+    cierre.confirmado_at = datetime.now(timezone.utc)
+    if comentario:
+        cierre.comentario_concil = comentario
+    db.add(cierre)
+    db.commit()
+    db.refresh(cierre)
+    return cierre
 
 
 def cerrar_metodo(
@@ -295,6 +341,7 @@ def cerrar_todo(
     movimiento = MovimientoCaja(
         tipo="cierre",
         monto=total,
+        monto_esperado=total,
         descripcion=desc,
         usuario_id=usuario_id,
         sucursal_id=sucursal_id,

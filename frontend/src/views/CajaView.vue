@@ -106,10 +106,23 @@
 
     <!-- Historial de Sesiones de Caja -->
     <BaseCard padding="none">
-      <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-        <h3 class="font-bold text-slate-900 text-sm">Historial de Caja</h3>
-        <div class="flex items-center gap-2">
+      <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between flex-wrap gap-2">
+        <h3 class="font-bold text-slate-900 dark:text-white text-sm">Historial de Caja</h3>
+        <div class="flex items-center gap-2 flex-wrap">
           <div class="flex gap-1">
+            <button
+              v-for="v in vistasHistorial"
+              :key="v.valor"
+              @click="cambiarVistaHistorial(v.valor)"
+              class="px-3 py-1 text-xs font-semibold rounded-lg transition"
+              :class="vistaHistorial === v.valor
+                ? 'bg-brand-500 text-white'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'"
+            >
+              <i :class="v.icone + ' mr-1'"></i>{{ v.label }}
+            </button>
+          </div>
+          <div v-if="vistaHistorial === 'lista'" class="flex gap-1">
             <button
               v-for="filtro in filtrosHistorial"
               :key="filtro.valor"
@@ -117,33 +130,33 @@
               class="px-3 py-1 text-xs font-semibold rounded-lg transition"
               :class="filtroHistorial === filtro.valor
                 ? 'bg-brand-500 text-white'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'"
             >
               {{ filtro.label }}
             </button>
           </div>
-          <BaseButton v-if="filtroHistorial === 'personalizado'" variant="secondary" size="xs" @click="showFechasPersonalizadas = !showFechasPersonalizadas">
+          <BaseButton v-if="vistaHistorial === 'lista' && filtroHistorial === 'personalizado'" variant="secondary" size="xs" @click="showFechasPersonalizadas = !showFechasPersonalizadas">
             <i class="fa-solid fa-calendar"></i> Fechas
           </BaseButton>
         </div>
       </div>
 
       <!-- Filtro de fechas personalizadas -->
-      <div v-if="showFechasPersonalizadas && filtroHistorial === 'personalizado'" class="px-5 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-3">
+      <div v-if="showFechasPersonalizadas && filtroHistorial === 'personalizado' && vistaHistorial === 'lista'" class="px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 flex items-center gap-3">
         <div class="flex items-center gap-2">
-          <label class="text-xs font-semibold text-slate-600">Desde:</label>
+          <label class="text-xs font-semibold text-slate-600 dark:text-slate-300">Desde:</label>
           <input
             v-model="fechaInicio"
             type="date"
-            class="px-2 py-1 text-xs border border-slate-200 rounded-lg"
+            class="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
           />
         </div>
         <div class="flex items-center gap-2">
-          <label class="text-xs font-semibold text-slate-600">Hasta:</label>
+          <label class="text-xs font-semibold text-slate-600 dark:text-slate-300">Hasta:</label>
           <input
             v-model="fechaFin"
             type="date"
-            class="px-2 py-1 text-xs border border-slate-200 rounded-lg"
+            class="px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
           />
         </div>
         <BaseButton variant="primary" size="xs" @click="fetchReportes">
@@ -151,31 +164,85 @@
         </BaseButton>
       </div>
 
-      <!-- Tabla de sesiones -->
+      <!-- Calendario (vista mes con semáforo) -->
+      <div v-if="vistaHistorial === 'calendario'" class="p-5">
+        <div class="flex items-center justify-between mb-4">
+          <BaseButton variant="ghost" size="sm" @click="cambiarMesCalendario(-1)">
+            <i class="fa-solid fa-chevron-left"></i>
+          </BaseButton>
+          <span class="font-bold text-slate-900 dark:text-white">{{ tituloMesCalendario }}</span>
+          <BaseButton variant="ghost" size="sm" @click="cambiarMesCalendario(1)">
+            <i class="fa-solid fa-chevron-right"></i>
+          </BaseButton>
+        </div>
+
+        <div class="grid grid-cols-7 gap-1.5 text-center mb-1">
+          <div v-for="d in diasSemana" :key="d" class="text-[10px] font-bold uppercase text-slate-400 py-1">{{ d }}</div>
+        </div>
+
+        <div class="grid grid-cols-7 gap-1.5">
+          <div v-for="(celda, idx) in celdasCalendario" :key="idx">
+            <button
+              v-if="celda.dia"
+              :disabled="!celda.tieneOperacion"
+              @click="abrirDiaCalendario(celda.fecha)"
+              class="w-full text-center rounded-xl border-2 p-2 transition"
+              :class="[
+                colorDia(celda),
+                celda.tieneOperacion && !celda.esHoy ? 'hover:opacity-80 cursor-pointer' : '',
+                celda.esHoy ? 'ring-2 ring-brand-500' : ''
+              ]"
+            >
+              <div class="text-sm font-semibold text-slate-800 dark:text-slate-100">{{ celda.dia }}</div>
+              <div v-if="celda.n_ventas" class="text-[9px] text-slate-500 dark:text-slate-400 font-mono-data">
+                {{ celda.n_ventas }} venta(s)
+              </div>
+              <div v-if="celda.ingresos" class="text-[9px] text-slate-700 dark:text-slate-300 font-mono-data">
+                ${{ fc(celda.ingresos) }}
+              </div>
+            </button>
+            <div v-else class="h-full min-h-[52px] rounded-xl border-2 border-dashed border-slate-100 dark:border-slate-800"></div>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-4 mt-4 text-[11px] text-slate-500 dark:text-slate-400">
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded border-2 bg-emerald-50 border-emerald-500"></span> OK / conciliado</span>
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded border-2 bg-amber-50 border-amber-500"></span> Con diferencias / corregido</span>
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded border-2 bg-red-50 border-red-500"></span> Sin conciliar / error</span>
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded border-2 bg-slate-50 border-slate-300"></span> Sin operaciones</span>
+          <BaseBadge v-if="loadingCalendario" variant="info" size="xs">
+            <i class="fa-solid fa-circle-notch animate-spin mr-1"></i>Cargando...
+          </BaseBadge>
+        </div>
+      </div>
+
+      <!-- Tabla de sesiones (vista lista) -->
+      <div v-if="vistaHistorial === 'lista'">
       <div class="overflow-x-auto">
         <table v-if="sesionesCaja.length" class="w-full text-sm">
-          <thead class="bg-slate-50 border-b border-slate-100">
+          <thead class="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
             <tr>
-              <th class="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase">Fecha</th>
-              <th class="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase">Usuario</th>
-              <th class="px-4 py-2 text-right text-xs font-semibold text-slate-500 uppercase">Apertura</th>
-              <th class="px-4 py-2 text-right text-xs font-semibold text-slate-500 uppercase">Cierre</th>
-              <th class="px-4 py-2 text-right text-xs font-semibold text-slate-500 uppercase">Ingresos</th>
-              <th class="px-4 py-2 text-right text-xs font-semibold text-slate-500 uppercase">Egresos</th>
-              <th class="px-4 py-2 text-center text-xs font-semibold text-slate-500 uppercase">Estado</th>
-              <th class="px-4 py-2 text-center text-xs font-semibold text-slate-500 uppercase">Discrepancias</th>
-              <th class="px-4 py-2 text-center text-xs font-semibold text-slate-500 uppercase">Acciones</th>
+              <th class="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Fecha</th>
+              <th class="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Usuario</th>
+              <th class="px-4 py-2 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Apertura</th>
+              <th class="px-4 py-2 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Cierre</th>
+              <th class="px-4 py-2 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Ingresos</th>
+              <th class="px-4 py-2 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Egresos</th>
+              <th class="px-4 py-2 text-center text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Estado</th>
+              <th class="px-4 py-2 text-center text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Discrepancias</th>
+              <th class="px-4 py-2 text-center text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Conciliación</th>
+              <th class="px-4 py-2 text-center text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Acciones</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="sesion in sesionesCaja" :key="sesion.apertura_id" class="border-b border-slate-50 hover:bg-slate-50">
+            <tr v-for="sesion in sesionesCaja" :key="sesion.apertura_id" class="border-b border-slate-50 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50">
               <td class="px-4 py-3">
-                <div class="text-xs font-medium text-slate-900">{{ formatFecha(sesion.apertura_fecha) }}</div>
+                <div class="text-xs font-medium text-slate-900 dark:text-white">{{ formatFecha(sesion.apertura_fecha) }}</div>
                 <div class="text-[10px] text-slate-400">{{ formatHora(sesion.apertura_fecha) }}</div>
               </td>
-              <td class="px-4 py-3 text-xs text-slate-600">{{ sesion.apertura_usuario }}</td>
-              <td class="px-4 py-3 text-right font-mono-data text-xs text-slate-700">{{ fc(sesion.apertura_monto) }}</td>
-              <td class="px-4 py-3 text-right font-mono-data text-xs" :class="sesion.cierre_monto ? 'text-slate-700' : 'text-slate-400'">
+              <td class="px-4 py-3 text-xs text-slate-600 dark:text-slate-300">{{ sesion.apertura_usuario }}</td>
+              <td class="px-4 py-3 text-right font-mono-data text-xs text-slate-700 dark:text-slate-300">{{ fc(sesion.apertura_monto) }}</td>
+              <td class="px-4 py-3 text-right font-mono-data text-xs" :class="sesion.cierre_monto ? 'text-slate-700 dark:text-slate-300' : 'text-slate-400'">
                 {{ sesion.cierre_monto ? fc(sesion.cierre_monto) : '—' }}
               </td>
               <td class="px-4 py-3 text-right font-mono-data text-xs text-emerald-600">{{ fc(sesion.total_ingresos) }}</td>
@@ -194,14 +261,32 @@
                 <span v-else class="text-xs text-slate-400">—</span>
               </td>
               <td class="px-4 py-3 text-center">
-                <BaseButton variant="ghost" size="xs" @click="verDetalleSesion(sesion)">
-                  <i class="fa-solid fa-eye"></i>
-                </BaseButton>
+                <BaseBadge v-if="sesion.cierre_monto_confirmado != null" variant="success" size="xs">
+                  <i class="fa-solid fa-circle-check mr-1"></i>{{ fc(sesion.cierre_monto_confirmado) }}
+                </BaseBadge>
+                <BaseBadge v-else-if="sesion.fue_automatico" variant="warning" size="xs">Sin confirmar</BaseBadge>
+                <span v-else class="text-xs text-slate-400">—</span>
+              </td>
+              <td class="px-4 py-3 text-center">
+                <div class="flex items-center justify-center gap-1">
+                  <BaseButton variant="ghost" size="xs" @click="verDetalleSesion(sesion)">
+                    <i class="fa-solid fa-eye"></i>
+                  </BaseButton>
+                  <BaseButton
+                    v-if="esCierreConfirmable(sesion)"
+                    variant="primary"
+                    size="xs"
+                    @click="abrirConfirmarCierreDeSesion(sesion)"
+                  >
+                    <i class="fa-solid fa-check"></i>
+                  </BaseButton>
+                </div>
               </td>
             </tr>
           </tbody>
         </table>
         <EmptyState v-else icon="fa-clock-rotate-left" title="Sin sesiones" text="No hay sesiones de caja en este período." />
+      </div>
       </div>
     </BaseCard>
 
@@ -225,6 +310,16 @@
             <div v-if="sesionSeleccionada.cierre_monto" class="font-mono-data font-bold text-brand-600 mt-1">{{ fc(sesionSeleccionada.cierre_monto) }}</div>
             <div v-if="sesionSeleccionada.cierre_descripcion" class="text-[10px] text-slate-500 mt-1">{{ sesionSeleccionada.cierre_descripcion }}</div>
             <BaseBadge v-if="sesionSeleccionada.fue_automatico" variant="info" size="xs" class="mt-1">Cierre automático</BaseBadge>
+            <div v-if="sesionSeleccionada.cierre_monto_confirmado != null" class="mt-2 bg-emerald-50 rounded-xl p-2">
+              <div class="text-[10px] uppercase tracking-wider text-emerald-600 font-semibold">Conciliado</div>
+              <div class="font-mono-data font-bold text-sm text-emerald-700">{{ fc(sesionSeleccionada.cierre_monto_confirmado) }}</div>
+              <div class="text-[10px] text-emerald-600">por {{ sesionSeleccionada.cierre_confirmado_por || '—' }} · {{ formatFechaHora(sesionSeleccionada.cierre_confirmado_at) }}</div>
+            </div>
+            <div v-else-if="sesionSeleccionada.fue_automatico" class="mt-2">
+              <BaseButton variant="primary" size="xs" :loading="confirming" @click="abrirConfirmarCierreDeSesion(sesionSeleccionada)">
+                <i class="fa-solid fa-check mr-1"></i>Confirmar cierre
+              </BaseButton>
+            </div>
           </div>
         </div>
 
@@ -295,6 +390,189 @@
               <span class="font-mono-data font-bold text-xs text-rose-600">-{{ fc(egr.monto) }}</span>
             </div>
           </div>
+        </div>
+      </div>
+    </BaseModal>
+
+    <!-- Modal Detalle del Día (vista calendario) -->
+    <BaseModal v-model="showDetalleDia" title="Detalle del Día" size="lg">
+      <div v-if="detalleDia" class="space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">{{ formatFechaDia(detalleDia.fecha) }}</div>
+            <div class="text-sm font-semibold text-slate-900 dark:text-white">
+              {{ detalleDia.n_ventas }} venta(s) · <span class="font-mono-data">{{ fc(detalleDia.total_ingresos) }}</span> ingresos
+            </div>
+          </div>
+          <BaseBadge :variant="badgeColorDia(estadoDiaActual() || 'sin_operacion')" size="sm">
+            {{ labelColorDia(estadoDiaActual() || 'sin_operacion') }}
+          </BaseBadge>
+        </div>
+
+        <!-- Mini dashboards por medio de pago -->
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <div v-for="(monto, metodo) in detalleDia.desglose" :key="metodo" class="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">{{ metodo }}</div>
+            <div class="font-mono-data font-bold text-lg text-slate-900 dark:text-white">{{ fc(monto) }}</div>
+          </div>
+          <div class="bg-brand-50 dark:bg-brand-900/20 rounded-xl p-3">
+            <div class="text-[10px] uppercase tracking-wider text-brand-600 font-semibold">Apertura</div>
+            <div class="font-mono-data font-bold text-lg text-brand-700">{{ fc(detalleDia.apertura) }}</div>
+          </div>
+          <div v-if="detalleDia.total_egresos" class="bg-rose-50 dark:bg-rose-900/20 rounded-xl p-3">
+            <div class="text-[10px] uppercase tracking-wider text-rose-600 font-semibold">Egresos</div>
+            <div class="font-mono-data font-bold text-lg text-rose-700">{{ fc(detalleDia.total_egresos) }}</div>
+          </div>
+          <div class="bg-emerald-50 dark:bg-emerald-900/20 rounded-xl p-3">
+            <div class="text-[10px] uppercase tracking-wider text-emerald-600 font-semibold">Saldo Final</div>
+            <div class="font-mono-data font-bold text-lg text-emerald-700">{{ fc(detalleDia.saldo_final) }}</div>
+          </div>
+        </div>
+
+        <!-- Cierres -->
+        <div v-if="detalleDia.cierres && detalleDia.cierres.length">
+          <h4 class="text-sm font-bold text-slate-900 dark:text-white mb-2">Cierres</h4>
+          <div class="space-y-2">
+            <div v-for="cierre in detalleDia.cierres" :key="cierre.id" class="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3">
+              <div class="flex items-center justify-between flex-wrap gap-2">
+                <div class="flex items-center gap-2">
+                  <BaseBadge v-if="cierre.fue_automatico" variant="info" size="xs">Automático</BaseBadge>
+                  <BaseBadge v-else variant="default" size="xs">Manual</BaseBadge>
+                  <span class="text-xs text-slate-500">{{ formatFechaHora(cierre.created_at) }}</span>
+                  <span class="text-xs text-slate-400">por {{ cierre.usuario_nombre }}</span>
+                </div>
+                <BaseButton v-if="cierre.monto_confirmado == null" :loading="confirming" variant="primary" size="xs"
+                  @click="abrirConfirmarCierreDeDia(cierre)">
+                  <i class="fa-solid fa-check mr-1"></i>Confirmar
+                </BaseButton>
+                <BaseBadge v-else variant="success" size="xs">
+                  <i class="fa-solid fa-circle-check mr-1"></i>Confirmado {{ fc(cierre.monto_confirmado) }}
+                  <span v-if="cierre.confirmado_por" class="ml-1">por {{ cierre.confirmado_por }}</span>
+                </BaseBadge>
+              </div>
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs mt-2">
+                <div><span class="text-slate-400">Sistema:</span> <span class="font-mono-data font-semibold">{{ fc(cierre.monto_esperado) }}</span></div>
+                <div><span class="text-slate-400">Confirmado:</span> <span class="font-mono-data font-semibold">{{ cierre.monto_confirmado != null ? fc(cierre.monto_confirmado) : '—' }}</span></div>
+                <div><span class="text-slate-400">Diferencia:</span>
+                  <span v-if="cierre.diferencia != null" class="font-mono-data font-semibold" :class="cierre.diferencia === 0 ? 'text-emerald-600' : cierre.diferencia > 0 ? 'text-amber-600' : 'text-rose-600'">
+                    {{ cierre.diferencia > 0 ? '+' : '' }}{{ fc(cierre.diferencia) }}
+                  </span>
+                  <span v-else class="text-slate-400">—</span>
+                </div>
+                <div v-if="cierre.comentario_concil" class="col-span-2 text-[10px] text-slate-500 italic">{{ cierre.comentario_concil }}</div>
+              </div>
+              <div class="text-[10px] text-slate-400 mt-1 italic">{{ cierre.descripcion }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tickets / ventas del día -->
+        <div v-if="detalleDia.tickets && detalleDia.tickets.length">
+          <h4 class="text-sm font-bold text-slate-900 dark:text-white mb-2">Ventas del día</h4>
+          <div class="max-h-64 overflow-y-auto space-y-1">
+            <button
+              v-for="t in detalleDia.tickets"
+              :key="t.id"
+              @click="verTicketDetalle(t.id)"
+              class="w-full flex items-center justify-between bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 hover:border-brand-400 transition text-left"
+            >
+              <div class="flex-1 min-w-0">
+                <div class="text-xs font-medium text-slate-800 dark:text-slate-200">{{ t.numero }} <span class="text-slate-400 font-normal">· {{ t.cliente || 'Cliente ocasional' }}</span></div>
+                <div class="text-[10px] text-slate-500">{{ formatFechaHora(t.fecha) }} · {{ t.medio_pago }} · {{ t.vendedor }}</div>
+              </div>
+              <span class="font-mono-data font-bold text-xs text-slate-900 dark:text-white ml-2">${{ fc(t.total) }}</span>
+              <i class="fa-solid fa-chevron-right text-[10px] text-slate-400 ml-2"></i>
+            </button>
+          </div>
+        </div>
+        <EmptyState v-else icon="fa-receipt" title="Sin ventas" text="No hubo ventas en esta jornada." />
+      </div>
+    </BaseModal>
+
+    <!-- Modal Detalle de Venta -->
+    <BaseModal v-model="showTicketDetalle" title="Detalle de Venta" size="lg">
+      <div v-if="ticketSeleccionado" class="space-y-4">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <div class="text-lg font-bold text-slate-900 dark:text-white">{{ ticketSeleccionado.numero }}</div>
+            <div class="text-xs text-slate-500">{{ formatFechaHora(ticketSeleccionado.fecha || ticketSeleccionado.created_at) }} · {{ ticketSeleccionado.medio_pago }}</div>
+            <div class="text-xs text-slate-400">Vendedor: {{ ticketSeleccionado.usuario?.nombre || ticketSeleccionado.vendedor || '—' }} · Cliente: {{ ticketSeleccionado.cliente_nombre || ticketSeleccionado.cliente || 'Ocasional' }}</div>
+          </div>
+          <div class="text-right">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Total</div>
+            <div class="font-mono-data font-bold text-2xl text-brand-600">{{ fc(ticketSeleccionado.total) }}</div>
+          </div>
+        </div>
+
+        <div v-if="ticketSeleccionado.items && ticketSeleccionado.items.length">
+          <h4 class="text-sm font-bold text-slate-900 dark:text-white mb-2">Artículos</h4>
+          <div class="space-y-1 max-h-72 overflow-y-auto">
+            <div v-for="item in ticketSeleccionado.items" :key="item.id" class="flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 rounded-lg px-3 py-2">
+              <div class="flex-1 min-w-0">
+                <div class="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">{{ item.producto_nombre || item.producto?.nombre || `Producto #${item.producto_id}` }}</div>
+                <div class="text-[10px] text-slate-500">{{ item.por_kilo ? item.peso + ' kg' : item.cantidad + ' u' }} × {{ fc(item.precio_unitario) }}</div>
+              </div>
+              <span class="font-mono-data font-bold text-xs text-slate-900 dark:text-white">{{ fc(item.subtotal) }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="ticketSeleccionado.estado" class="flex justify-end">
+          <BaseBadge :variant="ticketSeleccionado.estado === 'confirmada' ? 'success' : 'warning'" size="sm">{{ ticketSeleccionado.estado }}</BaseBadge>
+        </div>
+      </div>
+      <div v-else class="flex items-center justify-center py-12 text-slate-400">
+        <i class="fa-solid fa-circle-notch animate-spin mr-2"></i> Cargando...
+      </div>
+    </BaseModal>
+
+    <!-- Modal Confirmar Cierre -->
+    <BaseModal v-model="showConfirmarCierre" title="Confirmar Cierre de Caja" size="md" :hide-footer="true">
+      <div v-if="cierreAConfirmar" class="space-y-4">
+        <div v-if="cierreAConfirmar.fue_automatico" class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-xs">
+          <i class="fa-solid fa-triangle-exclamation text-amber-500 mr-1"></i>
+          Este cierre fue generado <b>automáticamente</b> por cambio de día con el monto calculado por el sistema. Confirmá el monto real contado.
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div class="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Monto del sistema (esperado)</div>
+            <div class="font-mono-data font-bold text-lg text-slate-900 dark:text-white">{{ fc(cierreAConfirmar.monto_esperado) }}</div>
+          </div>
+          <div class="bg-brand-50 dark:bg-brand-900/20 rounded-xl p-3">
+            <div class="text-[10px] uppercase tracking-wider text-brand-600 font-semibold">Diferencia</div>
+            <div class="font-mono-data font-bold text-lg" :class="Math.abs(Number(confirmarCierreForm.monto) - Number(cierreAConfirmar.monto_esperado)) > 0.01 ? 'text-amber-600' : 'text-brand-700'">
+              {{ diferenciaPreviewText }}
+            </div>
+          </div>
+        </div>
+
+        <BaseInput
+          v-model.number="confirmarCierreForm.monto"
+          label="Monto real confirmado"
+          type="number"
+          min="0"
+          step="0.01"
+          placeholder="0.00"
+          input-class="font-mono-data"
+        />
+        <BaseInput
+          v-model="confirmarCierreForm.comentario"
+          label="Comentario de conciliación (opcional)"
+          placeholder="Ej: el efectivo contado dio distinto al sistema..."
+          input-class="text-sm"
+        />
+
+        <div v-if="confirmarCierreForm.monto != null && Math.abs(Number(confirmarCierreForm.monto) - Number(cierreAConfirmar.monto_esperado)) > 0.01" class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-xs text-amber-700 dark:text-amber-300">
+          <i class="fa-solid fa-circle-info mr-1"></i>Al confirmar este monto quedará la diferencia registrada y el día pasará a <b>amarillo</b> (corrección). Podés seguir vendiendo normalmente.
+        </div>
+
+        <div class="flex gap-3 pt-2">
+          <BaseButton variant="secondary" class="flex-1" :disabled="confirming" @click="showConfirmarCierre = false">Cancelar</BaseButton>
+          <BaseButton variant="primary" class="flex-1" :loading="confirming" :disabled="confirming || !confirmarCierreForm.monto" @click="confirmarCierreFinal">
+            <i :class="confirming ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-check'"></i>
+            {{ confirming ? 'Guardando...' : 'Confirmar monto' }}
+          </BaseButton>
         </div>
       </div>
     </BaseModal>
@@ -538,13 +816,7 @@ const { playOpenCash, playCloseCash } = useSounds()
 const cajaResumen = reactive({ metodos_cerrados: [] })
 const cierreParcial = reactive({ activo: false, metodo: '', monto_real: 0, comentario: '' })
 
-const movements = ref([
-  { id: 1, fecha: '2026-06-20 09:15', tipo: 'Ingreso', monto: 5000, metodo: 'Efectivo', comentario: 'Venta ticket #1024' },
-  { id: 2, fecha: '2026-06-20 10:30', tipo: 'Ingreso', monto: 3200, metodo: 'Transferencia', comentario: 'Venta ticket #1025' },
-  { id: 3, fecha: '2026-06-20 11:45', tipo: 'Egreso', monto: 1500, metodo: 'Efectivo', comentario: 'Pago a proveedor' },
-  { id: 4, fecha: '2026-06-20 12:00', tipo: 'Ingreso', monto: 8000, metodo: 'Efectivo', comentario: 'Venta ticket #1026' },
-  { id: 5, fecha: '2026-06-20 13:30', tipo: 'Egreso', monto: 700, metodo: 'Transferencia', comentario: 'Gastos varios' },
-])
+const movements = ref([])
 
 const syncing = ref(false)
 const opening = ref(false)
@@ -610,12 +882,232 @@ const showDetalleSesion = ref(false)
 const sesionSeleccionada = ref(null)
 const loadingReportes = ref(false)
 
+// Vista del historial: lista | calendario
+const vistaHistorial = ref('lista')
+const vistasHistorial = [
+  { valor: 'lista', label: 'Lista', icone: 'fa-solid fa-list' },
+  { valor: 'calendario', label: 'Calendario', icone: 'fa-solid fa-calendar-days' },
+]
+const diasSemana = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+
+// Calendario (semáforo por día)
+const mesCalendario = ref(new Date())
+const calendarioDias = ref([])
+const loadingCalendario = ref(false)
+
+// Detalle del día
+const showDetalleDia = ref(false)
+const detalleDia = ref(null)
+const detalleDiaEstado = ref('sin_operacion')
+
+// Confirmar cierre
+const showConfirmarCierre = ref(false)
+const confirmando = ref(false)
+const cierreAConfirmar = ref(null)
+const confirmarCierreForm = reactive({ monto: 0, comentario: '' })
+
+// Detalle de ticket
+const showTicketDetalle = ref(false)
+const ticketSeleccionado = ref(null)
+const loadingTicket = ref(false)
+
 const filtrosHistorial = [
   { valor: 'hoy', label: 'Hoy' },
   { valor: 'semana', label: 'Semana' },
   { valor: 'mes', label: 'Mes' },
   { valor: 'personalizado', label: 'Personalizado' },
 ]
+
+function cambiarVistaHistorial(vista) {
+  vistaHistorial.value = vista
+  if (vista === 'calendario') {
+    fetchCalendario()
+  } else {
+    fetchReportes()
+  }
+}
+
+const tituloMesCalendario = computed(() => {
+  const d = mesCalendario.value
+  return d.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
+})
+
+const celdasCalendario = computed(() => {
+  const hoy = new Date()
+  const anio = mesCalendario.value.getFullYear()
+  const mes = mesCalendario.value.getMonth()
+  const primerDia = new Date(anio, mes, 1)
+  const offset = primerDia.getDay() // 0 = domingo
+  const totalDias = new Date(anio, mes + 1, 0).getDate()
+
+  const celdas = []
+  for (let i = 0; i < offset; i++) celdas.push({ dia: 0 })
+  for (let d = 1; d <= totalDias; d++) {
+    const fechaStr = `${anio}-${String(mes + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    const info = calendarioDias.value.find(x => x.fecha === fechaStr) || null
+    celdas.push({
+      dia: d,
+      fecha: fechaStr,
+      estado: info ? info.estado : 'sin_operacion',
+      tieneOperacion: !!info && (info.n_cierres > 0 || info.ingresos > 0 || info.n_ventas > 0),
+      esHoy: hoy.getFullYear() === anio && hoy.getMonth() === mes && hoy.getDate() === d,
+      n_ventas: info ? info.ventas : 0,
+      ingresos: info ? info.ingresos : 0,
+    })
+  }
+  return celdas
+})
+
+function colorDia(celda) {
+  if (celda.estado === 'verde') return 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-500'
+  if (celda.estado === 'amarillo') return 'bg-amber-50 dark:bg-amber-900/20 border-amber-500'
+  if (celda.estado === 'rojo') return 'bg-red-50 dark:bg-red-900/20 border-red-500'
+  if (celda.tieneOperacion) return 'bg-slate-100 dark:bg-slate-700/40 border-slate-300 dark:border-slate-600'
+  return 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700'
+}
+
+function labelColorDia(estado) {
+  if (estado === 'verde') return 'OK'
+  if (estado === 'amarillo') return 'Con diferencias'
+  if (estado === 'rojo') return 'Sin conciliar'
+  if (estado === 'abierta') return 'Caja abierta'
+  return 'Sin operaciones'
+}
+
+function badgeColorDia(estado) {
+  if (estado === 'verde') return 'success'
+  if (estado === 'amarillo') return 'warning'
+  if (estado === 'rojo') return 'danger'
+  return 'secondary'
+}
+
+function cambiarMesCalendario(delta) {
+  const nuevo = new Date(mesCalendario.value)
+  nuevo.setMonth(nuevo.getMonth() + delta)
+  mesCalendario.value = nuevo
+  fetchCalendario()
+}
+
+async function fetchCalendario() {
+  loadingCalendario.value = true
+  try {
+    const mes = `${mesCalendario.value.getFullYear()}-${String(mesCalendario.value.getMonth() + 1).padStart(2, '0')}`
+    const resp = await api.get(`/api/caja/calendario?mes=${mes}`)
+    calendarioDias.value = (resp && resp.dias) || []
+  } catch (e) {
+    console.error('Error fetching calendario:', e)
+    toast.error('Error al cargar el calendario de caja')
+  } finally {
+    loadingCalendario.value = false
+  }
+}
+
+async function abrirDiaCalendario(fecha) {
+  try {
+    const resp = await api.get(`/api/caja/dia?fecha=${fecha}`)
+    detalleDia.value = resp
+    const info = calendarioDias.value.find(x => x.fecha === fecha)
+    detalleDiaEstado.value = info ? info.estado : 'sin_operacion'
+    showDetalleDia.value = true
+  } catch (e) {
+    toast.error('Error al cargar el detalle del día')
+  }
+}
+
+function estadoDiaActual() {
+  return detalleDiaEstado.value
+}
+
+function formatFechaDia(fechaStr) {
+  if (!fechaStr) return '—'
+  const [y, m, d] = fechaStr.split('-').map(Number)
+  const fecha = new Date(y, m - 1, d)
+  return fecha.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+function esCierreConfirmable(sesion) {
+  return !!sesion.fue_automatico && sesion.cierre_monto_confirmado == null
+}
+
+function abrirConfirmarCierreDeSesion(sesion) {
+  cierreAConfirmar.value = {
+    id: sesion.cierre_id,
+    monto_esperado: sesion.cierre_monto_esperado || sesion.cierre_monto || 0,
+    monto_confirmado_form: null,
+    fue_automatico: sesion.fue_automatico,
+    origen: 'sesion',
+    sesion: sesion,
+  }
+  confirmarCierreForm.monto = cierreAConfirmar.value.monto_esperado
+  confirmarCierreForm.comentario = ''
+  showDetalleSesion.value = false
+  showConfirmarCierre.value = true
+}
+
+function abrirConfirmarCierreDeDia(cierre) {
+  cierreAConfirmar.value = {
+    id: cierre.id,
+    monto_esperado: cierre.monto_esperado || cierre.monto || 0,
+    monto_confirmado_form: null,
+    fue_automatico: cierre.fue_automatico,
+    origen: 'dia',
+  }
+  confirmarCierreForm.monto = cierreAConfirmar.value.monto_esperado
+  confirmarCierreForm.comentario = ''
+  showConfirmarCierre.value = true
+}
+
+const diferenciaPreviewText = computed(() => {
+  if (!cierreAConfirmar.value || confirmarCierreForm.monto == null) return '—'
+  const diff = Number(confirmarCierreForm.monto) - Number(cierreAConfirmar.value.monto_esperado)
+  return `${diff > 0 ? '+' : ''}${fc(diff)}`
+})
+
+async function confirmarCierreFinal() {
+  if (!cierreAConfirmar.value) return
+  confirmando.value = true
+  try {
+    const payload = {
+      monto_confirmado: Number(confirmarCierreForm.monto),
+      comentario: confirmarCierreForm.comentario || '',
+    }
+    await api.put(`/api/caja/cierre/${cierreAConfirmar.value.id}/confirmar`, payload)
+    toast.success('Cierre conciliado correctamente')
+    showConfirmarCierre.value = false
+    // Recargar vistas
+    const fecha = detalleDia.value?.fecha
+    if (fecha) {
+      const resp = await api.get(`/api/caja/dia?fecha=${fecha}`)
+      detalleDia.value = resp
+    }
+    await fetchCalendario()
+    await fetchReportes()
+    if (cierreAConfirmar.value.origen === 'sesion') {
+      const sesion = cierreAConfirmar.value.sesion
+      sesion.cierre_monto_confirmado = Number(confirmarCierreForm.monto)
+      sesion.cierre_confirmado_por = auth.currentUser?.nombre || 'Yo'
+      sesion.cierre_confirmado_at = new Date().toISOString()
+      verDetalleSesion(sesion)
+    }
+  } catch (e) {
+    toast.error('Error al confirmar el cierre: ' + (e?.data?.detail || e?.message || ''))
+  } finally {
+    confirmando.value = false
+  }
+}
+
+async function verTicketDetalle(ventaId) {
+  try {
+    loadingTicket.value = true
+    const resp = await api.get(`/api/ventas/${ventaId}`)
+    ticketSeleccionado.value = resp
+    showTicketDetalle.value = true
+  } catch (e) {
+    toast.error('Error al cargar el detalle de la venta')
+  } finally {
+    loadingTicket.value = false
+  }
+}
 
 function cambiarFiltroHistorial(filtro) {
   filtroHistorial.value = filtro
@@ -904,25 +1396,27 @@ async function registrarMovimiento() {
   }
   saving.value = true
   try {
-    const now = new Date()
-    const fecha = now.toISOString().slice(0, 16).replace('T', ' ')
-    movements.value.push({
-      id: Date.now(),
-      fecha,
-      tipo: nuevoMovimiento.tipo,
-      monto: nuevoMovimiento.monto,
-      metodo: nuevoMovimiento.metodo,
-      comentario: nuevoMovimiento.comentario || 'Sin comentario',
-    })
-    if (nuevoMovimiento.tipo === 'Ingreso') {
-      cajaStore.saldo_actual += nuevoMovimiento.monto
-    } else {
-      cajaStore.saldo_actual -= nuevoMovimiento.monto
+    const medioMap = {
+      'Efectivo': 'efectivo',
+      'Transferencia': 'transferencia',
+      'Débito': 'debito',
+      'Tarjeta': 'credito',
     }
+    const esIngreso = nuevoMovimiento.tipo === 'Ingreso'
+    const body = {
+      monto: nuevoMovimiento.monto,
+      descripcion: nuevoMovimiento.comentario || (esIngreso ? 'Ingreso manual' : 'Egreso manual'),
+    }
+    if (esIngreso) body.medio_pago = medioMap[nuevoMovimiento.metodo] || 'efectivo'
+    await api.post(esIngreso ? '/api/caja/ingreso' : '/api/caja/egreso', body)
+    await fetchMovimientos()
+    await fetchResumen()
     nuevoMovimiento.monto = 0
     nuevoMovimiento.comentario = ''
     showNuevoMovimiento.value = false
     toast.success('Movimiento registrado')
+  } catch (e) {
+    toast.error('Error al registrar movimiento: ' + (e?.data?.detail || e?.message || ''))
   } finally {
     saving.value = false
   }

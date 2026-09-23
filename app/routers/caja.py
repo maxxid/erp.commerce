@@ -40,6 +40,7 @@ class MovimientoRequest(BaseModel):
     monto: float = Field(..., gt=0)
     descripcion: str = ""
     sucursal_id: int = 1
+    medio_pago: Optional[str] = None
 
 
 class EgresoEspecialRequest(BaseModel):
@@ -72,6 +73,50 @@ def ultimo_cierre(
     """
     info = caja_service.obtener_ultimo_cierre(db)
     return RespuestaData(data=info)
+
+
+class ConfirmarCierreRequest(BaseModel):
+    monto_confirmado: float = Field(..., ge=0)
+    comentario: str = ""
+    sucursal_id: int = 1
+
+
+@router.put("/cierre/{cierre_id}/confirmar", response_model=RespuestaData)
+def confirmar_cierre(
+    cierre_id: int,
+    data: ConfirmarCierreRequest,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "cajero")),
+):
+    """Confirma o ajusta un cierre (auto o manual) con el monto real contado."""
+    try:
+        mov = caja_service.confirmar_cierre(
+            db, cierre_id, data.monto_confirmado, user.id,
+            data.comentario, data.sucursal_id,
+        )
+        diferencia = (mov.monto_confirmado or 0) - (mov.monto_esperado or mov.monto)
+        auditoria_service.registrar(
+            db, user.id, "confirmar_cierre_caja", mov.id, None, {
+                "monto_confirmado": data.monto_confirmado,
+                "monto_esperado": mov.monto_esperado,
+                "diferencia": diferencia,
+                "comentario": data.comentario,
+                "sucursal_id": data.sucursal_id,
+            },
+        )
+        return RespuestaData(
+            data={
+                "id": mov.id,
+                "monto_confirmado": mov.monto_confirmado,
+                "monto_esperado": mov.monto_esperado,
+                "diferencia": diferencia,
+                "confirmado_por_id": mov.confirmado_por_id,
+                "confirmado_at": mov.confirmado_at.isoformat() if mov.confirmado_at else None,
+            },
+            message=f"Cierre confirmado. Diferencia: ${diferencia:,.2f}",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/apertura", response_model=RespuestaData)
@@ -166,6 +211,7 @@ def ingreso(
         raise HTTPException(status_code=400, detail="La caja no está abierta")
     mov = caja_service.registrar_ingreso(
         db, data.monto, data.descripcion or "Ingreso manual", user.id,
+        medio_pago=data.medio_pago or "efectivo",
         sucursal_id=data.sucursal_id,
     )
     auditoria_service.registrar(db, user.id, "ingreso_caja", None, None,
@@ -237,6 +283,228 @@ def egreso_especial(
     )
 
 
+@router.get("/calendario", response_model=RespuestaData)
+def calendario_caja(
+    mes: Optional[str] = Query(None, description="Mes en formato YYYY-MM. Si viene vacío usa el mes actual"),
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "encargado")),
+):
+    """Resumen por día del mes (semáforo): verde ok, amarillo corrección, rojo sin conciliar."""
+    import calendar as _cal
+    from datetime import datetime, timedelta
+    from app.models.movimiento_caja import MovimientoCaja
+    from app.models.venta import Venta
+    from app.services.caja_service import _a_local
+
+    ahora = datetime.now()
+    try:
+        aaaa, mm = mes.split("-")
+        if len(aaaa) != 4 or len(mm) != 2:
+            raise ValueError
+        aaaa, mm = int(aaaa), int(mm)
+    except Exception:
+        aaaa, mm = ahora.year, ahora.month
+
+    dias_del_mes = _cal.monthrange(aaaa, mm)[1]
+    # Límites en UTC de un día local argentino (00:00 AR = 03:00 UTC del mismo día)
+    inicio_ar = datetime(aaaa, mm, 1)
+    fin_ar = inicio_ar.replace(day=dias_del_mes, hour=23, minute=59, second=59)
+    inicio_utc = inicio_ar - timedelta(hours=3)
+    fin_utc = fin_ar - timedelta(hours=3)
+
+    movs = (
+        db.query(MovimientoCaja)
+        .filter(
+            MovimientoCaja.sucursal_id == 1,
+            MovimientoCaja.created_at >= inicio_utc,
+            MovimientoCaja.created_at <= fin_utc,
+        )
+        .order_by(MovimientoCaja.id.asc())
+        .all()
+    )
+    ventas = (
+        db.query(Venta)
+        .filter(
+            Venta.sucursal_id == 1,
+            Venta.estado == "confirmada",
+            Venta.created_at >= inicio_utc,
+            Venta.created_at <= fin_utc,
+        )
+        .all()
+    )
+
+    resumen_dia = {}
+    for m in movs:
+        dia = _a_local(m.created_at).strftime("%Y-%m-%d") if m.created_at else None
+        if not dia:
+            continue
+        r = resumen_dia.setdefault(dia, {
+            "fecha": dia, "estado": "sin_operacion", "apertura": 0.0,
+            "cierre": None, "ingresos": 0.0, "egresos": 0.0,
+            "desglose": {}, "n_cierres": 0, "n_automaticos": 0,
+            "pendientes_conciliacion": 0, "correcciones": 0,
+        })
+        if m.tipo == "apertura":
+            r["apertura"] += m.monto or 0
+        elif m.tipo == "ingreso":
+            mp = m.medio_pago or "efectivo"
+            r["desglose"][mp] = r["desglose"].get(mp, 0) + (m.monto or 0)
+            r["ingresos"] += m.monto or 0
+        elif m.tipo == "egreso":
+            r["egresos"] += m.monto or 0
+        elif m.tipo == "cierre" and not m.medio_pago:
+            r["n_cierres"] += 1
+            r["cierre"] = m.monto
+            if m.fue_automatico:
+                r["n_automaticos"] += 1
+            if not m.monto_confirmado:
+                r["pendientes_conciliacion"] += 1
+            elif m.monto_confirmado is not None:
+                esperado = m.monto_esperado or m.monto
+                if abs(m.monto_confirmado - esperado) > 0.01:
+                    r["correcciones"] += 1
+
+    for dia, r in resumen_dia.items():
+        if r["estado"] == "sin_operacion" and (r["apertura"] or r["ingresos"] or r["egresos"] or r["n_cierres"]):
+            r["estado"] = "abierta"
+        if r["pendientes_conciliacion"] > 0:
+            r["estado"] = "rojo"
+        elif r["correcciones"] > 0:
+            r["estado"] = "amarillo"
+        elif r["n_cierres"] > 0:
+            r["estado"] = "verde"
+
+    # Completar días sin operaciones del mes
+    for d in range(1, dias_del_mes + 1):
+        fecha = f"{aaaa:04d}-{mm:02d}-{d:02d}"
+        if fecha not in resumen_dia:
+            resumen_dia[fecha] = {
+                "fecha": fecha, "estado": "sin_operacion", "apertura": 0.0,
+                "cierre": None, "ingresos": 0.0, "egresos": 0.0,
+                "desglose": {}, "n_cierres": 0, "n_automaticos": 0,
+                "pendientes_conciliacion": 0, "correcciones": 0,
+            }
+
+    dias = []
+    for d in range(1, dias_del_mes + 1):
+        fecha = f"{aaaa:04d}-{mm:02d}-{d:02d}"
+        r = resumen_dia[fecha]
+        r["ventas"] = sum(1 for v in ventas if _a_local(v.created_at).strftime("%Y-%m-%d") == fecha)
+        r["ventas_total"] = round(sum(v.total for v in ventas if _a_local(v.created_at).strftime("%Y-%m-%d") == fecha), 2)
+        dias.append(r)
+
+    return RespuestaData(data={"mes": f"{aaaa:04d}-{mm:02d}", "dias": dias})
+
+
+@router.get("/dia", response_model=RespuestaData)
+def dia_caja(
+    fecha: str = Query(..., description="Fecha en formato YYYY-MM-DD"),
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "encargado")),
+):
+    """Detalle de un día: sesiones, desglose por medio y ventas (tickets)."""
+    from datetime import datetime, timedelta
+    from app.models.movimiento_caja import MovimientoCaja
+    from app.models.venta import Venta
+    from app.services.caja_service import _a_local
+
+    try:
+        fecha_dt = datetime.strptime(fecha, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Fecha inválida. Formato: YYYY-MM-DD")
+
+    inicio_utc = fecha_dt - timedelta(hours=3)
+    fin_utc = fecha_dt.replace(hour=23, minute=59, second=59) - timedelta(hours=3)
+
+    movs = (
+        db.query(MovimientoCaja)
+        .filter(
+            MovimientoCaja.sucursal_id == 1,
+            MovimientoCaja.created_at >= inicio_utc,
+            MovimientoCaja.created_at <= fin_utc,
+        )
+        .order_by(MovimientoCaja.id.asc())
+        .all()
+    )
+    ventas = (
+        db.query(Venta)
+        .filter(
+            Venta.sucursal_id == 1,
+            Venta.estado == "confirmada",
+            Venta.created_at >= inicio_utc,
+            Venta.created_at <= fin_utc,
+        )
+        .order_by(Venta.id.asc())
+        .all()
+    )
+
+    desglose = {}
+    total_ingresos = 0.0
+    total_egresos = 0.0
+    apertura = 0.0
+    cierres = []
+    movimientos = []
+    for m in movs:
+        item = {
+            "id": m.id, "tipo": m.tipo, "monto": m.monto,
+            "monto_esperado": m.monto_esperado,
+            "monto_confirmado": m.monto_confirmado,
+            "fue_automatico": bool(m.fue_automatico),
+            "confirmado_por_id": m.confirmado_por_id,
+            "confirmado_por": (m.confirmado_por.nombre if m.confirmado_por else ""),
+            "confirmado_at": m.confirmado_at.isoformat() if m.confirmado_at else None,
+            "comentario_concil": m.comentario_concil,
+            "descripcion": m.descripcion, "medio_pago": m.medio_pago,
+            "referencia_tipo": m.referencia_tipo, "referencia_id": m.referencia_id,
+            "usuario_id": m.usuario_id,
+            "usuario_nombre": m.usuario.nombre if m.usuario else "",
+            "created_at": m.created_at.isoformat() if m.created_at else None,
+        }
+        movimientos.append(item)
+        if m.tipo == "apertura":
+            apertura = m.monto or 0
+        elif m.tipo == "ingreso":
+            mp = m.medio_pago or "efectivo"
+            desglose[mp] = desglose.get(mp, 0) + (m.monto or 0)
+            total_ingresos += m.monto or 0
+        elif m.tipo == "egreso":
+            total_egresos += m.monto or 0
+        elif m.tipo == "cierre" and not m.medio_pago:
+            esperado = m.monto_esperado or m.monto
+            confirmado = m.monto_confirmado
+            cierres.append({
+                "id": m.id, "monto": m.monto, "monto_esperado": esperado,
+                "monto_confirmado": confirmado,
+                "diferencia": round((confirmado - esperado), 2) if confirmado is not None else None,
+                "fue_automatico": bool(m.fue_automatico),
+                "confirmado_por": (m.confirmado_por.nombre if m.confirmado_por else ""),
+                "confirmado_at": m.confirmado_at.isoformat() if m.confirmado_at else None,
+                "comentario_concil": m.comentario_concil,
+                "usuario_nombre": m.usuario.nombre if m.usuario else "",
+                "descripcion": m.descripcion,
+                "created_at": m.created_at.isoformat() if m.created_at else None,
+            })
+
+    tickets = [{
+        "id": v.id, "numero": v.numero, "fecha": v.created_at.isoformat() if v.created_at else None,
+        "medio_pago": v.medio_pago, "total": v.total, "estado": v.estado,
+        "cliente": v.cliente.nombre if v.cliente else "",
+        "vendedor": v.usuario.nombre if v.usuario else "",
+    } for v in ventas]
+
+    return RespuestaData(data={
+        "fecha": fecha, "apertura": apertura,
+        "total_ingresos": round(total_ingresos, 2),
+        "total_egresos": round(total_egresos, 2),
+        "desglose": desglose,
+        "saldo_final": round(apertura + total_ingresos - total_egresos, 2),
+        "cierres": cierres,
+        "movimientos": movimientos,
+        "tickets": tickets,
+        "n_ventas": len(tickets),
+    })
+
+
 @router.get("/movimientos", response_model=RespuestaLista)
 def movimientos(
     page: int = Query(1, ge=1),
@@ -252,6 +520,11 @@ def movimientos(
         "usuario_id": m.usuario_id,
         "usuario_nombre": m.usuario.nombre if m.usuario else "",
         "sucursal_id": m.sucursal_id,
+        "monto_esperado": m.monto_esperado,
+        "monto_confirmado": m.monto_confirmado,
+        "fue_automatico": bool(m.fue_automatico),
+        "confirmado_por": m.confirmado_por.nombre if m.confirmado_por else "",
+        "confirmado_at": m.confirmado_at.isoformat() if m.confirmado_at else None,
         "created_at": m.created_at.isoformat() if m.created_at else None,
     } for m in movs]
     return RespuestaLista(
@@ -335,8 +608,13 @@ def reportes_caja(
             sesion_actual["cierre_id"] = mov.id
             sesion_actual["cierre_fecha"] = mov.created_at.isoformat() if mov.created_at else None
             sesion_actual["cierre_monto"] = mov.monto
+            sesion_actual["cierre_monto_esperado"] = mov.monto_esperado or mov.monto
+            sesion_actual["cierre_monto_confirmado"] = mov.monto_confirmado
             sesion_actual["cierre_usuario"] = mov.usuario.nombre if mov.usuario else "Desconocido"
             sesion_actual["cierre_descripcion"] = mov.descripcion
+            sesion_actual["cierre_confirmado_por"] = mov.confirmado_por.nombre if mov.confirmado_por else ""
+            sesion_actual["cierre_confirmado_at"] = mov.confirmado_at.isoformat() if mov.confirmado_at else None
+            sesion_actual["cierre_comentario"] = mov.comentario_concil
             sesion_actual["estado"] = "cerrada"
             
             # Calcular saldo final
@@ -347,8 +625,7 @@ def reportes_caja(
             sesion_actual["saldo_final"] = sesion_actual["apertura_monto"] + total_ingresos - total_egresos
             
             # Detectar si fue automático
-            if mov.descripcion and "automático" in mov.descripcion.lower():
-                sesion_actual["fue_automatico"] = True
+            sesion_actual["fue_automatico"] = bool(mov.fue_automatico) or (mov.descripcion and "automático" in mov.descripcion.lower())
             
             sesion_actual = None
         elif mov.tipo == "ingreso" and sesion_actual:

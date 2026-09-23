@@ -265,6 +265,18 @@ def _migrate_new_columns():
             conn.execute(sa.text("ALTER TABLE movimientos_stock ADD COLUMN lote_id INTEGER"))
             conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_movimientos_stock_lote_id ON movimientos_stock (lote_id)"))
             conn.commit()
+        existentes_mc = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(movimientos_caja)"))]
+        for col, tipo in [
+            ("monto_esperado", "FLOAT"),
+            ("monto_confirmado", "FLOAT"),
+            ("confirmado_por_id", "INTEGER"),
+            ("confirmado_at", "DATETIME"),
+            ("fue_automatico", "INTEGER NOT NULL DEFAULT 0"),
+            ("comentario_concil", "TEXT"),
+        ]:
+            if col not in existentes_mc:
+                conn.execute(sa.text(f"ALTER TABLE movimientos_caja ADD COLUMN {col} {tipo}"))
+                conn.commit()
     finally:
         conn.close()
 
