@@ -17,8 +17,8 @@ const toast = useToastStore()
 const productosStore = useProductosStore()
 const cajaStore = useCajaStore()
 
-const products = computed(() => productosStore.products || [])
-const categorias = computed(() => productosStore.categories || [])
+const products = computed(() => productosStore.productos || [])
+const categorias = computed(() => productosStore.categorias || [])
 const ofertas = computed(() => productosStore.ofertas || [])
 
 const searchText = ref('')
@@ -223,7 +223,7 @@ async function lookupAndAdd(raw) {
         stock_actual: resp.stock_actual || 0,
       }
       addToCart(newP)
-      productosStore.products.push(newP)
+      productosStore.productos.push(newP)
       scannerInput.value = ''
       return
     }
@@ -282,7 +282,7 @@ async function guardarManual() {
       categoria_id: categorias.value[0]?.id || 1
     }
     addToCart(temp, Number(manualEntry.qty) || 1, Number(manualEntry.precio) || 0)
-    productosStore.products.push(temp)
+    productosStore.productos.push(temp)
     showManualEntry.value = false
     manualEntry.codigo = ''
     manualEntry.nombre = ''
@@ -632,7 +632,6 @@ function logout() {
         <div class="flex gap-2">
           <div class="relative flex-1">
             <input
-              ref="scannerInput"
               v-model="scannerInput"
               type="text"
               inputmode="numeric"
@@ -658,9 +657,9 @@ function logout() {
           />
         </div>
 
-        <div v-if="carrito.length" class="rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 flex flex-col gap-2">
+        <div v-if="cart.items.length" class="rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 flex flex-col gap-2">
           <div class="text-sm font-semibold text-slate-600 dark:text-slate-300 flex items-center justify-between">
-            <span>Carrito ({{ carrito.length }})</span>
+            <span>Carrito ({{ cart.items.length }})</span>
             <button class="text-xs text-red-500" @click="vaciarCarrito">Vaciar</button>
           </div>
           <div v-for="(item, idx) in cart.items" :key="item.producto_id" class="flex flex-col gap-1.5 border-b border-slate-200 dark:border-slate-700 last:border-0 pb-2 last:pb-0">
