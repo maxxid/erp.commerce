@@ -32,6 +32,7 @@ const showTicket = ref(false)
 const scannerOpen = ref(false)
 const scannerError = ref('')
 const lastTicket = ref(null)
+const ajustes = ref({})
 
 const cart = reactive({
   items: [],
@@ -46,6 +47,7 @@ const mediosPago = [
   { value: 'efectivo', label: 'Efectivo', icon: 'fa-money-bill-wave' },
   { value: 'transferencia', label: 'Transferencia', icon: 'fa-mobile-screen-button' },
   { value: 'mercadopago_qr', label: 'QR MercadoPago', icon: 'fa-qrcode' },
+  { value: 'qr_interoperable', label: 'QR Transferencia', icon: 'fa-wallet' },
   { value: 'smartpoint', label: 'SmartPoint', icon: 'fa-cash-register' },
   { value: 'cta_corriente', label: 'Cuenta corriente', icon: 'fa-file-invoice-dollar' }
 ]
@@ -77,7 +79,7 @@ onMounted(async () => {
   cajaStore.fetchEstado()
   await Promise.all([
     productosStore.fetchAll(),
-    api.get('/api/config/ajustes').then(() => {}).catch(() => {})
+    api.get('/api/config/ajustes').then(r => { ajustes.value = r || {} }).catch(() => {})
   ])
   cargando.value = false
 })
@@ -467,6 +469,107 @@ function cerrarModalMp() {
   mpError.value = ''
 }
 
+// QR interoperable (EMVCo QRCPS v1.0): lo paga cualquier billetera.
+// El dinero llega por transferencia inmediata a la CBU/CVU configurada; la
+// venta se confirma manualmente al ver el ingreso acreditado.
+const qiModalOpen = ref(false)
+const qiLoading = ref(false)
+const qiError = ref('')
+const qiData = ref(null)
+const qiConfirmando = ref(false)
+let qiVentaId = null
+
+async function iniciarQrPreferido() {
+  const conf = ajustes.value || {}
+  if (conf.qr_interop_cuit?.valor && conf.qr_interop_cuenta?.valor) {
+    await iniciarQrInteroperable()
+  } else {
+    await iniciarQr()
+  }
+}
+
+async function iniciarQrInteroperable() {
+  qiLoading.value = true
+  qiError.value = ''
+  qiModalOpen.value = true
+  try {
+    const ventaId = await crearVenta()
+    if (!ventaId) {
+      qiError.value = 'No se pudo crear la venta'
+      return
+    }
+    qiVentaId = ventaId
+    const resp = await api.post('/api/pagos/interoperable/crear-orden', {
+      venta_id: ventaId
+    })
+    if (resp && resp.success) {
+      const qrDataUrl = resp.qr_data ? await QRCode.toDataURL(resp.qr_data, { width: 480, margin: 2 }) : ''
+      qiData.value = {
+        image_url: qrDataUrl,
+        monto: resp.monto || cart.total,
+        venta_numero: resp.venta_numero
+      }
+      vaciarCarrito()
+    } else {
+      qiError.value = resp?.detail || 'Error al generar el QR'
+      qiData.value = null
+    }
+  } catch (e) {
+    qiError.value = e.data?.detail || e.message || 'Error al generar el QR'
+    qiData.value = null
+  } finally {
+    qiLoading.value = false
+  }
+}
+
+async function confirmarQrInteroperable() {
+  if (!qiVentaId) return
+  qiConfirmando.value = true
+  try {
+    const resp = await api.put(`/api/ventas/${qiVentaId}/confirmar`, {
+      medio_pago: 'transferencia',
+      efectivo_pagado: 0,
+      descuento: 0
+    })
+    const total = resp?.total || qiData.value?.monto || 0
+    qiModalOpen.value = false
+    qiData.value = null
+    qiError.value = ''
+    qiVentaId = null
+    toast.success(`Pago por transferencia confirmado. Total: ${fc(total)}`)
+    showTicket.value = true
+    lastTicket.value = {
+      numero: resp?.numero || `#${qiVentaId}`,
+      total,
+      medio_pago: 'QR Transferencia',
+      items: [],
+      descuento: 0
+    }
+    setTimeout(() => { showTicket.value = false }, 8000)
+    productosStore.refreshProductos()
+    cajaStore.fetchEstado()
+  } catch (e) {
+    toast.error(e.data?.detail || e.message || 'Error confirmando el pago')
+  } finally {
+    qiConfirmando.value = false
+  }
+}
+
+async function cancelarQrInteroperable() {
+  qiModalOpen.value = false
+  qiData.value = null
+  qiError.value = ''
+  if (qiVentaId) {
+    try {
+      await api.put(`/api/ventas/${qiVentaId}/anular`)
+      toast.info('Venta pendiente anulada.')
+    } catch {
+      toast.info('QR cerrado. Quedó una venta pendiente; anulala desde Ventas si no cobrás.')
+    }
+    qiVentaId = null
+  }
+}
+
 // apertura de caja
 const showApertura = ref(false)
 const montoInicial = ref('')
@@ -558,6 +661,10 @@ async function ejecutarCobro() {
   showCobro.value = false
   if (cart.medio_pago === 'mercadopago_qr') {
     await iniciarQr()
+    return
+  }
+  if (cart.medio_pago === 'qr_interoperable') {
+    await iniciarQrInteroperable()
     return
   }
   if (cart.medio_pago === 'smartpoint') {
@@ -708,7 +815,7 @@ function logout() {
           <button
             :disabled="!cart.items.length || cart.total <= 0 || mpLoading"
             class="flex-1 rounded-xl border border-slate-300 dark:border-slate-700 py-3 text-sm font-medium active:bg-slate-100 dark:active:bg-slate-800 disabled:opacity-40"
-            @click="iniciarQr"
+            @click="iniciarQrPreferido"
           >
             <i v-if="mpLoading" class="fa-solid fa-circle-notch animate-spin mr-1"></i>
             <i v-else class="fa-solid fa-qrcode mr-1"></i> QR
@@ -749,6 +856,26 @@ function logout() {
         </template>
         <div v-if="mpError" class="text-red-500 text-sm text-center">{{ mpError }}</div>
         <BaseButton v-if="mpError" variant="secondary" block @click="mpModalOpen = false">Cerrar</BaseButton>
+      </div>
+    </BaseModal>
+
+    <!-- Modal QR interoperable (todas las billeteras) -->
+    <BaseModal v-model="qiModalOpen" title="Cobro con QR (transferencia)" :close-on-esc="false">
+      <div class="flex flex-col items-center gap-3 py-2">
+        <div v-if="qiLoading" class="py-8 text-slate-400"><i class="fa-solid fa-circle-notch animate-spin text-3xl"></i></div>
+        <template v-if="qiData">
+          <img :src="qiData.image_url" alt="QR" class="w-56 h-56 rounded-xl bg-white p-2 object-contain" />
+          <div class="text-center text-sm text-slate-600 dark:text-slate-300">{{ qiData.monto ? `Monto: ${fc(qiData.monto)}` : '' }}</div>
+          <div class="text-xs text-slate-500 text-center">El cliente lo paga con cualquier billetera (Brubank, Personal Pay, MODO, MP). La transferencia llega directo a tu CBU/CVU. Confirmá acá el cobro cuando lo veas acreditado.</div>
+          <div class="flex gap-2 w-full mt-2">
+            <BaseButton variant="secondary" block :disabled="qiConfirmando" @click="cancelarQrInteroperable">Cancelar</BaseButton>
+            <BaseButton variant="primary" block :loading="qiConfirmando" @click="confirmarQrInteroperable">
+              <i class="fa-solid fa-check mr-1"></i> Ya me pagaron
+            </BaseButton>
+          </div>
+        </template>
+        <div v-if="qiError" class="text-red-500 text-sm text-center">{{ qiError }}</div>
+        <BaseButton v-if="qiError" variant="secondary" block @click="qiModalOpen = false">Cerrar</BaseButton>
       </div>
     </BaseModal>
 

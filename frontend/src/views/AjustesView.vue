@@ -27,6 +27,7 @@ const afipExpanded = ref(false)
 const facturacionExpanded = ref(false)
 const bancariosExpanded = ref(false)
 const mercadopagoExpanded = ref(false)
+const qrInteropExpanded = ref(false)
 const ventasExpanded = ref(false)
 
 // MercadoPago store/POS creation
@@ -82,6 +83,10 @@ const config = ref({
   mercadopago_qr_fijo_url: '',
   mercadopago_qr_fijo_modo: 'dinamico',
   mercadopago_webhook_secret: '',
+  qr_interop_cuit: '',
+  qr_interop_cuenta: '',
+  qr_interop_nombre: '',
+  qr_interop_ciudad: '',
 })
 
 const facturaAuto = ref({
@@ -172,6 +177,10 @@ const descs = {
   mercadopago_qr_fijo_url: 'URL o código base64 del QR fijo (imagen para imprimir)',
   mercadopago_qr_fijo_modo: 'Modo QR: dinamico (solo QR en pantalla) o hibrido (QR fijo + dinámico)',
   mercadopago_webhook_secret: 'Clave secreta para validar webhooks de MercadoPago',
+  qr_interop_cuit: 'CUIT/CUIL del comercio (11 dígitos, obligatorio en el QR interoperable)',
+  qr_interop_cuenta: 'CBU (22) o CVU (23), o alias de la cuenta donde llega el pago',
+  qr_interop_nombre: 'Nombre corto del comercio que se muestra en el QR (máx. 25 caracteres)',
+  qr_interop_ciudad: 'Ciudad del comercio (opcional, máx. 15 caracteres)',
   factura_auto_efectivo: 'Emitir factura electrónica automáticamente al cobrar en efectivo',
   factura_auto_debito: 'Emitir factura electrónica automáticamente al cobrar con débito',
   factura_auto_credito: 'Emitir factura electrónica automáticamente al cobrar con crédito',
@@ -182,6 +191,8 @@ const descs = {
 }
 
 const MP_KEYS = ['mercadopago_enabled', 'mercadopago_access_token', 'mercadopago_user_id', 'mercadopago_store_id', 'mercadopago_external_store_id', 'mercadopago_external_pos_id', 'mercadopago_pos_id_qr', 'mercadopago_pos_id_smart', 'mercadopago_mode', 'mercadopago_qr_fijo_url', 'mercadopago_qr_fijo_modo', 'mercadopago_webhook_secret']
+
+const QR_INTEROP_KEYS = ['qr_interop_cuit', 'qr_interop_cuenta', 'qr_interop_nombre', 'qr_interop_ciudad']
 
 const VENTAS_KEYS = ['factura_auto_efectivo', 'factura_auto_debito', 'factura_auto_credito', 'factura_auto_transferencia', 'factura_auto_cta_corriente', 'factura_auto_mercadopago_qr', 'factura_auto_mercadopago_pos']
 
@@ -898,6 +909,61 @@ onMounted(loadConfig)
 
         <div class="flex items-center gap-3 pt-2">
           <BaseButton variant="primary" :loading="saving" @click="saveConfig(MP_KEYS)">
+            <i class="fa-solid fa-floppy-disk"></i> Guardar
+          </BaseButton>
+          <p class="text-[11px] text-slate-400">Los cambios se aplican inmediatamente</p>
+        </div>
+      </div>
+    </BaseCard>
+
+    <BaseCard v-if="!loading">
+      <button class="w-full text-left" @click="qrInteropExpanded = !qrInteropExpanded">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <i class="fa-solid fa-qrcode text-brand-600"></i>
+            QR Interoperable (todas las billeteras)
+          </h3>
+          <div class="flex items-center gap-3">
+            <span v-if="config.qr_interop_cuit && config.qr_interop_cuenta" class="text-xs text-green-600 dark:text-green-400">
+              <i class="fa-solid fa-check-circle mr-1"></i>Configurado
+            </span>
+            <span v-else class="text-xs text-amber-500">
+              <i class="fa-solid fa-circle-xmark mr-1"></i>No configurado
+            </span>
+            <i :class="['fa-solid fa-chevron-down text-xs transition-transform', qrInteropExpanded ? 'rotate-180' : '']"></i>
+          </div>
+        </div>
+      </button>
+
+      <div v-if="qrInteropExpanded" class="mt-4 space-y-4 max-w-lg">
+        <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded p-3">
+          <p class="text-xs text-blue-700 dark:text-blue-300">
+            <i class="fa-solid fa-circle-info mr-1"></i>
+            Este QR sigue el estándar EMVCo QRCPS v1.0 (BCRA Com. "A" 6425).
+            Cualquier billetera interoperable (Brubank, Personal Pay, MODO, MercadoPago, etc.)
+            puede pagarlo: el importe llega por transferencia inmediata a la CBU/CVU que cargués.
+            La venta se cierra cuando confirmás manualmente el pago.
+          </p>
+        </div>
+
+        <BaseInput v-model="config.qr_interop_cuit" label="CUIT/CUIL del comercio *" placeholder="Ej: 20111222333" hint="Debe tener 11 dígitos" />
+
+        <BaseInput v-model="config.qr_interop_cuenta" label="CBU, CVU o alias *" placeholder="Ej: 0000073100000000001234 o maxi@casillas" hint="Cuenta a la que llega el pago. No importa el banco: si la billetera del cliente no es interoperable, no podrá pagarlo." />
+
+        <BaseInput v-model="config.qr_interop_nombre" label="Nombre del comercio *" placeholder="Ej: MI NEGOCIO" hint="Se muestra en el QR. Sin acentos, máx. 25 caracteres" />
+
+        <BaseInput v-model="config.qr_interop_ciudad" label="Ciudad (opcional)" placeholder="Ej: MAR DEL PLATA" hint="Máx. 15 caracteres" />
+
+        <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded p-3">
+          <p class="text-xs text-amber-700 dark:text-amber-300">
+            <i class="fa-solid fa-triangle-exclamation mr-1"></i>
+            Probá el primer pago con un monto bajo. El QR cobra a través de transferencia
+            (sin señalar automáticamente la venta en el sistema: confirmás a mano al ver el ingreso).
+          </p>
+        </div>
+
+        <div class="flex items-center gap-3 pt-2">
+          <BaseButton variant="primary" :loading="saving" @click="saveConfig(QR_INTEROP_KEYS)">
             <i class="fa-solid fa-floppy-disk"></i> Guardar
           </BaseButton>
           <p class="text-[11px] text-slate-400">Los cambios se aplican inmediatamente</p>

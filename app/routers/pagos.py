@@ -24,6 +24,11 @@ class CrearOrdenPOSRequest(BaseModel):
     descripcion: Optional[str] = "Cobro ERP"
 
 
+class CrearOrdenInteroperableRequest(BaseModel):
+    venta_id: int
+    monto: Optional[float] = None
+
+
 class WebhookPayload(BaseModel):
     action: Optional[str] = None
     data: Optional[dict] = None
@@ -94,6 +99,65 @@ def crear_orden_qr(
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/interoperable/crear-orden")
+def crear_orden_interoperable(
+    req: CrearOrdenInteroperableRequest,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "cajero")),
+):
+    """Genera el payload del QR interoperable (EMVCo QRCPS v1.0) para una venta.
+
+    El QR lo puede pagar cualquier billetera interoperable (Brubank, Personal
+    Pay, MODO, MercadoPago, etc.) porque el importe viaja como transferencia
+    inmediata (PCT) a la CBU/CVU codificada en el campo 51.
+
+    Requiere configurarlo en Ajustes: qr_interop_cuit, qr_interop_cuenta,
+    qr_interop_nombre y opcionalmente qr_interop_ciudad.
+    """
+    from app.services import config_service, venta_service
+    from app.services import qr_interop_service
+
+    venta = venta_service.obtener_venta(db, req.venta_id)
+    if not venta:
+        raise HTTPException(status_code=404, detail="Venta no encontrada")
+
+    if venta.estado != "pendiente":
+        raise HTTPException(status_code=400, detail=f"Venta en estado {venta.estado}, no se puede cobrar")
+
+    monto = req.monto if req.monto is not None else venta.subtotal
+
+    cuit = config_service.get_config(db, "qr_interop_cuit") or ""
+    cuenta = config_service.get_config(db, "qr_interop_cuenta") or ""
+    nombre = config_service.get_config(db, "qr_interop_nombre") or ""
+    ciudad = config_service.get_config(db, "qr_interop_ciudad") or ""
+
+    if not cuit or not cuenta or not nombre:
+        raise HTTPException(
+            status_code=400,
+            detail="Falta configurar el QR interoperable en Ajustes (CUIT, CBU/CVU/alias y nombre del comercio)",
+        )
+
+    try:
+        qr_data = qr_interop_service.generar_qr_interoperable(
+            cuit=cuit,
+            cuenta=cuenta,
+            monto=monto,
+            nombre_comercio=nombre,
+            ciudad=ciudad,
+            dinamico=True,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return {
+        "success": True,
+        "qr_data": qr_data,
+        "venta_id": venta.id,
+        "venta_numero": venta.numero,
+        "monto": monto,
+    }
 
 
 @router.post("/mercadopago/crear-orden-pos")
