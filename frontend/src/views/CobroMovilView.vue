@@ -27,6 +27,7 @@ const buscando = ref(false)
 const cargando = ref(true)
 const confirmando = ref(false)
 const showPago = ref(false)
+const showCobro = ref(false)
 const showTicket = ref(false)
 const scannerOpen = ref(false)
 const scannerError = ref('')
@@ -563,19 +564,25 @@ async function crearVenta() {
   }
 }
 
-async function confirmarVenta() {
+function confirmarVenta() {
   if (!cart.items.length || cart.total <= 0) {
     toast.warning('El carrito está vacío')
-    return
-  }
-  if (cart.medio_pago === 'efectivo' && cart.recibido && recibidoNum.value < cart.total) {
-    toast.error(`Faltan ${fc(falta.value)}`)
     return
   }
   if (!cajaStore.abierta) {
     showApertura.value = true
     return
   }
+  cart.recibido = ''
+  showCobro.value = true
+}
+
+async function ejecutarCobro() {
+  if (cart.medio_pago === 'efectivo' && cart.recibido && recibidoNum.value < cart.total) {
+    toast.error(`Faltan ${fc(falta.value)}`)
+    return
+  }
+  showCobro.value = false
   if (cart.medio_pago === 'mercadopago_qr') {
     await iniciarQr()
     return
@@ -585,6 +592,14 @@ async function confirmarVenta() {
     if (id) {
       vaciarCarrito()
       toast.success('Venta creada. Registrala en el SmartPoint.')
+    }
+    return
+  }
+  if (cart.medio_pago === 'mercadopago_pos') {
+    const id = await crearVenta()
+    if (id) {
+      vaciarCarrito()
+      toast.success('Venta creada. Registrala en el SmartPoint físico.')
     }
     return
   }
@@ -770,6 +785,67 @@ function logout() {
         <div class="grid grid-cols-1 gap-2 mt-1">
           <BaseButton variant="primary" block :loading="manualGuardando" @click="guardarManual">Agregar al carrito</BaseButton>
           <BaseButton variant="ghost" block @click="showManualEntry = false">Cancelar</BaseButton>
+        </div>
+      </div>
+    </BaseModal>
+
+    <!-- Modal cobro -->
+    <BaseModal v-model="showCobro" title="Confirmar venta" :close-on-esc="false">
+      <div class="flex flex-col gap-4">
+        <div class="text-center">
+          <div class="text-xs text-slate-500">Total a cobrar</div>
+          <div class="text-4xl font-bold text-brand-600">{{ fc(cart.total) }}</div>
+        </div>
+
+        <div>
+          <div class="text-sm font-semibold mb-2">Medio de pago</div>
+          <div class="grid grid-cols-3 gap-2">
+            <button
+              v-for="m in mediosPago.filter(x => x.value !== 'mercadopago_pos')"
+              :key="m.value"
+              class="flex flex-col items-center gap-1 py-2 rounded-xl border text-xs transition"
+              :class="cart.medio_pago === m.value ? 'border-brand-600 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300' : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'"
+              @click="cart.medio_pago = m.value"
+            >
+              <i :class="['fa-solid', m.icon, 'text-lg']"></i>
+              <span>{{ m.label }}</span>
+            </button>
+          </div>
+        </div>
+
+        <div v-if="cart.medio_pago === 'efectivo'">
+          <BaseInput v-model="cart.recibido" label="¿Con cuánto paga?" type="text" inputmode="decimal" placeholder="0" hint="Opcional. Dejalo vacío para cobrar exacto." />
+          <div class="flex gap-2 flex-wrap mt-2" v-if="sugerenciasRecibido().length">
+            <button
+              v-for="s in sugerenciasRecibido()"
+              :key="s"
+              class="px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-sm text-slate-600 dark:text-slate-300"
+              @click="autoCompletarRecibido(s)"
+            >{{ fc(s) }}</button>
+          </div>
+          <div v-if="recibidoNum > 0 && cart.total > 0" class="mt-3 space-y-1">
+            <div class="flex justify-between text-sm">
+              <span class="text-slate-500">TOTAL</span>
+              <span>{{ fc(cart.total) }}</span>
+            </div>
+            <div class="flex justify-between text-sm">
+              <span class="text-slate-500">Paga con</span>
+              <span>{{ fc(recibidoNum) }}</span>
+            </div>
+            <div class="flex justify-between text-base font-semibold" :class="falta > 0 ? 'text-red-500' : 'text-green-600'">
+              <span>{{ falta > 0 ? 'FALTA' : 'VUELTO' }}</span>
+              <span>{{ fc(falta > 0 ? falta : vuelto) }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="text-sm text-slate-500 text-center bg-slate-50 dark:bg-slate-800 rounded-xl py-3">
+          Confirmando {{ mediosPago.find(m => m.value === cart.medio_pago)?.label || cart.medio_pago }} por {{ fc(cart.total) }}
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <BaseButton variant="secondary" block @click="showCobro = false">Volver</BaseButton>
+          <BaseButton variant="primary" block :loading="confirmando" @click="ejecutarCobro">Confirmar compra</BaseButton>
         </div>
       </div>
     </BaseModal>
