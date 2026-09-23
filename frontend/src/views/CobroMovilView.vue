@@ -77,15 +77,7 @@ onMounted(async () => {
   cajaStore.fetchEstado()
   await Promise.all([
     productosStore.fetchAll(),
-    api.get('/api/config/ajustes').then(cfg => {
-      if (cfg && typeof cfg === 'object') {
-        mpConfig.value = {
-          mercadopago_qr_fijo_url: cfg.mercadopago_qr_fijo_url?.valor || '',
-          mercadopago_qr_fijo_modo: cfg.mercadopago_qr_fijo_modo?.valor || 'dinamico'
-        }
-      }
-      return cfg
-    }).catch(() => {})
+    api.get('/api/config/ajustes').then(() => {}).catch(() => {})
   ])
   cargando.value = false
 })
@@ -372,33 +364,14 @@ function closeCamera() {
   scannerOpen.value = false
 }
 
-// MercadoPago QR (fijo + dinámico)
-const mpConfig = ref({})
+// MercadoPago QR dinámico (con importe). El QR fijo ya no se usa: no trae monto
+// y solo lo paga la app de MercadoPago cuando el vendedor carga el importe.
 const mpModalOpen = ref(false)
 const mpLoading = ref(false)
 const mpError = ref('')
 const mpData = ref(null)
 const mpPollingTimer = ref(null)
 let mpVentaId = null
-
-const qrFijoUrl = computed(() => {
-  const url = mpConfig.value && (mpConfig.value.mercadopago_qr_fijo_url || mpConfig.value.qr_fijo_url || '')
-  return url || ''
-})
-
-function showQrFijo() {
-  if (!qrFijoUrl.value) {
-    toast.warning('No hay QR fijo de MercadoPago configurado. Configuralo en Ajustes.')
-    return
-  }
-  mpData.value = {
-    tipo: 'fijo',
-    image_url: qrFijoUrl.value,
-    monto: cart.total,
-    texto: 'Escaneá el QR con tu aplicación de MercadoPago'
-  }
-  mpModalOpen.value = true
-}
 
 async function iniciarQr() {
   if (!cart.total) return
@@ -732,8 +705,13 @@ function logout() {
         <div class="text-xs text-slate-500">Total a cobrar</div>
         <div class="text-3xl font-bold">{{ fc(cart.total) }}</div>
         <div class="flex gap-2 pt-1">
-          <button class="flex-1 rounded-xl border border-slate-300 dark:border-slate-700 py-3 text-sm font-medium active:bg-slate-100 dark:active:bg-slate-800" @click="showQrFijo">
-            <i class="fa-solid fa-qrcode mr-1"></i> QR fijo
+          <button
+            :disabled="!cart.items.length || cart.total <= 0 || mpLoading"
+            class="flex-1 rounded-xl border border-slate-300 dark:border-slate-700 py-3 text-sm font-medium active:bg-slate-100 dark:active:bg-slate-800 disabled:opacity-40"
+            @click="iniciarQr"
+          >
+            <i v-if="mpLoading" class="fa-solid fa-circle-notch animate-spin mr-1"></i>
+            <i v-else class="fa-solid fa-qrcode mr-1"></i> QR
           </button>
           <button
             :disabled="!cart.items.length || cart.total <= 0 || confirmando || (buscando && false)"
@@ -767,11 +745,10 @@ function logout() {
         <template v-if="mpData">
           <img :src="mpData.image_url" alt="QR" class="w-56 h-56 rounded-xl bg-white p-2 object-contain" />
           <div class="text-center text-sm text-slate-600 dark:text-slate-300">{{ mpData.monto ? `Monto: ${fc(mpData.monto)}` : '' }}</div>
-          <div v-if="mpData.tipo === 'fijo'" class="text-xs text-slate-500 text-center">QR configurado en Ajustes. Esperando pago…</div>
-          <div v-else class="text-xs text-slate-500 text-center">El cliente escanea este QR y abona. La venta se cierra sola al confirmar el pago.</div>
+          <div class="text-xs text-slate-500 text-center">El cliente escanea este QR y abona. La venta se cierra sola al confirmar el pago.</div>
         </template>
         <div v-if="mpError" class="text-red-500 text-sm text-center">{{ mpError }}</div>
-        <BaseButton v-if="mpError && mpData?.tipo === 'fijo'" variant="secondary" block @click="mpModalOpen = false">Cerrar</BaseButton>
+        <BaseButton v-if="mpError" variant="secondary" block @click="mpModalOpen = false">Cerrar</BaseButton>
       </div>
     </BaseModal>
 
