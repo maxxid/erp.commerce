@@ -45,7 +45,7 @@ class Usuario(Base):
     ventas = relationship("Venta", back_populates="usuario")
     compras = relationship("Compra", back_populates="usuario")
     movimientos_stock = relationship("MovimientoStock", back_populates="usuario")
-    movimientos_caja = relationship("MovimientoCaja", back_populates="usuario")
+    movimientos_caja = relationship("MovimientoCaja", foreign_keys="MovimientoCaja.usuario_id", back_populates="usuario")
 
     def __repr__(self):
         return f"<Usuario(id={self.id}, username='{self.username}', rol='{self.rol}')>"

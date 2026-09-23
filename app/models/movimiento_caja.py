@@ -33,7 +33,7 @@ class MovimientoCaja(Base):
     fue_automatico = Column(Boolean, default=False)    # True = cierre automático por cambio de día
     comentario_concil = Column(Text, nullable=True)    # nota al confirmar/ajustar
 
-    usuario = relationship("Usuario", back_populates="movimientos_caja")
+    usuario = relationship("Usuario", foreign_keys=[usuario_id], back_populates="movimientos_caja")
     confirmado_por = relationship("Usuario", foreign_keys=[confirmado_por_id])
     sucursal = relationship("Sucursal", back_populates="movimientos_caja")
 
