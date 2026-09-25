@@ -27,8 +27,10 @@ const filtroSearch = ref('')
 const expandedRows = ref([])
 const syncing = ref(false)
 const anullingId = ref(null)
+const confirmingId = ref(null)
 const loading = ref(true)
 const anularTarget = ref(null)
+const confirmTarget = ref(null)
 const showTicket = ref(false)
 const ticketData = ref({ items: [], numero: '', fecha: '', total: 0, descuento: 0, medio_pago: '', cliente: '', sucursal: '' })
 
@@ -257,7 +259,10 @@ function estadoVariant(estado) {
   const map = {
     'Completada': 'success',
     'Pendiente': 'warning',
-    'Anulada': 'danger'
+    'Anulada': 'danger',
+    'confirmada': 'success',
+    'pendiente': 'warning',
+    'anulada': 'danger'
   }
   return map[estado] || 'default'
 }
@@ -276,6 +281,31 @@ async function executeAnular() {
   } finally {
     anullingId.value = null
     anularTarget.value = null
+  }
+}
+
+function confirmPendiente(sale) {
+  confirmTarget.value = sale
+}
+
+async function executeConfirm() {
+  if (!confirmTarget.value) return
+  confirmingId.value = confirmTarget.value.id
+  try {
+    const res = await api.put(`/api/ventas/${confirmTarget.value.id}/confirmar`, {
+      medio_pago: 'efectivo',
+      efectivo_pagado: 0,
+      descuento: 0
+    })
+    const sale = sales.value.find(s => s.id === confirmTarget.value.id)
+    if (sale) sale.estado = res?.estado || 'confirmada'
+    toast.success(`Venta #${confirmTarget.value.id} confirmada`)
+    await fetchVentas()
+  } catch (e) {
+    toast.error(e?.response?.data?.detail || e?.message || 'Error al confirmar la venta')
+  } finally {
+    confirmingId.value = null
+    confirmTarget.value = null
   }
 }
 </script>
@@ -437,6 +467,16 @@ async function executeAnular() {
               {{ facturandoId === row.id ? 'Facturando...' : 'Facturar' }}
             </button>
             <button
+              v-if="row.estado === 'pendiente'"
+              type="button"
+              :disabled="confirmingId === row.id"
+              class="px-2 py-1 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-lg text-[10px] font-bold transition disabled:opacity-50"
+              @click.stop="confirmPendiente(row)"
+            >
+              <i :class="[confirmingId === row.id ? 'fa-solid fa-circle-notch fa-spin' : 'fa-solid fa-check', 'mr-1']"></i>
+              {{ confirmingId === row.id ? 'Confirmando...' : 'Confirmar' }}
+            </button>
+            <button
               type="button"
               class="px-2 py-1 bg-brand-50 dark:bg-brand-900/20 hover:bg-brand-100 dark:hover:bg-brand-900/30 text-brand-700 dark:text-brand-300 rounded-lg text-[10px] font-bold transition"
               @click.stop="toggleRow(row.id)"
@@ -526,6 +566,27 @@ async function executeAnular() {
           <BaseButton variant="secondary" class="flex-1" @click="anularTarget = null">Cancelar</BaseButton>
           <BaseButton variant="danger" :loading="anullingId === anularTarget?.id" class="flex-1" @click="executeAnular">
             <i class="fa-solid fa-ban"></i> Anular
+          </BaseButton>
+        </div>
+      </div>
+    </BaseModal>
+
+    <BaseModal v-model="confirmTarget" title="Confirmar Venta" size="sm">
+      <div class="text-center">
+        <div class="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center mx-auto mb-3">
+          <i class="fa-solid fa-check text-emerald-500 text-xl"></i>
+        </div>
+        <h3 class="text-lg font-bold text-slate-950 dark:text-white font-display mb-1">Confirmar Venta</h3>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mb-2">
+          La venta <strong class="text-slate-900 dark:text-slate-100">#{{ confirmTarget?.id }}</strong> quedó pendiente. ¿Confirmarla ahora?
+        </p>
+        <p class="text-xs text-amber-600 dark:text-amber-400 mb-5">
+          Descontará el stock registrado en lotes y dejará marcado el déficit si se vendió por encima.
+        </p>
+        <div class="flex items-center gap-3">
+          <BaseButton variant="secondary" class="flex-1" @click="confirmTarget = null">Cancelar</BaseButton>
+          <BaseButton variant="primary" :loading="confirmingId === confirmTarget?.id" class="flex-1" @click="executeConfirm">
+            <i class="fa-solid fa-check"></i> Confirmar
           </BaseButton>
         </div>
       </div>
