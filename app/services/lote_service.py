@@ -128,6 +128,13 @@ def actualizar_lote(db: Session, lote_id: int, data: dict) -> Lote:
             from app.models.movimiento_stock import MovimientoStock
 
             producto = db.query(Producto).filter(Producto.id == lote.producto_id).first()
+            if producto is not None and producto.flag_revision_stock:
+                raise ValueError(
+                    "Este producto está en revisión de stock (se vendió por encima "
+                    "de lo registrado en lotes). No se puede ajustar la cantidad del "
+                    "lote manualmente: resolvé la revisión desde Productos > A revisar."
+                )
+
             stock_anterior = producto.stock_actual if producto else None
 
             diferencia = nueva - actual

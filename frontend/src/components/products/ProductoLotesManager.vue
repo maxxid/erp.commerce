@@ -10,6 +10,7 @@ import BaseBadge from '@/components/ui/BaseBadge.vue'
 
 const props = defineProps({
   productoId: { type: [Number, null], required: true },
+  revisionPendiente: { type: Boolean, default: false },
 })
 
 const toast = useToastStore()
@@ -117,7 +118,7 @@ async function saveEdit() {
       activo: editForm.activo,
       notas: editForm.notas || null,
     }
-    if (cantidad_payload != null) payload.cantidad_actual = cantidad_payload
+    if (cantidad_payload != null && !props.revisionPendiente) payload.cantidad_actual = cantidad_payload
     await api.put(`/api/lotes/${editing.value.id}`, payload)
     await load()
     toast.success('Lote actualizado')
@@ -332,11 +333,23 @@ async function executeRemove() {
             step="0.01"
             min="0"
             inputmode="decimal"
-            class="w-full px-3.5 py-2.5 text-sm font-mono-data text-right bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none transition"
+            :disabled="revisionPendiente"
+            class="w-full px-3.5 py-2.5 text-sm font-mono-data text-right bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none transition disabled:opacity-50 disabled:cursor-not-allowed"
           />
           <p v-if="editing" class="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
             Actual: <strong class="font-mono-data">{{ editing.cantidad_actual }}</strong>. Al dejarlo en <strong class="font-mono-data">0</strong> podrás desactivar o eliminar el lote. Queda registrado como movimiento de stock.
           </p>
+          <div
+            v-if="revisionPendiente"
+            class="mt-2 flex items-start gap-2 p-2.5 rounded-lg bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-700/40"
+          >
+            <i class="fa-solid fa-flag text-rose-500 mt-0.5"></i>
+            <p class="text-[11px] text-rose-700 dark:text-rose-300 font-medium">
+              Este producto está bajo revisión de stock (se vendió por encima de lo registrado en lotes).
+              No se puede ajustar la cantidad del lote manualmente. Resolvé la revisión desde
+              <strong>Productos > A revisar</strong>.
+            </p>
+          </div>
         </div>
 
         <div>

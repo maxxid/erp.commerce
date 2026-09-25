@@ -1149,6 +1149,7 @@ async function fetchProveedores() {
         <ProductoLotesManager
           v-if="editingProduct"
           :producto-id="editingProduct.id"
+          :revision-pendiente="!!editingProduct.flag_revision_stock"
         />
 
         <BaseInput
