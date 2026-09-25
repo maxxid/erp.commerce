@@ -49,6 +49,86 @@ def listar(
     )
 
 
+@router.get("/revision-stock", response_model=RespuestaLista)
+def revision_stock(
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """Productos con bandera de revisión de stock (se vendieron por encima de
+    lo registrado en lotes y requieren conteo/corrección manual)."""
+    productos = (
+        db.query(Producto)
+        .filter(
+            Producto.activo == True,
+            Producto.flag_revision_stock == True,
+        )
+        .order_by(Producto.deficit_stock.desc(), Producto.nombre.asc())
+        .all()
+    )
+    data = [
+        {
+            "id": p.id, "nombre": p.nombre, "codigo_barras": p.codigo_barras,
+            "stock_actual": p.stock_actual,
+            "deficit_stock": p.deficit_stock or 0,
+        }
+        for p in productos
+    ]
+    return RespuestaLista(
+        data=data, total=len(data),
+        message=f"{len(data)} producto(s) para revisar"
+    )
+
+
+class ResolverRevisionRequest(BaseModel):
+    """Marca un producto como revisado, limpiando su bandera de stock."""
+    stock_real: Optional[float] = None
+
+
+@router.post("/revision-stock/{producto_id}/resolver")
+def resolver_revision(
+    producto_id: int,
+    payload: ResolverRevisionRequest,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """Limpia la bandera de revisión. Si viene `stock_real`, ajusta el stock
+    del producto a ese valor real contado (vía stock directo) antes de
+    resolver."""
+    producto = db.query(Producto).filter(Producto.id == producto_id).first()
+    if not producto:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+    if payload.stock_real is not None:
+        if payload.stock_real < 0:
+            raise HTTPException(status_code=400, detail="stock_real no puede ser negativo")
+        stock_actual = producto_service._suma_lotes_activos(db, producto.id)
+        delta = round(payload.stock_real - stock_actual, 2)
+        if abs(delta) > 1e-9:
+            tipo = "entrada" if delta > 0 else "salida"
+            try:
+                stock_service.ajustar_stock_por_lote(
+                    db,
+                    producto_id=producto.id,
+                    cantidad_delta=delta,
+                    tipo=tipo,
+                    usuario_id=user.id,
+                    referencia_tipo="revision_stock",
+                    notas="Conteo físico de revisión de stock",
+                )
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+
+    producto = db.query(Producto).filter(Producto.id == producto_id).first()
+    producto.flag_revision_stock = False
+    producto.deficit_stock = 0.0
+    db.commit()
+    auditoria_service.registrar(
+        db, user.id, "revision_stock_resuelta", None, None,
+        {"producto_id": producto.id, "nombre": producto.nombre},
+    )
+    return RespuestaData(data={"id": producto.id}, message="Revisión resuelta")
+
+
 @router.get("/pendientes-etiquetar", response_model=RespuestaLista)
 def pendientes_etiquetar(
     db: Session = Depends(get_db),

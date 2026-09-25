@@ -474,6 +474,7 @@
                       @click="updateCartQty(idx, item.cantidad + 1)"
                     >+</button>
                     <BaseBadge v-if="item.oferta" size="xs" variant="warning" class="ml-1">{{ item.oferta.tipo === 'porcentaje' ? item.oferta.valor + '%' : item.oferta.tipo === 'monto_fijo' ? '$' + item.oferta.valor : '2x1' }}</BaseBadge>
+                    <BaseBadge v-if="item._revision" size="xs" variant="danger" class="ml-1" title="Se vende por encima del stock registrado en lotes. Revisar.">A revisar</BaseBadge>
                   </div>
                   <!-- Oferta badge para kilo (afuera del div de cantidad) -->
                   <div v-if="item.por_kilo && item.oferta" class="flex items-center gap-2 mt-1">
@@ -1925,12 +1926,12 @@ function addToCart(product, qty = 1, price = null) {
 
   const newQty = (existing ? existing.cantidad : 0) + qty
   if (!isManual && product.stock_actual !== undefined && newQty > product.stock_actual) {
-    toast.error(`Stock insuficiente: ${product.stock_actual} disponibles`)
-    return
+    toast.warning(`Stock insuficiente: ${product.stock_actual} disponibles. Se venderá igual y quedará bajo revisión.`)
   }
 
   if (existing) {
     existing.cantidad += qty
+    if (!isManual && product.stock_actual !== undefined && existing.cantidad > product.stock_actual) existing._revision = true
     if (oferta && !isManual) existing.oferta = { ...oferta }
   } else {
     cart.items.push({
@@ -1945,6 +1946,7 @@ function addToCart(product, qty = 1, price = null) {
       precio_unidad: product.precio_por_unidad || null,
       por_kilo: product.tipo_venta === 'kilo' || (product.tipo_venta === 'ambos' && basePrice === product.precio_por_kilo),
       peso: product.tipo_venta === 'kilo' ? (qty > 1 ? qty : 1) : null,
+      _revision: !isManual && product.stock_actual !== undefined && qty > product.stock_actual,
     })
   }
 
@@ -2024,8 +2026,10 @@ function updateCartQty(idx, qty) {
   const prod = products.value.find(p => p.id === item.producto_id)
   const isManual = prod?._pending || (prod?.codigo_barras && (prod.codigo_barras.startsWith('*MANUAL*') || prod.codigo_barras.startsWith('GEN-')))
   if (!isManual && prod && prod.stock_actual !== undefined && qty > prod.stock_actual) {
-    toast.error(`Stock insuficiente: ${prod.stock_actual} disponibles`)
-    return
+    toast.warning(`Stock insuficiente: ${prod.stock_actual} disponibles. Se venderá igual y quedará bajo revisión.`)
+    item._revision = true
+  } else {
+    item._revision = false
   }
   item.cantidad = qty
   recalcCart()

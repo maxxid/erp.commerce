@@ -249,15 +249,22 @@ def descontar_fefo(
     db: Session,
     producto_id: int,
     cantidad: float,
+    permitir_deficit: bool = False,
 ) -> List[Tuple[int, float]]:
     """Descuenta stock del producto siguiendo FEFO.
+
+    Args:
+        permitir_deficit: si True y el stock disponible en lotes no alcanza,
+            descuenta todo lo disponible y devuelve ese consumo; el faltante
+            se deja sin lote (el caller debe marcar la bandera de revisión).
+            si False (default), lanza ValueError como antes.
 
     Returns:
         Lista de tuplas (lote_id, cantidad_descontada) que luego el caller usa
         para registrar VentaItemLote o MovimientoStock.lote_id.
 
     Raises:
-        ValueError: Si no hay stock suficiente.
+        ValueError: Si no hay stock suficiente y `permitir_deficit` es False.
     """
     if cantidad <= 0:
         raise ValueError("Cantidad debe ser positiva")
@@ -274,7 +281,7 @@ def descontar_fefo(
     )
 
     disponible = sum(l.cantidad_actual for l in lotes)
-    if disponible < cantidad:
+    if disponible < cantidad and not permitir_deficit:
         raise ValueError(
             f"Stock insuficiente en lotes: disponible={disponible}, requerido={cantidad}"
         )
@@ -291,11 +298,48 @@ def descontar_fefo(
         restante -= tomar
         consumos.append((lote.id, tomar))
 
-    if restante > 0:
-        raise ValueError("Stock inconsistente: sobraron unidades sin asignar")
-
     _recalcular_stock_producto(db, producto_id)
     return consumos
+
+
+def descontar_fefo_detallado(
+    db: Session,
+    producto_id: int,
+    cantidad: float,
+) -> Tuple[List[Tuple[int, float]], float]:
+    """Descuenta stock FEFO permitiendo déficit.
+
+    Returns:
+        (consumos, deficit) donde deficit = cantidad que no pudo cubrirse
+        con lotes. Nunca lanza por stock insuficiente.
+    """
+    lotes = (
+        db.query(Lote)
+        .filter(
+            Lote.producto_id == producto_id,
+            Lote.activo == True,
+            Lote.cantidad_actual > 0,
+        )
+        .order_by(Lote.fecha_vencimiento.asc().nulls_last(), Lote.created_at.asc())
+        .all()
+    )
+
+    disponible = sum(l.cantidad_actual for l in lotes)
+    restante = cantidad
+    consumos = []
+    for lote in lotes:
+        if restante <= 0:
+            break
+        if lote.cantidad_actual <= 0:
+            continue
+        tomar = min(restante, lote.cantidad_actual)
+        lote.cantidad_actual -= tomar
+        restante -= tomar
+        consumos.append((lote.id, tomar))
+
+    _recalcular_stock_producto(db, producto_id)
+    deficit = max(0.0, round(cantidad - disponible, 6))
+    return consumos, deficit
 
 
 def reingresar_en_lote(

@@ -23,6 +23,7 @@ def ajustar_stock(
     referencia_tipo: str = "ajuste_manual",
     referencia_id: Optional[int] = None,
     notas: Optional[str] = None,
+    permitir_negativo: bool = False,
 ) -> MovimientoStock:
     """Ajusta el stock directo (sin pasar por lotes). Reservado para migraciones
     y casos donde aún no hay sistema de lotes. En operación normal usar
@@ -35,7 +36,7 @@ def ajustar_stock(
     stock_anterior = producto.stock_actual
     stock_resultante = stock_anterior + cantidad
 
-    if stock_resultante < 0:
+    if stock_resultante < 0 and not permitir_negativo:
         raise ValueError(
             f"Stock insuficiente: actual={stock_anterior}, "
             f"intentando descontar={abs(cantidad)}"

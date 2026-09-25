@@ -113,11 +113,11 @@ function addToCart(product, qty = 1, price = null) {
   const existing = cart.items.find(i => i.producto_id === product.id)
   const newQty = (existing ? existing.cantidad : 0) + qty
   if (!isManual && product.stock_actual !== undefined && newQty > product.stock_actual) {
-    toast.error(`Stock insuficiente: ${product.stock_actual} disponibles`)
-    return
+    toast.warning(`Stock insuficiente: ${product.stock_actual} disponibles. Se venderá igual y quedará bajo revisión.`)
   }
   if (existing) {
     existing.cantidad += qty
+    if (!isManual && product.stock_actual !== undefined && existing.cantidad > product.stock_actual) existing._revision = true
     if (oferta && !isManual) existing.oferta = { ...oferta }
   } else {
     cart.items.push({
@@ -133,6 +133,7 @@ function addToCart(product, qty = 1, price = null) {
       por_kilo: product.tipo_venta === 'kilo' || (product.tipo_venta === 'ambos' && basePrice === product.precio_por_kilo),
       peso: product.tipo_venta === 'kilo' ? (qty > 1 ? qty : 1) : null,
       _pending: product._pending || false,
+      _revision: !isManual && product.stock_actual !== undefined && qty > product.stock_actual,
       _nombre: product._nombre,
       _precio: product._precio,
       categoria_id: product.categoria_id
@@ -178,8 +179,10 @@ function updateCartQty(idx, qty) {
   const prod = products.value.find(p => p.id === item.producto_id)
   const isManual = prod?._pending || (prod?.codigo_barras && (prod.codigo_barras.startsWith('*MANUAL*') || prod.codigo_barras.startsWith('GEN-')))
   if (!isManual && prod && prod.stock_actual !== undefined && qty > prod.stock_actual) {
-    toast.error(`Stock insuficiente: ${prod.stock_actual} disponibles`)
-    return
+    toast.warning(`Stock insuficiente: ${prod.stock_actual} disponibles. Se venderá igual y quedará bajo revisión.`)
+    item._revision = true
+  } else {
+    item._revision = false
   }
   if (item.por_kilo) {
     item.peso = qty
@@ -774,7 +777,10 @@ function logout() {
             <div class="flex items-center gap-2">
               <span class="text-red-500 cursor-pointer p-1" @click="removeItem(idx)"><i class="fa-solid fa-xmark"></i></span>
               <div class="flex-1 min-w-0">
-                <div class="text-sm truncate">{{ item.nombre }}</div>
+                <div class="text-sm truncate flex items-center gap-1.5">
+                  <span class="truncate">{{ item.nombre }}</span>
+                  <span v-if="item._revision" class="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-300" title="Se vende por encima del stock registrado en lotes. Revisar.">A revisar</span>
+                </div>
                 <div class="text-xs text-slate-500">{{ fc(item._precio_neto || item.precio_unitario) }}</div>
               </div>
               <div class="flex items-center gap-1">

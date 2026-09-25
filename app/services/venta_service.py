@@ -145,12 +145,14 @@ def confirmar_venta(
 ) -> Venta:
     """Confirma una venta pendiente.
 
-    1. Verifica stock para cada ítem (no puede haber ventas parciales)
-    2. Descuenta stock y genera MovimientoStock por cada ítem
-    3. Aplica descuento
-    4. Registra ingreso en caja si la caja está abierta
-    5. Si es cta_corriente, actualiza saldo del cliente
-    6. Cambia estado a "confirmada"
+    1. Descarta stock (FEFO) y genera MovimientoStock por cada ítem.
+       No bloquea por stock insuficiente: si el stock físico real supera lo
+       registrado en lotes, vende igual y marca el producto con bandera de
+       revisión (flag_revision_stock + deficit_stock).
+    2. Aplica descuento
+    3. Registra ingreso en caja si la caja está abierta
+    4. Si es cta_corriente, actualiza saldo del cliente
+    5. Cambia estado a "confirmada"
 
     Args:
         efectivo_pagado: Parte de la venta abonada en efectivo (pago mixto).
@@ -162,18 +164,6 @@ def confirmar_venta(
     """
     if venta.estado != "pendiente":
         raise ValueError("La venta ya fue procesada")
-
-    # Verificar stock disponible (cache de producto.stock_actual, que refleja lotes)
-    for item in venta.items:
-        producto = db.query(Producto).filter(Producto.id == item.producto_id).first()
-        if not producto:
-            raise ValueError(f"Producto {item.producto_id} no encontrado")
-        cantidad_a_descontar = item.peso if item.por_kilo else item.cantidad
-        if producto.stock_actual < cantidad_a_descontar:
-            raise ValueError(
-                f"Stock insuficiente para '{producto.nombre}': "
-                f"disponible={producto.stock_actual}, requerido={cantidad_a_descontar}"
-            )
 
     # Verificar caja abierta
     if not caja_service.caja_abierta(db, venta.sucursal_id):
@@ -193,10 +183,13 @@ def confirmar_venta(
 
     uid = usuario_id or venta.usuario_id
 
-    # Descontar stock con FEFO y registrar trazabilidad por lote
+    # Descontar stock con FEFO y registrar trazabilidad por lote.
+    # NO se bloquea la venta por stock insuficiente: si el stock físico real
+    # supera lo registrado (error humano al cargar lotes), se vende igual y el
+    # producto queda marcado con bandera de revisión (flag_revision_stock).
     for item in venta.items:
         cantidad_a_descontar = item.peso if item.por_kilo else item.cantidad
-        consumos = lote_service.descontar_fefo(
+        consumos, deficit = lote_service.descontar_fefo_detallado(
             db, item.producto_id, cantidad_a_descontar
         )
         for lote_id, cant in consumos:
@@ -206,6 +199,12 @@ def confirmar_venta(
                 cantidad=cant,
             ))
 
+        if deficit > 0:
+            producto = db.query(Producto).filter(Producto.id == item.producto_id).first()
+            if producto:
+                producto.flag_revision_stock = True
+                producto.deficit_stock = (producto.deficit_stock or 0) + deficit
+
         stock_service.ajustar_stock(
             db,
             producto_id=item.producto_id,
@@ -214,6 +213,8 @@ def confirmar_venta(
             usuario_id=uid,
             referencia_tipo="venta",
             referencia_id=venta.id,
+            permitir_negativo=True,
+            notas=f"Déficit de lote: {deficit}" if deficit > 0 else None,
         )
 
     # Actualizar contadores de ofertas vendidas
@@ -292,19 +293,33 @@ def anular_venta(
 
     # Revertir stock: volver a ingresar en cada lote del que se había descontado
     for item in venta.items:
+        cantidad_vendida = item.peso if item.por_kilo else item.cantidad or 0
+        reingresado = 0.0
         for consumo in item.lote_consumos:
             lote_service.reingresar_en_lote(
                 db, item.producto_id, consumo.lote_id, consumo.cantidad
             )
+            reingresado += consumo.cantidad or 0
         stock_service.ajustar_stock(
             db,
             producto_id=item.producto_id,
-            cantidad=item.cantidad,
+            cantidad=cantidad_vendida,
             tipo="entrada",
             usuario_id=uid,
             referencia_tipo="venta_anulada",
             referencia_id=venta.id,
         )
+
+        # Revertir el déficit registrado (unidades vendidas sin cobertura de lote)
+        deficit_anulado = cantidad_vendida - reingresado
+        if deficit_anulado > 0:
+            producto = db.query(Producto).filter(Producto.id == item.producto_id).first()
+            if producto:
+                producto.deficit_stock = max(
+                    0.0, (producto.deficit_stock or 0) - deficit_anulado
+                )
+                if producto.deficit_stock <= 0:
+                    producto.flag_revision_stock = False
 
     # Revertir cta corriente
     if venta.medio_pago == "cta_corriente" and venta.cliente_id:

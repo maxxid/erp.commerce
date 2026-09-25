@@ -69,6 +69,8 @@ class ProductoOut(ProductoBase):
     observaciones: Optional[str] = None
     fecha_vencimiento: Optional[datetime] = None
     categoria_nombre: Optional[str] = None
+    flag_revision_stock: Optional[bool] = False
+    deficit_stock: Optional[float] = 0.0
     created_at: datetime
     updated_at: Optional[datetime] = None
 

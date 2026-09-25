@@ -54,6 +54,7 @@ const filterEnOferta = ref(false)
 const filterSinStock = ref(false)
 const filterSinCodigo = ref(false)
 const filterPorVencer = ref(false)
+const filterRevisionStock = ref(false)
 
 let searchDebounceTimer = null
 function onSearchInput() {
@@ -79,6 +80,7 @@ const activeFilterCount = computed(() => {
   if (filterSinCodigo.value) n++
   if (filterPendientes.value) n++
   if (filterPorVencer.value) n++
+  if (filterRevisionStock.value) n++
   return n
 })
 
@@ -93,6 +95,7 @@ function clearAllFilters() {
   filterSinCodigo.value = false
   filterPendientes.value = false
   filterPorVencer.value = false
+  filterRevisionStock.value = false
   clearSearch()
 }
 
@@ -141,6 +144,12 @@ const countPendientes = computed(() => {
       const cbs = String(p.codigo_barras).toLowerCase()
       return cbs.startsWith('gen-') || cbs.startsWith('*manual*')
     }).length
+  } catch { return 0 }
+})
+
+const countRevisionStock = computed(() => {
+  try {
+    return products.value.filter(p => p && p.flag_revision_stock).length
   } catch { return 0 }
 })
 
@@ -282,6 +291,9 @@ const filteredProducts = computed(() => {
         return da - db
       })
     }
+    if (filterRevisionStock.value) {
+      list = list.filter(p => p && p.flag_revision_stock)
+    }
     if (hasSearch.value) {
       const q = safeStr(searchQuery.value).trim()
       if (q) {
@@ -421,6 +433,35 @@ function closeModal() {
   editingProduct.value = null
   formError.value = ''
   showBarcodeHint.value = false
+}
+
+// --- Revisión de stock (bandera por déficit) ---
+const revisionTarget = ref(null)
+const revisionStockReal = ref('')
+const resolvingRevision = ref(false)
+
+function openRevisionModal(product) {
+  revisionTarget.value = product
+  revisionStockReal.value = product.stock_actual
+  resolvingRevision.value = false
+}
+
+async function resolverRevision() {
+  if (!revisionTarget.value) return
+  resolvingRevision.value = true
+  try {
+    const stockReal = revisionStockReal.value === '' || revisionStockReal.value === null
+      ? null
+      : parseFloat(String(revisionStockReal.value).replace(',', '.'))
+    await api.post(`/api/productos/revision-stock/${revisionTarget.value.id}/resolver`, { stock_real: stockReal })
+    toast.success('Revisión resuelta')
+    revisionTarget.value = null
+    await fetchProductsData(true)
+  } catch (e) {
+    toast.error(e.data?.detail || e.message || 'Error al resolver revisión')
+  } finally {
+    resolvingRevision.value = false
+  }
 }
 
 async function lookupBarcode() {
@@ -804,6 +845,21 @@ async function fetchProveedores() {
           :class="filterPendientes ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300'"
         >{{ countPendientes }}</span>
       </button>
+      <button
+        type="button"
+        class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 border flex items-center gap-1.5"
+        :class="filterRevisionStock
+          ? 'bg-rose-600 text-white border-rose-600 shadow-sm shadow-rose-500/20'
+          : 'bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900 hover:border-rose-300 dark:hover:border-rose-700'"
+        @click="filterRevisionStock = !filterRevisionStock"
+      >
+        <i class="fa-solid fa-flag"></i> A revisar
+        <span
+          v-if="countRevisionStock > 0"
+          class="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded-full"
+          :class="filterRevisionStock ? 'bg-white/20 text-white' : 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-300'"
+        >{{ countRevisionStock }}</span>
+      </button>
 
       <button
         v-if="activeFilterCount > 0 || hasSearch"
@@ -854,12 +910,23 @@ async function fetchProveedores() {
         </span>
       </template>
       <template #stock_actual="{ row }">
-        <BaseBadge
-          :variant="row.stock_actual <= 5 ? 'danger' : 'default'"
-          size="xs"
-        >
-          {{ row.stock_actual }}
-        </BaseBadge>
+        <div class="flex items-center justify-end gap-1.5">
+          <BaseBadge
+            :variant="row.stock_actual <= 5 ? 'danger' : 'default'"
+            size="xs"
+          >
+            {{ row.stock_actual }}
+          </BaseBadge>
+          <BaseBadge
+            v-if="row.flag_revision_stock"
+            variant="danger"
+            size="xs"
+            title="Se vendió por encima del stock registrado en lotes. Conteo/corrección pendiente."
+          >
+            <i class="fa-solid fa-flag mr-0.5 text-[8px]"></i>
+            Déficit {{ row.deficit_stock }}
+          </BaseBadge>
+        </div>
       </template>
       <template #vencimiento="{ row }">
         <div v-if="row._vto" class="flex items-center justify-center">
@@ -889,6 +956,16 @@ async function fetchProveedores() {
       </template>
       <template #acciones="{ row }">
         <div class="flex items-center justify-end gap-1">
+          <button
+            v-if="row.flag_revision_stock"
+            type="button"
+            aria-label="Resolver revisión de stock"
+            class="w-7 h-7 rounded-lg text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 flex items-center justify-center transition"
+            title="Contó y corrigió el stock: marcar revisión resuelta"
+            @click="openRevisionModal(row)"
+          >
+            <i class="fa-solid fa-flag text-[10px]"></i>
+          </button>
           <button
             v-if="row._oferta"
             type="button"
@@ -1148,6 +1225,39 @@ async function fetchProveedores() {
             {{ deleting ? 'Eliminando...' : 'Eliminar' }}
           </BaseButton>
         </div>
+      </div>
+    </BaseModal>
+
+    <!-- Revisión de stock Modal -->
+    <BaseModal v-model="revisionTarget" title="Resolver revisión de stock" size="sm" :close-on-overlay="true">
+      <div class="text-center">
+        <div class="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-900/20 flex items-center justify-center mx-auto mb-3">
+          <i class="fa-solid fa-flag text-rose-500 text-xl"></i>
+        </div>
+        <h3 class="text-lg font-bold text-slate-950 dark:text-white font-display mb-1">{{ revisionTarget?.nombre }}</h3>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mb-1">
+          Se vendió por encima del stock registrado en lotes
+          <template v-if="revisionTarget?.deficit_stock"> (déficit: <strong class="text-rose-600 dark:text-rose-400">{{ revisionTarget?.deficit_stock }}</strong> u.)</template>.
+        </p>
+        <p class="text-xs text-slate-400 dark:text-slate-500 mb-4">Realizá el conteo físico y cargá lo que encontrás para corregir el stock.</p>
+        <form class="space-y-4" @submit.prevent="resolverRevision">
+          <BaseInput
+            v-model="revisionStockReal"
+            label="Stock físico real (conteo)"
+            type="number"
+            step="0.01"
+            min="0"
+            placeholder="u."
+            hint="Si lo dejás vacío, solo se limpia la bandera sin ajustar stock."
+          />
+          <div class="flex items-center gap-3">
+            <BaseButton variant="secondary" class="flex-1" type="button" @click="revisionTarget = null">Cancelar</BaseButton>
+            <BaseButton variant="danger" class="flex-1" type="submit" :loading="resolvingRevision">
+              <i :class="resolvingRevision ? 'fa-solid fa-circle-notch fa-spin' : 'fa-solid fa-check'"></i>
+              {{ resolvingRevision ? 'Resolviendo...' : 'Resolver revisión' }}
+            </BaseButton>
+          </div>
+        </form>
       </div>
     </BaseModal>
 

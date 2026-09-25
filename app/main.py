@@ -237,6 +237,10 @@ def _migrate_new_columns():
         if "fecha_vencimiento" not in existentes_prod:
             conn.execute(sa.text("ALTER TABLE productos ADD COLUMN fecha_vencimiento DATETIME"))
             conn.commit()
+        if "flag_revision_stock" not in existentes_prod:
+            conn.execute(sa.text("ALTER TABLE productos ADD COLUMN flag_revision_stock BOOLEAN DEFAULT 0"))
+            conn.execute(sa.text("ALTER TABLE productos ADD COLUMN deficit_stock FLOAT DEFAULT 0.0"))
+            conn.commit()
         existentes_lic = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(licencias)"))]
         if "machine_id" not in existentes_lic:
             conn.execute(sa.text("ALTER TABLE licencias ADD COLUMN machine_id VARCHAR(200)"))
