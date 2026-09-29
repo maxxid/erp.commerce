@@ -6,6 +6,30 @@
 
 ## ✅ Completados recientemente
 
+### Tests de los 4 scrapers + 3 bugs que rompian en silencio — 29/09/2026
+- **Por que:** el scraping es la unica parte del ERP que puede fallar **sin fallar visiblemente**. Si Carrefour cambia su markup, `comparar_precios` devuelve `[]` y la pantalla dice "no lo encontramos", indistinguible de "el producto no esta en esa tienda". El resto del ERP es SQL CRUD donde un error se ve al instante. El repo no tenia **ningun** test
+- **Refactor fetch/parse** en `lookup_service.py`, sin cambiar comportamiento: `_lookup_supercoco` / `_lookup_carrefour_api` / `_scrape_fuente` hacen red; `_parse_supercoco` / `_parse_carrefour` / `_parse_vea` parsean y son testeables
+- **81 tests** en `tests/`: parseo de las 4 fuentes, cableado fetch->parse con `requests.get` simulado, TTL de caché, orden de precios, y casos límite
+- **Fixture autouse `sin_red`** que bloquea cualquier socket: la suite corre en 0.47s y por construcción no puede pegarle a Carrefour/Vea — si lo hiciera, quemaría el rate limit de las fuentes a las que les scrapeamos todos los días
+- `requirements-dev.txt` separado para que **pytest no entre al deploy** del servidor
+
+**Bugs reales que aparecieron al escribir los tests:**
+
+1. **Llaves dentro de strings JSON desbalanceaban el parser.** `_extract_state` contaba `{` y `}` a ciegas. Una descripción de producto con `{}` adentro (ej. "envase de 1 kg {sellado}") cerraba el objeto antes de tiempo, `json.loads` fallaba y **el scrape entero devolvía `None`**. Reemplazado por `_scan_json_object`, que ignora llaves dentro de strings y respeta escapes
+2. **El regex de Super Coco cortaba en la primera `}...)`.** Con `(\{.*?\})\s*\)` no-greedy, cualquier `})` dentro de un string del payload (ej. "pack de 2 })") truncaba el JSON y la fuente devolvía `None` para siempre. Ahora usa el mismo scanner balanceado
+3. **El botón "Ver en Super Coco" llevaba a la página de búsqueda, no al producto.** `url` era la `search_url`; ahora se arma con el `slug` del payload
+
+Además, dos guards defensivos: `_clean_name` y `_map_categoria` reventaban con `AttributeError` si VTEX cambiaba `categories` de lista de strings a lista de dicts (mismo error, dos funciones).
+
+- **Pendiente:** la tabla de `_map_categoria` no cubre segmentos compuestos como "Café molido", así que el café cae en una categoría propia en vez de "Almacén". Documentado en `test_categoria_usa_el_ultimo_segmento`, pero decidirlo es вопрос de producto
+
+### Gatear el scraping + single-flight — 29/09/2026
+- **Mi propuesta original era incorrecta y la corregí antes de tocar código.** Iba a gatear los 2 endpoints que disparan scraping con `require_role`. Al implementarlo encontré que `POST /api/productos/lookup` lo llaman **POS, Compras, Cobro Móvil y Productos**, y que las ventas son `require_role("admin", "cajero")` → gateearlo sin cajero **rompía el POS**, que es la caja. Además el sistema tiene exactamente 4 roles, así que un `require_role` con los 4 es idéntico a `get_current_user`: cero valor de seguridad
+- **Lo que sí quedó:** `GET /api/productos/precios-online/{barcode}` gateado a `admin, encargado, repositor`, los mismos roles que la tab en `TheSidebar` y en el `meta` del router. El cajero no tiene UI para esa pantalla
+- **La defensa real es mecánica, no por roles:** `threading.Semaphore(SCRAPER_MAX_CONCURRENT=8)` para acotar el scraping saliente
+- **Single-flight por `(fuente, barcode)`:** la caché sola no cubría el *stampede* — N requests del mismo barcode al mismo tiempo fallaban la caché a la vez y **los N salían a scrapear**. Con lock por clave, 6 requests simultáneos hacen **1** scrape y los otros 5 leen la caché. Hay test de concurrencia con threads reales que lo verifica
+- Los locks se liberan en `finally` (no se acumulan si el scrape revienta) y hay test de que el dict queda vacío tras 50 barcodes
+
 ### Precios Online: la pantalla no mostraba precios + caché de scraping — 29/09/2026
 - **Bug crítico:** la vista leía `r.precio_referencia || r.precio_venta`, pero `comparar_precios` devuelve el campo `precio` → **todos los precios online salían como "—"** y el bloque "Precio más bajo" nunca se renderizaba (su computed siempre daba `null`)
 - **Bug crítico:** las 3 llamadas iban dentro de un solo `try`. El 404 de `POST /api/productos/lookup` (cuando el producto no está en la BD local) cortaba la cadena **antes** de `GET /precios-online` → no se comparaba nada, que es justamente el caso de uso principal. Ahora cada paso tiene su propio `try` y el 404 se trata como información ("no está en tu catálogo"), no como error

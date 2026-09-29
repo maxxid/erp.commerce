@@ -1056,9 +1056,44 @@ Resultados ordenados de menor a mayor. La fila más barata se resalta con fondo 
 | **Cache de fracasos** | 120 s — evita que un timeout de red quede cacheado como "no encontrado" por 15 minutos |
 | **Timeout** | `settings.SCRAPER_TIMEOUT` = 20 s (antes hardcodeado en cada scraper: 15 y 20) |
 | **Límite de entradas** | 500, con purga de vencidas al exceder |
-| **Concurrencia** | `threading.Lock` alrededor del dict |
+| **Scraping simultáneo** | `SCRAPER_MAX_CONCURRENT` = 8, por `threading.Semaphore` |
+| **Single-flight** | Lock por `(fuente, barcode)`: N requests del mismo código a la vez → 1 solo scrape, los demás esperan y leen la caché |
+
+**Por qué `/lookup` NO está gateado por rol:** lo llaman `POSView`, `ComprasView`, `CobroMovilView` y `ProductsView`, y las ventas son `require_role("admin", "cajero")`. Gatequearlo sin cajero rompe el POS. Como el sistema solo tiene 4 roles, un `require_role` con los 4 sería idéntico a `get_current_user`. La protección contra abusar del scraping va por el semáforo y el single-flight, no por roles.
+
+`GET /precios-online/{barcode}` sí está gateado a `admin, encargado, repositor`, que son exactamente los roles de la tab en `TheSidebar` y en el `meta` del router.
 
 `comparar_precios` devuelve por fuente: `fuente`, `precio`, `nombre`, `marca`, `imagen_url`, `url`, `descuento`.
+
+### Tests de scraping
+
+`lookup_service.py` separa **fetch** de **parse** para que el parseo sea testeable sin red:
+
+| Capa | Funcion | Que hace |
+|------|---------|----------|
+| Fetch | `_lookup_supercoco`, `_lookup_carrefour_api`, `_scrape_fuente` | `requests.get` + manejo de errores, devuelve HTML/JSON crudo |
+| Parse | `_parse_supercoco`, `_parse_carrefour`, `_parse_vea` | Texto/JSON a dict de producto. Sin red |
+| Auxiliar | `_scan_json_object` / `_parse_balanced_object` | Extrae el objeto JSON tras un marcador, contando llaves **ignorando las que estan dentro de strings** |
+
+**Correr los tests**
+
+```
+python -m pip install -r requirements-dev.txt
+python -m pytest
+```
+
+`pytest.ini` fija `testpaths = tests`. `conftest.py` setea `DATABASE_URL` a una BD temporal antes de importar la app (porque `database.py` llama `verificar_db()` a nivel de modulo) y define un fixture autouse `sin_red` que **bloquea cualquier socket**: ningun test puede pegarle a Carrefour/Vea reales, porque serian lentos, flaky y quemarian el rate limit de las fuentes a las que les scrapeas todos los dias.
+
+| Archivo | Cubre |
+|---------|-------|
+| `test_scrapers.py` | Parseo de las 4 fuentes contra fixtures, orden, ofertas, categoria |
+| `test_scrapers_fetch.py` | Cableado fetch -> parse con `requests.get` simulado, timeouts, errores de red, flujo de 1 y 2 pasos |
+| `test_scrapers_limites.py` | Casos que rompian en silencio: llaves en strings, `})` dentro de un string, categorias como dicts, precios no numericos |
+| `test_lookup_cache.py` | TTL positivo/negativo, purga, cache por fuente+barcode, orden de `comparar_precios` |
+
+Las fixtures viven en `tests/fixtures/` y son HTML/JSON **guardados a mano**, con trampas incluidas a proposito (una descripcion con `{}` adentro, un `})` dentro de un string).
+
+**Cuando cambia el markup de una fuente:** el symptom es que `comparar_precios` devuelve `[]` y la pantalla dice "no lo encontramos", indistinguible de "no esta en esa tienda". Para diagnosticarlo, se reemplaza la fixture por el HTML real que devuelve la fuente y se corre el test: el nombre del test que falla dice que campo se rompio.
 
 ---
 

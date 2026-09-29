@@ -2,6 +2,7 @@ erp_comercio.db
 __pycache__/
 *.pyc
 *.pyo
+.pytest_cache/
 .env
 venv/
 .venv/

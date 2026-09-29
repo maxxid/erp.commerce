@@ -1,0 +1,4 @@
+-r requirements.txt
+
+# Solo para desarrollo. El deploy del servidor instala requirements.txt.
+pytest>=8.0

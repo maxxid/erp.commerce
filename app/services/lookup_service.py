@@ -1,4 +1,3 @@
-import re
 import json
 import time
 import threading
@@ -21,6 +20,39 @@ CACHE_TTL_NEGATIVO = 120
 
 _cache = {}
 _cache_lock = threading.Lock()
+
+_scrape_slots = threading.Semaphore(settings.SCRAPER_MAX_CONCURRENT)
+
+_locks_por_clave = {}
+_locks_guard = threading.Lock()
+
+
+class _KeyLock:
+    """Lock por (fuente, barcode) para no scrapear el mismo codigo N veces."""
+
+    __slots__ = ("lock", "refs")
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.refs = 0
+
+
+def _adquirir_lock(clave):
+    with _locks_guard:
+        kl = _locks_por_clave.get(clave)
+        if kl is None:
+            kl = _locks_por_clave[clave] = _KeyLock()
+        kl.refs += 1
+    kl.lock.acquire()
+    return kl
+
+
+def _liberar_lock(clave, kl):
+    kl.lock.release()
+    with _locks_guard:
+        kl.refs -= 1
+        if kl.refs == 0:
+            _locks_por_clave.pop(clave, None)
 
 
 def _cache_get(clave):
@@ -55,29 +87,62 @@ def _extract_json_ld(html):
     return None
 
 
-def _extract_state(html):
-    start_marker = "__STATE__"
-    idx = html.find(start_marker)
-    if idx == -1:
-        return None
-    idx = html.find("{", idx)
-    if idx == -1:
+def _parse_balanced_object(html, start):
+    """Parsea el objeto JSON que empieza en `start` (un '{'), respetando strings."""
+    if start == -1:
         return None
     depth = 0
-    i = idx
+    in_string = False
+    escaped = False
+    i = start
     while i < len(html):
         c = html[i]
-        if c == "{":
+        if in_string:
+            if escaped:
+                escaped = False
+            elif c == "\\":
+                escaped = True
+            elif c == '"':
+                in_string = False
+        elif c == '"':
+            in_string = True
+        elif c == "{":
             depth += 1
         elif c == "}":
             depth -= 1
             if depth == 0:
                 try:
-                    return json.loads(html[idx:i + 1])
+                    return json.loads(html[start:i + 1])
                 except json.JSONDecodeError:
                     return None
         i += 1
     return None
+
+
+def _scan_json_object(html, start_marker, skip_empty=False):
+    """Extrae el objeto JSON balanceado que sigue a un marcador.
+
+    Cuenta llaves ignorando las que estan dentro de strings JSON. Sin eso, una
+    descripcion del tipo 'envase de 1 kg {sellado}' desbalancea el conteo y el
+    scrape entero devuelve None en silencio.
+
+    skip_empty sigue buscando si la primera aparicion del marcador no tiene un
+    objeto real detras, que es el caso de 'window.data.products = window.data
+    .products || {}' seguido del Object.assign de verdad.
+    """
+    from_idx = 0
+    while True:
+        idx = html.find(start_marker, from_idx)
+        if idx == -1:
+            return None
+        parsed = _parse_balanced_object(html, html.find("{", idx))
+        if parsed is not None and (parsed or not skip_empty):
+            return parsed
+        from_idx = idx + len(start_marker)
+
+
+def _extract_state(html):
+    return _scan_json_object(html, "__STATE__")
 
 
 def _find_product_link(html):
@@ -226,6 +291,10 @@ def _map_categoria(categorias):
         return ""
     general = ""
     for cat in categorias:
+        if isinstance(cat, dict):
+            cat = cat.get("name", "")
+        if not isinstance(cat, str):
+            continue
         parts = [p for p in cat.strip("/").split("/") if p]
         if not general or len(parts) < len(general.split("/")):
             general = "/".join(parts)
@@ -260,6 +329,10 @@ def _clean_name(nombre, categorias):
         return nombre
     parts = set()
     for cat in categorias:
+        if isinstance(cat, dict):
+            cat = cat.get("name", "")
+        if not isinstance(cat, str):
+            continue
         cat_clean = cat.strip("/")
         if cat_clean:
             parts.add(cat_clean)
@@ -390,9 +463,17 @@ def _lookup_fuente(barcode, fuente):
     if hit:
         return valor
 
-    resultado = _scrape_fuente(barcode, fuente)
-    _cache_set(clave, resultado)
-    return resultado
+    kl = _adquirir_lock(clave)
+    try:
+        valor, hit = _cache_get(clave)
+        if hit:
+            return valor
+        with _scrape_slots:
+            resultado = _scrape_fuente(barcode, fuente)
+        _cache_set(clave, resultado)
+        return resultado
+    finally:
+        _liberar_lock(clave, kl)
 
 
 def _scrape_fuente(barcode, fuente):
@@ -411,7 +492,7 @@ def _scrape_fuente(barcode, fuente):
 
     final_url = resp.url.rstrip("/")
     if final_url.endswith("/p"):
-        return _scrape_producto(resp.text, barcode, fuente, url=final_url)
+        return _parse_vea(resp.text, barcode, fuente, url=final_url)
 
     product_path = _find_product_link(resp.text)
     if not product_path:
@@ -425,7 +506,12 @@ def _scrape_fuente(barcode, fuente):
     except requests.RequestException:
         return None
 
-    return _scrape_producto(prod_resp.text, barcode, fuente, url=product_url)
+    return _parse_vea(prod_resp.text, barcode, fuente, url=product_url)
+
+
+def _parse_vea(html, barcode, fuente, url=""):
+    """Parsea la pagina de producto de Vea / Mas Online (VTEX). Sin red."""
+    return _scrape_producto(html, barcode, fuente, url=url)
 
 
 def _lookup_carrefour_api(barcode):
@@ -437,6 +523,11 @@ def _lookup_carrefour_api(barcode):
     except (requests.RequestException, ValueError):
         return None
 
+    return _parse_carrefour(results, barcode)
+
+
+def _parse_carrefour(results, barcode):
+    """Parsea la respuesta de la API VTEX de Carrefour. Sin red: es testeable."""
     if not results or not isinstance(results, list):
         return None
 
@@ -457,7 +548,8 @@ def _lookup_carrefour_api(barcode):
         teasers = offer.get("Teasers", []) or offer.get("PromotionTeasers", [])
         if teasers:
             t = teasers[0]
-            promocion = t.get("Name", "") or t.get("<Name>k__BackingField", "")
+            if isinstance(t, dict):
+                promocion = t.get("Name", "") or t.get("<Name>k__BackingField", "")
 
     images = item.get("images", [])
     imagen = images[0].get("imageUrl", "") if images else ""
@@ -510,7 +602,12 @@ def _lookup_supercoco(barcode):
     except requests.RequestException:
         return None
 
-    data = _extract_supercoco_data(resp.text)
+    return _parse_supercoco(resp.text, barcode, search_url)
+
+
+def _parse_supercoco(html, barcode, search_url=""):
+    """Parsea el HTML de resultados de Super Coco. Sin red: es testeable."""
+    data = _extract_supercoco_data(html)
     if not data:
         return None
 
@@ -539,23 +636,31 @@ def _lookup_supercoco(barcode):
         "sku": sku.strip(),
         "propiedades": {},
         "fuente": "supercoco",
-        "url": search_url,
+        "url": _supercoco_product_url(data, search_url),
         "descuento": _supercoco_descuento(data),
         "categoria": _map_categoria_supercoco(data.get("categoryPath", [])),
     }
 
 
+def _supercoco_product_url(data, fallback=""):
+    """URL del producto, no de la pagina de busqueda."""
+    slug = data.get("slug") or data.get("url") or data.get("friendlyURL") or ""
+    if not isinstance(slug, str) or not slug:
+        return fallback
+    if slug.startswith("http"):
+        return slug
+    return "https://supercoco.com.ar/" + slug.lstrip("/")
+
+
 def _extract_supercoco_data(html):
-    """Extrae el JSON de window.data.products del HTML de Super Coco."""
-    pattern = r'window\.data\.products\s*=\s*Object\.assign\s*\(\s*window\.data\.products\s*,\s*(\{.*?\})\s*\)\s*;'
-    match = re.search(pattern, html, re.DOTALL)
-    if not match:
-        return None
-    try:
-        products = json.loads(match.group(1))
-    except (json.JSONDecodeError, TypeError):
-        return None
-    if not products:
+    """Extrae el primer producto de window.data.products del HTML de Super Coco.
+
+    Usa conteo de llaves balanceado en vez de un regex no-greedy: el patron
+    anterior cortaba en la primera '}...)' y fallaba si un string del payload
+    contenia esa secuencia.
+    """
+    products = _scan_json_object(html, "window.data.products", skip_empty=True)
+    if not products or not isinstance(products, dict):
         return None
     return next(iter(products.values()), None)
 

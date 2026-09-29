@@ -268,7 +268,7 @@ def productos_stock_bajo(
 def precios_online(
     barcode: str,
     db: Session = Depends(get_db),
-    user: Usuario = Depends(get_current_user),
+    user: Usuario = Depends(require_role("admin", "encargado", "repositor")),
 ):
     """Busca precios online en todas las fuentes externas para un código de barras.
 
@@ -276,6 +276,9 @@ def precios_online(
     de menor a mayor. Si el producto está cargado localmente, cada resultado
     incluye la diferencia contra el precio de venta propio para saber si conviene
     comprar en esa fuente.
+
+    Gateado a los mismos roles que la tab (admin, encargado, repositor): dispara
+    scraping hacia 4 sitios externos y el cajero no tiene UI para esta pantalla.
     """
     resultados = lk.comparar_precios(barcode)
 

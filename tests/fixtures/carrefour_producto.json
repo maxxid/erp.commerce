@@ -1,0 +1,28 @@
+[
+  {
+    "productName": "Gaseosa Cola 2,25 L",
+    "brand": "Coca-Cola",
+    "description": "Gaseosa de cola retornable 2,25 litros.",
+    "link": "/gaseosa-cola-225-l/p",
+    "categories": ["/Bebidas/Gaseosas"],
+    "items": [
+      {
+        "itemId": "99003",
+        "images": [
+          { "imageUrl": "https://www.carrefour.com.ar/medias/gaseosa-cola.jpg" }
+        ],
+        "sellers": [
+          {
+            "commertialOffer": {
+              "Price": 2400.0,
+              "ListPrice": 3100.0,
+              "Teasers": [
+                { "Name": "Oferta 20% off" }
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+]
