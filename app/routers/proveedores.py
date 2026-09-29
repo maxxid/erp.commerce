@@ -73,29 +73,28 @@ def productos_de_proveedor(
 ):
     """Devuelve los productos asociados a un proveedor."""
     from app.models.producto import Producto, producto_proveedor
-    
+    from app.services import producto_service
+
     proveedor = db.query(Proveedor).filter(Proveedor.id == proveedor_id).first()
     if not proveedor:
         raise HTTPException(status_code=404, detail="Proveedor no encontrado")
-    
-    # Obtener productos asociados
+
     productos = db.query(Producto).join(
         producto_proveedor, Producto.id == producto_proveedor.c.producto_id
     ).filter(
         producto_proveedor.c.proveedor_id == proveedor_id,
         Producto.activo == True
     ).all()
-    
+
     data = []
     for p in productos:
-        # Obtener datos de la relación
         rel_data = db.execute(
             producto_proveedor.select().where(
                 (producto_proveedor.c.producto_id == p.id) &
                 (producto_proveedor.c.proveedor_id == proveedor_id)
             )
         ).first()
-        
+
         data.append({
             "id": p.id,
             "codigo_barras": p.codigo_barras,
@@ -103,7 +102,7 @@ def productos_de_proveedor(
             "marca": p.marca,
             "precio_venta": p.precio_venta,
             "precio_costo": p.precio_costo,
-            "stock_actual": p.stock_actual,
+            "stock_actual": producto_service._suma_lotes_activos(db, p.id),
             "imagen_url": p.imagen_url,
             "costo_proveedor": rel_data.costo if rel_data else None,
             "codigo_proveedor": rel_data.codigo_proveedor if rel_data else None,

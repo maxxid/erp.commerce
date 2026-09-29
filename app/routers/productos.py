@@ -182,9 +182,6 @@ def info_detallada_producto(
     user: Usuario = Depends(get_current_user),
 ):
     """Devuelve info detallada del producto con proveedores y última fecha de compra."""
-    from app.models.compra import Compra, CompraItem
-    from sqlalchemy import desc
-    
     producto = producto_service.obtener_producto(db, producto_id)
     if not producto:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
@@ -249,8 +246,6 @@ def productos_stock_bajo(
     """Lista productos con stock bajo (<= stock_minimo) o sin stock.
     El stock se calcula siempre como suma de lotes activos.
     Los productos con controla_stock=False quedan fuera: no se les descuenta stock."""
-    from app.services import producto_service
-
     productos = db.query(Producto).filter(
         Producto.activo == True, Producto.controla_stock == True
     ).all()
@@ -276,14 +271,14 @@ def precios_online(
     user: Usuario = Depends(get_current_user),
 ):
     """Busca precios online en todas las fuentes externas para un código de barras.
-    
-    Devuelve una lista de resultados con precio, fuente y URL directa.
+
+    Devuelve una lista de resultados con precio, fuente y URL directa, ordenada
+    de menor a mayor. Si el producto está cargado localmente, cada resultado
+    incluye la diferencia contra el precio de venta propio para saber si conviene
+    comprar en esa fuente.
     """
-    from app.services import lookup_service as lk
-    
     resultados = lk.comparar_precios(barcode)
-    
-    # Enriquecer con URLs de búsqueda si no tienen URL directa
+
     for r in resultados:
         if not r.get("url"):
             fuente = r.get("fuente", "").lower()
@@ -295,7 +290,16 @@ def precios_online(
                 r["url"] = f"https://www.masonline.com.ar/{barcode}?_q={barcode}&map=ft"
             elif fuente == "supercoco":
                 r["url"] = f"https://supercoco.com.ar/s/?q={barcode}"
-    
+
+    local = producto_service.obtener_por_barcode(db, barcode)
+    if local and local.precio_venta:
+        for r in resultados:
+            diferencia = round(float(local.precio_venta) - float(r["precio"]), 2)
+            r["diferencia_vs_local"] = diferencia
+            r["porcentaje_vs_local"] = (
+                round(diferencia / float(r["precio"]) * 100, 1) if r["precio"] else 0.0
+            )
+
     return RespuestaData(
         data=resultados,
         message=f"{len(resultados)} resultado(s) encontrado(s)"

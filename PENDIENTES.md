@@ -6,6 +6,24 @@
 
 ## ✅ Completados recientemente
 
+### Precios Online: la pantalla no mostraba precios + caché de scraping — 29/09/2026
+- **Bug crítico:** la vista leía `r.precio_referencia || r.precio_venta`, pero `comparar_precios` devuelve el campo `precio` → **todos los precios online salían como "—"** y el bloque "Precio más bajo" nunca se renderizaba (su computed siempre daba `null`)
+- **Bug crítico:** las 3 llamadas iban dentro de un solo `try`. El 404 de `POST /api/productos/lookup` (cuando el producto no está en la BD local) cortaba la cadena **antes** de `GET /precios-online` → no se comparaba nada, que es justamente el caso de uso principal. Ahora cada paso tiene su propio `try` y el 404 se trata como información ("no está en tu catálogo"), no como error
+- **Datos que ya se scrapeaban y se descartaban:** `comparar_precios` sacaba `marca` e `imagen_url` de los resultados aunque `_scrape_producto` ya las tenía → ahora se incluyen
+- **Caché de scraping** (`lookup_service.py`): se cachea por `(fuente, barcode)` porque una búsqueda disparaba hasta 3 rondas completas de scraping (`/lookup` compara precios internamente y la vista además llama a `/precios-online`). 4 fuentes secuenciales con timeout de 20 s podían tardar ~135 s
+  - Aciertos: 15 min · **fracasos: 120 s** (si no, un timeout de red quedaba cacheado como "no encontrado" 15 minutos)
+  - `threading.Lock`, purga al superar 500 entradas, TTL configurable con `SCRAPER_CACHE_TTL`
+  - El timeout ahora sale de `settings.SCRAPER_TIMEOUT` en vez de estar hardcodeado (15/20) en cada scraper
+- **Orden y highlights:** resultados ordenados de menor a mayor; la fila más barata con fondo verde + badge "Más barato"
+- **KPIs de decisión de compra** (solo si el producto está en el catálogo local y hay resultados): precio de venta local, mejor precio online y **ganancia por unidad** (`precio_local - mejor_precio`). El backend ahora manda `diferencia_vs_local` y `porcentaje_vs_local` por resultado
+- **Fix de badges:** `BaseBadge` recibía clases Tailwind (`bg-blue-500`) en `variant` en vez de un variant válido → los badges de fuente salían sin color. Ahora cada fuente tiene su variant (`info`/`danger`/`success`/`brand`)
+- **Fix de clave de fuente:** el mapa tenía `masonline` pero el backend devuelve `masonline` → caía al fallback y mostraba el nombre crudo sin icono ni color
+- **UX:** modo dark completo (58 clases `dark:`), skeletons en vez de spinners manuales, guard de reentrada (doble clic ya no dispara dos búsquedas), `window.open` con `noopener,noreferrer`, reuso de `formatDateShort` en vez de `formatFecha` duplicado, key por fuente en vez de por índice, handlers en línea extraídos a funciones
+- **Convención:** 0 `console.error`, 0 comentarios HTML, toasts con el `detail` real del backend (`e?.data?.detail || e.message`) en vez de mensajes genéricos
+- **Backend:** imports function-local redundantes eliminados; `GET /api/proveedores/{id}/productos` ahora usa `_suma_lotes_activos()` — antes devolvía la columna legacy y el modal mostraba un stock distinto al de la card "Stock Bajo" de la misma pantalla
+- **Verificado:** caché (0 scrapes extra en la 2ª llamada), TTL positivo/negativo, orden por precio, `marca`/`imagen_url` presentes, `diferencia_vs_local` / `porcentaje_vs_local` / URL de fallback, y que sin producto local no se inventen diferencias
+- **Pendiente:** ninguno de esta feature
+
 ### Control de stock opcional + reporte de vendido por peso — 29/09/2026
 - **Nuevo campo `controla_stock` en productos** (default `True`, así nada cambia para los productos existentes):
   - Desactivado → vender **no** descuenta lotes, **no** genera `MovimientoStock` y **no** marca déficit; `anular_venta()` tampoco reingresa
@@ -270,6 +288,18 @@
 ### 🧪 Pendiente de validación manual en browser
 
 _(Código pusheado, falta probar end-to-end en navegador — sesión 10/08/2026)_
+
+**Precios Online** (29/09/2026):
+- [ ] Escanear un código que **sí** esté en el catálogo local → los precios online aparecen con cifras reales (no "—"), con imagen y marca
+- [ ] El primer resultado (más barato) sale con fondo verde + badge "Más barato", y el precio en verde
+- [ ] Aparecen los 3 KPIs: precio de venta local, mejor precio online y ganancia por unidad
+- [ ] En cada resultado aparece la diferencia contra el precio local ("$X vs tu precio") con el color correcto
+- [ ] Repetir la **misma** búsqueda: la segunda tiene que ser noticeably más rápida (caché de 15 min)
+- [ ] Escanear un código que **no** esté en el catálogo local → igual muestra la comparación online, y sale el aviso "Ese producto no está en tu catálogo" en vez de un error rojo
+- [ ] "Stock Bajo" → abrir, ver skeletons, click en un producto → carga su búsqueda y cierra el panel
+- [ ] Click en un chip de proveedor → el modal muestra los productos con el stock correcto (verificado contra `/productos`)
+- [ ] Revisar en **modo oscuro** que toda la pantalla sea legible
+- [ ] Doble clic rápido en "Buscar" → no debe disparar dos búsquedas
 
 **Control de stock por producto + Vendido por Peso** (29/09/2026):
 - [ ] Editar un producto fraccionado (panadería) → desactivar "Controlar stock" → guardar y recargar: el flag persiste

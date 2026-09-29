@@ -1,5 +1,7 @@
 import re
 import json
+import time
+import threading
 import requests
 from bs4 import BeautifulSoup
 from app.config import settings
@@ -12,6 +14,35 @@ HEADERS = {
 }
 
 FUENTES = ["carrefour", "vea", "masonline", "supercoco"]
+
+TIMEOUT = settings.SCRAPER_TIMEOUT
+CACHE_TTL = settings.SCRAPER_CACHE_TTL
+CACHE_TTL_NEGATIVO = 120
+
+_cache = {}
+_cache_lock = threading.Lock()
+
+
+def _cache_get(clave):
+    with _cache_lock:
+        entrada = _cache.get(clave)
+        if entrada is None:
+            return None, False
+        valor, expira = entrada
+        if expira < time.time():
+            _cache.pop(clave, None)
+            return None, False
+        return valor, True
+
+
+def _cache_set(clave, valor):
+    ttl = CACHE_TTL if valor else CACHE_TTL_NEGATIVO
+    with _cache_lock:
+        if len(_cache) > 500:
+            ahora = time.time()
+            for k in [k for k, (_, exp) in _cache.items() if exp < ahora]:
+                _cache.pop(k, None)
+        _cache[clave] = (valor, time.time() + ttl)
 
 
 def _extract_json_ld(html):
@@ -335,7 +366,7 @@ def lookup_producto(barcode, fuente=None):
 
 
 def comparar_precios(barcode):
-    """Obtiene el precio de cada fuente disponible."""
+    """Obtiene el precio de cada fuente disponible, ordenado de menor a mayor."""
     precios = []
     for f in FUENTES:
         result = _lookup_fuente(barcode, f)
@@ -344,13 +375,27 @@ def comparar_precios(barcode):
                 "fuente": f,
                 "precio": result["precio_referencia"],
                 "nombre": result["nombre"],
+                "marca": result.get("marca") or "",
+                "imagen_url": result.get("imagen_url") or "",
                 "url": result.get("url", ""),
                 "descuento": result.get("descuento"),
             })
+    precios.sort(key=lambda p: p["precio"])
     return precios
 
 
 def _lookup_fuente(barcode, fuente):
+    clave = f"{fuente}:{barcode}"
+    valor, hit = _cache_get(clave)
+    if hit:
+        return valor
+
+    resultado = _scrape_fuente(barcode, fuente)
+    _cache_set(clave, resultado)
+    return resultado
+
+
+def _scrape_fuente(barcode, fuente):
     if fuente == "carrefour":
         return _lookup_carrefour_api(barcode)
     if fuente == "supercoco":
@@ -358,7 +403,7 @@ def _lookup_fuente(barcode, fuente):
 
     search_url = f"https://www.{fuente}.com.ar/{barcode}?_q={barcode}&map=ft"
     try:
-        resp = requests.get(search_url, headers=HEADERS, timeout=20, allow_redirects=True)
+        resp = requests.get(search_url, headers=HEADERS, timeout=TIMEOUT, allow_redirects=True)
         resp.raise_for_status()
         _fix_encoding(resp)
     except requests.RequestException:
@@ -374,7 +419,7 @@ def _lookup_fuente(barcode, fuente):
 
     product_url = f"https://www.{fuente}.com.ar{product_path}"
     try:
-        prod_resp = requests.get(product_url, headers=HEADERS, timeout=20)
+        prod_resp = requests.get(product_url, headers=HEADERS, timeout=TIMEOUT)
         prod_resp.raise_for_status()
         _fix_encoding(prod_resp)
     except requests.RequestException:
@@ -386,7 +431,7 @@ def _lookup_fuente(barcode, fuente):
 def _lookup_carrefour_api(barcode):
     api_url = f"https://www.carrefour.com.ar/api/catalog_system/pub/products/search?fq=alternateIds_Ean:{barcode}"
     try:
-        resp = requests.get(api_url, headers=HEADERS, timeout=15)
+        resp = requests.get(api_url, headers=HEADERS, timeout=TIMEOUT)
         resp.raise_for_status()
         results = resp.json()
     except (requests.RequestException, ValueError):
@@ -460,7 +505,7 @@ def _lookup_supercoco(barcode):
     search_url = f"https://supercoco.com.ar/s/?q={barcode}"
     sc_headers = {"User-Agent": settings.SCRAPER_USER_AGENT}
     try:
-        resp = requests.get(search_url, headers=sc_headers, timeout=20, allow_redirects=True)
+        resp = requests.get(search_url, headers=sc_headers, timeout=TIMEOUT, allow_redirects=True)
         resp.raise_for_status()
     except requests.RequestException:
         return None

@@ -17,16 +17,17 @@
 8. [Clientes](#8-clientes)
 9. [Proveedores](#9-proveedores)
 10. [Compras](#10-compras)
-11. [Calendario](#11-calendario)
-12. [Reportes](#12-reportes)
-13. [Usuarios](#13-usuarios)
-14. [Licencias](#14-licencias)
-15. [Auditoría](#15-auditoría)
-16. [Backups](#16-backups)
-17. [Elementos Globales](#17-elementos-globales)
-18. [Flujos Funcionales Críticos](#18-flujos-funcionales-críticos)
-19. [Reglas de Negocio](#19-reglas-de-negocio)
-20. [Atajos de Teclado](#20-atajos-de-teclado)
+11. [Precios Online](#11-precios-online)
+12. [Calendario](#12-calendario)
+13. [Reportes](#13-reportes)
+14. [Usuarios](#14-usuarios)
+15. [Licencias](#15-licencias)
+16. [Auditoría](#16-auditoría)
+17. [Backups](#17-backups)
+18. [Elementos Globales](#18-elementos-globales)
+19. [Flujos Funcionales Críticos](#19-flujos-funcionales-críticos)
+20. [Reglas de Negocio](#20-reglas-de-negocio)
+21. [Atajos de Teclado](#21-atajos-de-teclado)
 
 ---
 
@@ -954,7 +955,114 @@ Cada medio se concilia por separado: se registra un `cierre_parcial` con `medio_
 
 ---
 
-## 11. Calendario
+## 11. Precios Online
+
+**Ruta:** `/precios-online` — **Componente:** `PreciosOnlineView.vue` — **Roles:** admin, encargado, repositor
+
+Compara el precio de un producto en comercios online contra el precio de venta propio, para decidir si conviene comprar en esa fuente.
+
+### Encabezado
+
+| Elemento | Acción |
+|----------|--------|
+| **Input "Código de barras"** | `v-model="barcodeInput"`, Enter → `buscarPrecios()` |
+| **Botón "Stock Bajo"** | `toggleStockBajo()` — variant dinámico: `primary` si el panel está abierto, `secondary` si está cerrado |
+| **Botón "Buscar"** | `buscarPrecios()` — bloqueado mientras `loading` (guard de reentrada) |
+| **Hint de espera** | Visible solo durante la búsqueda: "Consultando las fuentes online. Puede tardar unos segundos." |
+
+### Flujo de búsqueda
+
+Tres pasos **independientes**: un error en uno no cancela los otros.
+
+1. `POST /api/productos/lookup { barcode }` — busca en BD local, luego catálogo central, luego fuentes externas
+   - Si devuelve `id` → se pide `GET /api/productos/{id}/info-detallada` y se arma la card del producto local
+   - Si responde **404** → no es un error: se marca `noEstaEnLocal` y la búsqueda sigue
+2. `GET /api/productos/precios-online/{barcode}` — precios de las 4 fuentes, ordenados de menor a mayor
+3. Si no hay producto local **ni** resultados → `toast.info` de que no se encontró en ninguna fuente
+
+### KPIs de decisión de compra
+
+Se muestran solo cuando el producto está en el catálogo local **y** hay resultados online.
+
+| KPI | Cálculo |
+|-----|---------|
+| **Precio de venta local** | `productoInfo.precio_local` |
+| **Mejor precio online** | Primer resultado tras ordenar por precio ascendente |
+| **Ganancia por unidad** | `precio_local - mejor_precio`. Ícono `arrow-trend-up` en verde si es positiva, `arrow-trend-down` en ámbar si el local está más barato que el online |
+
+### Card: Producto Local
+
+| Elemento | Comportamiento |
+|----------|----------------|
+| Nombre + marca | Del `info-detallada` |
+| Badges | Precio local, costo, stock (`success` / `danger`) |
+| Última compra | Fecha con `formatDateShort` + número de orden |
+| Chips de proveedores | `es_principal` → badge "Principal". Click → `verProductosProveedor(prov)` abre el modal con los productos del proveedor |
+| Botón "No está en tu catálogo" | Solo si `noEstaEnLocal`: avisa que se puede crear desde Productos |
+
+### Card: Precios Online
+
+Resultados ordenados de menor a mayor. La fila más barata se resalta con fondo `emerald-50/50` + badge "Más barato" + precio en verde.
+
+| Elemento | Comportamiento |
+|----------|----------------|
+| **Badge de fuente** | `variant` según fuente: Carrefour `info`, Vea `danger`, Mas Online `success`, Super Coco `brand`. Fuente desconocida → `default` + ícono `fa-globe` |
+| **Precio** | `resultado.precio` (el campo que devuelve `comparar_precios`, no `precio_referencia`) |
+| **Diferencia vs precio local** | `diferencia_vs_local` con el signo invertido según convenga: verde si comprar online deja margen, rojo si el local ya es más barato |
+| **Oferta** | `descuento.activo` + `precio_oferta` → precio tachado; `descuento.promocion` → badge ámbar con el texto de la promoción |
+| **Botón "Ver en {fuente}"** | `window.open(url, '_blank', 'noopener,noreferrer')` |
+| **Imagen** | `imagen_url` cuando la fuente la expone; si no, ícono de tienda |
+
+### Panel: Stock Bajo
+
+| Elemento | Comportamiento |
+|----------|----------------|
+| **Header** | Cantidad de productos + botón de recarga (solo si hay resultados) |
+| **Carga** | Skeletons (`BaseSkeleton`), 4 filas |
+| **Vacío** | Ícono de check verde: "Todos los productos tienen stock suficiente" |
+| **Fila** | Imagen, nombre, marca, código, badge `stock/min` (`danger` si 0, `warning` si bajo) y precio local. Click → `buscarDesdeStockBajo(producto)` |
+
+### Modal: Productos del Proveedor
+
+| Elemento | Comportamiento |
+|----------|----------------|
+| **Título** | `Productos de {nombre}` |
+| **Carga** | Skeletons, 5 filas |
+| **Vacío** | "Este proveedor no tiene productos asociados" |
+| **Fila** | Imagen, nombre, marca, código, precio y stock. Click → `buscarDesdeProveedor(producto)`: setea el código, cierra el modal y relanza la búsqueda |
+| **Stock** | Viene de `_suma_lotes_activos()`, igual que el resto del sistema |
+
+### Reglas
+
+- El estado vacío inicial (`EmptyState`) solo aparece si no hubo búsqueda alguna: `!loading && !productoInfo && !resultados.length && !noEstaEnLocal`
+- Un 404 en el lookup **nunca** se muestra como error, solo como aviso informativo
+- Todos los errores van por `toast.error(e?.data?.detail || e.message || fallback)` — el wrapper `api.js` ya deja el `detail` del backend en `Error.message`
+- Se ignora cualquier resultado sin precio numérico antes de ordenar
+
+### API
+- `POST /api/productos/lookup` — producto local / catálogo central / fuentes externas
+- `GET /api/productos/precios-online/{barcode}` — precios por fuente, ordenados de menor a mayor, con `diferencia_vs_local` y `porcentaje_vs_local` si el producto está en el catálogo local
+- `GET /api/productos/{id}/info-detallada` — producto + proveedores + última compra
+- `GET /api/productos/stock-bajo` — productos con stock <= mínimo o sin stock
+- `GET /api/proveedores/{id}/productos` — productos asociados a un proveedor
+
+### Scraping: caché y timeout
+
+`app/services/lookup_service.py` cachea por `(fuente, barcode)` porque una sola búsqueda dispara varias rondas de scraping (`/lookup` compara precios por dentro y la vista llama además a `/precios-online`).
+
+| Aspecto | Valor |
+|---------|-------|
+| **Cache de aciertos** | `SCRAPER_CACHE_TTL` = 900 s (15 min) |
+| **Cache de fracasos** | 120 s — evita que un timeout de red quede cacheado como "no encontrado" por 15 minutos |
+| **Timeout** | `settings.SCRAPER_TIMEOUT` = 20 s (antes hardcodeado en cada scraper: 15 y 20) |
+| **Límite de entradas** | 500, con purga de vencidas al exceder |
+| **Concurrencia** | `threading.Lock` alrededor del dict |
+
+`comparar_precios` devuelve por fuente: `fuente`, `precio`, `nombre`, `marca`, `imagen_url`, `url`, `descuento`.
+
+---
+
+## 12. Calendario
 
 **Ruta:** `/calendario` — **Componente:** `CalendarioView.vue` — **Roles:** todos
 
@@ -1018,7 +1126,7 @@ Cada medio se concilia por separado: se registra un `cierre_parcial` con `medio_
 
 ---
 
-## 12. Reportes
+## 13. Reportes
 
 **Ruta:** `/reportes` — **Componente:** `ReportesView.vue` — **Roles:** admin, encargado
 
@@ -1099,7 +1207,7 @@ Cada medio se concilia por separado: se registra un `cierre_parcial` con `medio_
 
 ---
 
-## 13. Usuarios
+## 14. Usuarios
 
 **Ruta:** `/usuarios` — **Componente:** `UsuariosView.vue` — **Roles:** admin
 
@@ -1139,7 +1247,7 @@ Cada medio se concilia por separado: se registra un `cierre_parcial` con `medio_
 
 ---
 
-## 14. Licencias
+## 15. Licencias
 
 **Ruta:** `/licencias` — **Componente:** `LicenciasView.vue` — **Roles:** admin
 
@@ -1189,7 +1297,7 @@ Cada medio se concilia por separado: se registra un `cierre_parcial` con `medio_
 
 ---
 
-## 15. Auditoría
+## 16. Auditoría
 
 **Ruta:** `/auditoria` — **Componente:** `AuditoriaView.vue` — **Roles:** admin
 
@@ -1233,7 +1341,7 @@ Cada medio se concilia por separado: se registra un `cierre_parcial` con `medio_
 
 ---
 
-## 16. Backups
+## 17. Backups
 
 **Ruta:** `/backups` — **Componente:** `BackupsView.vue` — **Roles:** admin, encargado
 
@@ -1309,7 +1417,7 @@ Cada medio se concilia por separado: se registra un `cierre_parcial` con `medio_
 
 ---
 
-## 17. Elementos Globales
+## 18. Elementos Globales
 
 ### Command Palette (Ctrl+K / F2)
 
@@ -1350,7 +1458,7 @@ Cada medio se concilia por separado: se registra un `cierre_parcial` con `medio_
 
 ---
 
-## 18. Flujos Funcionales Críticos
+## 19. Flujos Funcionales Críticos
 
 ### Flujo 1: Venta Completa (POS)
 ```
@@ -1546,7 +1654,7 @@ Cajero escribe en buscador de texto → Enter
 
 ---
 
-## 19. Reglas de Negocio
+## 20. Reglas de Negocio
 
 1. **Stock**: No se puede vender más de lo que hay en stock disponible.
 2. **Precio histórico**: VentaItem guarda el precio al momento de la venta, no el precio actual del producto.
@@ -1572,7 +1680,7 @@ Cajero escribe en buscador de texto → Enter
 
 ---
 
-## 20. Atajos de Teclado
+## 21. Atajos de Teclado
 
 ### Globales (App.vue)
 

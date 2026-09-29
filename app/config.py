@@ -30,6 +30,7 @@ class Settings:
 
     # Scraping
     SCRAPER_TIMEOUT: int = 20
+    SCRAPER_CACHE_TTL: int = 900
     SCRAPER_USER_AGENT: str = (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
