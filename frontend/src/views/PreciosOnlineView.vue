@@ -788,6 +788,12 @@ const sinProveedores = computed(() => proveedoresOrdenados.value.length === 0)
 
                 <div class="text-right flex-shrink-0">
                   <div
+                    v-if="resultado.descuento?.activo && resultado.descuento.precio_original"
+                    class="text-xs text-slate-400 line-through"
+                  >
+                    {{ fc(resultado.descuento.precio_original) }}
+                  </div>
+                  <div
                     class="font-mono-data font-bold text-lg"
                     :class="resultado.esMasBajo ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-white'"
                   >
@@ -798,17 +804,23 @@ const sinProveedores = computed(() => proveedoresOrdenados.value.length === 0)
                       {{ resultado.diferencia_vs_local >= 0 ? '-' : '+' }}{{ fc(Math.abs(resultado.diferencia_vs_local)) }} vs tu precio
                     </span>
                   </div>
-                  <div v-if="resultado.descuento?.activo && resultado.descuento.precio_oferta" class="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">
-                    <i class="fa-solid fa-tag"></i>
-                    {{ fc(resultado.descuento.precio_oferta) }}
-                  </div>
                 </div>
               </div>
 
-              <div v-if="resultado.descuento?.activo && resultado.descuento.promocion" class="mt-2">
-                <BaseBadge variant="amber" size="xs">
+              <div
+                v-if="resultado.descuento?.activo && (resultado.descuento.promocion || resultado.descuento.precio_original)"
+                class="mt-2 flex items-center gap-2 flex-wrap"
+              >
+                <BaseBadge v-if="resultado.descuento.promocion" variant="amber" size="xs">
                   <i class="fa-solid fa-bolt mr-1"></i>{{ resultado.descuento.promocion }}
                 </BaseBadge>
+                <span
+                  v-if="resultado.descuento.precio_original"
+                  class="text-xs text-emerald-600 dark:text-emerald-400"
+                >
+                  ahorrás {{ fc(resultado.descuento.precio_original - resultado.precio) }}
+                  <span v-if="resultado.descuento.vigencia">· hasta el {{ fd(resultado.descuento.vigencia) }}</span>
+                </span>
               </div>
 
               <div class="flex items-center justify-end mt-3">

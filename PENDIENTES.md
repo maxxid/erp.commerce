@@ -6,6 +6,17 @@
 
 ## ✅ Completados recientemente
 
+### Las promos de Vea/MasOnline nunca se detectaron: se leia el precio de lista — 29/09/2026
+- **Por qué:** el código de barras está pensado para detectar promociones, ofertas y descuentos, pero en la práctica no lo hacía. Reportaba el precio **sin** promo y encima marcaba `activo: True` con los dos precios en `None`, o sea un badge de oferta con los números vacíos
+- **Causa raíz:** Vea/MasOnline emiten **dos bloques JSON-LD del mismo producto**. El primero trae `offers.lowPrice` = precio **de lista**. El de `id="structured-data-schema"` trae `offers.price` = lo que se paga por unidad **con la promo aplicada**, más `priceSpecification.price` (lista) y `priceValidUntil` (vigencia). `_extract_json_ld` devolvía el primer bloque que parseaba, así que nunca veía el bueno
+- **Verificado contra la página real** (Coca Cola Zero 2,25 L): `offers.price` = **3926.67**, `priceSpecification.price` = 5890. $5.890 × 2/3 = $3.926,67 → es una **3x2**, tal cual se ve en el artículo
+- **Arreglo:** `_extract_json_ld` puntúa los bloques y gana el correcto (`_puntaje_json_ld`), así que el orden en la página deja de importar. El descuento sale de `_descuento_de_json_ld` (JSON-LD), y el estado de VTEX queda solo como fallback
+- **La etiqueta de multi-compra se deduce del ratio exacto**: 2x1, 3x2 y 4x3. Un descuento común (5890 → 5000) no matchea ninguna proporción y queda sin etiqueta, que es lo correcto
+- **Corregido también el estado imposible:** un descuento sin los dos precios ya no se marca como activo, y la card muestra la lista tachada, el ahorro en pesos y la vigencia ("hasta el 01/10")
+- **Comprobado con red sobre 6 productos reales de la sección bebidas: 4 tienen promo**, detectadas las cuatro (2 de ellas con etiqueta de multi-compra)
+- **26 tests nuevos** (167 en total), con la página real guardada como fixture en `tests/fixtures/vea_promo_real.html` (solo los bloques ld+json, no los 3 MB de HTML)
+- **Pendiente:** el mismo análisis para **Carrefour** y **MasOnline**, que pueden tener la estructura de oferta distinta a la de Vea. Y sigue abierta la pregunta de si el barcode matchea siempre el mismo producto entre fuentes
+
 ### Validación con red real: 3 de 4 fuentes andan, Supercoco marcada experimental — 29/09/2026
 - **Por qué:** los tests corren con `sin_red`, o sea que el scraping llevaba commits entero sin verificarse contra los sitios reales. Con red se probaron 6 EAN-13 extraídos de la home de Vea
 - **`vea`, `masonline` y `carrefour` funcionan**: devuelven precios, ordenan y detectan ofertas. 2-3 resultados por código, ~9 s por búsqueda

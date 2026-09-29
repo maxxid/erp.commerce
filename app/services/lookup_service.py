@@ -115,13 +115,138 @@ def _cache_set(clave, valor):
 
 
 def _extract_json_ld(html):
+    """Devuelve el bloque JSON-LD de Product que trae el precio de oferta.
+
+    Vea/MasOnline emiten DOS bloques ld+json del mismo producto y no sirven para
+    lo mismo:
+
+    - el primero trae offers.lowPrice = precio de lista (5890 en una Coca de
+      oferta), que es el precio SIN promo. Aceptarlo perdi�� la descuento entero.
+    - el de id="structured-data-schema" trae offers.price = lo que se paga por
+      unidad ya con la promo aplicada, mas priceSpecification.price con la lista
+      y priceValidUntil con la vigencia.
+
+    Por eso no alcanza con devolver el primero que parsea: hay que elegir el
+    correcto. Se puntua cada bloque y se gana el mejor.
+    """
     soup = BeautifulSoup(html, "html.parser")
+    mejor = None
+    mejor_puntaje = -1
+
     for script in soup.find_all("script", type="application/ld+json"):
         try:
-            return json.loads(script.string)
+            data = json.loads(script.string)
         except (json.JSONDecodeError, TypeError):
             continue
-    return None
+        if not isinstance(data, dict):
+            continue
+
+        puntaje = _puntaje_json_ld(data, script.get("id"))
+        if puntaje > mejor_puntaje:
+            mejor, mejor_puntaje = data, puntaje
+
+    return mejor
+
+
+def _puntaje_json_ld(data, script_id=None):
+    """Que tan confiable es este bloque como fuente del precio de oferta."""
+    offers = data.get("offers")
+    if isinstance(offers, list):
+        offers = offers[0] if offers else None
+    if not isinstance(offers, dict):
+        return 0
+
+    puntaje = 0
+    if script_id == "structured-data-schema":
+        puntaje += 10
+    # price explicito es el precio de oferta; lowPrice es el de lista.
+    if offers.get("price") is not None:
+        puntaje += 5
+    if isinstance(offers.get("priceSpecification"), dict):
+        puntaje += 3
+    if _precio_de_json_ld(data) is not None:
+        puntaje += 1
+    return puntaje
+
+
+def _precio_de_json_ld(data):
+    """Precio de oferta de un bloque ld+json, o None si el bloque no lo tiene."""
+    offers = data.get("offers")
+    if isinstance(offers, list):
+        offers = offers[0] if offers else None
+    if not isinstance(offers, dict):
+        return None
+    precio = offers.get("price")
+    if precio is None:
+        low = offers.get("lowPrice")
+        if low is not None:
+            return float(low)
+        return None
+    try:
+        return float(precio)
+    except (TypeError, ValueError):
+        return None
+
+
+# Multi-compras habituales en supermercado. El precio de oferta de una 3x2 es
+# exactamente 2/3 del de lista, asi que el ratio delata la promo.
+_MULTI_COMPRA = ((2, 1), (3, 2), (4, 3))
+
+
+def _etiqueta_multi_compra(precio_oferta, precio_lista):
+    """'3x2' si el precio es una proporcion exacta de una multi-compra, si no ''."""
+    if not precio_lista or not precio_oferta or precio_oferta >= precio_lista:
+        return ""
+    for unidades, pagadas in _MULTI_COMPRA:
+        esperado = precio_lista * pagadas / unidades
+        if abs(precio_oferta - esperado) <= max(1.0, esperado * 0.01):
+            return f"{unidades}x{pagadas}"
+    return ""
+
+
+def _descuento_de_json_ld(offers):
+    """Arma el descuento desde el par precio de lista / precio de oferta.
+
+    aca esta la promo: VTEX publica en offers.price lo que se paga por unidad
+    ya con el descuento aplicado, y en priceSpecification.price el precio de
+    lista. Leer solo el segundo muestra el precio sin promo.
+    """
+    if not isinstance(offers, dict):
+        return None
+
+    # _precio_de_json_ld espera el bloque completo, no offers suelto: se lee directo.
+    try:
+        oferta = float(offers["price"]) if offers.get("price") is not None else None
+    except (TypeError, ValueError):
+        oferta = None
+    if oferta is None:
+        try:
+            oferta = float(offers["lowPrice"]) if offers.get("lowPrice") is not None else None
+        except (TypeError, ValueError):
+            oferta = None
+    if oferta is None or oferta <= 0:
+        return None
+
+    lista = None
+    spec = offers.get("priceSpecification")
+    if isinstance(spec, list):
+        spec = spec[0] if spec else None
+    if isinstance(spec, dict):
+        try:
+            lista = float(spec["price"])
+        except (KeyError, TypeError, ValueError):
+            lista = None
+
+    if lista is None or lista <= oferta:
+        return None
+
+    return {
+        "activo": True,
+        "precio_original": lista,
+        "precio_oferta": oferta,
+        "promocion": _etiqueta_multi_compra(oferta, lista),
+        "vigencia": offers.get("priceValidUntil"),
+    }
 
 
 def _parse_balanced_object(html, start):
@@ -279,12 +404,17 @@ def _scrape_producto(html, barcode, fuente, url=""):
         if low is not None and high is not None and low != high:
             precio = float(low)
         else:
-            precio = low or offers.get("price")
-            if precio is None and offers.get("offers"):
+            precio = _precio_de_json_ld(ld)
+            if precio is None and isinstance(offers, dict) and offers.get("offers"):
                 first_offer = offers["offers"][0] if offers["offers"] else {}
                 precio = first_offer.get("price")
 
-    descuento = _detectar_descuento(state)
+    # El JSON-LD trae el precio de lista y el de oferta con la promo ya aplicada,
+    # asi que es la fuente de verdad del descuento. El estado de VTEX se consulta
+    # despues, solo por si la pagina no trajo JSON-LD.
+    descuento = _descuento_de_json_ld(offers)
+    if not descuento:
+        descuento = _detectar_descuento(state)
 
     categorias_raw = _extract_categorias(state)
 
@@ -446,7 +576,11 @@ def _detectar_descuento(state):
                 return {"activo": True, "precio_original": lp, "precio_oferta": sp, "promocion": promocion}
 
     if promocion:
-        return {"activo": True, "precio_original": None, "precio_oferta": None, "promocion": promocion}
+        # Hay texto de promo pero ningun par de precios del que sacarla. No se
+        # marca como descuento: sin los dos numeros no se puede calcular el
+        # ahorro, y un badge de oferta sin precio hace dudar de todo lo demas.
+        return {"activo": False, "precio_original": None, "precio_oferta": None,
+                "promocion": promocion}
     return None
 
 

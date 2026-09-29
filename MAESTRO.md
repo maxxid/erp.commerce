@@ -1098,6 +1098,23 @@ FUENTES = {
 | Parse | `_parse_supercoco`, `_parse_carrefour`, `_parse_vea` | Texto/JSON a dict de producto. Sin red |
 | Auxiliar | `_scan_json_object` / `_parse_balanced_object` | Extrae el objeto JSON tras un marcador, contando llaves **ignorando las que estan dentro de strings** |
 
+#### La promo se lee del JSON-LD, no del estado de VTEX
+
+Vea y MasOnline emiten **dos bloques ld+json del mismo producto**, y cada uno tiene un precio distinto:
+
+| Bloque | Campo | Qué es |
+|--------|-------|--------|
+| primero (sin `id`) | `offers.lowPrice` | Precio **de lista**, o sea **sin promo** |
+| `id="structured-data-schema"` | `offers.price` | Lo que se paga por unidad **con la promo ya aplicada** |
+| | `priceSpecification.price` | El precio de lista, en `priceType: ListPrice` |
+| | `priceValidUntil` | Cuándo deja de estar la oferta |
+
+Leer el primero da el precio sin descuento. Por eso `_extract_json_ld` no devuelve "el primer bloque que parsea": puntúa cada bloque y gana el mejor (`_puntaje_json_ld`, con +10 para `structured-data-schema` y +5 por traer `price` explícito). El orden en la página no importa, y hay test de las dos variantes.
+
+Ejemplo real (Coca Cola Zero 2,25 L): `offers.price = 3926.67` y `priceSpecification.price = 5890`. $5.890 × 2/3 = $3.926,67, o sea una **3x2**. La etiqueta sale del ratio exacto (`_etiqueta_multi_compra`): 2x1, 3x2 y 4x3. Un descuento común como 5890 → 5000 no matchea ninguna proporción y queda sin etiqueta, que es lo correcto.
+
+**Un descuento sin los dos precios no se marca como descuento.** El fallback cuando la página no trae JSON-LD devuelve `activo: False` con el nombre de la promo: sin los dos números no se puede calcular el ahorro, y un badge de oferta sin precio hace dudar del resto de los datos. También `_find_promotion_code` barre el estado entero, así que puede(New) agarrar un banner general del sitio ("3x2 en Hamburguesas") que no es de este producto y que además puede estar vencido.
+
 **Correr los tests**
 
 ```
@@ -1116,6 +1133,7 @@ python -m pytest
 | `test_analisis_precios.py` | Historial de compras: orden, exclusion de anuladas/pendientes, ultimo costo, mejor historico con proveedor y fecha |
 | `test_analisis_precios_pdf.py` | La ficha PDF renderiza con y sin datos; escapa `&`/`<`/`>`;aguanta precios grandes y fechas invalidas |
 | `test_fuentes_registro.py` | Nombre canonico de cada fuente, flag experimental, y que una fuente apagada por config no genere ni un request |
+| `test_vea_promos.py` | Que se elija el bloque ld+json con precio de oferta y no el de lista, con una **pagina real** en `fixtures/vea_promo_real.html` |
 
 Las fixtures viven en `tests/fixtures/` y son HTML/JSON **guardados a mano**, con trampas incluidas a proposito (una descripcion con `{}` adentro, un `})` dentro de un string).
 
