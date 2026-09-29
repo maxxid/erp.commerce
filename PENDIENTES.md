@@ -6,6 +6,17 @@
 
 ## ✅ Completados recientemente
 
+### Contador de billetes por denominación (efectivo) — 29/09/2026
+- Nuevo componente `frontend/src/components/caja/ContadorBilletesModal.vue`: conteo por denominación con auto-suma
+- Denominaciones AR: billetes $100.000 / $50.000 / $20.000 / $10.000 / $5.000 / $2.000 / $1.000 y monedas $500 / $200 / $100 / $50 / $20 / $10 / $5 / $1
+- Botón "Contar billetes" en los 3 puntos de carga de efectivo de `CajaView.vue`:
+  - Modal **Apertura de Caja** → escribe en `monto_inicial`
+  - **Cerrar por Método** (cuando el método es efectivo) → escribe en `monto_real`
+  - Modal **Cierre de Caja (Arqueo)** → escribe en el Monto Real del método efectivo
+- UX: precarga greedy del monto ya cargado, subtotales por fila, total con piezas + total billetes + total monedas, botón "Limpiar", `Esc` cierra solo el modal de conteo
+- **Solo frontend**: el total se escribe en los campos existentes, sin cambios de API ni migraciones
+- **Pendiente opcional:** replicar el botón en el modal de Apertura del POS (`POSView.vue`) y en el de CobroMovil (`CobroMovilView.vue`)
+
 ### Fix Arqueo de Caja — 14/09/2026
 - **Bug:** al cerrar caja daba error "método ya fue cerrado en esta sesión" cuando en realidad no había cierre previo (tomaba `cierre_parcial` de sesiones anteriores como de la sesión actual)
 - **Fix backend (`caja_service.py`):**

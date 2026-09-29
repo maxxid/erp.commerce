@@ -66,6 +66,9 @@
           </BaseButton>
         </div>
         <BaseInput v-model.number="cierreParcial.monto_real" label="Monto Real" type="number" placeholder="0.00" input-class="font-mono-data" />
+        <BaseButton v-if="cierreParcial.metodo === 'efectivo'" variant="ghost" size="xs" @click="abrirContadorBilletes('parcial')">
+          <i class="fa-solid fa-money-bill-wave"></i> Contar billetes por denominación
+        </BaseButton>
         <BaseInput v-model="cierreParcial.comentario" label="Comentario (opcional)" placeholder="Nota del cierre" />
         <div class="flex gap-2 pt-1">
           <BaseButton variant="secondary" size="sm" block @click="cancelarCierre">Cancelar</BaseButton>
@@ -625,7 +628,12 @@
                 placeholder="0.00"
               />
             </div>
-            <p class="text-[10px] text-slate-400 mt-1">Monto con el que inicia la caja (efectivo)</p>
+            <div class="flex items-center justify-between gap-2 mt-1">
+              <p class="text-[10px] text-slate-400">Monto con el que inicia la caja (efectivo)</p>
+              <BaseButton variant="ghost" size="xs" @click="abrirContadorBilletes('apertura')">
+                <i class="fa-solid fa-money-bill-wave"></i> Contar billetes
+              </BaseButton>
+            </div>
           </div>
 
           <div class="border-t border-slate-200 dark:border-slate-700 pt-4">
@@ -706,7 +714,18 @@
 
             <div class="grid grid-cols-2 gap-3">
               <div>
-                <label class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block mb-1">Monto Real Contado</label>
+                <div class="flex items-center justify-between gap-2 mb-1">
+                  <label class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Monto Real Contado</label>
+                  <BaseButton
+                    v-if="metodo.valor === 'efectivo'"
+                    variant="ghost"
+                    size="xs"
+                    :disabled="metodo.cerrado || closing"
+                    @click="abrirContadorBilletes('arqueo', metodo)"
+                  >
+                    <i class="fa-solid fa-money-bill-wave"></i> Contar billetes
+                  </BaseButton>
+                </div>
                 <input
                   v-model.number="metodo.montoReal"
                   type="number"
@@ -787,6 +806,13 @@
         </div>
       </div>
     </BaseModal>
+
+    <ContadorBilletesModal
+      v-model="showContadorBilletes"
+      :titulo="tituloContadorBilletes"
+      :valor-actual="valorActualContador"
+      @aplicar="aplicarConteoBilletes"
+    />
   </div>
 </template>
 
@@ -806,6 +832,7 @@ import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseTable from '@/components/ui/BaseTable.vue'
 import BaseBadge from '@/components/ui/BaseBadge.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
+import ContadorBilletesModal from '@/components/caja/ContadorBilletesModal.vue'
 import { useSounds } from '@/composables/useSounds'
 import { useHeldTickets } from '@/composables/useHeldTickets'
 
@@ -838,6 +865,38 @@ const aperturaForm = reactive({
 const montoFinalApertura = computed(() => {
   return Math.max(0, aperturaForm.monto_inicial - aperturaForm.monto_retiro)
 })
+
+const showContadorBilletes = ref(false)
+const contadorContexto = ref(null)
+
+const TITULOS_CONTADOR = {
+  apertura: 'Contar efectivo — Apertura de caja',
+  parcial: 'Contar efectivo — Cierre por método',
+  arqueo: 'Contar efectivo — Cierre de caja',
+}
+
+const tituloContadorBilletes = computed(() => TITULOS_CONTADOR[contadorContexto.value] || 'Contar efectivo')
+
+const valorActualContador = computed(() => {
+  const ctx = contadorContexto.value
+  if (!ctx) return 0
+  if (ctx === 'apertura') return Number(aperturaForm.monto_inicial) || 0
+  if (ctx === 'parcial') return Number(cierreParcial.monto_real) || 0
+  return Number(ctx.metodo?.montoReal) || 0
+})
+
+function abrirContadorBilletes(contexto) {
+  contadorContexto.value = contexto
+  showContadorBilletes.value = true
+}
+
+function aplicarConteoBilletes(total) {
+  const ctx = contadorContexto.value
+  if (ctx === 'apertura') aperturaForm.monto_inicial = total
+  else if (ctx === 'parcial') cierreParcial.monto_real = total
+  else if (ctx?.metodo) ctx.metodo.montoReal = total
+  toast.success(`Total contado: ${fc(total)}`)
+}
 
 const metodosArqueo = reactive([
   { label: 'Efectivo', valor: 'efectivo', esperado: 0, montoReal: 0, comentario: '', cerrado: false, colorClass: 'bg-emerald-500' },

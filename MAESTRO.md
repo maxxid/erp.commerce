@@ -438,8 +438,19 @@
 | **Título "Caja / Arqueo"** | — |
 | **Botón "Sincronizar"** | `syncData()` — recarga movimientos y resumen |
 | **Badge estado caja** | Verde "Abierta" / Rojo "Cerrada" |
-| **Botón "Abrir Caja"** | `abrirCaja()` — prompt por monto inicial, POST `/api/caja/apertura` |
+| **Botón "Abrir Caja"** | `abrirCaja()` — precarga el último cierre y abre el modal de apertura, POST `/api/caja/apertura` |
 | **Botón "Cerrar Caja"** | `initCierreCaja()` — verifica tickets apartados, luego abre modal de arqueo |
+
+### Modal: Apertura de Caja
+*(visible al hacer "Abrir Caja")*
+
+| Elemento | Descripción |
+|----------|-------------|
+| **Último cierre detectado** | Banner con monto del último cierre + badge si fue automático |
+| **Monto inicial sugerido** | Input numérico precargado con el último cierre. Junto al hint tiene el botón "Contar billetes" |
+| **Retiro de efectivo (opcional)** | Monto que se aparta al abrir + motivo. Se registra como egreso |
+| **Monto final de apertura** | `monto_inicial - monto_retiro` (reactivo) — es el valor enviado a la API |
+| **Botones** | Cancelar / Abrir Caja (`confirmarAperturaCaja()`) |
 
 ### Resumen
 
@@ -456,14 +467,30 @@
 |----------|--------|
 | **Botones de método** | Efectivo \| Débito \| Crédito \| Transferencia. `@click` activa formulario de cierre |
 | **Badge "Cerrado"** | Métodos ya cerrados muestran check verde |
-| **Formulario activo** | Monto Real + Comentario + Cancelar/Cerrar |
+| **Formulario activo** | Monto Real + Comentario + Cancelar/Cerrar. En **Efectivo** aparece además el botón "Contar billetes" |
+
+### Modal: Conteo de Billetes (Efectivo)
+*(componente `ContadorBilletesModal.vue`, se abre desde Apertura, Cierre por Método y Arqueo)*
+
+| Elemento | Descripción |
+|----------|-------------|
+| **Columna Billetes** | Denominaciones $100.000 / $50.000 / $20.000 / $10.000 / $5.000 / $2.000 / $1.000 con input de cantidad y subtotal |
+| **Columna Monedas** | Denominaciones $500 / $200 / $100 / $50 / $20 / $10 / $5 / $1 con input de cantidad y subtotal |
+| **Total contado** | Auto-suma de todos los subtotales + piezas, total de billetes y total de monedas |
+| **Botón "Limpiar"** | Vacía todas las cantidades |
+| **Botón "Usar $X"** | Escribe el total en el campo de monto del modal padre y lo cierra (deshabilitado si el total es 0) |
+| **Precarga** | Al abrir, descompone greedy el monto ya cargado en el campo destino para partir de una base |
+
+- La suma se aplica al monto real del **efectivo** solamente; débito, crédito y transferencia siguen con carga manual
+- `Esc` cierra solo el modal de conteo (no el modal padre)
 
 ### Modal: Cierre de Caja (Arqueo)
 *(visible al hacer "Cerrar Caja")*
 
 | Elemento | Descripción |
 |----------|-------------|
-| **Métodos de pago** | Lista con: Esperado (calculado), Monto Real (input), Diferencia (color verde/rojo) |
+| **Métodos de pago** | Lista con: Esperado (calculado), Monto Real (input), Diferencia (color verde/rojo). En **Efectivo** el label "Monto Real Contado" lleva el botón "Contar billetes" |
+| **Botón "Contar billetes"** | Solo en Efectivo — abre el modal de conteo por denominación y escribe la auto-suma en el Monto Real |
 | **Comentario general** | Campo opcional para nota al cierre |
 | **Alerta tickets apartados** | Si hay tickets en hold: confirmación antes de continuar |
 | **Botón "Confirmar Cierre"** | `confirmarCierreCaja()` — cierra cada método + cierre-total + logout automático |
