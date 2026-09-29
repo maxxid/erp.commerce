@@ -331,21 +331,33 @@ Response (200):
     "ok": true,
     "data": {
       "abierta": true,
-      "saldo_actual": 72000.0
+      "saldo_actual": 50000.0,
+      "saldo_efectivo": 50000.0,
+      "saldos_cuentas": { "smartpoint": 25000.0 },
+      "saldo_cuenta_total": 25000.0,
+      "saldo_total": 75000.0,
+      "metodos_cerrados": []
     }
   }
 
   abierta: true si la caja está abierta (hubo apertura sin cierre)
-  saldo_actual: suma de ingresos - egresos desde la última apertura
+  saldo_actual: mismo valor que saldo_efectivo (solo el cajón)
+  saldos_cuentas: saldo absoluto por cuenta digital
+  saldo_cuenta_total: suma de las cuentas digitales
+  saldo_total: cajón + cuentas digitales
 
 
 5.2 POST /api/caja/apertura
-────────────────────────────
+───────────────────────────
 Request:
   {
     "monto_inicial": 50000.0,
-    "sucursal_id": 1
+    "sucursal_id": 1,
+    "saldos_cuentas": { "smartpoint": 25000.0, "mercadopago_qr": 8000.0 }
   }
+
+  saldos_cuentas es opcional. Claves válidas: smartpoint, mercadopago_qr,
+  mercadopago_pos, qr_interop. Los montos en 0 o negativos se descartan.
 
 Response (200):
   {
@@ -354,12 +366,38 @@ Response (200):
     "data": {
       "id": 1,
       "monto": 50000.0,
-      "tipo": "apertura"
+      "tipo": "apertura",
+      "saldos_cuentas": { "smartpoint": 25000.0, "mercadopago_qr": 8000.0 }
     }
   }
 
+  Cada saldo inicial de cuenta se persiste como un MovimientoCaja tipo
+  "apertura" con medio_pago = cuenta, referencia_tipo = "apertura_cuenta" y
+  referencia_id = id de la apertura del cajón. No abre una sesión nueva.
+
 Error (400):
   { "detail": "Ya hay una caja abierta. Ciérrela primero." }
+
+
+5.2.1 GET /api/caja/saldos-cuentas-sugeridos
+─────────────────────────────────────────────
+Último saldo real conocido por cuenta digital, para precargar la apertura.
+Lee el monto confirmado del último cierre_parcial por medio.
+
+Response (200):
+  {
+    "ok": true,
+    "data": {
+      "saldos": { "smartpoint": 22000.0 },
+      "nombres": {
+        "smartpoint": "SmartPoint",
+        "mercadopago_qr": "MercadoPago QR",
+        "mercadopago_pos": "MercadoPago POS",
+        "qr_interop": "QR Interoperable"
+      }
+    }
+  }
+
 
 
 5.3 POST /api/caja/cierre-metodo
@@ -391,6 +429,7 @@ Response (200):
 5.4 POST /api/caja/cierre-total
 ────────────────────────────────────
 Cierra la caja completamente (todos los métodos). Fin de la sesión.
+El total del cierre sale de saldo_total (cajón + cuentas digitales).
 Requiere rol: admin, cajero.
 
 Request:
@@ -406,30 +445,67 @@ Response (200):
     "data": {
       "id": 1,
       "total_ingresos": 72000.0,
-      "desglose": { "efectivo": 50000.0, "debito": 15000.0, ... }
+      "desglose": { "efectivo": 50000.0, "debito": 15000.0, ... },
+      "saldo_efectivo": 50000.0,
+      "saldo_cuenta_total": 25000.0,
+      "saldo_total": 75000.0,
+      "por_medio": [ ... ]
     }
   }
 
 
 5.5 GET /api/caja/resumen
-────────────────────────────
-Devuelve el desglose de ventas por medio de pago y si cada método está cerrado.
-Usado por el modal de cierre de caja.
+───────────────────────────
+Devuelve el desglose de ventas por medio de pago, el saldo de cada medio y
+si cada método está cerrado. Usado por el modal de cierre de caja.
 
 Response (200):
   {
     "ok": true,
     "data": {
       "apertura": 50000.0,
+      "apertura_cuentas": 25000.0,
       "efectivo": 30000.0,
       "debito": 12000.0,
       "credito": 5000.0,
       "transferencia": 25000.0,
+      "smartpoint": 22000.0,
       "total_ingresos": 72000.0,
-      "metodos_cerrados": ["debito", "credito"]
+      "egresos_total": 3000.0,
+      "saldo_efectivo": 80000.0,
+      "saldo_cuenta_total": 22000.0,
+      "saldo_total": 102000.0,
+      "metodos_cerrados": ["debito", "credito"],
+      "por_medio": [
+        {
+          "medio_pago": "efectivo",
+          "nombre": "Efectivo",
+          "es_cuenta_digital": false,
+          "apertura": 50000.0,
+          "ingresos": 30000.0,
+          "egresos": 0.0,
+          "esperado": 80000.0,
+          "falta_saldo_inicial": false
+        },
+        {
+          "medio_pago": "smartpoint",
+          "nombre": "SmartPoint",
+          "es_cuenta_digital": true,
+          "apertura": 25000.0,
+          "ingresos": 0.0,
+          "egresos": 3000.0,
+          "esperado": 22000.0,
+          "falta_saldo_inicial": false
+        }
+      ]
     }
   }
 
+  esperado = apertura + ingresos - egresos, calculado por medio.
+  falta_saldo_inicial: true si el medio tuvo movimientos pero se abrió sin
+  saldo inicial, por lo que su saldo absoluto no es verificable.
+  Siempre vienen efectivo, debito, credito y transferencia; las cuentas
+  digitales aparecen cuando tienen saldo inicial o movimiento.
 
 5.6 POST /api/caja/ingreso
 ───────────────────────────
@@ -439,24 +515,32 @@ Request:
   {
     "monto": 5000.0,
     "descripcion": "Depósito bancario",
+    "medio_pago": "smartpoint",
     "sucursal_id": 1
   }
 
-5.5 POST /api/caja/egreso
-──────────────────────────
+  medio_pago es opcional; si se omite se toma como "efectivo".
+
+5.7 POST /api/caja/egreso
+─────────────────────────
 Registra un egreso/retiro. Requiere caja abierta.
 
 Request:
   {
     "monto": 2000.0,
     "descripcion": "Pago proveedor",
+    "medio_pago": "smartpoint",
     "sucursal_id": 1
   }
 
-5.6 GET /api/caja/movimientos
+  Un egreso de una cuenta digital descuenta esa cuenta, nunca el cajón.
+  Un medio_pago fuera del catálogo → 422.
+
+5.8 GET /api/caja/movimientos
 ──────────────────────────────
 Query: page, page_size
-Response: Lista de movimientos (apertura, cierre, ingresos, egresos).
+Response: Lista de movimientos (apertura, apertura de cuenta, cierre,
+ingresos, egresos).
 
 
 ═══════════════════════════════════════════════════════════════

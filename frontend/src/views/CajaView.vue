@@ -24,11 +24,18 @@
       </div>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
       <BaseCard padding="md" class="text-center">
-        <div class="text-[10px] font-bold text-slate-400 uppercase">Saldo Actual</div>
+        <div class="text-[10px] font-bold text-slate-400 uppercase">Cajón (efectivo)</div>
         <div class="text-xl font-bold font-mono-data text-brand-600 mt-1">{{ fc(cajaStore.saldo_actual) }}</div>
-        <div class="text-[10px] text-slate-400 mt-0.5">en caja</div>
+        <div class="text-[10px] text-slate-400 mt-0.5">conteo físico</div>
+      </BaseCard>
+      <BaseCard padding="md" class="text-center">
+        <div class="text-[10px] font-bold text-slate-400 uppercase">Cuentas digitales</div>
+        <div class="text-xl font-bold font-mono-data text-indigo-600 mt-1">{{ fc(cajaStore.saldo_cuenta_total) }}</div>
+        <div class="text-[10px] text-slate-400 mt-0.5">
+          {{ cuentasConSaldo.length ? cuentasConSaldo.map(c => `${c.label} ${fc(c.saldo)}`).join(' · ') : 'sin saldos' }}
+        </div>
       </BaseCard>
       <BaseCard padding="md" class="text-center">
         <div class="text-[10px] font-bold text-slate-400 uppercase">Ingresos del Día</div>
@@ -44,13 +51,16 @@
 
     <!-- Cierre Parcial por Método -->
     <BaseCard v-if="cajaStore.abierta" padding="md" class="space-y-4">
-      <h3 class="font-bold text-slate-900 text-sm">Cerrar por Método</h3>
+      <div class="flex items-center justify-between">
+        <h3 class="font-bold text-slate-900 text-sm">Cerrar por Método</h3>
+        <span class="text-[10px] text-slate-400">Se cuenta cada medio por separado: el efectivo y las cuentas digitales se cuadran por su cuenta</span>
+      </div>
       <div class="flex flex-wrap gap-2">
         <BaseButton v-for="metodo in metodosPago" :key="metodo.valor"
                     :variant="cierreParcial.activo && cierreParcial.metodo === metodo.valor ? 'primary' : 'secondary'"
                     :disabled="cerrandoMetodo || cajaResumen.metodos_cerrados?.includes(metodo.valor)"
                     size="sm"
-                    @click="cierreParcial.activo = true; cierreParcial.metodo = metodo.valor; cierreParcial.monto_real = 0; cierreParcial.comentario = ''">
+                    @click="seleccionarCierreParcial(metodo)">
           <i v-if="cajaResumen.metodos_cerrados?.includes(metodo.valor)" class="fa-solid fa-check text-xs"></i>
           {{ metodo.label }}
         </BaseButton>
@@ -59,13 +69,19 @@
       <div v-if="cierreParcial.activo" class="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
         <div class="flex items-center justify-between">
           <span class="text-xs font-bold text-slate-600">
-            Cerrando: <span class="text-brand-600">{{ cierreParcial.metodo }}</span>
+            Cerrando: <span class="text-brand-600">{{ MEDIO_LABELS[cierreParcial.metodo] || cierreParcial.metodo }}</span>
           </span>
-          <BaseButton variant="ghost" size="xs" iconOnly @click="cancelarCierre">
-            <i class="fa-solid fa-xmark"></i>
-          </BaseButton>
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-mono-data font-semibold text-slate-500">Esperado: {{ fc(cierreParcial.esperado) }}</span>
+            <BaseButton variant="ghost" size="xs" iconOnly @click="cancelarCierre">
+              <i class="fa-solid fa-xmark"></i>
+            </BaseButton>
+          </div>
         </div>
-        <BaseInput v-model.number="cierreParcial.monto_real" label="Monto Real" type="number" placeholder="0.00" input-class="font-mono-data" />
+        <BaseInput v-model.number="cierreParcial.monto_real" :label="esCuentaDigital(cierreParcial.metodo) ? 'Saldo real en la cuenta' : 'Monto Real'" type="number" placeholder="0.00" input-class="font-mono-data" />
+        <p v-if="esCuentaDigital(cierreParcial.metodo)" class="text-[10px] text-slate-400">
+          Cargá el saldo que muestra la app: saldo inicial + ingresos - egresos = {{ fc(cierreParcial.esperado) }}
+        </p>
         <BaseButton v-if="cierreParcial.metodo === 'efectivo'" variant="ghost" size="xs" @click="abrirContadorBilletes('parcial')">
           <i class="fa-solid fa-money-bill-wave"></i> Contar billetes por denominación
         </BaseButton>
@@ -303,6 +319,9 @@
             <div class="text-sm font-medium text-slate-900">{{ formatFechaHora(sesionSeleccionada.apertura_fecha) }}</div>
             <div class="text-xs text-slate-600">{{ sesionSeleccionada.apertura_usuario }}</div>
             <div class="font-mono-data font-bold text-brand-600 mt-1">{{ fc(sesionSeleccionada.apertura_monto) }}</div>
+        <div v-if="sesionSeleccionada.apertura_cuentas" class="font-mono-data font-bold text-sm text-indigo-600 mt-0.5">
+          + {{ fc(sesionSeleccionada.apertura_cuentas) }} en cuentas digitales
+        </div>
             <div v-if="sesionSeleccionada.apertura_descripcion" class="text-[10px] text-slate-500 mt-1">{{ sesionSeleccionada.apertura_descripcion }}</div>
           </div>
           <div class="bg-slate-50 rounded-xl p-3">
@@ -340,6 +359,11 @@
             <div class="text-[10px] uppercase tracking-wider text-brand-600 font-semibold">Saldo Final</div>
             <div class="font-mono-data font-bold text-lg text-brand-700">{{ fc(sesionSeleccionada.saldo_final) }}</div>
           </div>
+        </div>
+
+        <div v-if="sesionSeleccionada.apertura_cuentas" class="flex items-center justify-between bg-indigo-50 rounded-xl p-3">
+          <span class="text-[10px] uppercase tracking-wider text-indigo-500 font-semibold">Saldos iniciales de cuentas digitales</span>
+          <span class="font-mono-data font-bold text-indigo-700">{{ fc(sesionSeleccionada.apertura_cuentas) }}</span>
         </div>
 
         <!-- Cierres por método -->
@@ -415,11 +439,11 @@
         <!-- Mini dashboards por medio de pago -->
         <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
           <div v-for="(monto, metodo) in detalleDia.desglose" :key="metodo" class="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3">
-            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">{{ metodo }}</div>
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">{{ MEDIO_LABELS[metodo] || metodo }}</div>
             <div class="font-mono-data font-bold text-lg text-slate-900 dark:text-white">{{ fc(monto) }}</div>
           </div>
           <div class="bg-brand-50 dark:bg-brand-900/20 rounded-xl p-3">
-            <div class="text-[10px] uppercase tracking-wider text-brand-600 font-semibold">Apertura</div>
+            <div class="text-[10px] uppercase tracking-wider text-brand-600 font-semibold">Apertura cajón</div>
             <div class="font-mono-data font-bold text-lg text-brand-700">{{ fc(detalleDia.apertura) }}</div>
           </div>
           <div v-if="detalleDia.total_egresos" class="bg-rose-50 dark:bg-rose-900/20 rounded-xl p-3">
@@ -429,6 +453,11 @@
           <div class="bg-emerald-50 dark:bg-emerald-900/20 rounded-xl p-3">
             <div class="text-[10px] uppercase tracking-wider text-emerald-600 font-semibold">Saldo Final</div>
             <div class="font-mono-data font-bold text-lg text-emerald-700">{{ fc(detalleDia.saldo_final) }}</div>
+          </div>
+          <div v-for="(saldo, cuenta) in detalleDia.saldos_cuentas || {}" :key="cuenta" class="bg-indigo-50 dark:bg-indigo-900/20 rounded-xl p-3">
+            <div class="text-[10px] uppercase tracking-wider text-indigo-500 font-semibold">{{ MEDIO_LABELS[cuenta] || cuenta }}</div>
+            <div class="font-mono-data font-bold text-lg text-indigo-700 dark:text-indigo-300">{{ fc(saldo) }}</div>
+            <div class="text-[9px] text-indigo-400">saldo final de la cuenta</div>
           </div>
         </div>
 
@@ -585,7 +614,10 @@
       <div class="space-y-4">
         <BaseSelect v-model="nuevoMovimiento.tipo" label="Tipo" :options="[{ value: 'Ingreso', label: 'Ingreso' }, { value: 'Egreso', label: 'Egreso' }]" />
         <BaseInput v-model.number="nuevoMovimiento.monto" label="Monto" type="number" placeholder="0.00" input-class="font-mono-data" />
-        <BaseSelect v-model="nuevoMovimiento.metodo" label="Método" :options="['Efectivo', 'Transferencia', 'Tarjeta']" />
+        <BaseSelect v-model="nuevoMovimiento.metodo" label="Sale de / entra a" :options="metodosMovimiento" />
+        <p class="text-[10px] text-slate-400 -mt-2">
+          Para un egreso indicá de qué cuenta salió el dinero (ej: una transferencia de MercadoPago al banco).
+        </p>
         <BaseInput v-model="nuevoMovimiento.comentario" label="Comentario" placeholder="Descripción del movimiento" />
         <div class="flex gap-2 pt-2">
           <BaseButton variant="secondary" size="sm" block @click="showNuevoMovimiento = false">Cancelar</BaseButton>
@@ -662,14 +694,55 @@
             />
           </div>
 
+          <div class="border-t border-slate-200 dark:border-slate-700 pt-4">
+            <div class="flex items-center gap-2 mb-1">
+              <label class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Saldos iniciales de cuentas digitales</label>
+              <BaseButton variant="ghost" size="xs" @click="abrirCuentasDigitales = !abrirCuentasDigitales">
+                <i :class="abrirCuentasDigitales ? 'fa-solid fa-chevron-up' : 'fa-solid fa-chevron-down'"></i>
+                {{ abrirCuentasDigitales ? 'Ocultar' : 'Mostrar' }}
+              </BaseButton>
+            </div>
+            <p class="text-[10px] text-slate-400 mb-2">
+              Cargá el saldo que muestra hoy cada app. Es el punto de partida para cuadrar esa cuenta al cerrar.
+            </p>
+            <div v-if="abrirCuentasDigitales" class="space-y-2">
+              <div v-for="cuenta in cuentasDigitales" :key="cuenta.valor" class="flex items-center gap-2">
+                <div class="flex-1">
+                  <label class="text-xs text-slate-600 dark:text-slate-300">{{ cuenta.label }}</label>
+                  <div class="relative mt-0.5">
+                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold">$</span>
+                    <input
+                      v-model.number="aperturaForm.saldos_cuentas[cuenta.valor]"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      class="w-full pl-7 pr-3 py-2 text-sm font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition"
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+              </div>
+              <p v-if="!cajasConCuentaUsada.length" class="text-[10px] text-slate-400">
+                Sin cuentas usadas en las últimas sesiones: dejá 0 o poné el saldo real si igual querés controlarlas.
+              </p>
+            </div>
+            <p v-else-if="totalSaldosCuentasApertura > 0" class="text-[10px] text-slate-500">
+              Cuentas a controlar: {{ cuentasConSaldoApertura }} — total {{ fc(totalSaldosCuentasApertura) }}
+            </p>
+          </div>
+
           <div class="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
             <div class="flex items-center justify-between">
-              <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Monto final de apertura</span>
+              <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Monto final de apertura (cajón)</span>
               <span class="font-mono-data font-bold text-2xl text-brand-600 dark:text-brand-400">{{ fc(montoFinalApertura) }}</span>
             </div>
             <p v-if="aperturaForm.monto_retiro > 0" class="text-[10px] text-slate-400 mt-1 text-right">
               {{ fc(aperturaForm.monto_inicial) }} - {{ fc(aperturaForm.monto_retiro) }} = {{ fc(montoFinalApertura) }}
             </p>
+            <div v-if="totalSaldosCuentasApertura > 0" class="flex items-center justify-between mt-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+              <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Total a controlar (cajón + cuentas)</span>
+              <span class="font-mono-data font-bold text-lg text-indigo-600 dark:text-indigo-400">{{ fc(montoFinalApertura + totalSaldosCuentasApertura) }}</span>
+            </div>
           </div>
         </div>
 
@@ -694,16 +767,17 @@
             <span class="font-semibold text-brand-700 dark:text-brand-300 text-sm">Confrontá los montos</span>
           </div>
           <p class="text-xs text-brand-600 dark:text-brand-400">
-            Ingresá el monto real contado en cada método de pago. El sistema calculará la diferencia automáticamente.
+            Cargá el monto real de cada medio. El efectivo se cuenta en el cajón y las cuentas digitales con el saldo que muestra la app: cada uno se cuadra por separado, sin compensar uno con otro.
           </p>
         </div>
 
         <div class="space-y-3">
-          <div v-for="metodo in metodosArqueo" :key="metodo.valor" class="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+          <div v-for="metodo in metodosArqueo" :key="metodo.valor" class="rounded-xl p-4 border" :class="metodo.es_cuenta_digital ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700'">
             <div class="flex items-center justify-between mb-3">
               <div class="flex items-center gap-2">
                 <span class="w-2 h-2 rounded-full" :class="metodo.colorClass"></span>
                 <span class="font-semibold text-slate-900 dark:text-white text-sm">{{ metodo.label }}</span>
+                <span v-if="metodo.es_cuenta_digital" class="text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 font-bold">CUENTA DIGITAL</span>
                 <span v-if="metodo.cerrado" class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 font-bold">CERRADO</span>
               </div>
               <div class="text-right">
@@ -712,10 +786,23 @@
               </div>
             </div>
 
+            <div v-if="metodo.es_cuenta_digital" class="flex flex-wrap items-center gap-x-4 gap-y-1 mb-3 text-[10px] font-mono-data text-slate-500 dark:text-slate-400">
+              <span>Saldo inicial {{ fc(metodo.apertura) }}</span>
+              <span class="text-emerald-600 dark:text-emerald-400">+ ingresos {{ fc(metodo.ingresos) }}</span>
+              <span class="text-rose-600 dark:text-rose-400">- egresos {{ fc(metodo.egresos) }}</span>
+            </div>
+
+            <div v-if="metodo.falta_saldo_inicial" class="flex items-start gap-2 mb-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-2">
+              <i class="fa-solid fa-circle-exclamation text-amber-500 mt-0.5"></i>
+              <p class="text-[10px] text-amber-700 dark:text-amber-300">
+                Esta cuenta se movió pero se abrió caja sin su saldo inicial. Cargá el saldo real de la app igual, pero la diferencia no va a cuadrar hasta que registres el saldo inicial al abrir.
+              </p>
+            </div>
+
             <div class="grid grid-cols-2 gap-3">
               <div>
                 <div class="flex items-center justify-between gap-2 mb-1">
-                  <label class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Monto Real Contado</label>
+                  <label class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">{{ metodo.es_cuenta_digital ? 'Saldo real en la app' : 'Monto Real Contado' }}</label>
                   <BaseButton
                     v-if="metodo.valor === 'efectivo'"
                     variant="ghost"
@@ -765,38 +852,46 @@
           </div>
         </div>
 
-        <!-- Egresos de la sesión (recargas, retiros a cuentas digitales) -->
-        <div v-if="egresosPorMedio.length" class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4">
+        <!-- Egresos de la sesión: ya están descontados del esperado de cada medio -->
+        <div v-if="egresosPorMedio.length" class="bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-xl p-4">
           <div class="flex items-center gap-2 mb-2">
-            <i class="fa-solid fa-arrow-up-from-bracket text-red-500"></i>
-            <span class="font-semibold text-red-700 dark:text-red-300 text-sm">Egresos de la sesión</span>
+            <i class="fa-solid fa-arrow-up-from-bracket text-rose-500"></i>
+            <span class="font-semibold text-rose-700 dark:text-rose-300 text-sm">Egresos de la sesión</span>
           </div>
-          <p class="text-[10px] text-red-600 dark:text-red-400 mb-2">
-            Salidas de dinero de la sesión. No forman parte del conteo físico de cada medio.
+          <p class="text-[10px] text-rose-600 dark:text-rose-400 mb-2">
+            Salidas de dinero. Ya están descontadas del saldo esperado de cada medio (por eso el arqueo de la cuenta digital cuadra igual).
           </p>
           <div class="space-y-1">
             <div v-for="e in egresosPorMedio" :key="e.medio" class="flex items-center justify-between text-sm">
-              <span class="text-red-700 dark:text-red-300">{{ e.label }}</span>
-              <span class="font-mono-data font-bold text-red-600 dark:text-red-400">-{{ fc(e.monto) }}</span>
+              <span class="text-rose-700 dark:text-rose-300">{{ e.label }}</span>
+              <span class="font-mono-data font-bold text-rose-600 dark:text-rose-400">-{{ fc(e.monto) }}</span>
             </div>
-            <div class="flex items-center justify-between text-sm pt-1 border-t border-red-200 dark:border-red-800">
-              <span class="font-semibold text-red-700 dark:text-red-300">Total egresado</span>
-              <span class="font-mono-data font-bold text-red-600 dark:text-red-400">-{{ fc(totalEgresos) }}</span>
+            <div class="flex items-center justify-between text-sm pt-1 border-t border-rose-200 dark:border-rose-800">
+              <span class="font-semibold text-rose-700 dark:text-rose-300">Total egresado</span>
+              <span class="font-mono-data font-bold text-rose-600 dark:text-rose-400">-{{ fc(totalEgresos) }}</span>
             </div>
           </div>
         </div>
 
         <!-- Resumen Total -->
-        <div class="bg-slate-100 dark:bg-slate-800 rounded-xl p-4">
+        <div class="bg-slate-100 dark:bg-slate-800 rounded-xl p-4 space-y-2">
           <div class="flex items-center justify-between">
-            <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Total Ingresos Esperado</span>
+            <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Cajón esperado</span>
+            <span class="font-mono-data font-bold text-slate-900 dark:text-white">{{ fc(esperadoEfectivo) }}</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Cuentas digitales esperadas</span>
+            <span class="font-mono-data font-bold text-indigo-600 dark:text-indigo-400">{{ fc(esperadoCuentas) }}</span>
+          </div>
+          <div class="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-700">
+            <span class="text-sm font-bold text-slate-900 dark:text-white">Total esperado</span>
             <span class="font-mono-data font-bold text-lg text-slate-900 dark:text-white">{{ fc(totalEsperado) }}</span>
           </div>
-          <div class="flex items-center justify-between mt-2">
-            <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Total Real Contado</span>
+          <div class="flex items-center justify-between">
+            <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Total real cargado</span>
             <span class="font-mono-data font-bold text-lg" :class="totalReal === totalEsperado ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'">{{ fc(totalReal) }}</span>
           </div>
-          <div v-if="totalReal !== totalEsperado" class="flex items-center justify-between mt-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <div v-if="totalReal !== totalEsperado" class="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-700">
             <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Diferencia Total</span>
             <span class="font-mono-data font-bold text-lg" :class="diferenciaTotal >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'">
               {{ diferenciaTotal >= 0 ? '+' : '' }}{{ fc(diferenciaTotal) }}
@@ -862,7 +957,9 @@ const toast = useToastStore()
 const cajaStore = useCajaStore()
 const { playOpenCash, playCloseCash } = useSounds()
 const cajaResumen = reactive({ metodos_cerrados: [], egresos_por_medio: {} })
-const cierreParcial = reactive({ activo: false, metodo: '', monto_real: 0, comentario: '' })
+// Último arqueo por medio recibido del backend (apertura + ingresos - egresos)
+let arqueoResumen = []
+const cierreParcial = reactive({ activo: false, metodo: '', monto_real: 0, comentario: '', esperado: 0 })
 
 const movements = ref([])
 
@@ -881,7 +978,11 @@ const aperturaForm = reactive({
   monto_inicial: 0,
   monto_retiro: 0,
   motivo_retiro: '',
+  saldos_cuentas: {},
 })
+
+const abrirCuentasDigitales = ref(false)
+const cajasConCuentaUsada = ref({})
 
 const montoFinalApertura = computed(() => {
   return Math.max(0, aperturaForm.monto_inicial - aperturaForm.monto_retiro)
@@ -919,12 +1020,7 @@ function aplicarConteoBilletes(total) {
   toast.success(`Total contado: ${fc(total)}`)
 }
 
-const metodosArqueo = reactive([
-  { label: 'Efectivo', valor: 'efectivo', esperado: 0, montoReal: 0, comentario: '', cerrado: false, colorClass: 'bg-emerald-500' },
-  { label: 'Débito', valor: 'debito', esperado: 0, montoReal: 0, comentario: '', cerrado: false, colorClass: 'bg-blue-500' },
-  { label: 'Crédito', valor: 'credito', esperado: 0, montoReal: 0, comentario: '', cerrado: false, colorClass: 'bg-purple-500' },
-  { label: 'Transferencia', valor: 'transferencia', esperado: 0, montoReal: 0, comentario: '', cerrado: false, colorClass: 'bg-amber-500' },
-])
+const metodosArqueo = reactive([])
 
 const MEDIO_LABELS = {
   efectivo: 'Efectivo',
@@ -938,9 +1034,63 @@ const MEDIO_LABELS = {
   cta_corriente: 'Cta. Cte.',
 }
 
+// Cuentas digitales: el saldo vive en la app del proveedor, no en el cajón
+const MEDIOS_CUENTA = ['smartpoint', 'mercadopago_qr', 'mercadopago_pos', 'qr_interop']
+
+const MEDIO_COLORS = {
+  efectivo: 'bg-emerald-500',
+  debito: 'bg-blue-500',
+  credito: 'bg-purple-500',
+  transferencia: 'bg-amber-500',
+}
+
+function esCuentaDigital(medio) {
+  return MEDIOS_CUENTA.includes(medio)
+}
+
+const cuentasDigitales = computed(() => MEDIOS_CUENTA.map(v => ({ valor: v, label: MEDIO_LABELS[v] || v })))
+
+const cuentasConSaldo = computed(() =>
+  Object.entries(cajaStore.saldos_cuentas || {})
+    .map(([medio, saldo]) => ({ medio, label: MEDIO_LABELS[medio] || medio, saldo }))
+    .filter(c => c.saldo)
+)
+
+const totalSaldosCuentasApertura = computed(() =>
+  Object.values(aperturaForm.saldos_cuentas || {}).reduce((sum, v) => sum + (Number(v) || 0), 0)
+)
+
+const cuentasConSaldoApertura = computed(() =>
+  cuentasDigitales.value
+    .filter(c => (Number(aperturaForm.saldos_cuentas[c.valor]) || 0) > 0)
+    .map(c => c.label)
+    .join(', ')
+)
+
 const nuevoMovimiento = reactive({ tipo: 'Ingreso', monto: 0, metodo: 'Efectivo', comentario: '' })
 
+// Selector de medio del movimiento manual: incluye las cuentas digitales para
+// poder registrar, por ejemplo, una transferencia de MP al banco.
+const MEDIOS_MOVIMIENTO = {
+  Efectivo: 'efectivo',
+  'Débito': 'debito',
+  Crédito: 'credito',
+  Transferencia: 'transferencia',
+  SmartPoint: 'smartpoint',
+  'QR MercadoPago': 'mercadopago_qr',
+  'POS MercadoPago': 'mercadopago_pos',
+  'QR BCRA': 'qr_interop',
+}
+const metodosMovimiento = Object.keys(MEDIOS_MOVIMIENTO)
+
 const totalEsperado = computed(() => metodosArqueo.reduce((sum, m) => sum + m.esperado, 0))
+const esperadoEfectivo = computed(() => {
+  const m = metodosArqueo.find(x => x.valor === 'efectivo')
+  return m ? m.esperado : 0
+})
+const esperadoCuentas = computed(() => metodosArqueo
+  .filter(m => m.es_cuenta_digital)
+  .reduce((sum, m) => sum + m.esperado, 0))
 const totalReal = computed(() => metodosArqueo.reduce((sum, m) => sum + (m.montoReal || 0), 0))
 const diferenciaTotal = computed(() => totalReal.value - totalEsperado.value)
 
@@ -961,12 +1111,19 @@ const egresosHoy = computed(() => movements.value.filter(m => m.tipo === 'Egreso
 const movimientosIngresos = computed(() => movements.value.filter(m => m.tipo === 'Ingreso' && esDeHoy(m)).length)
 const movimientosEgresos = computed(() => movements.value.filter(m => m.tipo === 'Egreso' && esDeHoy(m)).length)
 
-const metodosPago = [
-  { label: 'Efectivo', valor: 'efectivo' },
-  { label: 'Débito', valor: 'debito' },
-  { label: 'Crédito', valor: 'credito' },
-  { label: 'Transferencia', valor: 'transferencia' },
-]
+const metodosPago = computed(() => {
+  const base = [
+    { label: 'Efectivo', valor: 'efectivo' },
+    { label: 'Débito', valor: 'debito' },
+    { label: 'Crédito', valor: 'credito' },
+    { label: 'Transferencia', valor: 'transferencia' },
+  ]
+  // Las cuentas digitales que tengan saldo inicial o movimientos también se cierran
+  const enUso = arqueoResumen
+    .filter(f => esCuentaDigital(f.medio_pago))
+    .map(f => ({ label: f.nombre || MEDIO_LABELS[f.medio_pago], valor: f.medio_pago }))
+  return [...base, ...enUso]
+})
 
 const movementColumns = [
   { key: 'fecha', label: 'Fecha' },
@@ -1325,7 +1482,7 @@ async function fetchMovimientos() {
         tipo: (m.tipo || '').toLowerCase() === 'ingreso' ? 'Ingreso'
             : (m.tipo || '').toLowerCase() === 'egreso' ? 'Egreso' : m.tipo,
         monto: m.monto,
-        metodo: m.medio_pago || '',
+        metodo: MEDIO_LABELS[m.medio_pago] || m.medio_pago || '',
         comentario: m.descripcion || '',
         created_at: m.created_at,
       }))
@@ -1348,11 +1505,7 @@ async function fetchResumen() {
     if (data) {
       cajaResumen.metodos_cerrados = data.metodos_cerrados || []
       cajaResumen.egresos_por_medio = data.egresos_por_medio || {}
-      if (data.desglose) {
-        cajaStore.saldo_actual = (data.desglose.efectivo || 0) +
-          (data.desglose.debito || 0) + (data.desglose.credito || 0) +
-          (data.desglose.transferencia || 0)
-      }
+      arqueoResumen = data.por_medio || []
     }
   } catch { /* fallback to mock */ }
   await cajaStore.fetchEstado()
@@ -1373,19 +1526,29 @@ async function syncData() {
 
 async function abrirCaja() {
   await cajaStore.fetchUltimoCierre()
-  
+  await cargarSaldosCuentasSugeridos()
+
   const ultimo = cajaStore.ultimoCierre
-  if (ultimo && ultimo.monto > 0) {
-    aperturaForm.monto_inicial = ultimo.monto
-    aperturaForm.monto_retiro = 0
-    aperturaForm.motivo_retiro = ''
-    showAperturaModal.value = true
-  } else {
-    aperturaForm.monto_inicial = 0
-    aperturaForm.monto_retiro = 0
-    aperturaForm.motivo_retiro = ''
-    showAperturaModal.value = true
-  }
+  aperturaForm.monto_inicial = (ultimo && ultimo.monto > 0) ? ultimo.monto : 0
+  aperturaForm.monto_retiro = 0
+  aperturaForm.motivo_retiro = ''
+  showAperturaModal.value = true
+}
+
+// Trae el saldo con el que quedó cada cuenta digital en el último cierre para
+// que el operador solo confirme el número que ve hoy en la app.
+async function cargarSaldosCuentasSugeridos() {
+  const saldos = {}
+  MEDIOS_CUENTA.forEach(m => { saldos[m] = 0 })
+  try {
+    const data = await api.get('/api/caja/saldos-cuentas')
+    const sugeridos = data?.saldos || {}
+    cajasConCuentaUsada.value = sugeridos
+    MEDIOS_CUENTA.forEach(m => {
+      if (sugeridos[m] != null) saldos[m] = Number(sugeridos[m]) || 0
+    })
+  } catch { /* sin sugeridos: quedan en 0 */ }
+  aperturaForm.saldos_cuentas = saldos
 }
 
 async function confirmarAperturaCaja() {
@@ -1401,13 +1564,23 @@ async function confirmarAperturaCaja() {
     toast.error('El monto de retiro no puede ser mayor al monto inicial')
     return
   }
-  
+  const saldosCuentas = {}
+  for (const m of MEDIOS_CUENTA) {
+    const v = Number(aperturaForm.saldos_cuentas[m]) || 0
+    if (v < 0) {
+      toast.error(`El saldo inicial de ${MEDIO_LABELS[m]} no puede ser negativo`)
+      return
+    }
+    if (v > 0) saldosCuentas[m] = v
+  }
+
   opening.value = true
   try {
     await api.post('/api/caja/apertura', {
       monto_inicial: montoFinalApertura.value,
       monto_retiro: aperturaForm.monto_retiro,
       motivo_retiro: aperturaForm.motivo_retiro,
+      saldos_cuentas: saldosCuentas,
     })
     await cajaStore.fetchEstado()
     await fetchMovimientos()
@@ -1416,6 +1589,10 @@ async function confirmarAperturaCaja() {
     let msg = `Caja abierta con $${montoFinalApertura.value.toLocaleString()}`
     if (aperturaForm.monto_retiro > 0) {
       msg += ` (retiro: $${aperturaForm.monto_retiro.toLocaleString()})`
+    }
+    const nCuentas = Object.keys(saldosCuentas).length
+    if (nCuentas) {
+      msg += ` · ${nCuentas} cuenta${nCuentas > 1 ? 's' : ''} digital${nCuentas > 1 ? 'es' : ''} a controlar`
     }
     toast.success(msg)
     playOpenCash()
@@ -1438,24 +1615,53 @@ async function initCierreCaja() {
   try {
     const data = await api.get('/api/caja/resumen')
     if (data) {
-      const desglose = data.desglose || {}
-      const apertura = data.apertura || 0
-      metodosArqueo.forEach(m => {
-        if (m.valor === 'efectivo') {
-          m.esperado = (desglose[m.valor] || 0) + apertura
-        } else {
-          m.esperado = desglose[m.valor] || 0
-        }
-        m.montoReal = 0
-        m.comentario = ''
-        m.cerrado = data.metodos_cerrados?.includes(m.valor)
-      })
+      metodosArqueo.splice(0, metodosArqueo.length, ...construirMetodosArqueo(data))
     }
     cierreComentario.value = ''
     showCierreModal.value = true
   } catch (e) {
     toast.error('Error al obtener resumen de caja')
   }
+}
+
+// Arma las filas del arqueo a partir del resumen del backend: efectivo y medios
+// clásicos siempre, más las cuentas digitales que tengan saldo inicial o
+// movimientos en la sesión.
+function construirMetodosArqueo(data) {
+  const porMedio = data.por_medio || []
+  const cerrados = data.metodos_cerrados || []
+  if (!porMedio.length) {
+    return ['efectivo', 'debito', 'credito', 'transferencia'].map(v => ({
+      label: MEDIO_LABELS[v], valor: v, esperado: 0, apertura: 0, ingresos: 0, egresos: 0,
+      montoReal: 0, comentario: '', cerrado: cerrados.includes(v), es_cuenta_digital: false,
+      falta_saldo_inicial: false,
+      colorClass: MEDIO_COLORS[v] || 'bg-slate-400',
+    }))
+  }
+  return porMedio.map(f => ({
+    label: f.nombre || MEDIO_LABELS[f.medio_pago] || f.medio_pago,
+    valor: f.medio_pago,
+    esperado: f.esperado || 0,
+    apertura: f.apertura || 0,
+    ingresos: f.ingresos || 0,
+    egresos: f.egresos || 0,
+    montoReal: 0,
+    comentario: '',
+    cerrado: cerrados.includes(f.medio_pago),
+    es_cuenta_digital: !!f.es_cuenta_digital,
+    falta_saldo_inicial: !!f.falta_saldo_inicial,
+    colorClass: f.es_cuenta_digital ? 'bg-indigo-500' : (MEDIO_COLORS[f.medio_pago] || 'bg-slate-400'),
+  }))
+}
+
+// Cierre de un medio suelto (incluye cuentas digitales)
+function seleccionarCierreParcial(metodo) {
+  const fila = arqueoResumen.find(f => f.medio_pago === metodo.valor)
+  cierreParcial.activo = true
+  cierreParcial.metodo = metodo.valor
+  cierreParcial.monto_real = 0
+  cierreParcial.comentario = ''
+  cierreParcial.esperado = fila ? (fila.esperado || 0) : 0
 }
 
 async function confirmarCierreCaja() {
@@ -1501,18 +1707,14 @@ async function registrarMovimiento() {
   }
   saving.value = true
   try {
-    const medioMap = {
-      'Efectivo': 'efectivo',
-      'Transferencia': 'transferencia',
-      'Débito': 'debito',
-      'Tarjeta': 'credito',
-    }
     const esIngreso = nuevoMovimiento.tipo === 'Ingreso'
+    const medio = MEDIOS_MOVIMIENTO[nuevoMovimiento.metodo] || 'efectivo'
     const body = {
       monto: nuevoMovimiento.monto,
-      descripcion: nuevoMovimiento.comentario || (esIngreso ? 'Ingreso manual' : 'Egreso manual'),
+      descripcion: nuevoMovimiento.comentario
+        || (esIngreso ? 'Ingreso manual' : 'Egreso manual'),
+      medio_pago: medio,
     }
-    if (esIngreso) body.medio_pago = medioMap[nuevoMovimiento.metodo] || 'efectivo'
     await api.post(esIngreso ? '/api/caja/ingreso' : '/api/caja/egreso', body)
     await fetchMovimientos()
     await fetchResumen()
@@ -1532,6 +1734,7 @@ function cancelarCierre() {
   cierreParcial.metodo = ''
   cierreParcial.monto_real = 0
   cierreParcial.comentario = ''
+  cierreParcial.esperado = 0
 }
 
 async function cerrarMetodo() {
@@ -1546,11 +1749,12 @@ async function cerrarMetodo() {
       monto_real: cierreParcial.monto_real,
       comentario: cierreParcial.comentario || '',
     })
-    toast.success(`Método ${cierreParcial.metodo} cerrado correctamente`)
+    toast.success(`${MEDIO_LABELS[cierreParcial.metodo] || cierreParcial.metodo} cerrado correctamente`)
     cierreParcial.activo = false
     cierreParcial.metodo = ''
     cierreParcial.monto_real = 0
     cierreParcial.comentario = ''
+    cierreParcial.esperado = 0
     await fetchMovimientos()
     await fetchResumen()
   } catch {

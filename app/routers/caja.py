@@ -1,10 +1,10 @@
-"""Router de Caja: apertura, cierre por método, cierre total."""
+﻿"""Router de Caja: apertura, cierre por método, cierre total."""
 
 from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from app.database import get_db
 from app.services import caja_service
 from app.services import catalogo_service
@@ -22,6 +22,10 @@ class AperturaRequest(BaseModel):
     sucursal_id: int = 1
     monto_retiro: float = Field(0.0, ge=0, description="Monto que se retira al abrir caja")
     motivo_retiro: str = Field("", description="Motivo del retiro (ej: 'Fondo para cambio')")
+    saldos_cuentas: dict = Field(
+        default_factory=dict,
+        description="Saldo inicial de cada cuenta digital (ej: {'smartpoint': 5000})",
+    )
 
 
 class CierreMetodoRequest(BaseModel):
@@ -41,6 +45,15 @@ class MovimientoRequest(BaseModel):
     descripcion: str = ""
     sucursal_id: int = 1
     medio_pago: Optional[str] = None
+
+    @field_validator("medio_pago")
+    @classmethod
+    def _validar_medio(cls, v):
+        if v and v not in caja_service.MEDIOS_INGRESO:
+            raise ValueError(
+                f"Medio de pago inválido. Opciones: {', '.join(caja_service.MEDIOS_INGRESO)}"
+            )
+        return v
 
 
 class EgresoEspecialRequest(BaseModel):
@@ -130,18 +143,37 @@ def apertura(
             db, data.monto_inicial, user.id, data.sucursal_id,
             monto_retiro=data.monto_retiro,
             motivo_retiro=data.motivo_retiro,
+            saldos_cuentas=data.saldos_cuentas,
         )
         auditoria_service.registrar(db, user.id, "apertura_caja", None, None,
                                    {"monto_inicial": data.monto_inicial, 
                                     "monto_retiro": data.monto_retiro,
                                     "motivo_retiro": data.motivo_retiro,
+                                    "saldos_cuentas": data.saldos_cuentas,
                                     "sucursal_id": data.sucursal_id})
         return RespuestaData(
-            data={"id": mov.id, "monto": mov.monto, "tipo": mov.tipo},
+            data={"id": mov.id, "monto": mov.monto, "tipo": mov.tipo,
+                  "saldos_cuentas": data.saldos_cuentas},
             message="Caja abierta",
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/saldos-cuentas", response_model=RespuestaData)
+def saldos_cuentas_sugeridos(
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """Saldos sugeridos de las cuentas digitales para abrir la jornada."""
+    sugeridos = caja_service.obtener_saldos_cuentas_sugeridos(db)
+    nombres = {m: caja_service.nombre_medio(m) for m in caja_service.MEDIOS_CUENTA}
+    return RespuestaData(
+        data={
+            "saldos": sugeridos,
+            "nombres": nombres,
+        }
+    )
 
 
 @router.post("/cierre-metodo", response_model=RespuestaData)
@@ -194,6 +226,11 @@ def cierre_total(
                 "id": mov.id,
                 "total_ingresos": desglose["total_ingresos"],
                 "desglose": desglose["desglose"],
+                "saldo_efectivo": desglose.get("saldo_efectivo", 0.0),
+                "saldo_cuenta_total": desglose.get("saldo_cuenta_total", 0.0),
+                "saldo_total": desglose.get("saldo_total", 0.0),
+                "saldo_medios_total": mov.monto_esperado or mov.monto,
+                "por_medio": desglose.get("por_medio", []),
             },
             message="Caja cerrada totalmente.",
         )
@@ -230,9 +267,12 @@ def egreso(
     mov = caja_service.registrar_egreso(
         db, data.monto, data.descripcion or "Egreso manual", user.id,
         sucursal_id=data.sucursal_id,
+        medio_pago=data.medio_pago or "efectivo",
     )
     auditoria_service.registrar(db, user.id, "egreso_caja", None, None,
-                               {"monto": data.monto, "descripcion": data.descripcion, "sucursal_id": data.sucursal_id})
+                               {"monto": data.monto, "descripcion": data.descripcion,
+                                "medio_pago": data.medio_pago or "efectivo",
+                                "sucursal_id": data.sucursal_id})
     return RespuestaData(data={"id": mov.id, "monto": mov.monto}, message="Egreso registrado")
 
 
@@ -345,7 +385,11 @@ def calendario_caja(
             "pendientes_conciliacion": 0, "correcciones": 0,
         })
         if m.tipo == "apertura":
-            r["apertura"] += m.monto or 0
+            if m.medio_pago:
+                # Saldo inicial de una cuenta digital: no es el fondo del cajón
+                r["apertura_cuentas"] = r.get("apertura_cuentas", 0.0) + (m.monto or 0)
+            else:
+                r["apertura"] += m.monto or 0
         elif m.tipo == "ingreso":
             mp = m.medio_pago or "efectivo"
             r["desglose"][mp] = r["desglose"].get(mp, 0) + (m.monto or 0)
@@ -441,7 +485,11 @@ def dia_caja(
     desglose = {}
     total_ingresos = 0.0
     total_egresos = 0.0
+    ingresos_cuentas = 0.0
+    egresos_cuentas = 0.0
     apertura = 0.0
+    apertura_cuentas = 0.0
+    saldos_cuentas_dia: dict = {}
     cierres = []
     movimientos = []
     for m in movs:
@@ -462,13 +510,24 @@ def dia_caja(
         }
         movimientos.append(item)
         if m.tipo == "apertura":
-            apertura = m.monto or 0
+            if m.medio_pago:
+                apertura_cuentas = apertura_cuentas + (m.monto or 0)
+                saldos_cuentas_dia[m.medio_pago] = saldos_cuentas_dia.get(m.medio_pago, 0.0) + (m.monto or 0)
+            else:
+                apertura = m.monto or 0
         elif m.tipo == "ingreso":
             mp = m.medio_pago or "efectivo"
             desglose[mp] = desglose.get(mp, 0) + (m.monto or 0)
             total_ingresos += m.monto or 0
+            if mp in caja_service.MEDIOS_CUENTA:
+                ingresos_cuentas += m.monto or 0
+                saldos_cuentas_dia[mp] = saldos_cuentas_dia.get(mp, 0.0) + (m.monto or 0)
         elif m.tipo == "egreso":
             total_egresos += m.monto or 0
+            mp = m.medio_pago or "efectivo"
+            if mp in caja_service.MEDIOS_CUENTA:
+                egresos_cuentas += m.monto or 0
+                saldos_cuentas_dia[mp] = saldos_cuentas_dia.get(mp, 0.0) - (m.monto or 0)
         elif m.tipo == "cierre" and not m.medio_pago:
             esperado = m.monto_esperado or m.monto
             confirmado = m.monto_confirmado
@@ -494,10 +553,15 @@ def dia_caja(
 
     return RespuestaData(data={
         "fecha": fecha, "apertura": apertura,
+        "apertura_cuentas": round(apertura_cuentas, 2),
         "total_ingresos": round(total_ingresos, 2),
         "total_egresos": round(total_egresos, 2),
         "desglose": desglose,
         "saldo_final": round(apertura + total_ingresos - total_egresos, 2),
+        "ingresos_cuentas": round(ingresos_cuentas, 2),
+        "egresos_cuentas": round(egresos_cuentas, 2),
+        "saldos_cuentas": {k: round(v, 2) for k, v in saldos_cuentas_dia.items()},
+        "saldo_final_cuentas": round(apertura_cuentas + ingresos_cuentas - egresos_cuentas, 2),
         "cierres": cierres,
         "movimientos": movimientos,
         "tickets": tickets,
@@ -583,8 +647,18 @@ def reportes_caja(
     # Agrupar por sesiones (apertura -> cierre)
     sesiones = []
     sesion_actual = None
-    
+    # Las aperturas de cuenta pueden compartir timestamp con la del cajón: si
+    # llegan antes en el orden, se guardan acá y se suman a la sesión siguiente.
+    apertura_cuentas_pendiente = 0.0
+
     for mov in movimientos:
+        if mov.tipo == "apertura" and mov.medio_pago:
+            # Saldo inicial de una cuenta digital: no abre una sesión nueva
+            if sesion_actual is not None:
+                sesion_actual["apertura_cuentas"] = sesion_actual.get("apertura_cuentas", 0.0) + (mov.monto or 0)
+            else:
+                apertura_cuentas_pendiente += mov.monto or 0
+            continue
         if mov.tipo == "apertura":
             # Nueva sesión
             sesion_actual = {
@@ -592,6 +666,7 @@ def reportes_caja(
                 "apertura_id": mov.id,
                 "apertura_fecha": mov.created_at.isoformat() if mov.created_at else None,
                 "apertura_monto": mov.monto,
+                "apertura_cuentas": apertura_cuentas_pendiente,
                 "apertura_usuario": mov.usuario.nombre if mov.usuario else "Desconocido",
                 "apertura_descripcion": mov.descripcion,
                 "cierres": [],
@@ -602,6 +677,7 @@ def reportes_caja(
                 "saldo_final": 0,
                 "estado": "abierta"
             }
+            apertura_cuentas_pendiente = 0.0
             sesiones.append(sesion_actual)
         elif mov.tipo == "cierre" and sesion_actual:
             # Cierre de sesión

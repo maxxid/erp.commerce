@@ -770,7 +770,8 @@
           <KpiCard label="Ventas Hoy" :value="stats.ventas_hoy" prefix="$" icon="fa-sack-dollar" icon-color="success" :sublabel="`${stats.tickets_hoy} tickets`" />
           <KpiCard label="Ticket Prom." :value="stats.ticket_promedio" prefix="$" icon="fa-receipt" icon-color="brand" />
           <KpiCard label="Efectivo" :value="stats.efectivo" prefix="$" icon="fa-money-bill-wave" icon-color="info" />
-          <KpiCard label="Caja" :value="stats.saldo_caja" prefix="$" icon="fa-vault" icon-color="success" />
+          <KpiCard label="Cajón" :value="stats.saldo_caja" prefix="$" icon="fa-vault" icon-color="success" />
+          <KpiCard label="Cuentas digitales" :value="stats.saldo_cuentas" prefix="$" icon="fa-mobile-screen" icon-color="brand" />
         </div>
 
         <BaseCard padding="none">
@@ -1275,9 +1276,38 @@
           />
         </div>
 
+        <div class="border-t border-slate-200 dark:border-slate-700 pt-4">
+          <div class="flex items-center gap-2 mb-1">
+            <label class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Saldos de cuentas digitales</label>
+            <BaseButton variant="ghost" size="xs" @click="abrirCuentasDigitales = !abrirCuentasDigitales">
+              <i :class="abrirCuentasDigitales ? 'fa-solid fa-chevron-up' : 'fa-solid fa-chevron-down'"></i>
+              {{ abrirCuentasDigitales ? 'Ocultar' : 'Mostrar' }}
+            </BaseButton>
+          </div>
+          <p class="text-[10px] text-slate-400 mb-2">
+            Dejá en 0 las que no uses. El saldo que cargues acá es con el que se va a cuadrar esa cuenta al cerrar.
+          </p>
+          <div v-if="abrirCuentasDigitales" class="space-y-2">
+            <div v-for="cuenta in cuentasDigitales" :key="cuenta.valor">
+              <label class="text-xs text-slate-600 dark:text-slate-300">{{ cuenta.label }}</label>
+              <div class="relative mt-0.5">
+                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold">$</span>
+                <input
+                  v-model.number="aperturaForm.saldos_cuentas[cuenta.valor]"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  class="w-full pl-7 pr-3 py-2 text-sm font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition"
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
           <div class="flex items-center justify-between">
-            <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Monto final de apertura</span>
+            <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Monto final de apertura (cajón)</span>
             <span class="font-mono-data font-bold text-2xl text-brand-600 dark:text-brand-400">{{ fc(montoFinalApertura) }}</span>
           </div>
           <p v-if="aperturaForm.monto_retiro > 0" class="text-[10px] text-slate-400 mt-1 text-right">
@@ -1348,8 +1378,17 @@ const showTicket = ref(false)
 // Apertura de caja desde el POS
 const showAperturaModal = ref(false)
 const abriendoCaja = ref(false)
-const aperturaForm = reactive({ monto_inicial: 0, monto_retiro: 0, motivo_retiro: '' })
+const aperturaForm = reactive({ monto_inicial: 0, monto_retiro: 0, motivo_retiro: '', saldos_cuentas: {} })
 const montoFinalApertura = computed(() => Math.max(0, aperturaForm.monto_inicial - aperturaForm.monto_retiro))
+const abrirCuentasDigitales = ref(false)
+const MEDIO_LABELS_CUENTA = {
+  smartpoint: 'SmartPoint',
+  mercadopago_qr: 'QR MercadoPago',
+  mercadopago_pos: 'POS MercadoPago',
+  qr_interop: 'QR BCRA',
+}
+const MEDIOS_CUENTA = Object.keys(MEDIO_LABELS_CUENTA)
+const cuentasDigitales = MEDIOS_CUENTA.map(v => ({ valor: v, label: MEDIO_LABELS_CUENTA[v] }))
 let aperturaResolver = null
 
 // MercadoPago QR states
@@ -1541,7 +1580,8 @@ const stats = reactive({
   tickets_hoy: 12,
   ticket_promedio: 7041,
   efectivo: 52000,
-  saldo_caja: 72000
+  saldo_caja: 72000,
+  saldo_cuentas: 0
 })
 
 const clientes = ref([])
@@ -1679,7 +1719,9 @@ async function fetchPOSStats() {
       stats.efectivo = cajaRes.desglose.efectivo || 0
     }
     if (cajaEst) {
-      stats.saldo_caja = cajaEst.saldo_actual || 0
+      // El KPI "Caja" es el efectivo del cajón; las cuentas digitales van aparte
+      stats.saldo_caja = cajaEst.saldo_efectivo ?? cajaEst.saldo_actual ?? 0
+      stats.saldo_cuentas = cajaEst.saldo_cuenta_total || 0
     }
   } catch { /* fallback to mock */ }
 }
@@ -1687,12 +1729,28 @@ async function fetchPOSStats() {
 async function abrirCajaDesdePos() {
   if (cajaStore.abierta) return true
   await cajaStore.fetchUltimoCierre()
+  await cargarSaldosCuentasSugeridosPos()
   const ultimo = cajaStore.ultimoCierre
   aperturaForm.monto_inicial = ultimo && ultimo.monto > 0 ? ultimo.monto : 0
   aperturaForm.monto_retiro = 0
   aperturaForm.motivo_retiro = ''
   showAperturaModal.value = true
   return await new Promise(resolve => { aperturaResolver = resolve })
+}
+
+// Saldo con el que quedó cada cuenta digital en el último cierre: el operador
+// solo confirma el número que ve hoy en la app.
+async function cargarSaldosCuentasSugeridosPos() {
+  const saldos = {}
+  MEDIOS_CUENTA.forEach(m => { saldos[m] = 0 })
+  try {
+    const data = await api.get('/api/caja/saldos-cuentas')
+    const sugeridos = data?.saldos || {}
+    MEDIOS_CUENTA.forEach(m => {
+      if (sugeridos[m] != null) saldos[m] = Number(sugeridos[m]) || 0
+    })
+  } catch { /* sin sugeridos: quedan en 0 */ }
+  aperturaForm.saldos_cuentas = saldos
 }
 
 function cancelarAperturaPos() {
@@ -1713,17 +1771,29 @@ async function confirmarAperturaPos() {
     toast.error('El monto de retiro no puede ser mayor al monto inicial')
     return
   }
+  const saldosCuentas = {}
+  for (const m of MEDIOS_CUENTA) {
+    const v = Number(aperturaForm.saldos_cuentas[m]) || 0
+    if (v < 0) {
+      toast.error(`El saldo inicial de ${MEDIO_LABELS_CUENTA[m]} no puede ser negativo`)
+      return
+    }
+    if (v > 0) saldosCuentas[m] = v
+  }
   abriendoCaja.value = true
   try {
     await api.post('/api/caja/apertura', {
       monto_inicial: montoFinalApertura.value,
       monto_retiro: aperturaForm.monto_retiro,
       motivo_retiro: aperturaForm.motivo_retiro,
+      saldos_cuentas: saldosCuentas,
     })
     await cajaStore.fetchEstado()
     showAperturaModal.value = false
     playOpenCash()
-    toast.success(`Caja abierta con $${montoFinalApertura.value.toLocaleString()}`)
+    const nCuentas = Object.keys(saldosCuentas).length
+    toast.success(`Caja abierta con $${montoFinalApertura.value.toLocaleString()}` +
+      (nCuentas ? ` · ${nCuentas} cuenta${nCuentas > 1 ? 's' : ''} digital${nCuentas > 1 ? 'es' : ''} a controlar` : ''))
     if (aperturaResolver) { aperturaResolver(true); aperturaResolver = null }
   } catch (e) {
     toast.error('Error al abrir caja: ' + (e.message || ''))
@@ -2486,8 +2556,8 @@ async function confirmarVenta() {
   stats.ticket_promedio = Math.round(stats.ventas_hoy / stats.tickets_hoy)
   if (cart.medio_pago === 'efectivo') {
     stats.efectivo += ventaTotal
+    stats.saldo_caja += ventaTotal
   }
-  stats.saldo_caja += ventaTotal
 
   recentTransactions.value.unshift({
     id: ventaResp?.id || Date.now(),
@@ -2709,7 +2779,7 @@ async function onMpPagoConfirmado(ventaId, orderId) {
       stats.ventas_hoy += venta.total
       stats.tickets_hoy += 1
       stats.ticket_promedio = Math.round(stats.ventas_hoy / stats.tickets_hoy)
-      stats.saldo_caja += venta.total
+      // El pago entra a la cuenta digital, no al cajón
 
       recentTransactions.value.unshift({
         id: ventaId,
@@ -2820,7 +2890,7 @@ async function confirmarQi() {
       stats.ventas_hoy += v.total
       stats.tickets_hoy += 1
       stats.ticket_promedio = Math.round(stats.ventas_hoy / stats.tickets_hoy)
-      stats.saldo_caja += v.total
+      // Transferencia: el saldo va a la cuenta, no al cajón
 
       recentTransactions.value.unshift({
         id: qiVentaId,
@@ -2936,7 +3006,7 @@ async function onMpPosPagoConfirmado(ventaId, orderId) {
       stats.ventas_hoy += venta.total
       stats.tickets_hoy += 1
       stats.ticket_promedio = Math.round(stats.ventas_hoy / stats.tickets_hoy)
-      stats.saldo_caja += venta.total
+      // El pago entra a la cuenta digital, no al cajón
 
       recentTransactions.value.unshift({
         id: ventaId,

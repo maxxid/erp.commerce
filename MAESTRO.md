@@ -519,25 +519,43 @@ Si el producto de recarga no está configurado, el modal avisa y ofrece ir a Aju
 | Elemento | Descripción |
 |----------|-------------|
 | **Último cierre detectado** | Banner con monto del último cierre + badge si fue automático |
-| **Monto inicial sugerido** | Input numérico precargado con el último cierre. Junto al hint tiene el botón "Contar billetes" |
-| **Retiro de efectivo (opcional)** | Monto que se aparta al abrir + motivo. Se registra como egreso |
+| **Monto inicial sugerido** | Input numérico precargado con el último cierre (`GET /api/caja/saldos-cuentas-sugeridos`). Junto al hint tiene el botón "Contar billetes" |
+| **Saldos iniciales de cuentas digitales** | Una fila por cuenta digital (SmartPoint, MercadoPago QR, MercadoPago POS, QR Interoperable) precargada con el último saldo real de esa cuenta. Se envía en `saldos_cuentas` del POST de apertura; los montos en 0 se descartan |
+| **Retiro de efectivo (opcional)** | Monto que se aparta al abrir + motivo. Se registra como egreso del cajón |
 | **Monto final de apertura** | `monto_inicial - monto_retiro` (reactivo) — es el valor enviado a la API |
+| **Aviso "falta saldo inicial"** | Si una cuenta digital tuvo movimientos pero se abrió sin saldo inicial, la Arqueo la marca con warning: sin ese dato el saldo absoluto de la cuenta no es verificable |
 | **Botones** | Cancelar / Abrir Caja (`confirmarAperturaCaja()`) |
+
+Cada apertura de cuenta digital se persiste como movimiento `tipo="apertura"` con `medio_pago` = cuenta, `referencia_tipo="apertura_cuenta"` y `referencia_id` = id de la apertura del cajón. No genera una sesión de caja nueva ni altera la lectura del efectivo.
 
 ### Resumen
 
 | KPI | Descripción |
 |-----|-------------|
-| **Saldo Actual** | Balance desde última apertura |
+| **Cajón** | `saldo_efectivo`: balance de efectivo desde la última apertura |
+| **Cuentas digitales** | `saldo_cuenta_total`: suma de los saldos de las cuentas digitales |
+| **Total** | `saldo_total` = Cajón + Cuentas digitales. Es el total bajo control del turno |
 | **Ingresos del Día** | Suma de ingresos |
-| **Egresos del Día** | Suma de egresos |
+| **Egresos del Día** | Suma de egresos (de todos los medios; el detalle por medio sale del arqueo) |
+
+### Arqueo por Medio de Pago
+*(tarjeta de arqueo visible cuando caja abierta)*
+
+| Columna | Descripción |
+|---------|-------------|
+| **Método** | Efectivo \| Débito \| Crédito \| Transferencia + las cuentas digitales con movimiento o saldo inicial |
+| **Saldo inicial** | Aporte de apertura de ese medio (solo cuentas digitales; el efectivo toma la apertura del cajón) |
+| **Ingresos** | Ingresos del medio |
+| **Egresos** | Egresos del medio |
+| **Esperado** | `apertura + ingresos - egresos` |
+| **Monto Real** | Input por medio; en efectivo abre "Contar billetes" |
 
 ### Cierre por Método de Pago
 *(visible cuando caja abierta)*
 
 | Elemento | Acción |
 |----------|--------|
-| **Botones de método** | Efectivo \| Débito \| Crédito \| Transferencia. `@click` activa formulario de cierre |
+| **Botones de método** | Efectivo \| Débito \| Crédito \| Transferencia + las cuentas digitales. `@click` activa formulario de cierre |
 | **Badge "Cerrado"** | Métodos ya cerrados muestran check verde |
 | **Formulario activo** | Monto Real + Comentario + Cancelar/Cerrar. En **Efectivo** aparece además el botón "Contar billetes" |
 
@@ -599,17 +617,19 @@ Si el producto de recarga no está configurado, el modal avisa y ofrece ir a Aju
 | **Comentario general** | Campo opcional para nota al cierre |
 | **Egresos de la sesión** | Bloque rojo (solo si hay egresos con medio definido) con el detalle por medio y el total. No forman parte del conteo físico de cada método |
 | **Alerta tickets apartados** | Si hay tickets en hold: confirmación antes de continuar |
-| **Botón "Confirmar Cierre"** | `confirmarCierreCaja()` — cierra cada método + cierre-total + logout automático |
+| **Botón "Confirmar Cierre"** | `confirmarCierreCaja()` — cierra cada medio (POST `/api/caja/cierre-metodo`) + cierre-total + logout automático |
 | **Botón "Cancelar"** | Cierra el modal sin cerrar la caja |
+
+Cada medio se concilia por separado: se registra un `cierre_parcial` con `medio_pago`, `monto_esperado`, `monto_confirmado` y la diferencia. El cierre total usa `saldo_total` (cajón + cuentas digitales).
 
 ### Movimientos del Día
 
 | Columna | Descripción |
 |---------|-------------|
 | Fecha | Timestamp del movimiento |
-| Tipo | Apertura / Ingreso / Egreso / Cierre |
+| Tipo | Apertura / Apertura de cuenta / Ingreso / Egreso / Cierre |
 | Monto | Formateado $ |
-| Método | Efectivo / Débito / Crédito / Transferencia |
+| Método | Efectivo / Débito / Crédito / Transferencia / cuenta digital |
 | Comentario | Descripción |
 
 | Elemento | Acción |
@@ -622,7 +642,7 @@ Si el producto de recarga no está configurado, el modal avisa y ofrece ir a Aju
 |-------|--------|
 | Tipo | Ingreso / Egreso |
 | Monto | Input number |
-| Método de Pago | Select |
+| Método de Pago | Select (incluye las cuentas digitales) |
 | Comentario | Input text |
 | **Botón "Registrar"** | `registrarMovimiento()` |
 | **Botón "Cancelar"** | `showNuevoMovimiento = false` |
@@ -638,13 +658,21 @@ Si el producto de recarga no está configurado, el modal avisa y ofrece ir a Aju
 
 ### API Calls
 - `GET /api/caja/movimientos` — listar movimientos
-- `GET /api/caja/resumen` — resumen por método (para modal de cierre)
-- `GET /api/caja/estado` — estado actual
-- `POST /api/caja/apertura` — abrir caja
+- `GET /api/caja/resumen` — resumen por medio (`por_medio` con apertura/ingresos/egresos/esperado por método, más `saldo_efectivo`, `saldo_cuenta_total`, `saldo_total`)
+- `GET /api/caja/estado` — estado actual (cajón y cuentas por separado)
+- `GET /api/caja/saldos-cuentas-sugeridos` — últimos saldos reales por cuenta digital para precargar la apertura
+- `POST /api/caja/apertura` — abrir caja (cajón + `saldos_cuentas`)
 - `POST /api/caja/cierre-total` — cerrar caja + logout automático
-- `POST /api/caja/cierre-metodo` — cerrar método con monto real y comentario
+- `POST /api/caja/cierre-metodo` — cerrar un medio con monto real y comentario
 - `POST /api/caja/ingreso` — ingreso manual
 - `POST /api/caja/egreso` — egreso manual
+
+### Cuentas Digitales vs Cajón
+- Las cuentas digitales son `smartpoint`, `mercadopago_qr`, `mercadopago_pos` y `qr_interop`. Se configuran en Ajustes.
+- Cada cuenta mantiene su propio saldo: apertura + ingresos - egresos.
+- Un egreso de cuenta (ej. una recarga de SUBE) **nunca** descuenta el efectivo del cajón.
+- `saldo_actual` conserva el nombre histórico pero representa solo el cajón; para el total usar `saldo_total`.
+- Sin apertura de la cuenta, el arqueo marca `falta_saldo_inicial` para ese medio.
 
 ### Auto-cierre por Cambio de Día
 - En `caja_service.caja_abierta()` compara fecha de apertura vs fecha actual
@@ -1067,6 +1095,7 @@ Si el producto de recarga no está configurado, el modal avisa y ofrece ir a Aju
 - `GET /api/dashboard/trimestral` — reporte trimestral vs trimestre anterior, por mes
 - `GET /api/reportes/vendido-por-peso?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&producto_id=` — kg e importe por producto (`router: reportes.py`, cualquier usuario autenticado). Solo ítems con `por_kilo = true` de ventas confirmadas
 - `GET /api/reportes/recargas?desde=YYYY-MM-DD&hasta=YYYY-MM-DD` — recargas de saldo por día y por medio de pago (`router: reportes.py`)
+- `GET /api/caja/reportes?desde=YYYY-MM-DD&hasta=YYYY-MM-DD` — sesiones agrupadas (apertura → cierre) por día. Cada sesión expone `apertura` (cajón) y `apertura_cuentas` (suma de los saldos iniciales de las cuentas digitales del turno). Las aperturas de cuenta no generan sesiones propias
 
 ---
 

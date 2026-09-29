@@ -1,4 +1,4 @@
-"""Servicio de Caja: apertura, cierre por método, cierre total.
+﻿"""Servicio de Caja: apertura, cierre por método, cierre total.
 
 Reglas de negocio:
 - Solo puede haber una caja abierta por sucursal a la vez.
@@ -17,6 +17,40 @@ from app.models.movimiento_caja import MovimientoCaja
 
 # Zona horaria Argentina (UTC-3)
 TZ_AR = timezone(timedelta(hours=-3))
+
+# Medios de pago con cuenta digital externa (el saldo vive fuera de la caja).
+# Se arquean por separado: el sistema calcula el saldo esperado de cada cuenta
+# (saldo inicial + ingresos - egresos) y el operador carga el saldo real que
+# muestra la app del proveedor.
+MEDIOS_CUENTA = {
+    "smartpoint": "SmartPoint",
+    "mercadopago_qr": "MercadoPago QR",
+    "mercadopago_pos": "MercadoPago POS",
+    "qr_interop": "QR Interoperable",
+}
+
+# Medios de pago sin cuenta digital propia (tarjetas, transferencias, efectivo)
+MEDIOS_INGRESO = {
+    "efectivo": "Efectivo",
+    "debito": "Débito",
+    "credito": "Crédito",
+    "transferencia": "Transferencia",
+    **MEDIOS_CUENTA,
+}
+
+MEDIOS_ESPERADOS_ARQUEO = ["efectivo", "debito", "credito", "transferencia"]
+
+
+def nombre_medio(medio_pago: Optional[str]) -> str:
+    """Nombre legible del medio de pago."""
+    if not medio_pago:
+        return "Efectivo"
+    return MEDIOS_INGRESO.get(medio_pago, medio_pago)
+
+
+def _es_apertura_de_caja(m: MovimientoCaja) -> bool:
+    """True si el movimiento es la apertura de la sesión (cajón)."""
+    return m.tipo == "apertura" and not m.medio_pago
 
 
 def _ahora_local() -> datetime:
@@ -60,7 +94,7 @@ def caja_abierta(db: Session, sucursal_id: int = 1) -> bool:
         if m.tipo == "cierre" and not m.medio_pago:
             return False
         # Apertura: caja abierta solo si corresponde al día actual
-        if m.tipo == "apertura":
+        if _es_apertura_de_caja(m):
             return _es_apertura_del_dia_actual(m.created_at)
     # Sin aperturas ni cierres registrados: caja cerrada
     return False
@@ -84,7 +118,7 @@ def cerrar_sesion_anterior_automaticamente(db: Session, sucursal_id: int = 1) ->
         # Si hay un cierre total reciente, no hay sesión abierta previa
         if m.tipo == "cierre" and not m.medio_pago:
             return False
-        if m.tipo == "apertura":
+        if _es_apertura_de_caja(m):
             apertura = m
             break
     if apertura is None:
@@ -93,8 +127,8 @@ def cerrar_sesion_anterior_automaticamente(db: Session, sucursal_id: int = 1) ->
         return False
 
     desglose = obtener_resumen_por_medio_pago(db, sucursal_id)
-    total = desglose["total_ingresos"]
-    desc = f"Cierre automático por cambio de día. Total ingresos: ${total:,.2f}"
+    total = desglose.get("saldo_medios_total", desglose.get("saldo_total"))
+    desc = f"Cierre automático por cambio de día. Total esperado: ${total:,.2f}"
     cierre = MovimientoCaja(
         tipo="cierre",
         monto=total,
@@ -118,15 +152,18 @@ def abrir_caja(
     sucursal_id: int = 1,
     monto_retiro: float = 0.0,
     motivo_retiro: str = "",
+    saldos_cuentas: Optional[dict] = None,
 ) -> MovimientoCaja:
     """Abre la caja con un monto inicial.
     
     Si hay monto_retiro > 0, crea automáticamente un egreso vinculado.
     
     Args:
-        monto_inicial: Monto con el que se abre la caja (sugerido del último cierre)
+        monto_inicial: Monto con el que se abre el cajón (sugerido del último cierre)
         monto_retiro: Monto que se aparta/retira al abrir (opcional)
         motivo_retiro: Motivo del retiro (ej: "Fondo para cambio", "Retiro de efectivo")
+        saldos_cuentas: Saldo inicial de cada cuenta digital al abrir
+            (ej: {"smartpoint": 5000, "mercadopago_qr": 1200})
     
     Returns:
         MovimientoCaja de la apertura
@@ -153,6 +190,26 @@ def abrir_caja(
     db.add(movimiento)
     db.commit()
     db.refresh(movimiento)
+
+    # Saldo inicial de cada cuenta digital: es el punto de partida del arqueo
+    # de esa cuenta (apertura + ingresos - egresos = saldo esperado).
+    for medio, monto in (saldos_cuentas or {}).items():
+        if medio not in MEDIOS_CUENTA or not monto or float(monto) <= 0:
+            continue
+        db.add(
+            MovimientoCaja(
+                tipo="apertura",
+                monto=float(monto),
+                descripcion=f"Apertura de {nombre_medio(medio)}",
+                medio_pago=medio,
+                referencia_tipo="apertura_cuenta",
+                referencia_id=movimiento.id,
+                usuario_id=usuario_id,
+                sucursal_id=sucursal_id,
+            )
+        )
+    if saldos_cuentas:
+        db.commit()
     
     # Si hay retiro, crear egreso automáticamente
     if monto_retiro > 0:
@@ -173,6 +230,30 @@ def abrir_caja(
         db.commit()
     
     return movimiento
+
+
+def obtener_saldos_cuentas_sugeridos(db: Session, sucursal_id: int = 1) -> dict:
+    """Saldos con los que seSugiere abrir las cuentas digitales.
+
+    Se toma el saldo real con el que quedó cada cuenta en el último cierre
+    parcial, para que el operador solo tenga que confirmar el número que ve en
+    la app del proveedor.
+    """
+    sugeridos: dict = {}
+    for medio in MEDIOS_CUENTA:
+        ultimo = (
+            db.query(MovimientoCaja)
+            .filter(
+                MovimientoCaja.sucursal_id == sucursal_id,
+                MovimientoCaja.tipo == "cierre_parcial",
+                MovimientoCaja.medio_pago == medio,
+            )
+            .order_by(MovimientoCaja.id.desc())
+            .first()
+        )
+        if ultimo is not None:
+            sugeridos[medio] = ultimo.monto or 0.0
+    return sugeridos
 
 
 def obtener_ultimo_cierre(db: Session, sucursal_id: int = 1) -> Optional[dict]:
@@ -273,13 +354,11 @@ def cerrar_metodo(
     if not caja_abierta(db, sucursal_id):
         raise ValueError("No hay caja abierta para cerrar.")
 
-    desglose = obtener_resumen_por_medio_pago(db, sucursal_id)
-    esperado = desglose["desglose"].get(medio_pago, 0)
-
-    # Para efectivo: sumar el monto de apertura inicial
-    if medio_pago == "efectivo":
-        apertura_monto = _obtener_monto_apertura(db, sucursal_id)
-        esperado += apertura_monto
+    arqueo = _construir_arqueo_por_medio(db, sucursal_id)
+    fila = next((f for f in arqueo if f["medio_pago"] == medio_pago), None)
+    if fila is None:
+        raise ValueError(f"El medio '{medio_pago}' no tiene movimientos en esta sesión.")
+    esperado = fila["esperado"]
 
     diferencia = monto_real - esperado
 
@@ -299,7 +378,7 @@ def cerrar_metodo(
         if apertura_sesion and ya_cerrado.id > apertura_sesion.id:
             raise ValueError(f"El método '{medio_pago}' ya fue cerrado en esta sesión.")
 
-    desc = f"Cierre {medio_pago}. Esperado: ${esperado:,.2f}. Diferencia: ${diferencia:,.2f}"
+    desc = f"Cierre {nombre_medio(medio_pago)}. Esperado: ${esperado:,.2f}. Diferencia: ${diferencia:,.2f}"
     if comentario:
         desc += f" — {comentario}"
 
@@ -332,9 +411,11 @@ def cerrar_todo(
         raise ValueError("No hay caja abierta para cerrar.")
 
     desglose = obtener_resumen_por_medio_pago(db, sucursal_id)
-    total = desglose["total_ingresos"]
+    total = desglose.get("saldo_medios_total", desglose.get("saldo_total"))
 
-    desc = f"Cierre total de caja. Total ingresos: ${total:,.2f}"
+    desc = (
+        f"Cierre total de caja. Total esperado de todos los medios: ${total:,.2f}"
+    )
     if comentario:
         desc += f" — {comentario}"
 
@@ -411,8 +492,18 @@ def registrar_egreso(
     return movimiento
 
 
-def obtener_saldo_actual(db: Session, sucursal_id: int = 1) -> float:
-    """Calcula el saldo actual desde la última apertura hasta ahora."""
+def obtener_saldo_por_medio(db: Session, sucursal_id: int = 1) -> dict:
+    """Saldo de cada medio de pago desde la apertura de la sesión actual.
+
+    Para cada medio devuelve:
+        apertura: saldo inicial con el que arrancó el medio en esta sesión
+        ingresos: total ingresado por el medio
+        egresos: total salido del medio
+        esperado: apertura + ingresos - egresos (con lo que debería haber)
+
+    La suma de los esperados es el total de dinero bajo control de la sesión
+    (cajón + cuentas digitales), sin mezclar fondos entre sí.
+    """
     movimientos = (
         db.query(MovimientoCaja)
         .filter(MovimientoCaja.sucursal_id == sucursal_id)
@@ -420,33 +511,84 @@ def obtener_saldo_actual(db: Session, sucursal_id: int = 1) -> float:
         .all()
     )
 
-    saldo = 0.0
+    saldos: dict = {}
     for m in movimientos:
         # Cierre total: fin del ciclo
         if m.tipo == "cierre" and not m.medio_pago:
-            saldo = 0.0
             break
-        if m.tipo in ("apertura", "ingreso"):
-            saldo += m.monto
-        elif m.tipo == "egreso":
-            saldo -= m.monto
-        # Cierre parcial no afecta el saldo (es informativo)
+        # Apertura del cajón: fin de la sesión actual (su monto es el fondo inicial)
+        if _es_apertura_de_caja(m):
+            fila = saldos.setdefault(
+                "efectivo",
+                {"apertura": 0.0, "ingresos": 0.0, "egresos": 0.0, "esperado": 0.0},
+            )
+            fila["apertura"] += m.monto or 0.0
+            break
 
-    return saldo
+        if m.tipo == "apertura" and m.medio_pago:
+            # Saldo inicial de una cuenta digital
+            fila = saldos.setdefault(
+                m.medio_pago,
+                {"apertura": 0.0, "ingresos": 0.0, "egresos": 0.0, "esperado": 0.0},
+            )
+            fila["apertura"] += m.monto or 0.0
+        elif m.tipo == "ingreso":
+            fila = saldos.setdefault(
+                m.medio_pago or "efectivo",
+                {"apertura": 0.0, "ingresos": 0.0, "egresos": 0.0, "esperado": 0.0},
+            )
+            fila["ingresos"] += m.monto or 0.0
+        elif m.tipo == "egreso":
+            fila = saldos.setdefault(
+                m.medio_pago or "efectivo",
+                {"apertura": 0.0, "ingresos": 0.0, "egresos": 0.0, "esperado": 0.0},
+            )
+            fila["egresos"] += m.monto or 0.0
+        # cierre_parcial es informativo, no afecta el saldo
+
+    for fila in saldos.values():
+        fila["esperado"] = fila["apertura"] + fila["ingresos"] - fila["egresos"]
+
+    return saldos
+
+
+def obtener_saldos_cuenta(db: Session, sucursal_id: int = 1) -> dict:
+    """Saldos actuales de las cuentas digitales (SmartPoint, MP, etc.)."""
+    saldos = obtener_saldo_por_medio(db, sucursal_id)
+    return {
+        medio: fila["esperado"]
+        for medio, fila in saldos.items()
+        if medio in MEDIOS_CUENTA
+    }
+
+
+def obtener_saldo_actual(db: Session, sucursal_id: int = 1) -> float:
+    """Saldo del cajón (efectivo) desde la última apertura hasta ahora."""
+    return obtener_saldo_por_medio(db, sucursal_id).get("efectivo", {}).get("esperado", 0.0)
 
 
 def obtener_estado_caja(db: Session, sucursal_id: int = 1) -> dict:
-    """Devuelve el estado actual de la caja."""
+    """Devuelve el estado actual de la caja con el cajón y las cuentas separados."""
     # Auto-cierre por cambio de día: si la última apertura es de un día anterior,
     # registrar el cierre automático para que hoy la caja arranque cerrada.
     cerrar_sesion_anterior_automaticamente(db, sucursal_id)
     abierta = caja_abierta(db, sucursal_id)
-    saldo = obtener_saldo_actual(db, sucursal_id) if abierta else 0.0
+    saldos = obtener_saldo_por_medio(db, sucursal_id) if abierta else {}
+    saldo_efectivo = saldos.get("efectivo", {}).get("esperado", 0.0)
+    saldos_cuentas = {
+        medio: fila["esperado"]
+        for medio, fila in saldos.items()
+        if medio in MEDIOS_CUENTA
+    }
     metodos_cerrados = _metodos_ya_cerrados(db, sucursal_id) if abierta else []
 
     return {
         "abierta": abierta,
-        "saldo_actual": saldo,
+        "saldo_actual": saldo_efectivo,
+        "saldo_efectivo": saldo_efectivo,
+        "saldos_cuentas": saldos_cuentas,
+        "saldo_cuenta_total": sum(saldos_cuentas.values()),
+        "saldo_total": saldo_efectivo + sum(saldos_cuentas.values()),
         "metodos_cerrados": metodos_cerrados,
     }
 
@@ -463,7 +605,7 @@ def _metodos_ya_cerrados(db: Session, sucursal_id: int = 1) -> list:
     for m in movimientos:
         if m.tipo == "cierre" and not m.medio_pago:
             break
-        if m.tipo == "apertura":
+        if _es_apertura_de_caja(m):
             break
         if m.tipo == "cierre_parcial" and m.medio_pago:
             cerrados.add(m.medio_pago)
@@ -506,7 +648,7 @@ def obtener_resumen_por_medio_pago(db: Session, sucursal_id: int = 1) -> dict:
         if m.tipo == "cierre" and not m.medio_pago:
             break
         # Apertura: fin del ciclo de la sesión actual
-        if m.tipo == "apertura":
+        if _es_apertura_de_caja(m):
             break
         if m.tipo == "ingreso":
             mp = m.medio_pago or "efectivo"
@@ -535,6 +677,18 @@ def obtener_resumen_por_medio_pago(db: Session, sucursal_id: int = 1) -> dict:
         if _es_posterior_a_apertura(db, v.id, sucursal_id):
             cta_corriente_total += v.total
 
+    por_medio = _construir_arqueo_por_medio(db, sucursal_id)
+    saldo_efectivo = next(
+        (f["esperado"] for f in por_medio if f["medio_pago"] == "efectivo"), 0.0
+    )
+    saldo_cuenta_total = sum(
+        f["esperado"] for f in por_medio if f["es_cuenta_digital"]
+    )
+    # Total de todo lo que se arquea medio por medio. Es el que se usa como
+    # monto esperado del cierre total, para que coincida con la suma de los
+    # cierres parciales (débito/crédito/transferencia incluidos).
+    saldo_medios_total = sum(f["esperado"] for f in por_medio)
+
     return {
         "desglose": desglose,
         "total_ingresos": sum(desglose.values()),
@@ -542,7 +696,55 @@ def obtener_resumen_por_medio_pago(db: Session, sucursal_id: int = 1) -> dict:
         "egresos_por_medio": egresos_por_medio,
         "cta_corriente": cta_corriente_total,
         "apertura": _obtener_monto_apertura(db, sucursal_id),
+        "por_medio": por_medio,
+        "saldo_efectivo": saldo_efectivo,
+        "saldo_cuenta_total": saldo_cuenta_total,
+        "saldo_total": saldo_efectivo + saldo_cuenta_total,
+        "saldo_medios_total": saldo_medios_total,
     }
+
+
+def _construir_arqueo_por_medio(db: Session, sucursal_id: int = 1) -> List[dict]:
+    """Arma la lista de medios a arquear con su saldo esperado.
+
+    Incluye siempre efectivo, débito, crédito y transferencia, más las cuentas
+    digitales (SmartPoint, MP, etc.) que tengan movimiento o saldo inicial en la
+    sesión. Cada medio se cuadra por separado: el saldo de una cuenta digital
+    nunca se compensa con el del cajón.
+    """
+    saldos = obtener_saldo_por_medio(db, sucursal_id)
+
+    medios = list(MEDIOS_ESPERADOS_ARQUEO)
+    for medio in MEDIOS_CUENTA:
+        fila = saldos.get(medio)
+        if fila and (fila["apertura"] or fila["ingresos"] or fila["egresos"]):
+            medios.append(medio)
+    # Cualquier otro medio con movimiento (ej: ajustes manuales)
+    for medio, fila in saldos.items():
+        if medio not in medios and (fila["ingresos"] or fila["egresos"] or fila["apertura"]):
+            medios.append(medio)
+
+    arqueo = []
+    for medio in medios:
+        fila = saldos.get(medio, {"apertura": 0.0, "ingresos": 0.0, "egresos": 0.0, "esperado": 0.0})
+        es_cuenta = medio in MEDIOS_CUENTA
+        arqueo.append({
+            "medio_pago": medio,
+            "nombre": nombre_medio(medio),
+            "es_cuenta_digital": es_cuenta,
+            "apertura": round(fila["apertura"], 2),
+            "ingresos": round(fila["ingresos"], 2),
+            "egresos": round(fila["egresos"], 2),
+            "esperado": round(fila["esperado"], 2),
+            # Si la cuenta se movió pero se abrió sin saldo inicial, el esperado
+            # no se puede comparar con el saldo de la app.
+            "falta_saldo_inicial": bool(
+                es_cuenta
+                and not fila["apertura"]
+                and (fila["ingresos"] or fila["egresos"])
+            ),
+        })
+    return arqueo
 
 
 def _es_posterior_a_apertura(db: Session, referencia_id: int, sucursal_id: int) -> bool:
@@ -552,6 +754,7 @@ def _es_posterior_a_apertura(db: Session, referencia_id: int, sucursal_id: int) 
         .filter(
             MovimientoCaja.sucursal_id == sucursal_id,
             MovimientoCaja.tipo == "apertura",
+            MovimientoCaja.medio_pago == None,
         )
         .order_by(MovimientoCaja.id.desc())
         .first()
@@ -583,18 +786,19 @@ def _apertura_sesion_actual(db: Session, sucursal_id: int = 1) -> Optional[Movim
     for m in movimientos:
         if m.tipo == "cierre" and not m.medio_pago:
             return None
-        if m.tipo == "apertura":
+        if _es_apertura_de_caja(m):
             return m
     return None
 
 
 def _obtener_monto_apertura(db: Session, sucursal_id: int = 1) -> float:
-    """Obtiene el monto de la última apertura de caja."""
+    """Obtiene el monto con el que se abrió el cajón en la sesión actual."""
     apertura = (
         db.query(MovimientoCaja)
         .filter(
             MovimientoCaja.sucursal_id == sucursal_id,
             MovimientoCaja.tipo == "apertura",
+            MovimientoCaja.medio_pago == None,
         )
         .order_by(MovimientoCaja.id.desc())
         .first()
