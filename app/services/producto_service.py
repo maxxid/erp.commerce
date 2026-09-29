@@ -126,6 +126,7 @@ def actualizar_producto(db: Session, producto: Producto, data: dict) -> Producto
         "precio_venta", "precio_etiqueta", "imagen_url", "sku", "propiedades", "fuente",
         "categoria_id", "stock_minimo", "observaciones", "fecha_vencimiento",
         "tipo_venta", "precio_por_kilo", "precio_por_unidad", "controla_stock",
+        "es_recarga",
     ]
     for field in updatable:
         if field in data and data[field] is not None:

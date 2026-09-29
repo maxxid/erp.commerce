@@ -8,6 +8,7 @@ Campos de precio: referencia (fuente externa), costo (proveedor), venta (públic
 
 from sqlalchemy import (
     Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text, JSON, Table,
+    true, false,
 )
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
@@ -65,7 +66,14 @@ class Producto(Base):
     # False = el producto NO controla stock: venderlo no genera MovimientoStock,
     # no descuenta lotes y no marca déficit. Útil para fraccionados (panadería)
     # donde el stock en kg se desincroniza solo y solo importa lo vendido.
-    controla_stock = Column(Boolean, default=True, nullable=False, index=True)
+    # server_default para que el DDL quede con DEFAULT (INSERTS que no manden el
+    # campo, tipo SQL crudo o instalaciones viejas, no rompen).
+    controla_stock = Column(Boolean, default=True, server_default=true(), nullable=False, index=True)
+
+    # True = el producto es un SERVICIO DE RECARGA (SUBE, saldo, etc.).
+    # No descuenta stock y además, al confirmar la venta, registra el egreso
+    # real del dinero cargado (que sale de una cuenta digital, no del cajón).
+    es_recarga = Column(Boolean, default=False, server_default=false(), nullable=False, index=True)
 
     # Bandera de revisión: se activa cuando un producto se vende por encima de su
     # stock real (suma de lotes). Indica posible error humano de carga (ej. se

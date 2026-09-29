@@ -260,6 +260,129 @@
     <BaseCard>
       <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-brand-100 flex items-center justify-center">
+            <i class="fa-solid fa-mobile-screen-button text-brand-600 text-sm"></i>
+          </div>
+          <div>
+            <h2 class="font-semibold text-slate-900">Recargas de saldo</h2>
+            <p class="text-xs text-slate-500">Cuánto se cargó, cuánto se cobró y la ganancia (adicional) del período</p>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <BaseInput v-model="recargasDesde" type="date" size="sm" class="w-40" />
+          <span class="text-xs text-slate-400">a</span>
+          <BaseInput v-model="recargasHasta" type="date" size="sm" class="w-40" />
+          <BaseButton variant="primary" size="sm" :loading="loadingRecargas" @click="loadRecargas">
+            <i class="fa-solid fa-filter text-xs"></i>
+            Calcular
+          </BaseButton>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-4">
+        <KpiCard
+          label="Cargado"
+          :value="reporteRecargas.totales.monto_cargado"
+          prefix="$ "
+          icon="fa-mobile-screen-button"
+          icon-color="brand"
+          :decimals="2"
+          :animate="false"
+        />
+        <KpiCard
+          label="Cobrado"
+          :value="reporteRecargas.totales.total_cobrado"
+          prefix="$ "
+          icon="fa-cash-register"
+          icon-color="info"
+          :decimals="2"
+          :animate="false"
+        />
+        <KpiCard
+          label="Ganancia (adicional)"
+          :value="reporteRecargas.totales.ganancia"
+          prefix="$ "
+          icon="fa-arrow-trend-up"
+          icon-color="success"
+          :decimals="2"
+          :animate="false"
+        />
+        <KpiCard
+          label="Operaciones"
+          :value="reporteRecargas.totales.recargas"
+          icon="fa-receipt"
+          icon-color="warning"
+          :animate="false"
+        />
+      </div>
+
+      <div v-if="loadingRecargas" class="flex items-center justify-center py-12 text-slate-400 text-sm">
+        <i class="fa-solid fa-circle-notch fa-spin mr-2"></i>
+        Calculando recargas...
+      </div>
+      <EmptyState
+        v-else-if="!reporteRecargas.por_dia.length"
+        icon="fa-mobile-screen-button"
+        title="Sin recargas en el período"
+        text="Vendé recargas desde el POS dentro del rango de fechas para ver el detalle."
+        compact
+      />
+      <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div>
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Por día</p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="border-b border-slate-200 dark:border-slate-700 text-left">
+                  <th class="py-2 px-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Fecha</th>
+                  <th class="py-2 px-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold text-right">Cargado</th>
+                  <th class="py-2 px-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold text-right">Cobrado</th>
+                  <th class="py-2 px-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold text-right">Ganancia</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in reporteRecargas.por_dia" :key="row.fecha" class="border-b border-slate-100 dark:border-slate-800/60">
+                  <td class="py-2.5 px-3 font-semibold text-slate-900 dark:text-white">{{ row.fecha }}</td>
+                  <td class="py-2.5 px-3 text-right font-mono-data text-slate-700 dark:text-slate-300">{{ formatCurrency(row.cargado) }}</td>
+                  <td class="py-2.5 px-3 text-right font-mono-data text-slate-700 dark:text-slate-300">{{ formatCurrency(row.cobrado) }}</td>
+                  <td class="py-2.5 px-3 text-right font-mono-data font-bold text-emerald-600 dark:text-emerald-400">{{ formatCurrency(row.ganancia) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div>
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Por medio de pago del cliente</p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="border-b border-slate-200 dark:border-slate-700 text-left">
+                  <th class="py-2 px-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Medio</th>
+                  <th class="py-2 px-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold text-right">Operaciones</th>
+                  <th class="py-2 px-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold text-right">Cargado</th>
+                  <th class="py-2 px-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold text-right">Cobrado</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in reporteRecargas.por_medio_pago" :key="row.medio_pago" class="border-b border-slate-100 dark:border-slate-800/60">
+                  <td class="py-2.5 px-3 font-semibold text-slate-900 dark:text-white">
+                    {{ MEDIO_LABELS[row.medio_pago] || row.medio_pago }}
+                  </td>
+                  <td class="py-2.5 px-3 text-right font-mono-data text-slate-700 dark:text-slate-300">{{ row.recargas }}</td>
+                  <td class="py-2.5 px-3 text-right font-mono-data text-slate-700 dark:text-slate-300">{{ formatCurrency(row.cargado) }}</td>
+                  <td class="py-2.5 px-3 text-right font-mono-data font-bold text-slate-900 dark:text-white">{{ formatCurrency(row.cobrado) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </BaseCard>
+
+    <BaseCard>
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div class="flex items-center gap-2.5">
           <div class="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
             <i class="fa-solid fa-weight-hanging text-emerald-600 text-sm"></i>
           </div>
@@ -552,6 +675,40 @@ async function loadVendidoPorPeso() {
   }
 }
 
+const recargasDesde = ref(fechaISO(hace30))
+const recargasHasta = ref(fechaISO(hoy))
+const loadingRecargas = ref(false)
+const reporteRecargas = ref({ por_dia: [], por_medio_pago: [], totales: { monto_cargado: 0, total_cobrado: 0, ganancia: 0, recargas: 0, unidades: 0 } })
+
+const MEDIO_LABELS = {
+  efectivo: 'Efectivo',
+  transferencia: 'Transferencia',
+  mercadopago_qr: 'QR MP',
+  mercadopago_pos: 'POS MP',
+  smartpoint: 'SmartPoint',
+  qr_interop: 'QR BCRA',
+  debito: 'Débito',
+  credito: 'Crédito',
+  cta_corriente: 'Cta. Cte.',
+}
+
+async function loadRecargas() {
+  if (!recargasDesde.value || !recargasHasta.value) {
+    toast.error('Elegí el rango de fechas')
+    return
+  }
+  loadingRecargas.value = true
+  try {
+    const params = new URLSearchParams({ desde: recargasDesde.value, hasta: recargasHasta.value })
+    const data = await api.get(`/api/reportes/recargas?${params}`)
+    reporteRecargas.value = data || { por_dia: [], por_medio_pago: [], totales: { monto_cargado: 0, total_cobrado: 0, ganancia: 0, recargas: 0, unidades: 0 } }
+  } catch (e) {
+    toast.error(e?.data?.detail || 'Error al cargar el reporte de recargas')
+  } finally {
+    loadingRecargas.value = false
+  }
+}
+
 const stockLoteSearch = ref('')
 const loadingLotes = ref(false)
 const syncingLotes = ref(false)
@@ -777,7 +934,7 @@ async function syncQuarterly(silent = false) {
   syncingQuarterly.value = false
 }
 
-onMounted(() => { syncAll(); loadStockPorLote(); loadVendidoPorPeso() })
+onMounted(() => { syncAll(); loadStockPorLote(); loadVendidoPorPeso(); loadRecargas() })
 </script>
 
 <style scoped>

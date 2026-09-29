@@ -765,6 +765,27 @@
           </div>
         </div>
 
+        <!-- Egresos de la sesión (recargas, retiros a cuentas digitales) -->
+        <div v-if="egresosPorMedio.length" class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4">
+          <div class="flex items-center gap-2 mb-2">
+            <i class="fa-solid fa-arrow-up-from-bracket text-red-500"></i>
+            <span class="font-semibold text-red-700 dark:text-red-300 text-sm">Egresos de la sesión</span>
+          </div>
+          <p class="text-[10px] text-red-600 dark:text-red-400 mb-2">
+            Salidas de dinero de la sesión. No forman parte del conteo físico de cada medio.
+          </p>
+          <div class="space-y-1">
+            <div v-for="e in egresosPorMedio" :key="e.medio" class="flex items-center justify-between text-sm">
+              <span class="text-red-700 dark:text-red-300">{{ e.label }}</span>
+              <span class="font-mono-data font-bold text-red-600 dark:text-red-400">-{{ fc(e.monto) }}</span>
+            </div>
+            <div class="flex items-center justify-between text-sm pt-1 border-t border-red-200 dark:border-red-800">
+              <span class="font-semibold text-red-700 dark:text-red-300">Total egresado</span>
+              <span class="font-mono-data font-bold text-red-600 dark:text-red-400">-{{ fc(totalEgresos) }}</span>
+            </div>
+          </div>
+        </div>
+
         <!-- Resumen Total -->
         <div class="bg-slate-100 dark:bg-slate-800 rounded-xl p-4">
           <div class="flex items-center justify-between">
@@ -840,7 +861,7 @@ const auth = useAuthStore()
 const toast = useToastStore()
 const cajaStore = useCajaStore()
 const { playOpenCash, playCloseCash } = useSounds()
-const cajaResumen = reactive({ metodos_cerrados: [] })
+const cajaResumen = reactive({ metodos_cerrados: [], egresos_por_medio: {} })
 const cierreParcial = reactive({ activo: false, metodo: '', monto_real: 0, comentario: '' })
 
 const movements = ref([])
@@ -905,11 +926,35 @@ const metodosArqueo = reactive([
   { label: 'Transferencia', valor: 'transferencia', esperado: 0, montoReal: 0, comentario: '', cerrado: false, colorClass: 'bg-amber-500' },
 ])
 
+const MEDIO_LABELS = {
+  efectivo: 'Efectivo',
+  debito: 'Débito',
+  credito: 'Crédito',
+  transferencia: 'Transferencia',
+  mercadopago_qr: 'QR MercadoPago',
+  mercadopago_pos: 'POS MercadoPago',
+  smartpoint: 'SmartPoint',
+  qr_interop: 'QR BCRA',
+  cta_corriente: 'Cta. Cte.',
+}
+
 const nuevoMovimiento = reactive({ tipo: 'Ingreso', monto: 0, metodo: 'Efectivo', comentario: '' })
 
 const totalEsperado = computed(() => metodosArqueo.reduce((sum, m) => sum + m.esperado, 0))
 const totalReal = computed(() => metodosArqueo.reduce((sum, m) => sum + (m.montoReal || 0), 0))
 const diferenciaTotal = computed(() => totalReal.value - totalEsperado.value)
+
+// Egresos por medio de la sesión (ej: recargas que salieron de MercadoPago/SmartPoint).
+// No afectan el conteo físico de cada método: se informan aparte para que el cierre
+// muestre el egreso real sin romper el arqueo del efectivo.
+const egresosPorMedio = computed(() => {
+  const porMedio = cajaResumen.egresos_por_medio || {}
+  return Object.entries(porMedio)
+    .map(([medio, monto]) => ({ medio, label: MEDIO_LABELS[medio] || medio, monto }))
+    .filter(e => e.monto > 0)
+    .sort((a, b) => b.monto - a.monto)
+})
+const totalEgresos = computed(() => egresosPorMedio.value.reduce((sum, e) => sum + e.monto, 0))
 
 const ingresosHoy = computed(() => movements.value.filter(m => m.tipo === 'Ingreso' && esDeHoy(m)).reduce((sum, m) => sum + m.monto, 0))
 const egresosHoy = computed(() => movements.value.filter(m => m.tipo === 'Egreso' && esDeHoy(m)).reduce((sum, m) => sum + m.monto, 0))
@@ -1302,6 +1347,7 @@ async function fetchResumen() {
     const data = await api.get('/api/caja/resumen')
     if (data) {
       cajaResumen.metodos_cerrados = data.metodos_cerrados || []
+      cajaResumen.egresos_por_medio = data.egresos_por_medio || {}
       if (data.desglose) {
         cajaStore.saldo_actual = (data.desglose.efectivo || 0) +
           (data.desglose.debito || 0) + (data.desglose.credito || 0) +

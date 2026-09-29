@@ -1,4 +1,4 @@
-"""
+﻿"""
 ERP Comercio — Aplicación principal.
 
 FastAPI + SQLAlchemy + JWT.
@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from app.config import settings
 from app.database import engine, Base
 from app.models import *  # noqa: F401, F403 — Registrar todos los modelos
-from app.routers import auth, productos, categorias, dashboard, caja, clientes, ventas, proveedores, compras, calendario, backups, usuarios, auditoria, licencia, catalogo, ofertas, facturacion, configuracion as config_router, pagos, lotes, denominaciones, reportes
+from app.routers import auth, productos, categorias, dashboard, caja, clientes, ventas, proveedores, compras, calendario, backups, usuarios, auditoria, licencia, catalogo, ofertas, facturacion, configuracion as config_router, pagos, lotes, denominaciones, reportes, recargas
 
 
 def crear_app() -> FastAPI:
@@ -55,6 +55,7 @@ def crear_app() -> FastAPI:
     app.include_router(lotes.router)
     app.include_router(denominaciones.router)
     app.include_router(reportes.router)
+    app.include_router(recargas.router)
 
     # Servir el frontend Vue 3 (producción)
     @app.get("/app")
@@ -94,6 +95,7 @@ def crear_app() -> FastAPI:
         _migrate_lotes_iniciales()
         _seed_denominaciones()
         _seed_database()
+        _seed_producto_recarga()
         _start_backup_scheduler()
 
     return app
@@ -248,6 +250,10 @@ def _migrate_new_columns():
             conn.execute(sa.text("ALTER TABLE productos ADD COLUMN controla_stock BOOLEAN NOT NULL DEFAULT 1"))
             conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_productos_controla_stock ON productos (controla_stock)"))
             conn.commit()
+        if "es_recarga" not in existentes_prod:
+            conn.execute(sa.text("ALTER TABLE productos ADD COLUMN es_recarga BOOLEAN NOT NULL DEFAULT 0"))
+            conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_productos_es_recarga ON productos (es_recarga)"))
+            conn.commit()
         existentes_lic = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(licencias)"))]
         if "machine_id" not in existentes_lic:
             conn.execute(sa.text("ALTER TABLE licencias ADD COLUMN machine_id VARCHAR(200)"))
@@ -353,6 +359,40 @@ def _seed_denominaciones():
             print(f"[Denominaciones] {creadas} denominación(es) por defecto creada(s)")
     except Exception as e:
         print(f"[Denominaciones] Error al crear denominaciones por defecto: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
+def _seed_producto_recarga():
+    """Crea el producto de servicio de recarga si todavía no hay ninguno.
+
+    Es idempotente: solo corre la primera vez (o si el usuario lo borró).
+    El precio de venta real lo calcula el POS como base + adicional, así que
+    el precio del producto es solo un valor de referencia.
+    """
+    from app.database import SessionLocal
+    from app.models.producto import Producto
+
+    db = SessionLocal()
+    try:
+        if db.query(Producto).filter(Producto.es_recarga == True).first():
+            return
+        db.add(Producto(
+            codigo_barras="REC-SUBE",
+            nombre="Recarga SUBE",
+            descripcion="Carga de saldo. Se cobra base + adicional; el dinero sale de la cuenta digital configurada.",
+            precio_venta=1100,
+            precio_costo=1000,
+            stock_actual=0,
+            controla_stock=False,
+            es_recarga=True,
+            fuente="sistema",
+        ))
+        db.commit()
+        print("[Recargas] Producto 'Recarga SUBE' creado")
+    except Exception as e:
+        print(f"[Recargas] Error al crear el producto de recarga: {e}")
         db.rollback()
     finally:
         db.close()

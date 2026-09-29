@@ -388,12 +388,18 @@ def registrar_egreso(
     referencia_tipo: Optional[str] = None,
     referencia_id: Optional[int] = None,
     sucursal_id: int = 1,
+    medio_pago: Optional[str] = None,
 ) -> MovimientoCaja:
-    """Registra un egreso de dinero (ej: pago a proveedor, retiro)."""
+    """Registra un egreso de dinero (ej: pago a proveedor, retiro, recarga).
+
+    `medio_pago` indica de qué cuenta sale el dinero (para las recargas, la cuenta
+    digital desde la que se carga). Si se deja None se comporta como antes.
+    """
     movimiento = MovimientoCaja(
         tipo="egreso",
         monto=monto,
         descripcion=descripcion,
+        medio_pago=medio_pago,
         referencia_tipo=referencia_tipo,
         referencia_id=referencia_id,
         usuario_id=usuario_id,
@@ -494,6 +500,7 @@ def obtener_resumen_por_medio_pago(db: Session, sucursal_id: int = 1) -> dict:
 
     desglose = {"efectivo": 0, "debito": 0, "credito": 0, "transferencia": 0}
     egresos_total = 0
+    egresos_por_medio: dict = {}
     for m in movimientos:
         # Cierre total: fin de la sesión actual
         if m.tipo == "cierre" and not m.medio_pago:
@@ -507,6 +514,8 @@ def obtener_resumen_por_medio_pago(db: Session, sucursal_id: int = 1) -> dict:
                 desglose[mp] = desglose.get(mp, 0) + m.monto
         elif m.tipo == "egreso":
             egresos_total += m.monto
+            if m.medio_pago:
+                egresos_por_medio[m.medio_pago] = egresos_por_medio.get(m.medio_pago, 0) + m.monto
         # cierre_parcial es informativo, no afecta el desglose
 
     # Ventas en cta_corriente (no generan MovimientoCaja, van directo a Venta)
@@ -530,6 +539,7 @@ def obtener_resumen_por_medio_pago(db: Session, sucursal_id: int = 1) -> dict:
         "desglose": desglose,
         "total_ingresos": sum(desglose.values()),
         "total_egresos": egresos_total,
+        "egresos_por_medio": egresos_por_medio,
         "cta_corriente": cta_corriente_total,
         "apertura": _obtener_monto_apertura(db, sucursal_id),
     }

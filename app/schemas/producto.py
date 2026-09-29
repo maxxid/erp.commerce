@@ -27,6 +27,7 @@ class ProductoBase(BaseModel):
     precio_por_kilo: Optional[float] = None
     precio_por_unidad: Optional[float] = None
     controla_stock: Optional[bool] = True
+    es_recarga: Optional[bool] = False
 
 
 class ProductoCreate(ProductoBase):
@@ -58,6 +59,7 @@ class ProductoUpdate(BaseModel):
     precio_por_kilo: Optional[float] = None
     precio_por_unidad: Optional[float] = None
     controla_stock: Optional[bool] = None
+    es_recarga: Optional[bool] = None
 
 
 class ProductoOut(ProductoBase):
@@ -74,6 +76,7 @@ class ProductoOut(ProductoBase):
     categoria_nombre: Optional[str] = None
     flag_revision_stock: Optional[bool] = False
     deficit_stock: Optional[float] = 0.0
+    es_recarga: bool = False
     created_at: datetime
     updated_at: Optional[datetime] = None
 
@@ -108,6 +111,7 @@ class ProductoLookupResponse(BaseModel):
     precio_por_kilo: Optional[float] = None
     precio_por_unidad: Optional[float] = None
     controla_stock: bool = True
+    es_recarga: bool = False
     ia_mode: bool = False
     _cached: bool = False
     comparacion: Optional[list] = None

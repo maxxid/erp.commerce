@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.models.venta import Venta, VentaItem, VentaItemLote
 from app.models.producto import Producto
 from app.models.cliente import Cliente
-from app.services import stock_service, caja_service, oferta_service, lote_service
+from app.services import stock_service, caja_service, oferta_service, lote_service, recarga_service
 
 
 def generar_numero(db: Session, prefijo: str = "V") -> str:
@@ -283,6 +283,14 @@ def confirmar_venta(
                 medio_pago=medio_pago,
             )
 
+    # Recargas de dinero digital: el costo real es lo cargado y sale un EGRESO
+    # de caja por la cuenta digital configurada (MercadoPago / SmartPoint / ...).
+    cfg_recarga = recarga_service.get_config(db)
+    for item in venta.items:
+        producto = db.query(Producto).filter(Producto.id == item.producto_id).first()
+        if producto is not None and producto.es_recarga:
+            recarga_service.registrar_venta_recarga(db, venta, item, producto, uid, cfg_recarga)
+
     db.commit()
     db.refresh(venta)
     return venta
@@ -352,7 +360,11 @@ def anular_venta(
             referencia_tipo="venta_anulada",
             referencia_id=venta.id,
             sucursal_id=venta.sucursal_id,
+            medio_pago=venta.medio_pago,
         )
+
+    # Revertir recargas: el dinero cargado vuelve a la cuenta digital de origen.
+    recarga_service.anular_recargas(db, venta, uid)
 
     venta.estado = "anulada"
     db.commit()

@@ -136,6 +136,7 @@
 | **Stock Crítico** | Cantidad de productos con stock <= stock_minimo |
 | **Ventas Mes** | Total del mes actual (solo en modo simple: 4 cards) |
 | **Ticket Promedio** | Promedio por ticket (solo en modo simple: 4 cards) |
+| **Recargas Hoy** | Solo aparece si hubo recargas: monto cargado hoy ($) + cantidad y ganancia del adicional. Viene de `recargas_hoy` en `GET /api/dashboard/resumen` |
 | **Stock Total** | Unidades en stock (solo en modo simple) |
 | **Tendencia** | Variación vs período anterior (solo en modo simple) |
 
@@ -263,6 +264,7 @@
 | **Botón "Confirmar Venta"** | `confirmarVenta()` — flujo completo de confirmación |
 | **Link "Vaciar carrito"** | `vaciarCarrito()` — limpia carrito |
 | **Link "Hold"** | `holdTicket()` — aparta el carrito en localStorage, vacía el carrito. Muestra toast con ID del ticket |
+| **Botón "Recarga"** | Header del POS — abre el modal de recarga de saldo (ver "Servicio de Recargas") |
 | **Dropdown recall** | `showRecallDropdown` — lista tickets apartados con items, total, tiempo transcurrido. Tickets >2h destacados en ámbar |
 | **Botón recall por ticket** | `recallTicket(id)` — restaura items, subtotal, descuento, cliente, medio de pago |
 | **Botón descartar** | `deleteHeldTicket(id)` — elimina ticket (registra en auditoría local) |
@@ -288,8 +290,19 @@
 9. Muestra TicketModal
 10. Carrito se vacía, focus vuelve al escáner
 
-### Flujo de Apartado (Hold) / Recall
+### Flujo de Recarga (POS)
 
+1. Botón "Recarga" en el header → `abrirModalRecarga()`
+2. Se carga `GET /api/recargas/config` al montar el POS (monto base, adicional %, cuenta de salida, producto)
+3. Elegir monto (input o atajos de $1.000 / $2.000 / $3.000 / $5.000 / $10.000)
+4. Se muestra el desglose en vivo: cargado, adicional y total a cobrar
+5. "Agregar al carrito" → una línea de venta con `cantidad` = unidades y `precio_unitario` = base + adicional
+6. Se cobra como cualquier venta (efectivo / transferencia / etc.)
+7. Al confirmar, el backend registra el egreso de caja por el monto cargado desde la cuenta digital
+
+Si el producto de recarga no está configurado, el modal avisa y ofrece ir a Ajustes (solo admin / encargado).
+
+### Flujo de Apartado (Hold) / Recall
 1. "Hold" → `holdTicket()` guarda carrito en `localStorage('apex-pos-held')` con timestamp, items, total
 2. Carrito se vacía, toast informa ID del ticket
 3. Badge contador en header del POS muestra cantidad de tickets apartados
@@ -410,6 +423,41 @@
 | **Alertas** | Quedan fuera de `GET /api/productos/stock-bajo`, de los filtros "Stock bajo"/"Sin stock" de Productos y de la grilla del POS (muestran badge `s/ctrl`) |
 | **Migración** | `ALTER TABLE productos ADD COLUMN controla_stock BOOLEAN NOT NULL DEFAULT 1` en `_migrate_new_columns()` (`app/main.py`) |
 
+### Servicio de Recargas (SUBE, saldo, etc.)
+
+*(cargar saldo a un cliente cobrando base + adicional, con el dinero saliendo de una cuenta digital)*
+
+| Elemento | Comportamiento |
+|----------|----------------|
+| **Botón "Recarga"** | Header del POS. Abre el modal de recarga (solo visible si hay un producto de recarga configurado) |
+| **Monto a cargar** | Input libre + atajos de $1.000 / $2.000 / $3.000 / $5.000 / $10.000. Solo múltiplos del monto base (por defecto $1.000) |
+| **Desglose** | Muestra lo que se carga, el adicional y el total a cobrar en vivo |
+| **Al confirmar la venta** | Se cobra el total (efectivo / transferencia / etc.) y sale un **egreso real de caja** por el monto cargado desde la cuenta digital configurada |
+| **Ganancia** | El adicional. El costo del ítem se guarda como el monto cargado, así el Dashboard no cuenta los $1.000 cargados como ganancia |
+| **Anulación** | Devuelve el dinero cargado a la cuenta digital (movimiento de ingreso compensatorio) y excluye la recarga del reporte |
+| **Movimientos** | El egreso queda en el listado de movimientos de caja con `medio_pago` = cuenta de salida |
+| **Cierre de caja** | Los egresos de la sesión se informan aparte por medio (no afectan el conteo físico de cada método) |
+| **Dashboard** | KPI "Recargas Hoy" (cargado + ganancia) cuando hubo recargas en el día |
+| **Reportes** | Card "Recargas de saldo": cargado, cobrado, ganancia y operaciones, por día y por medio de pago del cliente |
+| **Semilla** | `_seed_producto_recarga()` crea el producto "Recarga SUBE" (`es_recarga=True`, sin stock) la primera vez que arranca |
+
+**Ajustes → Servicio de Recargas** *(tarjeta colapsable en `/ajustes`)*
+
+| Campo | Detalle |
+|-------|---------|
+| Monto base por unidad | Default `1000`. Solo se admiten múltiplos de este valor |
+| Adicional (%) | Default `10`. El cliente paga `base × (1 + %)` por unidad ($1.100) |
+| Cuenta de salida | De dónde sale el dinero para cargar: `smartpoint`, `mercadopago_qr`, `mercadopago_pos`, `qr_interop`, `debito`, `credito`, `transferencia`, `efectivo` |
+| Producto que representa la recarga | Solo productos sin control de stock. Al elegirlo queda marcado `es_recarga=True` |
+
+**Backend:**
+- Tabla `recargas` (`app/models/recarga.py`): `venta_id`, `unidades`, `monto_cargado`, `adicional_monto`, `total_cobrado`, `medio_pago_cobro`, `medio_pago_carga`, `estado` (`confirmada` / `anulada`)
+- `app/services/recarga_service.py`: config en la tabla `configuraciones`, `precio_unidad()`, `calcular()`, `registrar_venta_recarga()` y `anular_recargas()`
+- Enganche en `confirmar_venta()` / `anular_venta()` (`app/services/venta_service.py`)
+- `registrar_egreso()` ahora acepta `medio_pago`; `obtener_resumen_por_medio_pago()` devuelve `egresos_por_medio`
+- **Endpoints:** `GET /api/recargas/config` (cualquier usuario autenticado, lo usa el POS), `PUT /api/recargas/config` (admin / encargado), `GET /api/recargas/calculo?unidades=` (desglose)
+- **Migración:** `ALTER TABLE productos ADD COLUMN es_recarga BOOLEAN NOT NULL DEFAULT 0` en `_migrate_new_columns()` (`app/main.py`)
+
 ### Modal: Crear/Editar Oferta
 
 | Campo | Tipo | Detalle |
@@ -525,6 +573,22 @@
 - **Siembra:** `_seed_denominaciones()` en `app/main.py` crea la tabla y la lista por defecto la primera vez que arranca
 - Las deshabilitadas quedan guardadas pero **no aparecen** en el contador de caja
 
+### Ajustes: Servicio de Recargas
+*(tarjeta colapsable en `/ajustes`, define el servicio de carga de saldo — ver "Servicio de Recargas" en Productos)*
+
+| Elemento | Descripción |
+|----------|-------------|
+| **Monto base por unidad** | Input numérico (default `1000`). Solo se admiten recargas múltiplo de este valor |
+| **Adicional (%)** | Input numérico (default `10`). Debajo muestra el precio de venta calculado por unidad ($1.100) |
+| **Cuenta de salida** | Select con `smartpoint`, `mercadopago_qr`, `mercadopago_pos`, `qr_interop`, `debito`, `credito`, `transferencia`, `efectivo` |
+| **Producto de la recarga** | Select de productos sin control de stock. Al guardarlo se marca `es_recarga=True` |
+| **Botón "Guardar"** | `saveRecargas()` → `PUT /api/recargas/config` (admin o encargado) |
+
+- **Backend:** `app/services/recarga_service.py` (config en la tabla `configuraciones`, claves `recarga_*`) + `app/routers/recargas.py`
+- **Endpoints:** `GET /api/recargas/config` (cualquier usuario autenticado), `PUT /api/recargas/config` (admin / encargado), `GET /api/recargas/calculo?unidades=`
+- **Siembra:** `_seed_producto_recarga()` en `app/main.py` crea el producto "Recarga SUBE" si todavía no hay ningún producto de recarga
+- Si el producto no está configurado, el POS muestra un aviso con acceso directo a esta tarjeta (solo para admin / encargado)
+
 ### Modal: Cierre de Caja (Arqueo)
 *(visible al hacer "Cerrar Caja")*
 
@@ -533,6 +597,7 @@
 | **Métodos de pago** | Lista con: Esperado (calculado), Monto Real (input), Diferencia (color verde/rojo). En **Efectivo** el label "Monto Real Contado" lleva el botón "Contar billetes" |
 | **Botón "Contar billetes"** | Solo en Efectivo — abre el modal de conteo por denominación y escribe la auto-suma en el Monto Real |
 | **Comentario general** | Campo opcional para nota al cierre |
+| **Egresos de la sesión** | Bloque rojo (solo si hay egresos con medio definido) con el detalle por medio y el total. No forman parte del conteo físico de cada método |
 | **Alerta tickets apartados** | Si hay tickets en hold: confirmación antes de continuar |
 | **Botón "Confirmar Cierre"** | `confirmarCierreCaja()` — cierra cada método + cierre-total + logout automático |
 | **Botón "Cancelar"** | Cierra el modal sin cerrar la caja |
@@ -973,6 +1038,19 @@
 | **Carga** | `onMounted` y `syncAll()` también refrescan este reporte |
 | **Solo ventas confirmadas** | Las ventas anuladas y las pendientes quedan fuera del cálculo |
 
+#### Recargas de saldo
+
+*(carga de saldo SUBE y similares — cuánto se cargó, cuánto se cobró y la ganancia)*
+
+| Elemento | Descripción |
+|----------|-------------|
+| **Rango de fechas** | Inputs `desde` / `hasta` (por defecto, últimos 30 días) + botón "Calcular" → `loadRecargas()` |
+| **KPIs** | Cargado ($), cobrado ($), ganancia = adicional y cantidad de operaciones |
+| **Tabla por día** | Fecha, cargado, cobrado y ganancia |
+| **Tabla por medio de pago** | Medio con el que pagó el cliente: operaciones, cargado y cobrado |
+| **Solo recargas confirmadas** | Las anuladas quedan fuera del cálculo |
+| **Carga** | `onMounted` también refresca este reporte |
+
 #### Reporte Trimestral
 
 | Elemento | Descripción |
@@ -988,6 +1066,7 @@
 - `GET /api/dashboard/mensual` — reporte mensual vs mes anterior, por semana, por categoría
 - `GET /api/dashboard/trimestral` — reporte trimestral vs trimestre anterior, por mes
 - `GET /api/reportes/vendido-por-peso?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&producto_id=` — kg e importe por producto (`router: reportes.py`, cualquier usuario autenticado). Solo ítems con `por_kilo = true` de ventas confirmadas
+- `GET /api/reportes/recargas?desde=YYYY-MM-DD&hasta=YYYY-MM-DD` — recargas de saldo por día y por medio de pago (`router: reportes.py`)
 
 ---
 

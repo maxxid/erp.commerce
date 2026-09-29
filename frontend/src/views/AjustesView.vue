@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useToastStore } from '@/stores/toasts'
 import api from '@/services/api'
 import BaseCard from '@/components/ui/BaseCard.vue'
@@ -30,6 +30,73 @@ const mercadopagoExpanded = ref(false)
 const qrInteropExpanded = ref(false)
 const ventasExpanded = ref(false)
 const denominacionesExpanded = ref(false)
+const recargasExpanded = ref(false)
+
+// --- Servicio de recargas ---
+const savingRecargas = ref(false)
+const recargas = ref({ monto_base: 1000, adicional_pct: 10, medio_pago_carga: 'smartpoint', producto_id: null })
+const productosRecarga = ref([])
+
+const MEDIOS_CARGA = [
+  { value: 'smartpoint', label: 'Smart Point' },
+  { value: 'mercadopago_qr', label: 'MercadoPago QR' },
+  { value: 'mercadopago_pos', label: 'MercadoPago POS' },
+  { value: 'qr_interop', label: 'QR BCRA (Interoperable)' },
+  { value: 'debito', label: 'Débito' },
+  { value: 'credito', label: 'Crédito' },
+  { value: 'transferencia', label: 'Transferencia' },
+  { value: 'efectivo', label: 'Efectivo' },
+]
+const mediosCarga = computed(() => MEDIOS_CARGA)
+const productosSinStock = computed(() => productosRecarga.value)
+const recargaPrecioUnitario = computed(() => {
+  const base = recargas.value.monto_base || 0
+  const pct = recargas.value.adicional_pct || 0
+  return Math.round(base * (1 + pct / 100) * 100) / 100
+})
+
+async function loadRecargas() {
+  try {
+    const [cfg, prods] = await Promise.all([
+      api.get('/api/recargas/config'),
+      api.get('/api/productos?page_size=500').catch(() => null),
+    ])
+    if (cfg) {
+      recargas.value = {
+        monto_base: cfg.monto_base ?? 1000,
+        adicional_pct: cfg.adicional_pct ?? 10,
+        medio_pago_carga: cfg.medio_pago_carga || 'smartpoint',
+        producto_id: cfg.producto_id ?? null,
+      }
+    }
+    const lista = prods?.data || prods || []
+    if (Array.isArray(lista)) {
+      productosRecarga.value = lista
+        .filter(p => p.controla_stock === false)
+        .map(p => ({ id: p.id, nombre: p.nombre, precio_venta: p.precio_venta }))
+    }
+  } catch { /* la card queda con los defaults */ }
+}
+
+async function saveRecargas() {
+  savingRecargas.value = true
+  try {
+    const data = await api.put('/api/recargas/config', {
+      monto_base: recargas.value.monto_base,
+      adicional_pct: recargas.value.adicional_pct,
+      medio_pago_carga: recargas.value.medio_pago_carga,
+      producto_id: recargas.value.producto_id,
+    })
+    if (data) {
+      recargas.value = { ...recargas.value, ...data }
+    }
+    toast.success('Configuración de recargas guardada')
+  } catch (e) {
+    toast.error(e?.response?.data?.detail || 'No se pudo guardar la configuración')
+  } finally {
+    savingRecargas.value = false
+  }
+}
 
 const denominaciones = ref([])
 const denominacionesEliminadas = ref([])
@@ -523,6 +590,7 @@ function displayCsr() {
 onMounted(async () => {
   await loadConfig()
   await loadDenominaciones()
+  await loadRecargas()
 })
 </script>
 
@@ -1141,6 +1209,107 @@ onMounted(async () => {
             <i class="fa-solid fa-floppy-disk"></i> Guardar
           </BaseButton>
           <p class="text-[11px] text-slate-400">Los cambios se aplican inmediatamente</p>
+        </div>
+      </div>
+    </BaseCard>
+
+    <BaseCard v-if="!loading">
+      <button class="w-full text-left" @click="recargasExpanded = !recargasExpanded">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <i class="fa-solid fa-mobile-screen-button text-brand-600"></i>
+            Servicio de Recargas
+          </h3>
+          <i :class="['fa-solid fa-chevron-down text-xs transition-transform', recargasExpanded ? 'rotate-180' : '']"></i>
+        </div>
+      </button>
+
+      <div v-if="recargasExpanded" class="mt-4 space-y-4">
+        <div class="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg p-4">
+          <p class="text-xs text-slate-600 dark:text-slate-400">
+            Configurá las recargas de saldo (SUBE, etc.): cuánto se carga por unidad, el adicional que cobra el
+            negocio y <strong>de qué cuenta sale el dinero</strong>. Al confirmar la venta, el monto cargado se
+            registra como <strong>egreso real de caja</strong> de esa cuenta y el adicional queda como ganancia.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-lg">
+          <div>
+            <label class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block mb-1">
+              Monto base por unidad
+            </label>
+            <div class="relative">
+              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
+              <input
+                v-model.number="recargas.monto_base"
+                type="number"
+                min="1"
+                step="100"
+                class="w-full pl-7 pr-3 py-2 text-sm font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
+              >
+            </div>
+            <p class="text-[10px] text-slate-400 mt-1">Solo se admiten múltiplos de este monto.</p>
+          </div>
+
+          <div>
+            <label class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block mb-1">
+              Adicional (%)
+            </label>
+            <div class="relative">
+              <input
+                v-model.number="recargas.adicional_pct"
+                type="number"
+                min="0"
+                max="100"
+                step="1"
+                class="w-full pr-8 py-2 text-sm font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
+              >
+              <span class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">%</span>
+            </div>
+            <p class="text-[10px] text-slate-400 mt-1">
+              El cliente paga {{ fc(recargaPrecioUnitario) }} por unidad.
+            </p>
+          </div>
+        </div>
+
+        <div class="max-w-lg">
+          <label class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block mb-1">
+            Cuenta de salida (de dónde sale el dinero para cargar)
+          </label>
+          <select
+            v-model="recargas.medio_pago_carga"
+            class="w-full px-3 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
+          >
+            <option v-for="m in mediosCarga" :key="m.value" :value="m.value">{{ m.label }}</option>
+          </select>
+          <p class="text-[10px] text-slate-400 mt-1">
+            Se registra un egreso de caja por el monto cargado con este medio de pago.
+          </p>
+        </div>
+
+        <div class="max-w-lg">
+          <label class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block mb-1">
+            Producto que representa la recarga
+          </label>
+          <select
+            v-model.number="recargas.producto_id"
+            class="w-full px-3 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
+          >
+            <option :value="null">— Sin configurar —</option>
+            <option v-for="p in productosSinStock" :key="p.id" :value="p.id">
+              {{ p.nombre }} ({{ fc(p.precio_venta) }})
+            </option>
+          </select>
+          <p class="text-[10px] text-slate-400 mt-1">
+            Solo productos sin control de stock. Al elegirlo queda marcado como servicio de recarga.
+          </p>
+        </div>
+
+        <div class="flex items-center gap-3 pt-2">
+          <BaseButton variant="primary" :loading="savingRecargas" @click="saveRecargas">
+            <i class="fa-solid fa-floppy-disk"></i> Guardar
+          </BaseButton>
+          <p class="text-[11px] text-slate-400">Los cambios se aplican inmediatamente en el POS</p>
         </div>
       </div>
     </BaseCard>

@@ -164,6 +164,16 @@ function buildLoteAlerts() {
       <KpiCard label="Stock" :value="data.valor_stock || 0" prefix="$" :loading="loading" icon="fa-boxes-stacked" icon-color="warning" :sublabel="(data.total_productos || 0) + ' productos'" />
       <KpiCard label="Stock Crítico" :value="data.stock_bajo || 0" :loading="loading" icon="fa-triangle-exclamation" icon-color="danger" sublabel="bajo mínimo" />
       <KpiCard label="Tendencia" :value="data.tendencia || 0" suffix="%" :trend="data.tendencia || 0" trend-label="vs semana anterior" :loading="loading" icon="fa-arrow-trend-up" icon-color="success" />
+      <KpiCard
+        v-if="data.recargas_hoy && data.recargas_hoy.recargas"
+        label="Recargas Hoy"
+        :value="data.recargas_hoy.monto_cargado || 0"
+        prefix="$"
+        :loading="loading"
+        icon="fa-mobile-screen-button"
+        icon-color="brand"
+        :sublabel="(data.recargas_hoy.recargas || 0) + ' recargas · +$' + (data.recargas_hoy.ganancia || 0)"
+      />
     </div>
 
     <!-- Charts -->

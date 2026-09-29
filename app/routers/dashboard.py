@@ -13,6 +13,7 @@ from app.models.movimiento_caja import MovimientoCaja
 from app.schemas.common import RespuestaData
 from app.auth.dependencies import get_current_user
 from app.models.usuario import Usuario
+from app.services import recarga_service
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 
@@ -159,6 +160,10 @@ def resumen(db: Session = Depends(get_db), user: Usuario = Depends(get_current_u
     ).group_by(Venta.medio_pago).order_by(func.count(Venta.id).desc()).first()
     medio_favorito = medio_fav[0] if medio_fav else "—"
 
+    # Recargas de dinero digital (SUBE, saldo, etc.)
+    recargas_hoy = recarga_service.resumen(db, hoy, hoy + timedelta(days=1))["totales"]
+    recargas_mes = recarga_service.resumen(db, inicio_mes, hoy + timedelta(days=1))["totales"]
+
     return RespuestaData(data={
         "total_productos": total_productos, "valor_stock": valor_stock,
         "total_clientes": total_clientes, "stock_bajo": stock_bajo,
@@ -170,6 +175,7 @@ def resumen(db: Session = Depends(get_db), user: Usuario = Depends(get_current_u
         "margen_pct_hoy": margen_pct_hoy, "margen_pct_mes": margen_pct_mes,
         "margen_bruto_semana": margen_semana, "margen_bruto_trimestre": margen_trimestre,
         "margen_pct_semana": margen_pct_semana, "margen_pct_trimestre": margen_pct_trimestre,
+        "recargas_hoy": recargas_hoy, "recargas_mes": recargas_mes,
         "ventas_7_dias": {"labels": dias_labels, "valores": dias_valores},
         "ventas_por_hora": {"labels": horas_labels, "valores": horas_valores},
         "top_productos_mes": top_productos,

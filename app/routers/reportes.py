@@ -13,6 +13,7 @@ from app.models.producto import Producto
 from app.models.usuario import Usuario
 from app.models.venta import Venta, VentaItem
 from app.schemas.common import RespuestaData
+from app.services import recarga_service
 
 router = APIRouter(prefix="/api/reportes", tags=["Reportes"])
 
@@ -106,3 +107,30 @@ def vendido_por_peso(
         },
         message="Reporte de ventas por peso",
     )
+
+
+@router.get("/recargas", response_model=RespuestaData)
+def reporte_recargas(
+    desde: str = Query(..., description="Fecha inicial YYYY-MM-DD"),
+    hasta: str = Query(..., description="Fecha final YYYY-MM-DD (inclusive)"),
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """Recargas de dinero digital: cuánto se cargó, cuánto se cobró y la ganancia.
+
+    Solo cuenta recargas confirmadas; las anuladas quedan excluidas.
+    La ganancia es el adicional cobrado (total cobrado - monto cargado).
+    """
+    try:
+        f_desde = _parse_fecha(desde, "desde")
+        f_hasta = _parse_fecha(hasta, "hasta") + timedelta(days=1)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if f_desde >= f_hasta:
+        raise HTTPException(status_code=400, detail="'desde' debe ser anterior a 'hasta'")
+
+    data = recarga_service.resumen(db, f_desde, f_hasta)
+    data["desde"] = desde
+    data["hasta"] = hasta
+    return RespuestaData(data=data, message="Reporte de recargas")

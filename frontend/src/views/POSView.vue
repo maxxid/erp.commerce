@@ -7,6 +7,15 @@
         <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Punto de Venta rápido</p>
       </div>
       <div class="flex items-center gap-3">
+        <BaseButton
+          v-if="recargaHabilitada"
+          variant="secondary"
+          size="sm"
+          title="Cargar saldo / recargas"
+          @click="abrirModalRecarga"
+        >
+          <i class="fa-solid fa-mobile-screen-button mr-1"></i> Recarga
+        </BaseButton>
         <button
           type="button"
           class="w-9 h-9 rounded-xl flex items-center justify-center border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
@@ -436,7 +445,10 @@
                   <div class="flex items-start justify-between gap-2">
                     <div>
                       <p class="text-xs font-bold text-slate-900 dark:text-white truncate">{{ item.nombre }}</p>
-                      <p class="text-[10px] text-slate-400 dark:text-slate-500 font-mono-data">{{ item.codigo_barras }}</p>
+                      <p v-if="item._recarga" class="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                        Carga {{ fc(item._recarga.monto_cargado) }} + adicional {{ fc(item._recarga.adicional) }}
+                      </p>
+                      <p v-else class="text-[10px] text-slate-400 dark:text-slate-500 font-mono-data">{{ item.codigo_barras }}</p>
                     </div>
                     <span class="text-sm font-bold font-mono-data text-brand-600 dark:text-brand-400 shrink-0">{{ fc(totalLinea(item)) }}</span>
                   </div>
@@ -486,6 +498,8 @@
                       type="button"
                       aria-label="Disminuir cantidad"
                       class="w-6 h-6 rounded-md bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs flex items-center justify-center transition active:scale-95"
+                      :disabled="!!item._recarga"
+                      :class="item._recarga ? 'opacity-40 cursor-not-allowed' : ''"
                       @click="updateCartQty(idx, item.cantidad - 1)"
                     >&minus;</button>
                     <span class="text-xs font-mono-data font-bold text-slate-700 dark:text-slate-200 w-6 text-center">{{ item.cantidad }}u.</span>
@@ -1100,6 +1114,107 @@
     </div>
   </BaseModal>
 
+  <!-- Modal Recarga -->
+  <BaseModal v-model="showRecargaModal" title="Recarga de saldo" size="md" :hide-footer="true">
+    <div v-if="!recargaCfg.producto_id" class="space-y-4">
+      <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4">
+        <div class="flex items-center gap-2 mb-2">
+          <i class="fa-solid fa-triangle-exclamation text-amber-500"></i>
+          <span class="font-semibold text-amber-700 dark:text-amber-300 text-sm">Falta configurar el producto de recarga</span>
+        </div>
+        <p class="text-xs text-amber-600 dark:text-amber-400">
+          Andá a <strong>Ajustes → Servicio de Recargas</strong>, elegí el producto que representa la recarga
+          y guardá. Después vas a poder cargarlo desde acá.
+        </p>
+        <p v-if="!puedeConfigurarRecargas" class="text-xs text-amber-600 dark:text-amber-400 mt-2">
+          Necesitás que un administrador o encargado lo configure.
+        </p>
+      </div>
+      <div class="flex gap-3 pt-2">
+        <BaseButton variant="secondary" class="flex-1" @click="showRecargaModal = false">Cerrar</BaseButton>
+        <BaseButton v-if="puedeConfigurarRecargas" variant="primary" class="flex-1" @click="irAAjustesRecargas">
+          <i class="fa-solid fa-gear mr-1"></i> Ir a Ajustes
+        </BaseButton>
+      </div>
+    </div>
+
+    <div v-else class="space-y-5">
+      <div class="bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800 rounded-xl p-4 flex items-center justify-between">
+        <div>
+          <p class="text-[10px] uppercase tracking-wider text-brand-500 font-semibold">Se carga desde</p>
+          <p class="text-sm font-bold text-brand-700 dark:text-brand-300">{{ medioPagoCargaLabel }}</p>
+        </div>
+        <div class="text-right">
+          <p class="text-[10px] uppercase tracking-wider text-brand-500 font-semibold">Adicional</p>
+          <p class="text-sm font-bold font-mono-data text-brand-700 dark:text-brand-300">{{ recargaCfg.adicional_pct }}%</p>
+        </div>
+      </div>
+
+      <div>
+        <label class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block mb-1">Monto a cargar</label>
+        <div class="relative">
+          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold">$</span>
+          <input
+            v-model.number="recargaForm.monto"
+            type="number"
+            :step="recargaCfg.monto_base"
+            :min="recargaCfg.monto_base"
+            class="w-full pl-7 pr-3 py-2.5 text-2xl font-mono-data font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition"
+            @input="validarMontoRecarga"
+          >
+        </div>
+        <p v-if="recargaForm.error" class="text-xs text-red-600 dark:text-red-400 mt-1">
+          <i class="fa-solid fa-circle-exclamation mr-1"></i>{{ recargaForm.error }}
+        </p>
+        <p v-else class="text-[10px] text-slate-400 mt-1">
+          Solo múltiplos de {{ fc(recargaCfg.monto_base) }} (no se admiten recargas parciales).
+        </p>
+      </div>
+
+      <div class="grid grid-cols-5 gap-2">
+        <button
+          v-for="n in [1, 2, 3, 5, 10]"
+          :key="n"
+          type="button"
+          class="py-2 rounded-lg border text-xs font-bold transition-colors"
+          :class="recargaForm.monto === recargaCfg.monto_base * n
+            ? 'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300'
+            : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'"
+          @click="setMontoRecarga(n)"
+        >
+          {{ fc(recargaCfg.monto_base * n) }}
+        </button>
+      </div>
+
+      <div class="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-2">
+        <div class="flex items-center justify-between text-sm">
+          <span class="text-slate-500 dark:text-slate-400">Se carga al cliente</span>
+          <span class="font-mono-data font-bold text-slate-900 dark:text-white">{{ fc(recargaCalculo.monto_cargado) }}</span>
+        </div>
+        <div class="flex items-center justify-between text-sm">
+          <span class="text-slate-500 dark:text-slate-400">Adicional ({{ recargaCfg.adicional_pct }}%)</span>
+          <span class="font-mono-data font-bold text-emerald-600 dark:text-emerald-400">+{{ fc(recargaCalculo.adicional_monto) }}</span>
+        </div>
+        <div class="flex items-center justify-between text-base pt-2 border-t border-slate-200 dark:border-slate-700">
+          <span class="font-semibold text-slate-700 dark:text-slate-300">Total a cobrar</span>
+          <span class="font-mono-data font-bold text-brand-600 dark:text-brand-400 text-xl">{{ fc(recargaCalculo.total_cobrar) }}</span>
+        </div>
+      </div>
+
+      <div class="flex gap-3 pt-2">
+        <BaseButton variant="secondary" class="flex-1" @click="showRecargaModal = false">Cancelar</BaseButton>
+        <BaseButton
+          variant="primary"
+          class="flex-1"
+          :disabled="!recargaValido"
+          @click="agregarRecargaAlCarrito"
+        >
+          <i class="fa-solid fa-plus mr-1"></i> Agregar al carrito
+        </BaseButton>
+      </div>
+    </div>
+  </BaseModal>
+
   <!-- Modal Apertura de Caja -->
   <BaseModal v-model="showAperturaModal" title="Apertura de Caja" size="md" :hide-footer="true">
     <div class="space-y-5">
@@ -1522,6 +1637,7 @@ onMounted(async () => {
     }
   } catch { /* sin datos */ }
 
+  cargarConfigRecarga()
   fetchPOSStats()
   fetchRecentTransactions()
   cajaStore.fetchEstado()
@@ -1983,6 +2099,109 @@ function addToCart(product, qty = 1, price = null) {
   lookupProduct._searched = false
   recalcCart()
   nextTick(() => barcodeInput.value?.focus())
+}
+
+// --- Recargas de saldo -----------------------------------------------------
+const showRecargaModal = ref(false)
+const recargaCfg = ref({
+  monto_base: 1000, adicional_pct: 10, medio_pago_carga: 'smartpoint',
+  producto_id: null, producto: null, medios_pago_disponibles: []
+})
+const recargaForm = reactive({ monto: 1000, error: '' })
+
+const recargaHabilitada = computed(() => !!recargaCfg.value.producto_id)
+const puedeConfigurarRecargas = computed(() => ['admin', 'encargado'].includes(auth.currentUser?.rol))
+const medioPagoCargaLabel = computed(() => {
+  const found = mediosPago.find(m => m.value === recargaCfg.value.medio_pago_carga)
+  return found ? found.label : recargaCfg.value.medio_pago_carga
+})
+const recargaUnidades = computed(() => {
+  const base = recargaCfg.value.monto_base || 1000
+  const n = (recargaForm.monto || 0) / base
+  return Number.isInteger(n) && n > 0 ? n : 0
+})
+const recargaCalculo = computed(() => {
+  const base = recargaCfg.value.monto_base || 1000
+  const pct = recargaCfg.value.adicional_pct ?? 10
+  const cargado = base * recargaUnidades.value
+  const adicional = Math.round(cargado * pct) / 100
+  return { monto_cargado: cargado, adicional_monto: adicional, total_cobrar: cargado + adicional }
+})
+const recargaValido = computed(() => !!recargaCfg.value.producto_id && recargaUnidades.value > 0 && !recargaForm.error)
+
+async function cargarConfigRecarga() {
+  try {
+    const data = await api.get('/api/recargas/config')
+    if (data) {
+      recargaCfg.value = { ...recargaCfg.value, ...data }
+      if (!recargaForm.monto) recargaForm.monto = recargaCfg.value.monto_base
+    }
+  } catch { /* el POS sigue funcionando sin recargas */ }
+}
+
+function abrirModalRecarga() {
+  recargaForm.error = ''
+  if (!recargaForm.monto) recargaForm.monto = recargaCfg.value.monto_base
+  showRecargaModal.value = true
+}
+
+function setMontoRecarga(n) {
+  recargaForm.monto = recargaCfg.value.monto_base * n
+  recargaForm.error = ''
+}
+
+function validarMontoRecarga() {
+  const base = recargaCfg.value.monto_base || 1000
+  const monto = recargaForm.monto || 0
+  if (monto <= 0) {
+    recargaForm.error = 'Ingresá un monto mayor a 0'
+  } else if (monto % base !== 0) {
+    recargaForm.error = `El monto debe ser múltiplo de ${fc(base)}`
+  } else {
+    recargaForm.error = ''
+  }
+}
+
+function irAAjustesRecargas() {
+  showRecargaModal.value = false
+  router.push({ name: 'ajustes', query: { tab: 'recargas' } })
+}
+
+function agregarRecargaAlCarrito() {
+  validarMontoRecarga()
+  if (!recargaValido.value) return
+
+  const unidades = recargaUnidades.value
+  const precioUnitario = recargaCfg.value.precio_venta_unidad
+    || Math.round((recargaCfg.value.monto_base * (1 + (recargaCfg.value.adicional_pct || 0) / 100)) * 100) / 100
+  const nombre = `${recargaCfg.value.producto?.nombre || 'Recarga'} ${fc(recargaCalculo.value.monto_cargado)}`
+
+  const existing = cart.items.find(i => i.producto_id === recargaCfg.value.producto_id && i._recarga)
+  if (existing) {
+    existing.cantidad += unidades
+    existing.nombre = `${recargaCfg.value.producto?.nombre || 'Recarga'} ${fc(recargaCalculo.value.monto_cargado)}`
+  } else {
+    cart.items.push({
+      producto_id: recargaCfg.value.producto_id,
+      nombre,
+      codigo_barras: null,
+      precio_unitario: precioUnitario,
+      cantidad: unidades,
+      oferta: null,
+      tipo_venta: 'unidad',
+      por_kilo: false,
+      peso: null,
+      _recarga: {
+        monto_cargado: recargaCalculo.value.monto_cargado,
+        adicional: recargaCalculo.value.adicional_monto,
+        medio_pago_carga: recargaCfg.value.medio_pago_carga
+      }
+    })
+  }
+
+  recalcCart()
+  showRecargaModal.value = false
+  toast.success(`Recarga de ${fc(recargaCalculo.value.monto_cargado)} agregada al carrito.`)
 }
 
 function handlePagoKeydown(event) {

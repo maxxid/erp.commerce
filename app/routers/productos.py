@@ -480,6 +480,7 @@ def lookup(
             precio_por_kilo=local.precio_por_kilo,
             precio_por_unidad=local.precio_por_unidad,
             controla_stock=local.controla_stock is not False,
+            es_recarga=bool(local.es_recarga),
             _cached=True,
             ia_mode=data.ia_mode,
         )
