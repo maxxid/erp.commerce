@@ -1063,7 +1063,30 @@ Resultados ordenados de menor a mayor. La fila más barata se resalta con fondo 
 
 `GET /precios-online/{barcode}` sí está gateado a `admin, encargado, repositor`, que son exactamente los roles de la tab en `TheSidebar` y en el `meta` del router.
 
-`comparar_precios` devuelve por fuente: `fuente`, `precio`, `nombre`, `marca`, `imagen_url`, `url`, `descuento`.
+`comparar_precios` devuelve por fuente: `fuente`, `nombre_fuente`, `experimental`, `precio`, `nombre`, `marca`, `imagen_url`, `url`, `descuento`.
+
+### Fuentes: registro, nombre canónico y apagado
+
+`FUENTES` dejó de ser una lista y es un dict con los datos de cada fuente:
+
+```python
+FUENTES = {
+    "carrefour": {"nombre": "Carrefour", "experimental": False},
+    "vea": {"nombre": "Vea", "experimental": False},
+    "masonline": {"nombre": "MasOnline", "experimental": False},
+    "supercoco": {"nombre": "Supercoco (experimental)", "experimental": True},
+}
+```
+
+**El nombre vive en el backend y viaja en `nombre_fuente`.** Antes el nombre estaba duplicado en `PreciosOnlineView.vue` y el PDF hacia `str(fuente).upper()`, o sea "SUPERcoco". Con el registro, pantalla y PDF muestran lo mismo y no hay dos listas que desincronicen. El frontend conserva su mapa local solo para el color y el icono, que son cosas de presentacion.
+
+**Supercoco está activa y marcada experimental.** La página de búsqueda renderiza por JavaScript: devuelve el mismo HTML (~393 KB) para cualquier consulta, sin los productos adentro, así que el parser nunca va a matchear nada. Se verificó contra el sitio en vivo. No se apagó porque apagarla esconde el síntoma en vez de documentarlo; el nombre y el aviso en pantalla dicen que ese precio no es confiable. La API estilo VTEX devuelve 404 y el documento no trae `__PRELOADED` / `__NEXT_DATA__` / `__NUXT__`, así que arreglarlo pide ver la llamada real desde el navegador.
+
+| Config | Efecto |
+|--------|--------|
+| `SCRAPER_FUENTES_OFF` | Lista de fuentes a no consultar, separada por coma: `SCRAPER_FUENTES_OFF=supercoco,carrefour` |
+
+`fuentes_activas()` filtra por esa variable, así que apagar una fuente que rompió no obliga a tocar código ni a redeploy. Tolera espacios y mayúsculas, e ignora nombres que no existen. `lookup_producto(barcode, fuente=...)` con fuente explícita **no** se filtra: es un pedido directo, no un barrido.
 
 ### Tests de scraping
 
@@ -1092,6 +1115,7 @@ python -m pytest
 | `test_lookup_cache.py` | TTL positivo/negativo, purga, cache por fuente+barcode, orden de `comparar_precios` |
 | `test_analisis_precios.py` | Historial de compras: orden, exclusion de anuladas/pendientes, ultimo costo, mejor historico con proveedor y fecha |
 | `test_analisis_precios_pdf.py` | La ficha PDF renderiza con y sin datos; escapa `&`/`<`/`>`;aguanta precios grandes y fechas invalidas |
+| `test_fuentes_registro.py` | Nombre canonico de cada fuente, flag experimental, y que una fuente apagada por config no genere ni un request |
 
 Las fixtures viven en `tests/fixtures/` y son HTML/JSON **guardados a mano**, con trampas incluidas a proposito (una descripcion con `{}` adentro, un `})` dentro de un string).
 

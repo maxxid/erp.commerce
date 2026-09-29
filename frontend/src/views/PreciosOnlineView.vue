@@ -31,8 +31,8 @@ const loadingProductosProveedor = ref(false)
 const fuentesConocidas = {
   carrefour: { nombre: 'Carrefour', variant: 'info', icon: 'fa-store' },
   vea: { nombre: 'Vea', variant: 'danger', icon: 'fa-store' },
-  masonline: { nombre: 'Mas Online', variant: 'success', icon: 'fa-store' },
-  supercoco: { nombre: 'Super Coco', variant: 'brand', icon: 'fa-store' }
+  masonline: { nombre: 'MasOnline', variant: 'success', icon: 'fa-store' },
+  supercoco: { nombre: 'Supercoco (experimental)', variant: 'brand', icon: 'fa-store', experimental: true }
 }
 
 function getFuenteInfo(fuente) {
@@ -41,6 +41,19 @@ function getFuenteInfo(fuente) {
     variant: 'default',
     icon: 'fa-globe'
   }
+}
+
+// El nombre canonico lo manda el backend (lookup_service.FUENTES). El mapa local
+// solo aporta el color y el icono, que son cosas de presentacion.
+function nombreFuenteDe(resultado) {
+  if (!resultado) return ''
+  return resultado.nombre_fuente || getFuenteInfo(resultado.fuente).nombre
+}
+
+function esFuenteExperimental(resultado) {
+  if (!resultado) return false
+  if (typeof resultado.experimental === 'boolean') return resultado.experimental
+  return !!getFuenteInfo(resultado.fuente).experimental
 }
 
 function num(v) {
@@ -110,6 +123,8 @@ async function buscarPrecios() {
         resultados.value = precios
           .map(r => ({
             fuente: r.fuente,
+            nombre_fuente: r.nombre_fuente || '',
+            experimental: r.experimental === true,
             nombre: r.nombre,
             marca: r.marca || '',
             precio: num(r.precio),
@@ -428,7 +443,7 @@ const sinProveedores = computed(() => proveedoresOrdenados.value.length === 0)
         prefix="$ "
         icon="fa-cart-shopping"
         icon-color="info"
-        :sublabel="getFuenteInfo(precioMasBajo.fuente).nombre"
+        :sublabel="nombreFuenteDe(precioMasBajo)"
       />
       <KpiCard
         label="Ganancia por unidad"
@@ -577,7 +592,7 @@ const sinProveedores = computed(() => proveedoresOrdenados.value.length === 0)
               {{ analisis.online ? fc(analisis.online.precio) : '—' }}
             </p>
             <p v-if="analisis.online" class="text-xs text-blue-700/80 dark:text-blue-500/80 mt-1">
-              {{ getFuenteInfo(analisis.online.fuente).nombre }} hoy
+              {{ nombreFuenteDe(analisis.online) }} hoy
             </p>
           </div>
         </div>
@@ -729,7 +744,7 @@ const sinProveedores = computed(() => proveedoresOrdenados.value.length === 0)
           <p v-if="precioMasBajo" class="text-xs text-slate-500 dark:text-slate-400 mt-1">
             Precio más bajo:
             <span class="font-mono-data font-bold text-emerald-600 dark:text-emerald-400">{{ fc(precioMasBajo.precio) }}</span>
-            en {{ getFuenteInfo(precioMasBajo.fuente).nombre }}
+            en {{ nombreFuenteDe(precioMasBajo) }}
             <span v-if="porcentajeContraLocal !== null" class="text-slate-400">
               ({{ porcentajeContraLocal > 0 ? '+' : '' }}{{ porcentajeContraLocal }}% vs tu precio)
             </span>
@@ -759,10 +774,14 @@ const sinProveedores = computed(() => proveedoresOrdenados.value.length === 0)
                   <div class="flex items-center gap-2">
                     <BaseBadge :variant="getFuenteInfo(resultado.fuente).variant" size="xs">
                       <i :class="`fa-solid ${getFuenteInfo(resultado.fuente).icon} mr-1`"></i>
-                      {{ getFuenteInfo(resultado.fuente).nombre }}
+                      {{ nombreFuenteDe(resultado) }}
                     </BaseBadge>
                     <BaseBadge v-if="resultado.esMasBajo" variant="success" size="xs">Más barato</BaseBadge>
                   </div>
+                  <p v-if="esFuenteExperimental(resultado)" class="text-xs text-amber-600 dark:text-amber-400 mt-1.5 flex items-center gap-1">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                    El precio puede no corresponder al mismo producto
+                  </p>
                   <h4 class="font-semibold text-slate-900 dark:text-white text-sm truncate mt-1.5">{{ resultado.nombre }}</h4>
                   <p v-if="resultado.marca" class="text-xs text-slate-500 dark:text-slate-400 truncate">{{ resultado.marca }}</p>
                 </div>
@@ -800,7 +819,7 @@ const sinProveedores = computed(() => proveedoresOrdenados.value.length === 0)
                   @click="abrirFuente(resultado.url)"
                 >
                   <i class="fa-solid fa-external-link-alt mr-1"></i>
-                  Ver en {{ getFuenteInfo(resultado.fuente).nombre }}
+                  Ver en {{ nombreFuenteDe(resultado) }}
                 </BaseButton>
               </div>
             </div>

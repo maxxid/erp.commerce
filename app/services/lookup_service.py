@@ -12,7 +12,44 @@ HEADERS = {
     "Accept-Encoding": "gzip, deflate, br",
 }
 
-FUENTES = ["carrefour", "vea", "masonline", "supercoco"]
+# Registro de fuentes. El nombre es el canonico y es el que se muestra en
+# pantalla y en el PDF, para que ninguna de las dos cosas diga algo distinto.
+# "experimental" marca fuentes queandsiguen online pero no se puede garantizar
+# que el precio matchee el producto exacto: se avisa en vez de esconderla.
+FUENTES = {
+    "carrefour": {"nombre": "Carrefour", "experimental": False},
+    "vea": {"nombre": "Vea", "experimental": False},
+    "masonline": {"nombre": "MasOnline", "experimental": False},
+    # La pagina de busqueda de Supercoco renderiza por JS: el HTML que devuelve
+    # no trae los productos, asi que hoy nomatchea nada. Se deja activa para
+    # revisar la respuesta real, y el nombre avisa que no es confiable aun.
+    "supercoco": {"nombre": "Supercoco (experimental)", "experimental": True},
+}
+
+
+def nombre_fuente(fuente):
+    """Nombre para mostrar de una fuente. Falls back a la clave si no la conocemos."""
+    return FUENTES.get(str(fuente or "").lower(), {}).get("nombre") or str(fuente or "")
+
+
+def _fuentes_desactivadas():
+    """Fuentes apagadas por configuracion, para no entrar a una que vamos a cambiar.
+
+    SCRAPER_FUENTES_OFF=supercoco,foo  -> no se consultan, sin tocar el codigo
+    y sin redeploy para volver a prenderlas.
+    """
+    crudo = (settings.SCRAPER_FUENTES_OFF or "")
+    return {f.strip().lower() for f in crudo.split(",") if f.strip()}
+
+
+def fuentes_activas():
+    """Fuentes que se van a consultar, en orden."""
+    apagadas = _fuentes_desactivadas()
+    return [f for f in FUENTES if f not in apagadas]
+
+
+def esta_experimental(fuente):
+    return bool(FUENTES.get(str(fuente or "").lower(), {}).get("experimental"))
 
 TIMEOUT = settings.SCRAPER_TIMEOUT
 CACHE_TTL = settings.SCRAPER_CACHE_TTL
@@ -429,7 +466,7 @@ def _find_promotion_code(state):
 
 def lookup_producto(barcode, fuente=None):
     """Busca un producto por código de barras."""
-    fuentes = [fuente] if fuente else FUENTES
+    fuentes = [fuente] if fuente else fuentes_activas()
 
     for f in fuentes:
         result = _lookup_fuente(barcode, f)
@@ -441,11 +478,13 @@ def lookup_producto(barcode, fuente=None):
 def comparar_precios(barcode):
     """Obtiene el precio de cada fuente disponible, ordenado de menor a mayor."""
     precios = []
-    for f in FUENTES:
+    for f in fuentes_activas():
         result = _lookup_fuente(barcode, f)
         if result and result.get("precio_referencia"):
             precios.append({
                 "fuente": f,
+                "nombre_fuente": nombre_fuente(f),
+                "experimental": esta_experimental(f),
                 "precio": result["precio_referencia"],
                 "nombre": result["nombre"],
                 "marca": result.get("marca") or "",

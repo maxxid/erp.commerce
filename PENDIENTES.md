@@ -6,6 +6,15 @@
 
 ## ✅ Completados recientemente
 
+### Validación con red real: 3 de 4 fuentes andan, Supercoco marcada experimental — 29/09/2026
+- **Por qué:** los tests corren con `sin_red`, o sea que el scraping llevaba commits entero sin verificarse contra los sitios reales. Con red se probaron 6 EAN-13 extraídos de la home de Vea
+- **`vea`, `masonline` y `carrefour` funcionan**: devuelven precios, ordenan y detectan ofertas. 2-3 resultados por código, ~9 s por búsqueda
+- **Supercoco devuelve 0 siempre, y no es un bug de parseo**: la página de búsqueda renderiza por JavaScript y devuelve el mismo HTML (~393 KB) para cualquier consulta, sin los productos adentro. El parser busca algo que el documento nunca va a traer. La API estilo VTEX da 404 y no hay `__PRELOADED` / `__NEXT_DATA__` / `__NUXT__`
+- **Quedó activa, marcada `(experimental)`**, no apagada: apagarla esconde el síntoma en vez de documentarlo. El nombre en pantalla, en el PDF y en el payload (`nombre_fuente`) avisa que el precio no es confiable, y la card suma un aviso "el precio puede no corresponder al mismo producto"
+- **`FUENTES` pasó de lista a registro** con nombre canónico y flag `experimental`. El nombre vive en el backend: antes estaba duplicado en el frontend y el PDF hacía `str(fuente).upper()` → "SUPERCOO"
+- **Nuevo `SCRAPER_FUENTES_OFF`**: apagar una fuente que rompió no obliga a tocar código ni redeploy. Hay tests de que una fuente apagada no genera ni un request
+- **Pendiente para cuando haya tiempo:** el fetch de Supercoco contra la llamada real (pide DevTools), y **el desajuste de precios y nombres entre fuentes** — para `7797750980852`, Vea y Carrefour dan $999.999 pero MasOnline $679.999, y los títulos difieren bastante para el mismo código. Si dos fuentes matchean productos distintos, "el más barato online" compara cosas distintas
+
 ### Análisis de Compra: lo que pagaste, a quién y cuándo salió más barato — 29/09/2026
 - **Por que:** `/precios-online` decía "acá está más barato" online, pero no contestaba la pregunta que de verdad importa al comprar: **¿cuánto pagué yo la última vez, a quién, y cuándo fue que más barato?** El dato existía (compras + `producto_proveedor`), nunca se había mostrado junto a los precios online
 - **`app/services/analisis_precios_service.py`**: historial de compras del producto, costo de lista actual por proveedor, último precio pagado a cada uno, mejor costo histórico **con proveedor y fecha**, ahorro contra la referencia y margen con el precio online más bajo

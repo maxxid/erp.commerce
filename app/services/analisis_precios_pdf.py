@@ -15,6 +15,8 @@ from reportlab.platypus import (
     SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer,
 )
 
+from app.services.lookup_service import nombre_fuente, esta_experimental
+
 ANCHO_UTIL = landscape(A4)[0] - 24 * mm
 
 VERDE = colors.HexColor("#047857")
@@ -131,7 +133,7 @@ def _bloque_recomendacion(analisis):
         return None
 
     partes = []
-    fuente = str(online["fuente"]).upper()
+    fuente = nombre_fuente(online.get("fuente"))
     precio = _fc(online["precio"])
 
     if proveedor is not None and proveedor < online["precio"]:
@@ -213,8 +215,11 @@ def generar_analisis_precios_pdf(analisis: dict) -> bytes:
             oferta = ""
             if desc and desc.get("activo") and desc.get("precio_oferta"):
                 oferta = f"antes {_fc(desc.get('precio_original'))}"
+            etiqueta = nombre_fuente(r.get("fuente"))
+            if esta_experimental(r.get("fuente")):
+                etiqueta += " (puede no ser el mismo producto)"
             filas.append([
-                _escapar(str(r.get("fuente", "")).upper()),
+                _escapar(etiqueta),
                 _fc(r.get("precio")),
                 oferta,
                 _escapar(str(r.get("nombre", ""))[:70]),

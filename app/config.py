@@ -37,6 +37,9 @@ class Settings:
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/125.0.0.0 Safari/537.36"
     )
+    # Fuentes a no consultar, separadas por coma: SCRAPER_FUENTES_OFF=supercoco
+    # Apagar una fuente que rompio no debería obligar a tocar codigo ni redeploy.
+    SCRAPER_FUENTES_OFF: str = os.getenv("SCRAPER_FUENTES_OFF", "")
 
     # Negocio
     DEFAULT_MARGIN: float = 30.0         # % de margen por defecto
