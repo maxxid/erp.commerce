@@ -6,6 +6,17 @@
 
 ## ✅ Completados recientemente
 
+### Las promos por cantidad de MasOnline no se detectaban: no estan en el HTML — 29/09/2026
+- **Por qué:** el codigo esta hecho para detectar promociones, ofertas y descuentos, y en MasOnline seguia reportando el precio de lista. La Coca Zero de la URL de arriba devolvia $5.899 cuando en 3x2 sale $3.932,86
+- **Causa raíz:** no es un bug de parseo, es que la promo **no esta en ningun lado del HTML**. El precio se arma por JS (`priceBehavior: "async"`), el HTML no lo renderiza, y en el estado de VTEX el offer llega con `teasers: []` y `discountHighlights: []` vacios, con `price == priceWithoutDiscount`. No hay nada que parsear
+- **La unica fuente es la simulacion de carrito** (`GET /api/checkout/pub/orderForms/simulation`), que devuelve el precio por unidad ya con la promo aplicada segun la cantidad. Ahi se ve que baja recien en 3
+- **A diferencia de Vea**, que ya publica el precio descontado en el JSON-LD. Mismo grupo, distinta implementacion
+- **El precio de una unidad no baja:** 3932.86 es lo que se paga comprando 3. Por eso va `cantidad_minima` en la respuesta y la card y el PDF lo dicen. Sin eso, un 3x2 se lee como una bajada de precio que no existe para quien compra una
+- **Se usa el precio que devuelve la simulacion, no `lista * 2/3`**: la cuenta da 3932.67 y VTEX devuelve 3932.86
+- **No se consulta el carrito para todo.** Solo si el producto no tiene ya descuento del JSON-LD y esta en un cluster con multi-compra explicito (`3x2- Bebidas`, no `Oferta` ni `- OP`). Medido: bebidas 7/8 pasan el filtro, pero limpieza, panaderia y alimentos dan 0/5, o sea el gasto extra se concentra donde estan las promos
+- **43 tests nuevos** (215 en total), con la pagina real como fixture
+- **Pendiente:** solo se simulan cantidades 2 y 3, asi que un 6x5 se escapa. Si aparece alguna, se suman en `_CANTIDADES_MASCULINAS`
+
 ### Las promos de Vea/MasOnline nunca se detectaron: se leia el precio de lista — 29/09/2026
 - **Por qué:** el código de barras está pensado para detectar promociones, ofertas y descuentos, pero en la práctica no lo hacía. Reportaba el precio **sin** promo y encima marcaba `activo: True` con los dos precios en `None`, o sea un badge de oferta con los números vacíos
 - **Causa raíz:** Vea/MasOnline emiten **dos bloques JSON-LD del mismo producto**. El primero trae `offers.lowPrice` = precio **de lista**. El de `id="structured-data-schema"` trae `offers.price` = lo que se paga por unidad **con la promo aplicada**, más `priceSpecification.price` (lista) y `priceValidUntil` (vigencia). `_extract_json_ld` devolvía el primer bloque que parseaba, así que nunca veía el bueno
@@ -18,6 +29,7 @@
 - **Pendiente:** el mismo análisis para **Carrefour** y **MasOnline**, que pueden tener la estructura de oferta distinta a la de Vea. Y sigue abierta la pregunta de si el barcode matchea siempre el mismo producto entre fuentes
 
 ### Validación con red real: 3 de 4 fuentes andan, Supercoco marcada experimental — 29/09/2026
+
 - **Por qué:** los tests corren con `sin_red`, o sea que el scraping llevaba commits entero sin verificarse contra los sitios reales. Con red se probaron 6 EAN-13 extraídos de la home de Vea
 - **`vea`, `masonline` y `carrefour` funcionan**: devuelven precios, ordenan y detectan ofertas. 2-3 resultados por código, ~9 s por búsqueda
 - **Supercoco devuelve 0 siempre, y no es un bug de parseo**: la página de búsqueda renderiza por JavaScript y devuelve el mismo HTML (~393 KB) para cualquier consulta, sin los productos adentro. El parser busca algo que el documento nunca va a traer. La API estilo VTEX da 404 y no hay `__PRELOADED` / `__NEXT_DATA__` / `__NUXT__`

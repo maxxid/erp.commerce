@@ -821,6 +821,13 @@ const sinProveedores = computed(() => proveedoresOrdenados.value.length === 0)
                   ahorrás {{ fc(resultado.descuento.precio_original - resultado.precio) }}
                   <span v-if="resultado.descuento.vigencia">· hasta el {{ fd(resultado.descuento.vigencia) }}</span>
                 </span>
+                <span
+                  v-if="resultado.descuento.cantidad_minima"
+                  class="text-xs text-amber-600 dark:text-amber-400"
+                >
+                  <i class="fa-solid fa-cart-shopping mr-1"></i>válido comprando
+                  {{ resultado.descuento.cantidad_minima }} o más
+                </span>
               </div>
 
               <div class="flex items-center justify-end mt-3">

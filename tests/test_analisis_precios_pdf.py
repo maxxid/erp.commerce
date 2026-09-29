@@ -5,7 +5,7 @@ reportlab genere un PDF valido. El caso importante es que no revienta cuando
 el producto no tiene historial, proveedores ni precios online.
 """
 
-from app.services.analisis_precios_pdf import generar_analisis_precios_pdf
+from app.services.analisis_precios_pdf import _texto_oferta, generar_analisis_precios_pdf
 
 
 def _base(**overrides):
@@ -170,4 +170,52 @@ class TestRobustez:
     def test_cantidad_decimal(self):
         analisis = _con_datos()
         analisis["historial"][0]["cantidad_recibida"] = 2.5
+        assert _es_pdf(generar_analisis_precios_pdf(analisis))
+
+
+class TestTextoOferta:
+    """La columna de oferta tiene que decir el minimo de compra.
+
+    Sin eso, un 3x2 se lee como si el precio de una sola unidad bajo, que es
+    justo la confusion que el scraping de MasOnline puede producir.
+    """
+
+    def test_promo_por_cantidad_muestra_el_minimo(self):
+        texto = _texto_oferta({
+            "activo": True, "precio_original": 5899.0, "precio_oferta": 3932.86,
+            "promocion": "3x2", "cantidad_minima": 3,
+        })
+        assert "3x2" in texto
+        assert "min. 3 u." in texto
+        assert "antes" in texto
+
+    def test_promo_sin_minimo_no_inventa_uno(self):
+        texto = _texto_oferta({
+            "activo": True, "precio_original": 5000.0, "precio_oferta": 3926.67,
+            "promocion": "3x2", "cantidad_minima": None,
+        })
+        assert "antes" in texto
+        assert "min." not in texto
+
+    def test_sin_etiqueta_pero_con_minimo_no_queda_vacio(self):
+        texto = _texto_oferta({
+            "activo": True, "precio_original": 100.0, "precio_oferta": 85.0,
+            "promocion": "", "cantidad_minima": 2,
+        })
+        assert "por cantidad" in texto
+        assert "min. 2 u." in texto
+
+    def test_sin_descuento_no_muestra_nada(self):
+        assert _texto_oferta(None) == ""
+        assert _texto_oferta({}) == ""
+        assert _texto_oferta({"activo": False, "precio_original": 100}) == ""
+        assert _texto_oferta({"activo": True, "precio_original": 100,
+                              "precio_oferta": None}) == ""
+
+    def test_genera_pdf_con_promo_por_cantidad(self):
+        analisis = _con_datos()
+        analisis["precios_online"][0]["descuento"] = {
+            "activo": True, "precio_original": 5899.0, "precio_oferta": 3932.86,
+            "promocion": "3x2", "vigencia": None, "cantidad_minima": 3,
+        }
         assert _es_pdf(generar_analisis_precios_pdf(analisis))

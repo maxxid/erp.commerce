@@ -1,4 +1,6 @@
+import base64
 import json
+import re
 import time
 import threading
 import requests
@@ -14,7 +16,7 @@ HEADERS = {
 
 # Registro de fuentes. El nombre es el canonico y es el que se muestra en
 # pantalla y en el PDF, para que ninguna de las dos cosas diga algo distinto.
-# "experimental" marca fuentes queandsiguen online pero no se puede garantizar
+# "experimental" marca fuentes que siguen online pero no se puede garantizar
 # que el precio matchee el producto exacto: se avisa en vez de esconderla.
 FUENTES = {
     "carrefour": {"nombre": "Carrefour", "experimental": False},
@@ -246,6 +248,139 @@ def _descuento_de_json_ld(offers):
         "precio_oferta": oferta,
         "promocion": _etiqueta_multi_compra(oferta, lista),
         "vigencia": offers.get("priceValidUntil"),
+        "cantidad_minima": None,
+    }
+
+
+# --- Promos por cantidad (solo MasOnline) -----------------------------------
+#
+# MasOnline no publica estas promos en ningun lado del HTML: el precio se arma
+# por JS (priceBehavior "async") y en el estado el offer llega con teasers:[] y
+# discountHighlights:[] vacios, con price == priceWithoutDiscount. El unico
+# lugar donde aparecen es la simulacion de carrito, que devuelve el precio POR
+# UNIDAD ya con la promo aplicada, y solo a partir de cierta cantidad.
+#
+# Ojo con el significado: el precio efectivo no es el de una unidad, es el que
+# se paga si se compran N. Por eso va cantidad_minima en la respuesta, sin eso
+# un 3x2 se lee como una bajada de precio que no existe para quien compra 1.
+
+# Cantidades a simular. Con 2 y 3 sale el minimo: si ya baja en 2 es un 2x1, si
+# recién baja en 3 es 3x2. Un 6x5 se escapa, son casos raros y cada cantidad
+# probada es un request a un endpoint de carrito.
+_CANTIDADES_MASCULINAS = (2, 3)
+
+# Solo "3x2" o "2x1", no palabras sueltas tipo "Oferta" u "OP": casi todos los
+# productos estan en clusters que suenan a promo, asi que un filtro laxo no
+# filtra nada (medido: recall 2/2 pero precision 2/8; con esta, 2/3).
+# El segundo numero es cuantos se pagan, asi que va de 1 a 9.
+_RE_MULTI_COMPRA = re.compile(r"\b([2-9])\s?[x*]\s?([1-9])\b", re.IGNORECASE)
+
+
+def _tiene_cluster_multicompra(state):
+    """True si el producto esta en un cluster con un multi-compra explicito."""
+    if not state:
+        return False
+    for key, val in state.items():
+        if "productClusters" not in key or not isinstance(val, dict):
+            continue
+        nombre = val.get("name")
+        if isinstance(nombre, str) and _RE_MULTI_COMPRA.search(nombre):
+            return True
+    return False
+
+
+def _token_de_precio(state):
+    """id, seller y precio de lista del offer, sacados del priceToken. Sin red.
+
+    El priceToken es un JWT firmado por VTEX del que solo interesa leer el
+    payload: no se valida la firma porque no es una frontera de confianza, es
+    un dato publico de la misma pagina.
+    """
+    if not state:
+        return None
+    for val in state.values():
+        if not isinstance(val, dict):
+            continue
+        token = val.get("priceToken")
+        if not token:
+            continue
+        partes = str(token).split(".")
+        if len(partes) < 2:
+            continue
+        try:
+            payload = json.loads(base64.urlsafe_b64decode(partes[1] + "=="))
+        except (ValueError, TypeError):
+            continue
+        data = payload.get("data") if isinstance(payload, dict) else None
+        if not isinstance(data, dict):
+            continue
+        item_id, seller = data.get("id"), data.get("seller")
+        lista = data.get("priceWithoutDiscount")
+        if not item_id or not seller or not lista:
+            continue
+        try:
+            return {
+                "id": str(item_id),
+                "seller": str(seller),
+                "precio_lista": float(lista) / 100,
+            }
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _etiqueta_desde_cantidad(unidades, precio_oferta, precio_lista):
+    """'3x2' a partir de la cantidad minima y el precio, no al reves.
+
+    Sabiendo que el precio baja recien en N unidades, el ratio dice cuantas se
+    pagan: 3 * (3932.86/5899) = 2.0, o sea pagás 2 de 3.
+    """
+    if not unidades or not precio_lista or not precio_oferta:
+        return ""
+    pagadas = unidades * (precio_oferta / precio_lista)
+    entero = round(pagadas)
+    if entero < 1 or entero >= unidades:
+        return ""
+    if abs(pagadas - entero) > 0.02:
+        return ""
+    return f"{unidades}x{entero}"
+
+
+def _detectar_promo_cantidad(simulaciones, precio_lista):
+    """Arma el descuento desde las simulaciones de carrito. Sin red.
+
+    `simulaciones` es una lista de (cantidad, precio_por_unidad). Gana la
+    cantidad mas chica en la que el precio baja, que es el minimo de compra.
+    Se usa el precio que devuelve la simulacion y no una cuenta como
+    lista * 2/3: VTEX redondea y da 3932.86 donde la cuenta da 3932.67.
+    """
+    if not precio_lista or precio_lista <= 0:
+        return None
+    if not isinstance(simulaciones, (list, tuple)):
+        return None
+
+    precio_oferta = None
+    unidades = None
+    for cantidad, precio in simulaciones:
+        try:
+            cantidad, precio = int(cantidad), float(precio)
+        except (TypeError, ValueError):
+            continue
+        if unidades is not None and cantidad >= unidades:
+            continue
+        if 0 < precio < precio_lista:
+            unidades, precio_oferta = cantidad, precio
+
+    if unidades is None or precio_oferta is None:
+        return None
+
+    return {
+        "activo": True,
+        "precio_original": precio_lista,
+        "precio_oferta": round(precio_oferta, 2),
+        "promocion": _etiqueta_desde_cantidad(unidades, precio_oferta, precio_lista),
+        "vigencia": None,
+        "cantidad_minima": unidades,
     }
 
 
@@ -416,6 +551,20 @@ def _scrape_producto(html, barcode, fuente, url=""):
     if not descuento:
         descuento = _detectar_descuento(state)
 
+    # MasOnline esconde las promos por cantidad: no estan en el HTML ni en el
+    # estado, solo en la simulacion de carrito. Se consulta de ahi, y solo si
+    # el producto tiene pinta de estar en una (cluster con un NxM explicito).
+    #
+    # Cuando aparece, el precio de referencia pasa a ser el efectivo. Es el
+    # precio por unidad del promo, no el de una unidad, asi que se arrastra el
+    # minimo de compra para que no se lea como una bajada de precio.
+    if (fuente == "masonline" and not (descuento and descuento.get("activo"))
+            and _tiene_cluster_multicompra(state)):
+        promo_cantidad = _promo_cantidad(state, fuente)
+        if promo_cantidad:
+            descuento = promo_cantidad
+            precio = promo_cantidad["precio_oferta"]
+
     categorias_raw = _extract_categorias(state)
 
     return {
@@ -429,9 +578,78 @@ def _scrape_producto(html, barcode, fuente, url=""):
         "propiedades": propiedades,
         "fuente": fuente,
         "url": url,
-        "descuento": descuento,
+        "descuento": _normalizar_descuento(descuento),
         "categoria": _map_categoria(categorias_raw),
     }
+
+
+def _normalizar_descuento(descuento):
+    """Le da a todo descuento la misma forma.
+
+    Hay varios lugares que arman el dict y a cada uno se le olvido algun campo,
+    campos, asi que en vez de perseguirlos se completa aca una sola vez. El
+    frontend y el PDF leen estas claves sin chequear que esten.
+    """
+    if not isinstance(descuento, dict):
+        return None
+    salida = {
+        "activo": bool(descuento.get("activo")),
+        "precio_original": descuento.get("precio_original"),
+        "precio_oferta": descuento.get("precio_oferta"),
+        "promocion": descuento.get("promocion") or "",
+        "vigencia": descuento.get("vigencia"),
+        "cantidad_minima": descuento.get("cantidad_minima"),
+    }
+    return salida
+
+
+def _simular_carrito(fuente, token, cantidad):
+    """Precio por unidad para esa cantidad, con promos ya aplicadas. Red."""
+    url = f"https://www.{fuente}.com.ar/api/checkout/pub/orderForms/simulation"
+    params = {
+        "request.items[0].id": token["id"],
+        "request.items[0].quantity": str(cantidad),
+        "request.items[0].seller": token["seller"],
+    }
+    try:
+        resp = requests.get(url, params=params, headers=HEADERS, timeout=TIMEOUT)
+        resp.raise_for_status()
+        data = resp.json()
+    except (requests.RequestException, ValueError):
+        return None
+    items = data.get("items") if isinstance(data, dict) else None
+    if not items or not isinstance(items[0], dict):
+        return None
+    precio = items[0].get("sellingPrice")
+    if not isinstance(precio, (int, float)):
+        return None
+    return precio / 100
+
+
+def _promo_cantidad(state, fuente):
+    """Busca promo por cantidad consultando el carrito. Red.
+
+    Solo se llega aca cuando el filtro de clusters dejo pasar al producto, asi
+    que la mayoria de las consultas no pegan ningun request contra el checkout.
+    """
+    token = _token_de_precio(state)
+    if not token:
+        return None
+
+    precio_lista = token["precio_lista"]
+    simulaciones = []
+    for cantidad in _CANTIDADES_MASCULINAS:
+        try:
+            precio = _simular_carrito(fuente, token, cantidad)
+        except Exception:
+            # Un solo producto que rompa no puede voltear la comparacion entera.
+            continue
+        if precio is not None:
+            simulaciones.append((cantidad, precio))
+        if precio is not None and precio < precio_lista:
+            break
+
+    return _detectar_promo_cantidad(simulaciones, precio_lista)
 
 
 def _extract_categorias(state):

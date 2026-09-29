@@ -1115,6 +1115,44 @@ Ejemplo real (Coca Cola Zero 2,25 L): `offers.price = 3926.67` y `priceSpecifica
 
 **Un descuento sin los dos precios no se marca como descuento.** El fallback cuando la página no trae JSON-LD devuelve `activo: False` con el nombre de la promo: sin los dos números no se puede calcular el ahorro, y un badge de oferta sin precio hace dudar del resto de los datos. También `_find_promotion_code` barre el estado entero, así que puede(New) agarrar un banner general del sitio ("3x2 en Hamburguesas") que no es de este producto y que además puede estar vencido.
 
+#### En MasOnline las promos no están en ningún lado del HTML
+
+Vea y MasOnline son del mismo grupo, pero la promo se implementa distinto:
+
+| | Dónde está la promo | Precio de referencia |
+|---|---|---|
+| **Vea** | JSON-LD, ya descontado | 3926.67 (el de oferta) |
+| **MasOnline** | Solo en la simulación de carrito | 3932.86 (recién comprando 3) |
+
+En MasOnline el precio se arma por JS (`priceBehavior: "async"`), el HTML no lo renderiza y en el estado el offer llega con `teasers: []` y `discountHighlights: []` vacíos, con `price == priceWithoutDiscount`. No hay nada que parsear. La única fuente es `GET /api/checkout/pub/orderForms/simulation`, que devuelve el precio **por unidad con la promo ya aplicada** según la cantidad:
+
+| cantidad | unidad | total | pagás |
+|---|---|---|---|
+| 1 | 5899.00 | 5899.00 | 1 |
+| 2 | 5899.00 | 11798.00 | 2 |
+| **3** | **3932.86** | 11798.58 | 2 |
+| 4 | 5899.00 | 23596.00 | 4 |
+| **6** | **3932.86** | 23597.16 | 4 |
+
+Tres cosas que salen de esa tabla:
+
+- **El precio de una unidad no baja.** 3932.86 es lo que se paga comprando 3. Por eso la respuesta lleva `cantidad_minima` y la card y el PDF lo dicen, sin eso un 3x2 se lee como una bajada de precio que no existe para quien compra una.
+- **El precio se usa el que devuelve la simulación, no una cuenta.** `lista * 2/3` da 3932.67 y VTEX devuelve 3932.86. Calcularlo muestra un precio que el cliente nunca va a ver.
+- **La promo es por bloques de 3.** A cantidad 4 y 5 no hay descuento (quirón de VTEX), y a 6 vuelve. `cantidad_minima` es 3, que es lo que importa para comprar.
+
+**Cómo se decide si vale la pena preguntar.** La simulación va a un endpoint de carrito de terceros, así que no se llama para todo. Solo si:
+
+1. el producto no tiene ya un descuento del JSON-LD, y
+2. está en un cluster con un multi-compra **explícito** (`3x2- Bebidas`, `Hasta 2x1`, no `Oferta` ni `- OP`).
+
+El filtro importa mucho: `3x2- Bebidas` cuelga de casi todas las bebidas, pero fuera de bebidas casi ningún producto lo cuelga. Medido sobre 5 productos de cada categoría: bebidas 7/8 pasan el filtro, limpieza 0/5, panadería 0/5, alimentos 0/5. Es decir, el gasto extra se concentra justo donde están las promos. Un filtro más laxo (cualquier palabra tipo "Oferta" u "OP") no filtraba nada: recall 2/2 pero precisión 2/8.
+
+Con eso una comparación de 8 bebidas hizo **14 requests al carrito** (2 por producto que pasa el filtro, cortando antes si la promo ya aparece en la primera consulta).
+
+**Carrefour quedó afuera:** el mismo producto no tiene descuento por cantidad ni a 1 ni a 3, así que la simulación no aporta nada ahí.
+
+**Limitación conocida:** solo se simulan cantidades 2 y 3, así que un `6x5` se escapa. Son promos raras y cada cantidad probada es un request a un endpoint de carrito; si alguna vez aparecen, el lugar para sumarlas es `_CANTIDADES_MASCULINAS`.
+
 **Correr los tests**
 
 ```
@@ -1134,6 +1172,7 @@ python -m pytest
 | `test_analisis_precios_pdf.py` | La ficha PDF renderiza con y sin datos; escapa `&`/`<`/`>`;aguanta precios grandes y fechas invalidas |
 | `test_fuentes_registro.py` | Nombre canonico de cada fuente, flag experimental, y que una fuente apagada por config no genere ni un request |
 | `test_vea_promos.py` | Que se elija el bloque ld+json con precio de oferta y no el de lista, con una **pagina real** en `fixtures/vea_promo_real.html` |
+| `test_masonline_promos.py` | Filtro de clusters, `priceToken`, y la promo por cantidad contra la simulacion de carrito, con la **pagina real** en `fixtures/masonline_promo_real.html` |
 
 Las fixtures viven en `tests/fixtures/` y son HTML/JSON **guardados a mano**, con trampas incluidas a proposito (una descripcion con `{}` adentro, un `})` dentro de un string).
 

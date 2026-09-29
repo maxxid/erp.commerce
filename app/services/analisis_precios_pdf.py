@@ -33,6 +33,22 @@ C_TIT = ParagraphStyle("tit", fontSize=16, leading=19, textColor=colors.HexColor
 C_SEC = ParagraphStyle("sec", fontSize=11, leading=14, textColor=colors.HexColor("#374151"), spaceBefore=2)
 
 
+def _texto_oferta(desc):
+    """Columna de oferta: precio tachado y, si hay, el minimo de compra.
+
+    Sin el minimo, un 3x2 se lee como si el precio de una sola unidad hubiera
+    bajado, y no es el caso: el precio efectivo sale comprando N.
+    """
+    if not desc or not desc.get("activo") or not desc.get("precio_oferta"):
+        return ""
+    texto = f"antes {_fc(desc.get('precio_original'))}"
+    minimo = desc.get("cantidad_minima")
+    if minimo:
+        promo = desc.get("promocion") or "por cantidad"
+        texto += f" ({promo}, min. {minimo} u.)"
+    return texto
+
+
 def _fc(valor):
     if valor is None:
         return "-"
@@ -212,9 +228,7 @@ def generar_analisis_precios_pdf(analisis: dict) -> bytes:
         resaltar = []
         for i, r in enumerate(precios, start=1):
             desc = r.get("descuento")
-            oferta = ""
-            if desc and desc.get("activo") and desc.get("precio_oferta"):
-                oferta = f"antes {_fc(desc.get('precio_original'))}"
+            oferta = _texto_oferta(desc)
             etiqueta = nombre_fuente(r.get("fuente"))
             if esta_experimental(r.get("fuente")):
                 etiqueta += " (puede no ser el mismo producto)"
