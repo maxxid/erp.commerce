@@ -1090,10 +1090,36 @@ python -m pytest
 | `test_scrapers_fetch.py` | Cableado fetch -> parse con `requests.get` simulado, timeouts, errores de red, flujo de 1 y 2 pasos |
 | `test_scrapers_limites.py` | Casos que rompian en silencio: llaves en strings, `})` dentro de un string, categorias como dicts, precios no numericos |
 | `test_lookup_cache.py` | TTL positivo/negativo, purga, cache por fuente+barcode, orden de `comparar_precios` |
+| `test_analisis_precios.py` | Historial de compras: orden, exclusion de anuladas/pendientes, ultimo costo, mejor historico con proveedor y fecha |
+| `test_analisis_precios_pdf.py` | La ficha PDF renderiza con y sin datos; escapa `&`/`<`/`>`;aguanta precios grandes y fechas invalidas |
 
 Las fixtures viven en `tests/fixtures/` y son HTML/JSON **guardados a mano**, con trampas incluidas a proposito (una descripcion con `{}` adentro, un `})` dentro de un string).
 
 **Cuando cambia el markup de una fuente:** el symptom es que `comparar_precios` devuelve `[]` y la pantalla dice "no lo encontramos", indistinguible de "no esta en esa tienda". Para diagnosticarlo, se reemplaza la fixture por el HTML real que devuelve la fuente y se corre el test: el nombre del test que falla dice que campo se rompio.
+
+### Análisis de Compra
+
+`/precios-online` decia "aca esta mas barato", pero no contestaba la pregunta que importa al comprar: **¿cuanto pago yo la ultima vez, a quien, y cuando fue que mas barato?** Ese analisis vive en `app/services/analisis_precios_service.py` y se muestra en una card abajo de la ficha del producto.
+
+**No hay tabla nueva.** Todo sale de datos que el sistema ya tiene:
+
+| Dato | Origen |
+|------|--------|
+| Que se pago, cuando y a quien | `compras` + `compra_items` + `proveedores` |
+| Costo de lista actual por proveedor | `producto_proveedor.costo` |
+
+| Endpoint | Que hace |
+|----------|----------|
+| `GET /api/productos/{id}/analisis-precios` | Historial, costo por proveedor, online, ahorro, margen |
+| `GET /api/productos/{id}/analisis-precios/pdf` | Ficha A4 horizontal para imprimir o compartir |
+
+Ambos estan gateados a `admin, encargado, repositor` y comparten `_analisis_por_id()`, asi que el PDF nunca puede decir algo distinto a lo que muestra la pantalla.
+
+**Las compras anuladas quedan fuera.** `ESTADOS_VALIDOS = ("recibida", "parcial")`: una compra cancelada figuraria como "el precio mas bajo que jamais conseguiste", que es exactamente el error que hace desconfiar de la pantalla. Por el mismo motivo se ignoran las `pendiente` (todavia no se pago nada).
+
+En la pantalla: la columna mas barata de la tabla de proveedores queda resaltada en verde, y la compra con menor precio unitario en ambar. `ahorro_vs_mejor_historico` compara el precio online de hoy contra el mejor pago historico, no contra el ultimo: comparar contra el ultimo compra "contra vos mismo" y siempre sale que conviene comprar online.
+
+La ficha PDF (`app/services/analisis_precios_pdf.py`, ReportLab) es landscape porque en vertical la tabla de historial no entra sin partirse en 3 paginas. Empieza con una frase de recomendacion ("tu proveedor habitual sigue mejor...") porque es lo primero que se lee al recibirla por mail.
 
 ---
 

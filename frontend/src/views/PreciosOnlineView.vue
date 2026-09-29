@@ -101,6 +101,7 @@ async function buscarPrecios() {
 
     if (idLocal) {
       await cargarInfoLocal(idLocal)
+      cargarAnalisis(idLocal)
     }
 
     try {
@@ -220,6 +221,59 @@ const renderedResultados = computed(() =>
 )
 
 const hayBusqueda = computed(() => loading.value || !!productoInfo.value || resultados.value.length > 0 || noEstaEnLocal.value)
+
+const analisis = ref(null)
+const loadingAnalisis = ref(false)
+const descargandoPdf = ref(false)
+
+async function cargarAnalisis(id) {
+  loadingAnalisis.value = true
+  analisis.value = null
+  try {
+    const resp = await api.get(`/api/productos/${id}/analisis-precios`)
+    analisis.value = resp
+  } catch (e) {
+    toast.error(e?.data?.detail || e.message || 'No se pudo cargar el historial de precios')
+  } finally {
+    loadingAnalisis.value = false
+  }
+}
+
+async function descargarAnalisisPdf() {
+  if (!productoInfo.value?.id || descargandoPdf.value) return
+  descargandoPdf.value = true
+  try {
+    const url = `/api/productos/${productoInfo.value.id}/analisis-precios/pdf`
+    const { data } = await api.get(url, { responseType: 'blob' })
+    const blob = new Blob([data], { type: 'application/pdf' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `analisis-precios-${productoInfo.value.id}.pdf`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(link.href)
+  } catch (e) {
+    toast.error(e?.data?.detail || e.message || 'No se pudo generar el PDF')
+  } finally {
+    descargandoPdf.value = false
+  }
+}
+
+const proveedoresOrdenados = computed(() => {
+  const lista = Array.isArray(analisis.value?.proveedores) ? analisis.value.proveedores : []
+  const mejor = num(analisis.value?.mejor_oferta_proveedor)
+  return lista.map(p => ({ ...p, esMejorOferta: mejor !== null && num(p.costo_actual) === mejor }))
+})
+
+const historialOrdenado = computed(() => {
+  const lista = Array.isArray(analisis.value?.historial) ? analisis.value.historial : []
+  const mejorId = analisis.value?.mejor_historico?.compra_id
+  return lista.map(h => ({ ...h, esMejorPrecio: mejorId !== null && h.compra_id === mejorId }))
+})
+
+const sinHistorial = computed(() => (analisis.value ? !analisis.value.tiene_historico : false))
+const sinProveedores = computed(() => proveedoresOrdenados.value.length === 0)
 </script>
 
 <template>
@@ -390,7 +444,8 @@ const hayBusqueda = computed(() => loading.value || !!productoInfo.value || resu
     </div>
 
     <BaseCard v-if="productoInfo" padding="lg">
-      <div class="flex items-start gap-4">
+      <div class="flex items-start justify-between gap-4">
+        <div class="flex items-start gap-4 flex-1 min-w-0">
         <div v-if="productoInfo.imagen" class="w-20 h-20 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex-shrink-0">
           <img :src="productoInfo.imagen" :alt="productoInfo.nombre" class="w-full h-full object-cover" />
         </div>
@@ -443,6 +498,210 @@ const hayBusqueda = computed(() => loading.value || !!productoInfo.value || resu
             </div>
           </div>
         </div>
+        </div>
+        <BaseButton
+          variant="outline"
+          size="sm"
+          class="flex-shrink-0"
+          :loading="descargandoPdf"
+          @click="descargarAnalisisPdf"
+        >
+          <i class="fa-solid fa-file-pdf"></i>
+          <span class="hidden sm:inline">Ficha PDF</span>
+        </BaseButton>
+      </div>
+    </BaseCard>
+
+    <BaseCard v-if="productoInfo" padding="none">
+      <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+        <div>
+          <h3 class="font-bold text-slate-900 dark:text-white text-sm">Análisis de Compra</h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Lo que realmente pagaste contra lo que hay hoy
+          </p>
+        </div>
+        <BaseButton
+          variant="ghost"
+          size="xs"
+          :loading="loadingAnalisis"
+          @click="cargarAnalisis(productoInfo.id)"
+        >
+          <i class="fa-solid fa-refresh"></i>
+        </BaseButton>
+      </div>
+
+      <div v-if="loadingAnalisis" class="p-5 space-y-3">
+        <div v-for="i in 3" :key="i" class="flex items-center gap-4">
+          <BaseSkeleton width="6rem" height="1.25rem" />
+          <BaseSkeleton height="0.875rem" width="40%" />
+        </div>
+      </div>
+
+      <div v-else-if="!analisis" class="p-6 text-center text-sm text-slate-400">
+        No se pudo cargar el análisis
+      </div>
+
+      <div v-else class="p-5 space-y-6">
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div class="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900">
+            <p class="text-xs text-amber-700 dark:text-amber-400">Último costo pagado</p>
+            <p class="font-mono-data font-bold text-amber-900 dark:text-amber-200 mt-1">
+              {{ analisis.ultimo_costo ? fc(analisis.ultimo_costo.precio_unitario) : '—' }}
+            </p>
+            <p v-if="analisis.ultimo_costo" class="text-xs text-amber-700/80 dark:text-amber-500/80 mt-1 truncate">
+              {{ fd(analisis.ultimo_costo.fecha) }} · {{ analisis.ultimo_costo.proveedor_nombre }}
+            </p>
+          </div>
+
+          <div class="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900">
+            <p class="text-xs text-emerald-700 dark:text-emerald-400">Mejor costo histórico</p>
+            <p class="font-mono-data font-bold text-emerald-900 dark:text-emerald-200 mt-1">
+              {{ analisis.mejor_historico ? fc(analisis.mejor_historico.precio_unitario) : '—' }}
+            </p>
+            <p v-if="analisis.mejor_historico" class="text-xs text-emerald-700/80 dark:text-emerald-500/80 mt-1 truncate">
+              {{ fd(analisis.mejor_historico.fecha) }} · {{ analisis.mejor_historico.proveedor_nombre }}
+            </p>
+          </div>
+
+          <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
+            <p class="text-xs text-slate-500 dark:text-slate-400">Mejor oferta proveedor</p>
+            <p class="font-mono-data font-bold text-slate-900 dark:text-white mt-1">
+              {{ analisis.mejor_oferta_proveedor !== null ? fc(analisis.mejor_oferta_proveedor) : '—' }}
+            </p>
+            <p class="text-xs text-slate-400 mt-1">Costo de lista actual</p>
+          </div>
+
+          <div class="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900">
+            <p class="text-xs text-blue-700 dark:text-blue-400">Mejor precio online</p>
+            <p class="font-mono-data font-bold text-blue-900 dark:text-blue-200 mt-1">
+              {{ analisis.online ? fc(analisis.online.precio) : '—' }}
+            </p>
+            <p v-if="analisis.online" class="text-xs text-blue-700/80 dark:text-blue-500/80 mt-1">
+              {{ getFuenteInfo(analisis.online.fuente).nombre }} hoy
+            </p>
+          </div>
+        </div>
+
+        <div
+          v-if="analisis.ahorro_vs_mejor_historico"
+          class="p-3 rounded-xl text-sm"
+          :class="analisis.ahorro_vs_mejor_historico.conviene_online
+            ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300'
+            : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'"
+        >
+          <i
+            class="fa-solid mr-1"
+            :class="analisis.ahorro_vs_mejor_historico.conviene_online ? 'fa-circle-check' : 'fa-circle-info'"
+          ></i>
+          <template v-if="analisis.ahorro_vs_mejor_historico.conviene_online">
+            Comprar hoy online sale
+            <strong>{{ fc(analisis.ahorro_vs_mejor_historico.diferencia) }}</strong>
+            menos que tu mejor compra histórica
+            ({{ analisis.ahorro_vs_mejor_historico.porcentaje }}% menos).
+          </template>
+          <template v-else>
+            Hoy ningún canal online le gana a tu mejor compra histórica por
+            <strong>{{ fc(Math.abs(analisis.ahorro_vs_mejor_historico.diferencia)) }}</strong>.
+          </template>
+        </div>
+
+        <div v-if="analisis.margen_actual" class="p-3 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/50 text-slate-700 dark:text-slate-300">
+          <i class="fa-solid fa-calculator mr-1"></i>
+          Vendiendo a <strong>{{ fc(analisis.margen_actual.precio_venta) }}</strong> y comprando al
+          precio online más bajo te quedan
+          <strong :class="analisis.margen_actual.positivo ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'">
+            {{ fc(analisis.margen_actual.utilidad) }}
+          </strong>
+          por unidad ({{ analisis.margen_actual.porcentaje }}%).
+        </div>
+
+        <div>
+          <h4 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">
+            Costo por proveedor
+          </h4>
+          <p v-if="sinProveedores" class="text-sm text-slate-400 py-2">
+            Este producto no tiene proveedores cargados.
+          </p>
+          <div v-else class="overflow-x-auto -mx-5 px-5">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="text-left text-xs text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
+                  <th class="py-2 pr-3 font-medium">Proveedor</th>
+                  <th class="py-2 px-3 font-medium text-right">Costo actual</th>
+                  <th class="py-2 px-3 font-medium text-right">Último pagado</th>
+                  <th class="py-2 pl-3 font-medium text-right">Plazo</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="p in proveedoresOrdenados"
+                  :key="p.proveedor_id"
+                  class="border-b border-slate-100 dark:border-slate-800 last:border-0"
+                  :class="p.esMejorOferta ? 'bg-emerald-50/60 dark:bg-emerald-950/20' : ''"
+                >
+                  <td class="py-2 pr-3 text-slate-900 dark:text-white">
+                    {{ p.nombre }}
+                    <BaseBadge v-if="p.es_principal" variant="warning" size="xs" class="ml-1">Principal</BaseBadge>
+                    <BaseBadge v-if="p.esMejorOferta" variant="success" size="xs" class="ml-1">Mejor</BaseBadge>
+                  </td>
+                  <td class="py-2 px-3 text-right font-mono-data" :class="p.esMejorOferta ? 'text-emerald-700 dark:text-emerald-400 font-bold' : 'text-slate-700 dark:text-slate-300'">
+                    {{ p.costo_actual !== null ? fc(p.costo_actual) : '—' }}
+                  </td>
+                  <td class="py-2 px-3 text-right font-mono-data text-slate-600 dark:text-slate-400">
+                    {{ p.ultimo_precio_pagado !== null ? fc(p.ultimo_precio_pagado) : 'Nunca' }}
+                    <span v-if="p.ultima_fecha_pago" class="block text-xs text-slate-400">{{ fd(p.ultima_fecha_pago) }}</span>
+                  </td>
+                  <td class="py-2 pl-3 text-right text-slate-500 dark:text-slate-400">
+                    {{ p.plazo_entrega_dias !== null ? `${p.plazo_entrega_dias} d` : '—' }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div>
+          <h4 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">
+            Historial de compras
+          </h4>
+          <p v-if="sinHistorial" class="text-sm text-slate-400 py-2">
+            Este producto todavía no tiene compras registradas.
+          </p>
+          <div v-else class="overflow-x-auto -mx-5 px-5">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="text-left text-xs text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
+                  <th class="py-2 pr-3 font-medium">Fecha</th>
+                  <th class="py-2 px-3 font-medium">Proveedor</th>
+                  <th class="py-2 px-3 font-medium text-right">Cant.</th>
+                  <th class="py-2 pl-3 font-medium text-right">Precio unit.</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="h in historialOrdenado"
+                  :key="h.compra_id"
+                  class="border-b border-slate-100 dark:border-slate-800 last:border-0"
+                  :class="h.esMejorPrecio ? 'bg-amber-50/60 dark:bg-amber-950/20' : ''"
+                >
+                  <td class="py-2 pr-3 text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                    {{ fd(h.fecha) }}
+                    <BaseBadge v-if="h.esMejorPrecio" variant="warning" size="xs" class="ml-1">Mínimo</BaseBadge>
+                  </td>
+                  <td class="py-2 px-3 text-slate-900 dark:text-white">{{ h.proveedor_nombre }}</td>
+                  <td class="py-2 px-3 text-right font-mono-data text-slate-600 dark:text-slate-400">{{ h.cantidad_recibida }}</td>
+                  <td class="py-2 pl-3 text-right font-mono-data font-semibold" :class="h.esMejorPrecio ? 'text-amber-700 dark:text-amber-400' : 'text-slate-900 dark:text-white'">
+                    {{ fc(h.precio_unitario) }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <p class="text-xs text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
+          Las compras anuladas quedan excluidas del historial.
+        </p>
       </div>
     </BaseCard>
 

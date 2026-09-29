@@ -2,6 +2,7 @@
 
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
@@ -22,6 +23,8 @@ from app.services import lookup_service as lk
 from app.services import stock_service
 from app.services import catalogo_service
 from app.services import auditoria_service
+from app.services import analisis_precios_service
+from app.services.analisis_precios_pdf import generar_analisis_precios_pdf
 from app.models.compra import Compra, CompraItem
 from app.models.proveedor import Proveedor
 
@@ -306,6 +309,61 @@ def precios_online(
     return RespuestaData(
         data=resultados,
         message=f"{len(resultados)} resultado(s) encontrado(s)"
+    )
+
+
+def _analisis_por_id(db: Session, producto_id: int) -> dict:
+    """Arma el analisis de un producto local, con precios online cuando hay codigo.
+
+    Compartido por el JSON y el PDF para que ambos devuelvan exactamente lo mismo.
+    """
+    producto = db.query(Producto).filter(Producto.id == producto_id).first()
+    if not producto:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+    precios = []
+    if producto.codigo_barras:
+        precios = lk.comparar_precios(producto.codigo_barras)
+
+    return analisis_precios_service.analizar_precios(db, producto, precios)
+
+
+@router.get("/{producto_id}/analisis-precios", response_model=RespuestaData)
+def analisis_precios(
+    producto_id: int,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "encargado", "repositor")),
+):
+    """Historial de compras, costo por proveedor y precios online de un producto.
+
+    Cierra el gap que dejaba /precios-online: comparar el precio online
+    contra lo que realmente se pagó, y contra el costo de lista de cada
+    proveedor.
+    """
+    return RespuestaData(
+        data=_analisis_por_id(db, producto_id),
+        message="Análisis de precios generado",
+    )
+
+
+@router.get("/{producto_id}/analisis-precios/pdf")
+def analisis_precios_pdf(
+    producto_id: int,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "encargado", "repositor")),
+):
+    """Descarga la ficha PDF del análisis, para compartir o imprimir."""
+    analisis = _analisis_por_id(db, producto_id)
+    pdf = generar_analisis_precios_pdf(analisis)
+
+    nombre = analisis["producto"].get("nombre") or "producto"
+    slug = "".join(c if c.isalnum() or c in "-_" else "-" for c in nombre.lower())
+    slug = "-".join(p for p in slug.split("-") if p)[:60] or "producto"
+
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="analisis-precios-{slug}.pdf"'},
     )
 
 

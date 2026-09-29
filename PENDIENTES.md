@@ -6,6 +6,15 @@
 
 ## ✅ Completados recientemente
 
+### Análisis de Compra: lo que pagaste, a quién y cuándo salió más barato — 29/09/2026
+- **Por que:** `/precios-online` decía "acá está más barato" online, pero no contestaba la pregunta que de verdad importa al comprar: **¿cuánto pagué yo la última vez, a quién, y cuándo fue que más barato?** El dato existía (compras + `producto_proveedor`), nunca se había mostrado junto a los precios online
+- **`app/services/analisis_precios_service.py`**: historial de compras del producto, costo de lista actual por proveedor, último precio pagado a cada uno, mejor costo histórico **con proveedor y fecha**, ahorro contra la referencia y margen con el precio online más bajo
+- **Sin tabla nueva.** El historial sale de `compras` + `compra_items`. Migración: ninguna
+- **Las compras anuladas quedan excluidas** (`ESTADOS_VALIDOS = ("recibida", "parcial")`): si no, una compra cancelada figuraría como "el precio más bajo que jamás conseguiste" y la pantalla perdería credibilidad al primer dato raro. Las `pendiente` se ignoran porque todavía no se pagó nada
+- **Ficha PDF** (`analisis_precios_pdf.py`, ReportLab, A4 horizontal) con la fila más barata resaltada en cada tabla. Landscape porque en vertical el historial se parte en 3 páginas. Empieza con una frase de recomendación, que es lo primero que se lee
+- **38 tests nuevos** (125 en total): orden del historial, exclusión de anuladas, que una anulada no pueda ser el "mejor precio", proveedor/fecha del mínimo, productos sin historial, y que el PDF renderice con y sin datos, escapando `&`/`<`/`>`
+- **Bug encontrado al escribir los tests:** `db.query(Entidad, tabla_core)` **aplana la tabla Core a sus columnas**: la fila devolvía 11 valores en vez de 2 y el `for proveedor, vinculo in filas` tiraba `ValueError: too many values to unpack`. Resuelto con `select()` de columnas explícitas
+
 ### Tests de los 4 scrapers + 3 bugs que rompian en silencio — 29/09/2026
 - **Por que:** el scraping es la unica parte del ERP que puede fallar **sin fallar visiblemente**. Si Carrefour cambia su markup, `comparar_precios` devuelve `[]` y la pantalla dice "no lo encontramos", indistinguible de "el producto no esta en esa tienda". El resto del ERP es SQL CRUD donde un error se ve al instante. El repo no tenia **ningun** test
 - **Refactor fetch/parse** en `lookup_service.py`, sin cambiar comportamiento: `_lookup_supercoco` / `_lookup_carrefour_api` / `_scrape_fuente` hacen red; `_parse_supercoco` / `_parse_carrefour` / `_parse_vea` parsean y son testeables
