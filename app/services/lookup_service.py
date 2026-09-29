@@ -11,7 +11,10 @@ HEADERS = {
     "User-Agent": settings.SCRAPER_USER_AGENT,
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "es-AR,es;q=0.9,en;q=0.8",
-    "Accept-Encoding": "gzip, deflate, br",
+    # Sin "br" a proposito: brotli no viene instalado, y si el servidor lo
+    # manda igual requests NO lo descomprime y devuelve bytes crudos en vez de
+    # textear el error. Commerciante.carrefour.com.ar responde justamente asi.
+    "Accept-Encoding": "gzip, deflate",
 }
 
 # Registro de fuentes. El nombre es el canonico y es el que se muestra en

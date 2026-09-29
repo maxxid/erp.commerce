@@ -1065,6 +1065,24 @@ Resultados ordenados de menor a mayor. La fila más barata se resalta con fondo 
 
 `comparar_precios` devuelve por fuente: `fuente`, `nombre_fuente`, `experimental`, `precio`, `nombre`, `marca`, `imagen_url`, `url`, `descuento`.
 
+### Por qué los headers no piden brotli
+
+`Accept-Encoding` es `gzip, deflate` y **no** `br`, a propósito. `brotli` no viene instalado, y si el servidor responde igual con `Content-Encoding: br`, `requests` **no lo descomprime y no tira error**: devuelve los bytes comprimidos y los trata como si fueran el HTML. El parseo falla después con un error que no menciona el Encoding, que es la peor forma de fallar porque esconde la causa.
+
+Lo detectó `comerciante.carrefour.com.ar`, que responde con `br`. Ese sitio no se puede usar como fuente (abajo), pero el bug era general: cualquier sitio que decidiera responder brotli nos devolvía basura en silencio.
+
+Supercoco usa un dict de headers propio con solo el User-Agent, así que nunca pidió brotli. `test_scrapers_fetch.py::TestHeadersDeRed` cubre las dos rutas.
+
+### `comerciante.carrefour.com.ar` (Maxi Pedido) — no se puede usar como fuente
+
+Existe y es un sitio distinto del de consumo, con precios por volumen. El listado se puede leer por API (`GET /products?method=productsList&currentUrl=...`) y trae EAN, nombre y sector, así que la parte de catálogo funciona.
+
+**Pero los precios están detrás de un login.** En los 12 productos que devuelve la búsqueda el atributo viene literalmente como `data-price="private"`, y la página de producto no tiene precio alguno. El sitio lo dice en pantalla: *"Te pedimos por favor que ingreses tus datos para poder ver el precio y stock disponible."*
+
+No es un obstáculo a sortear con otra consulta: es el propósito del sitio, un portal B2B con acceso por cuenta. Agregarlo exigiría una cuenta de comercio mayorista y guardar credenciales, que es otra decisión y otra responsabilidad, y no algo que se pueda resolver desde acá.
+
+Aparte: el EAN buscado (`7790895001000`) no existe. La búsqueda lo resuelve por近似 a `7790895000997` (Coca regular 2.25 L), que sí existe.
+
 ### Fuentes: registro, nombre canónico y apagado
 
 `FUENTES` dejó de ser una lista y es un dict con los datos de cada fuente:

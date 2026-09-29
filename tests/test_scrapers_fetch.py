@@ -49,6 +49,29 @@ def instalar(monkeypatch, *respuestas):
     return pedidas
 
 
+class TestHeadersDeRed:
+    """Los headers decide si lo que baja es texto o bytes crudos.
+
+    Si se pide "br" y brotli no esta instalado, requests NO descomprime y no
+    tira error: devuelve los bytes comprimidos como si fueran el HTML. El
+    parseo falla en silencio, con un error de parseo que no dice nada del
+   Encoding. Comerciante.carrefour.com.ar responde justo con br.
+    """
+
+    def test_no_pide_brotli(self):
+        assert "br" not in ls.HEADERS["Accept-Encoding"].replace(",", " ").split()
+
+    def test_pide_algo_que_se_sepuede_descomprimir(self):
+        assert "gzip" in ls.HEADERS["Accept-Encoding"]
+
+    def test_supercoco_tampoco_pide_brotli(self, monkeypatch, sin_cache):
+        """Supercoco usa su propio dict de headers: ese no debe pedir brotli."""
+        pedidas = instalar(monkeypatch, RespuestaFalsa("<html></html>"))
+        ls._lookup_supercoco(BARCODE)
+        accept = pedidas[0][1]["headers"].get("Accept-Encoding", "")
+        assert "br" not in accept.replace(",", " ").split()
+
+
 class TestSuperCocoFetch:
     def test_wirea_html_y_url_de_busqueda(self, monkeypatch, leer_fixture, sin_cache):
         instalar(monkeypatch, RespuestaFalsa(leer_fixture("supercoco_busqueda.html")))

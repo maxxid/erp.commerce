@@ -6,6 +6,14 @@
 
 ## ✅ Completados recientemente
 
+### Carrefour Maxi (comerciante.carrefour.com.ar): el sitio es B2B con login, no sirve como fuente — 29/09/2026
+- **Se investigo** el portal de compras por volumen de Carrefour, que tiene precios distintos y a veces mejores que el de consumo
+- **El catalogo se puede leer por API** (`GET /products?method=productsList&currentUrl=...`): trae EAN, nombre y sector
+- **Los precios no.** En los 12 productos que devuelve la búsqueda el atributo viene literalmente como `data-price="private"`, y la página de producto no tiene precio. El sitio lo dice en pantalla: "Te pedimos por favor que ingreses tus datos para poder ver el precio y stock disponible"
+- **No se implemento, y no es un bug pendiente:** es un portal B2B con acceso por cuenta, no un obstáculo técnico. Agregarlo exigiría una cuenta de comercio mayorista y guardar credenciales, que es otra decisión
+- **De paso se arreglo un bug general que ese sitio destapo:** el scraper pedía `Accept-Encoding: br` y `brotli` no esta instalado, asi que cuando un servidor responde brotli `requests` NO lo descomprime ni tira error, devuelve los bytes crudos. Cualquier sitio que respondiera brotli nos daba basura en silencio, con un error de parseo que no decia nada del Encoding. Ahora se pide `gzip, deflate`
+- **3 tests nuevos** (218 en total) para que ninguna fuente vuelva a pedir brotli
+
 ### Las promos por cantidad de MasOnline no se detectaban: no estan en el HTML — 29/09/2026
 - **Por qué:** el codigo esta hecho para detectar promociones, ofertas y descuentos, y en MasOnline seguia reportando el precio de lista. La Coca Zero de la URL de arriba devolvia $5.899 cuando en 3x2 sale $3.932,86
 - **Causa raíz:** no es un bug de parseo, es que la promo **no esta en ningun lado del HTML**. El precio se arma por JS (`priceBehavior: "async"`), el HTML no lo renderiza, y en el estado de VTEX el offer llega con `teasers: []` y `discountHighlights: []` vacios, con `price == priceWithoutDiscount`. No hay nada que parsear
