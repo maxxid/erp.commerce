@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from app.config import settings
 from app.database import engine, Base
 from app.models import *  # noqa: F401, F403 — Registrar todos los modelos
-from app.routers import auth, productos, categorias, dashboard, caja, clientes, ventas, proveedores, compras, calendario, backups, usuarios, auditoria, licencia, catalogo, ofertas, facturacion, configuracion as config_router, pagos, lotes, denominaciones
+from app.routers import auth, productos, categorias, dashboard, caja, clientes, ventas, proveedores, compras, calendario, backups, usuarios, auditoria, licencia, catalogo, ofertas, facturacion, configuracion as config_router, pagos, lotes, denominaciones, reportes
 
 
 def crear_app() -> FastAPI:
@@ -54,6 +54,7 @@ def crear_app() -> FastAPI:
     app.include_router(pagos.router)
     app.include_router(lotes.router)
     app.include_router(denominaciones.router)
+    app.include_router(reportes.router)
 
     # Servir el frontend Vue 3 (producción)
     @app.get("/app")
@@ -242,6 +243,10 @@ def _migrate_new_columns():
         if "flag_revision_stock" not in existentes_prod:
             conn.execute(sa.text("ALTER TABLE productos ADD COLUMN flag_revision_stock BOOLEAN DEFAULT 0"))
             conn.execute(sa.text("ALTER TABLE productos ADD COLUMN deficit_stock FLOAT DEFAULT 0.0"))
+            conn.commit()
+        if "controla_stock" not in existentes_prod:
+            conn.execute(sa.text("ALTER TABLE productos ADD COLUMN controla_stock BOOLEAN NOT NULL DEFAULT 1"))
+            conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_productos_controla_stock ON productos (controla_stock)"))
             conn.commit()
         existentes_lic = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(licencias)"))]
         if "machine_id" not in existentes_lic:

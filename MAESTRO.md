@@ -390,12 +390,25 @@
 | Precio venta | Input number | — |
 | Stock inicial | Input number | Solo en creación |
 | Stock mínimo | Input number | 0 = alerta deshabilitada, con hint text |
+| **Controlar stock** | BaseToggle | Desactivado en fraccionados: vender no descuenta lotes, no genera movimientos ni alertas (solo queda registrado lo vendido) |
 | Categoría | BaseSelect + botón `+` | Quick-create inline: nombre + botón Crear |
 | Proveedor | Combobox + botón `+` | Quick-create inline: nombre + CUIT |
 | Fecha vencimiento | Input date | Opcional |
 | Observaciones | Textarea | Opcional |
 | **Botón "Guardar"** | Primary | `saveProduct()` |
 | **Botón "Cancelar"** | Ghost | `closeModal()` |
+
+#### Control de stock por producto (`controla_stock`)
+
+*(productos fraccionados: panadería, fiambre, etc., donde el stock en kg se desincroniza solo)*
+
+| Elemento | Comportamiento |
+|----------|----------------|
+| **Default** | `True` — todos los productos existentes siguen controlando stock tal cual |
+| **Con control** | Comportamiento actual: FEFO sobre lotes, `MovimientoStock` de salida, `deficit_stock` / `flag_revision_stock` y alertas de stock bajo |
+| **Sin control** | `confirmar_venta()` no descuenta lotes ni genera movimientos; `anular_venta()` no reingresa. Se siguen guardando `peso` y `subtotal` de la venta para el análisis |
+| **Alertas** | Quedan fuera de `GET /api/productos/stock-bajo`, de los filtros "Stock bajo"/"Sin stock" de Productos y de la grilla del POS (muestran badge `s/ctrl`) |
+| **Migración** | `ALTER TABLE productos ADD COLUMN controla_stock BOOLEAN NOT NULL DEFAULT 1` en `_migrate_new_columns()` (`app/main.py`) |
 
 ### Modal: Crear/Editar Oferta
 
@@ -947,6 +960,19 @@
 | **Top 5 Productos** | Lista rankeada |
 | **Botón sync propio** | `syncMonthly()` |
 
+#### Vendido por Peso
+
+*(productos fraccionados: panadería, fiambre, etc. — análisis de kg e importe)*
+
+| Elemento | Descripción |
+|----------|-------------|
+| **Rango de fechas** | Inputs `desde` / `hasta` (por defecto, últimos 30 días) + botón "Calcular" → `loadVendidoPorPeso()` |
+| **KPIs** | Total vendido ($), kilos vendidos, operaciones y cantidad de productos del período |
+| **Tabla** | Por producto: kilos totales (con rango min–max), precio promedio por kg, operaciones e importe |
+| **Pie de tabla** | Totales del período |
+| **Carga** | `onMounted` y `syncAll()` también refrescan este reporte |
+| **Solo ventas confirmadas** | Las ventas anuladas y las pendientes quedan fuera del cálculo |
+
 #### Reporte Trimestral
 
 | Elemento | Descripción |
@@ -961,6 +987,7 @@
 - `GET /api/dashboard/semanal` — reporte semanal vs semana anterior
 - `GET /api/dashboard/mensual` — reporte mensual vs mes anterior, por semana, por categoría
 - `GET /api/dashboard/trimestral` — reporte trimestral vs trimestre anterior, por mes
+- `GET /api/reportes/vendido-por-peso?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&producto_id=` — kg e importe por producto (`router: reportes.py`, cualquier usuario autenticado). Solo ítems con `por_kilo = true` de ventas confirmadas
 
 ---
 

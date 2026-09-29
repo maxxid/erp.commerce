@@ -62,6 +62,11 @@ class Producto(Base):
     stock_transito = Column(Float, default=0.0)    # Mercadería comprada, aún no recibida
     stock_minimo = Column(Float, default=0.0)
 
+    # False = el producto NO controla stock: venderlo no genera MovimientoStock,
+    # no descuenta lotes y no marca déficit. Útil para fraccionados (panadería)
+    # donde el stock en kg se desincroniza solo y solo importa lo vendido.
+    controla_stock = Column(Boolean, default=True, nullable=False, index=True)
+
     # Bandera de revisión: se activa cuando un producto se vende por encima de su
     # stock real (suma de lotes). Indica posible error humano de carga (ej. se
     # cargó un lote de 10 y había 12) y requiere conteo/corrección posterior.

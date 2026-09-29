@@ -26,6 +26,7 @@ class ProductoBase(BaseModel):
     tipo_venta: Optional[str] = "unidad"
     precio_por_kilo: Optional[float] = None
     precio_por_unidad: Optional[float] = None
+    controla_stock: Optional[bool] = True
 
 
 class ProductoCreate(ProductoBase):
@@ -56,6 +57,7 @@ class ProductoUpdate(BaseModel):
     tipo_venta: Optional[str] = None
     precio_por_kilo: Optional[float] = None
     precio_por_unidad: Optional[float] = None
+    controla_stock: Optional[bool] = None
 
 
 class ProductoOut(ProductoBase):
@@ -66,6 +68,7 @@ class ProductoOut(ProductoBase):
     precio_etiqueta: Optional[float] = None
     activo: bool
     ia_analizado: bool
+    controla_stock: bool = True
     observaciones: Optional[str] = None
     fecha_vencimiento: Optional[datetime] = None
     categoria_nombre: Optional[str] = None
@@ -101,6 +104,10 @@ class ProductoLookupResponse(BaseModel):
     url: Optional[str] = None
     descuento: Optional[dict] = None
     categoria: Optional[str] = None
+    tipo_venta: Optional[str] = "unidad"
+    precio_por_kilo: Optional[float] = None
+    precio_por_unidad: Optional[float] = None
+    controla_stock: bool = True
     ia_mode: bool = False
     _cached: bool = False
     comparacion: Optional[list] = None

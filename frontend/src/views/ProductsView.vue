@@ -11,6 +11,7 @@ import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseBadge from '@/components/ui/BaseBadge.vue'
+import BaseToggle from '@/components/ui/BaseToggle.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseTable from '@/components/ui/BaseTable.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -101,7 +102,7 @@ function clearAllFilters() {
 
 const countStockBajo = computed(() => {
   try {
-    return products.value.filter(p => p && Number(p.stock_actual) <= Number(p.stock_minimo || 5) && Number(p.stock_actual) >= 0).length
+    return products.value.filter(p => p && p.controla_stock !== false && Number(p.stock_actual) <= Number(p.stock_minimo || 5) && Number(p.stock_actual) >= 0).length
   } catch { return 0 }
 })
 
@@ -121,7 +122,7 @@ const countEnOferta = computed(() => {
 
 const countSinStock = computed(() => {
   try {
-    return products.value.filter(p => p && Number(p.stock_actual) === 0).length
+    return products.value.filter(p => p && p.controla_stock !== false && Number(p.stock_actual) === 0).length
   } catch { return 0 }
 })
 
@@ -218,6 +219,7 @@ const defaultForm = () => ({
   proveedor_id: null,
   observaciones: '',
   tipo_venta: 'unidad',
+  controla_stock: true,
 })
 
 const form = reactive(defaultForm())
@@ -250,7 +252,7 @@ const filteredProducts = computed(() => {
       list = list.filter(p => p && p.categoria_id === filterCategory.value)
     }
     if (filterStockBajo.value) {
-      list = list.filter(p => p && Number(p.stock_actual) <= Number(p.stock_minimo || 5) && Number(p.stock_actual) >= 0)
+      list = list.filter(p => p && p.controla_stock !== false && Number(p.stock_actual) <= Number(p.stock_minimo || 5) && Number(p.stock_actual) >= 0)
     }
     if (filterPrecioDefasado.value) {
       list = list.filter(p => p && Number(p.precio_venta) > 0 && Number(p.precio_costo) > 0 && Number(p.precio_venta) <= Number(p.precio_costo))
@@ -261,7 +263,7 @@ const filteredProducts = computed(() => {
       list = list.filter(p => p && pids.has(p.id))
     }
     if (filterSinStock.value) {
-      list = list.filter(p => p && Number(p.stock_actual) === 0)
+      list = list.filter(p => p && p.controla_stock !== false && Number(p.stock_actual) === 0)
     }
     if (filterSinCodigo.value) {
       list = list.filter(p => {
@@ -424,6 +426,7 @@ function openEditModal(product) {
     proveedor_id: product.proveedor_id || null,
     observaciones: product.observaciones || '',
     tipo_venta: product.tipo_venta || 'unidad',
+    controla_stock: product.controla_stock !== false,
   })
   showModal.value = true
 }
@@ -495,6 +498,7 @@ async function saveProduct() {
   saving.value = true
   try {
     const payload = { ...form }
+    payload.controla_stock = form.controla_stock !== false
     if (form.tipo_venta === 'kilo') {
       payload.precio_por_kilo = form.precio_venta
       payload.precio_venta = null
@@ -912,13 +916,22 @@ async function fetchProveedores() {
       <template #stock_actual="{ row }">
         <div class="flex items-center justify-end gap-1.5">
           <BaseBadge
+            v-if="row.controla_stock === false"
+            variant="default"
+            size="xs"
+            title="No controla stock: venderlo no descuenta lotes ni genera alertas"
+          >
+            <i class="fa-solid fa-circle-slash mr-0.5 text-[8px]"></i> s/ctrl
+          </BaseBadge>
+          <BaseBadge
+            v-else
             :variant="row.stock_actual <= 5 ? 'danger' : 'default'"
             size="xs"
           >
             {{ row.stock_actual }}
           </BaseBadge>
           <BaseBadge
-            v-if="row.flag_revision_stock"
+            v-if="row.flag_revision_stock && row.controla_stock !== false"
             variant="danger"
             size="xs"
             title="Se vendió por encima del stock registrado en lotes. Conteo/corrección pendiente."
@@ -1106,6 +1119,12 @@ async function fetchProveedores() {
             </template>
           </BaseInput>
         </div>
+
+        <BaseToggle
+          v-model="form.controla_stock"
+          label="Controlar stock"
+          description="Desactivá esto en fraccionados (panadería, chorizo, etc.): al vender no se descuenta de los lotes, no genera movimientos ni alertas de bajo stock. Solo queda registrado lo vendido (kg y $)."
+        />
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div class="flex items-end gap-2">

@@ -247,10 +247,13 @@ def productos_stock_bajo(
     user: Usuario = Depends(get_current_user),
 ):
     """Lista productos con stock bajo (<= stock_minimo) o sin stock.
-    El stock se calcula siempre como suma de lotes activos."""
+    El stock se calcula siempre como suma de lotes activos.
+    Los productos con controla_stock=False quedan fuera: no se les descuenta stock."""
     from app.services import producto_service
 
-    productos = db.query(Producto).filter(Producto.activo == True).all()
+    productos = db.query(Producto).filter(
+        Producto.activo == True, Producto.controla_stock == True
+    ).all()
     for p in productos:
         p.stock_actual = producto_service._suma_lotes_activos(db, p.id)
 
@@ -473,6 +476,10 @@ def lookup(
             propiedades=local.propiedades,
             fuente=local.fuente,
             categoria=local.categoria.nombre if local.categoria else None,
+            tipo_venta=local.tipo_venta,
+            precio_por_kilo=local.precio_por_kilo,
+            precio_por_unidad=local.precio_por_unidad,
+            controla_stock=local.controla_stock is not False,
             _cached=True,
             ia_mode=data.ia_mode,
         )

@@ -196,7 +196,12 @@ def confirmar_venta(
     # NO se bloquea la venta por stock insuficiente: si el stock físico real
     # supera lo registrado (error humano al cargar lotes), se vende igual y el
     # producto queda marcado con bandera de revisión (flag_revision_stock).
+    # Productos con controla_stock=False no mueven stock en absoluto.
     for item in venta.items:
+        producto = db.query(Producto).filter(Producto.id == item.producto_id).first()
+        if producto is not None and producto.controla_stock is False:
+            continue
+
         cantidad_a_descontar = item.peso if item.por_kilo else item.cantidad
         consumos, deficit = lote_service.descontar_fefo_detallado(
             db, item.producto_id, cantidad_a_descontar
@@ -208,11 +213,9 @@ def confirmar_venta(
                 cantidad=cant,
             ))
 
-        if deficit > 0:
-            producto = db.query(Producto).filter(Producto.id == item.producto_id).first()
-            if producto:
-                producto.flag_revision_stock = True
-                producto.deficit_stock = (producto.deficit_stock or 0) + deficit
+        if deficit > 0 and producto is not None:
+            producto.flag_revision_stock = True
+            producto.deficit_stock = (producto.deficit_stock or 0) + deficit
 
         stock_service.ajustar_stock(
             db,
@@ -300,8 +303,13 @@ def anular_venta(
 
     uid = usuario_id or venta.usuario_id
 
-    # Revertir stock: volver a ingresar en cada lote del que se había descontado
+    # Revertir stock: volver a ingresar en cada lote del que se había descontado.
+    # Los productos con controla_stock=False nunca descontaron, no hay que reingresar.
     for item in venta.items:
+        producto = db.query(Producto).filter(Producto.id == item.producto_id).first()
+        if producto is not None and producto.controla_stock is False:
+            continue
+
         cantidad_vendida = item.peso if item.por_kilo else item.cantidad or 0
         reingresado = 0.0
         for consumo in item.lote_consumos:
@@ -321,14 +329,12 @@ def anular_venta(
 
         # Revertir el déficit registrado (unidades vendidas sin cobertura de lote)
         deficit_anulado = cantidad_vendida - reingresado
-        if deficit_anulado > 0:
-            producto = db.query(Producto).filter(Producto.id == item.producto_id).first()
-            if producto:
-                producto.deficit_stock = max(
-                    0.0, (producto.deficit_stock or 0) - deficit_anulado
-                )
-                if producto.deficit_stock <= 0:
-                    producto.flag_revision_stock = False
+        if deficit_anulado > 0 and producto is not None:
+            producto.deficit_stock = max(
+                0.0, (producto.deficit_stock or 0) - deficit_anulado
+            )
+            if producto.deficit_stock <= 0:
+                producto.flag_revision_stock = False
 
     # Revertir cta corriente
     if venta.medio_pago == "cta_corriente" and venta.cliente_id:

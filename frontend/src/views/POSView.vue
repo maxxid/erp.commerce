@@ -379,6 +379,15 @@
                     <span v-if="p.tipo_venta === 'kilo'" class="text-[9px] text-amber-500">/kg</span>
                   </span>
                   <BaseBadge
+                    v-if="p.controla_stock === false"
+                    variant="default"
+                    size="xs"
+                    title="Sin control de stock"
+                  >
+                    s/ctrl
+                  </BaseBadge>
+                  <BaseBadge
+                    v-else
                     :variant="p.stock_actual <= 5 ? 'danger' : 'default'"
                     size="xs"
                   >
@@ -1714,7 +1723,11 @@ async function triggerPOSLookup() {
           marca: resp.marca || '',
           precio_venta: resp.precio_venta || 0,
           stock_actual: resp.stock_actual || 0,
-          categoria_id: null
+          categoria_id: null,
+          tipo_venta: resp.tipo_venta || 'unidad',
+          precio_por_kilo: resp.precio_por_kilo || null,
+          precio_por_unidad: resp.precio_por_unidad || null,
+          controla_stock: resp.controla_stock !== false
         })
       }
       addToCart(localHit || products.value[products.value.length - 1])
@@ -1931,6 +1944,7 @@ function addManualToCart() {
 
 function addToCart(product, qty = 1, price = null) {
   const isManual = product._pending || (product.codigo_barras && (product.codigo_barras.startsWith('*MANUAL*') || product.codigo_barras.startsWith('GEN-')))
+  const sinCtrlStock = product.controla_stock === false
 
   const oferta = ofertas.value.find(o => o.producto_id === product.id && o.activo)
   const basePrice = price || product.precio_por_kilo || product.precio_venta || 0
@@ -1938,13 +1952,13 @@ function addToCart(product, qty = 1, price = null) {
   const existing = cart.items.find(i => i.producto_id === product.id)
 
   const newQty = (existing ? existing.cantidad : 0) + qty
-  if (!isManual && product.stock_actual !== undefined && newQty > product.stock_actual) {
+  if (!isManual && !sinCtrlStock && product.stock_actual !== undefined && newQty > product.stock_actual) {
     toast.warning(`Stock insuficiente: ${product.stock_actual} disponibles. Se venderá igual y quedará bajo revisión.`)
   }
 
   if (existing) {
     existing.cantidad += qty
-    if (!isManual && product.stock_actual !== undefined && existing.cantidad > product.stock_actual) existing._revision = true
+    if (!isManual && !sinCtrlStock && product.stock_actual !== undefined && existing.cantidad > product.stock_actual) existing._revision = true
     if (oferta && !isManual) existing.oferta = { ...oferta }
   } else {
     cart.items.push({
@@ -1960,7 +1974,7 @@ function addToCart(product, qty = 1, price = null) {
       por_kilo: product.tipo_venta === 'kilo' || (product.tipo_venta === 'ambos' && basePrice === product.precio_por_kilo),
       peso: product.tipo_venta === 'kilo' ? (qty > 1 ? qty : 1) : null,
       _importe: product.tipo_venta === 'kilo' ? Math.round((qty > 1 ? qty : 1) * basePrice * 100) / 100 : null,
-      _revision: !isManual && product.stock_actual !== undefined && qty > product.stock_actual,
+      _revision: !isManual && !sinCtrlStock && product.stock_actual !== undefined && qty > product.stock_actual,
     })
   }
 
@@ -2047,7 +2061,7 @@ function updateCartQty(idx, qty) {
   const item = cart.items[idx]
   const prod = products.value.find(p => p.id === item.producto_id)
   const isManual = prod?._pending || (prod?.codigo_barras && (prod.codigo_barras.startsWith('*MANUAL*') || prod.codigo_barras.startsWith('GEN-')))
-  if (!isManual && prod && prod.stock_actual !== undefined && qty > prod.stock_actual) {
+  if (!isManual && prod && prod.controla_stock !== false && prod.stock_actual !== undefined && qty > prod.stock_actual) {
     toast.warning(`Stock insuficiente: ${prod.stock_actual} disponibles. Se venderá igual y quedará bajo revisión.`)
     item._revision = true
   } else {

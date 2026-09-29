@@ -6,6 +6,19 @@
 
 ## ✅ Completados recientemente
 
+### Control de stock opcional + reporte de vendido por peso — 29/09/2026
+- **Nuevo campo `controla_stock` en productos** (default `True`, así nada cambia para los productos existentes):
+  - Desactivado → vender **no** descuenta lotes, **no** genera `MovimientoStock` y **no** marca déficit; `anular_venta()` tampoco reingresa
+  - Ideal para fraccionados (panadería, fiambre): el stock en kg se desincroniza solo, lo que interesa es lo vendido
+  - Sigue guardando `peso` y `subtotal` de cada venta, así el análisis no se pierde
+- **Migración:** `ALTER TABLE productos ADD COLUMN controla_stock BOOLEAN NOT NULL DEFAULT 1` + índice, en `_migrate_new_columns()` (`app/main.py`)
+- **Backend:** campo en `ProductoBase`/`ProductoUpdate`/`ProductoOut`/`ProductoLookupResponse`, editable en `actualizar_producto()`; `GET /api/productos/stock-bajo` excluye los productos sin control
+- **UI:** toggle "Controlar stock" en el modal de producto; badge `s/ctrl` en la tabla de Productos y en la grilla del POS; el POS no avisa "stock insuficiente" ni marca `_revision` en estos productos; los filtros y contadores "Stock bajo"/"Sin stock" los excluyen
+- **Reporte nuevo "Vendido por Peso"** en `ReportesView.vue` (full width, antes de Stock por Lote): rango de fechas (últimos 30 días por defecto), KPIs de $ / kg / operaciones / productos, tabla por producto con kg, rango min–max, precio promedio por kg, operaciones e importe, y pie con totales
+- **Endpoint nuevo** `GET /api/reportes/vendido-por-peso?desde=&hasta=&producto_id=` (`app/routers/reportes.py`, primer router de reportes, registrado en `app/main.py`). Cualquier usuario autenticado; solo ítems `por_kilo` de ventas **confirmadas** (anuladas y pendientes fuera)
+- **Tests:** migración sobre base vieja (productos existentes quedan en 1), venta por kg sin control no mueve stock ni marca déficit, con control descuenta bien, anulación no reingresa de más, reporte agrega solo confirmadas y rechaza fechas inválidas
+- **Pendiente:** replicar el campo Importe en `CobroMovilView.vue`; el flujo offline (`useOfflineSales.js`) sigue sin persistir items (ver abajo)
+
 ### Cobro por importe en productos fraccionados (panadería) — 29/09/2026
 - **Problema:** en productos por kilo solo se podía cargar el peso, y con 2 decimales el subtotal redondeaba (0,333 kg × $3.000 = $999 en vez de $1.000)
 - **Nuevo campo "Importe" ($)** en cada item por kilo del carrito del POS: se tipea lo que se cobra y el peso se calcula solo (`importe / precio_por_kilo`, 3 decimales)
@@ -257,6 +270,14 @@
 ### 🧪 Pendiente de validación manual en browser
 
 _(Código pusheado, falta probar end-to-end en navegador — sesión 10/08/2026)_
+
+**Control de stock por producto + Vendido por Peso** (29/09/2026):
+- [ ] Editar un producto fraccionado (panadería) → desactivar "Controlar stock" → guardar y recargar: el flag persiste
+- [ ] En `/products`, el producto aparece con badge `s/ctrl` en la columna Stock y no suma en "Stock bajo" / "Sin stock"
+- [ ] En el POS, vender por kilo ese producto: no aparece el aviso de "Stock insuficiente" ni queda marcado en revisión
+- [ ] Vender un producto **con** control y stock 0 → debe seguir apareciendo el aviso y la bandera de déficit (comportamiento viejo intacto)
+- [ ] En `/reportes` → card "Vendido por Peso": cambiar el rango, "Calcular", y contrastar los kg/$ con el ticket de las ventas del período
+- [ ] Verificar que una venta anulada del período desaparece del reporte
 
 **Lotes + FEFO** (commits `d9b97f5`, `b9391f7`):
 - [ ] Verificar que al primer arranque se creó un "Lote inicial" para cada producto con stock preexistente (ir a `/products` → Editar → sección "Lotes")

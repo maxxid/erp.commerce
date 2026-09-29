@@ -256,6 +256,132 @@
 
     </div>
 
+    <!-- ==================== VENDIDO POR PESO ==================== -->
+    <BaseCard>
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
+            <i class="fa-solid fa-weight-hanging text-emerald-600 text-sm"></i>
+          </div>
+          <div>
+            <h2 class="font-semibold text-slate-900">Vendido por Peso</h2>
+            <p class="text-xs text-slate-500">Kg e importe de los productos fraccionados (panadería, fiambre, etc.)</p>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <BaseInput
+            v-model="pesoDesde"
+            type="date"
+            size="sm"
+            class="w-40"
+          />
+          <span class="text-xs text-slate-400">a</span>
+          <BaseInput
+            v-model="pesoHasta"
+            type="date"
+            size="sm"
+            class="w-40"
+          />
+          <BaseButton
+            variant="primary"
+            size="sm"
+            :loading="loadingPeso"
+            @click="loadVendidoPorPeso"
+          >
+            <i class="fa-solid fa-filter text-xs"></i>
+            Calcular
+          </BaseButton>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-4">
+        <KpiCard
+          label="Total vendido"
+          :value="vendidoPeso.totales.importe_total"
+          prefix="$ "
+          icon="fa-dollar-sign"
+          icon-color="success"
+          :decimals="2"
+          :animate="false"
+        />
+        <KpiCard
+          label="Kilos vendidos"
+          :value="vendidoPeso.totales.peso_total"
+          suffix=" kg"
+          icon="fa-weight-hanging"
+          icon-color="brand"
+          :decimals="3"
+          :animate="false"
+        />
+        <KpiCard
+          label="Operaciones"
+          :value="vendidoPeso.totales.ventas"
+          icon="fa-receipt"
+          icon-color="info"
+          :animate="false"
+        />
+        <KpiCard
+          label="Productos"
+          :value="vendidoPeso.totales.productos"
+          icon="fa-box"
+          icon-color="warning"
+          :animate="false"
+        />
+      </div>
+
+      <div v-if="loadingPeso" class="flex items-center justify-center py-12 text-slate-400 text-sm">
+        <i class="fa-solid fa-circle-notch fa-spin mr-2"></i>
+        Calculando vendido por peso...
+      </div>
+      <EmptyState
+        v-else-if="!vendidoPeso.items.length"
+        icon="fa-weight-hanging"
+        title="Sin ventas por peso en el período"
+        text="Cargá ventas por kilo en el POS dentro del rango de fechas para ver el detalle."
+        compact
+      />
+      <div v-else class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-slate-200 dark:border-slate-700 text-left">
+              <th class="py-2 px-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Producto</th>
+              <th class="py-2 px-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold text-right">Kilos</th>
+              <th class="py-2 px-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold text-right">Precio prom./kg</th>
+              <th class="py-2 px-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold text-right">Operaciones</th>
+              <th class="py-2 px-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold text-right">Importe</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="row in vendidoPeso.items"
+              :key="row.producto_id"
+              class="border-b border-slate-100 dark:border-slate-800/60"
+            >
+              <td class="py-2.5 px-3 font-semibold text-slate-900 dark:text-white">{{ row.producto_nombre }}</td>
+              <td class="py-2.5 px-3 text-right font-mono-data text-slate-700 dark:text-slate-300">
+                {{ row.peso_total }} kg
+                <span class="text-[10px] text-slate-400">({{ row.peso_min }}–{{ row.peso_max }})</span>
+              </td>
+              <td class="py-2.5 px-3 text-right font-mono-data text-slate-700 dark:text-slate-300">
+                {{ formatCurrency(row.peso_total > 0 ? row.importe_total / row.peso_total : 0) }}
+              </td>
+              <td class="py-2.5 px-3 text-right font-mono-data text-slate-700 dark:text-slate-300">{{ row.ventas }}</td>
+              <td class="py-2.5 px-3 text-right font-mono-data font-bold text-slate-900 dark:text-white">{{ formatCurrency(row.importe_total) }}</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr class="border-t-2 border-slate-200 dark:border-slate-700">
+              <td class="py-2.5 px-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Total</td>
+              <td class="py-2.5 px-3 text-right font-mono-data font-bold text-slate-900 dark:text-white">{{ vendidoPeso.totales.peso_total }} kg</td>
+              <td class="py-2.5 px-3"></td>
+              <td class="py-2.5 px-3 text-right font-mono-data font-bold text-slate-900 dark:text-white">{{ vendidoPeso.totales.ventas }}</td>
+              <td class="py-2.5 px-3 text-right font-mono-data font-bold text-brand-600 dark:text-brand-400">{{ formatCurrency(vendidoPeso.totales.importe_total) }}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </BaseCard>
+
     <!-- ==================== STOCK POR LOTE ==================== -->
     <BaseCard>
       <div class="flex items-center justify-between mb-4">
@@ -390,6 +516,41 @@ const syncing = ref(false)
 const syncingWeekly = ref(false)
 const syncingMonthly = ref(false)
 const syncingQuarterly = ref(false)
+
+// ── Vendido por peso ──────────────────────────────────────────────────
+
+function fechaISO(d) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+const hoy = new Date()
+const hace30 = new Date()
+hace30.setDate(hoy.getDate() - 30)
+
+const pesoDesde = ref(fechaISO(hace30))
+const pesoHasta = ref(fechaISO(hoy))
+const loadingPeso = ref(false)
+const vendidoPeso = ref({ items: [], totales: { peso_total: 0, importe_total: 0, ventas: 0, productos: 0 } })
+
+async function loadVendidoPorPeso() {
+  if (!pesoDesde.value || !pesoHasta.value) {
+    toast.error('Elegí el rango de fechas')
+    return
+  }
+  loadingPeso.value = true
+  try {
+    const params = new URLSearchParams({ desde: pesoDesde.value, hasta: pesoHasta.value })
+    const data = await api.get(`/api/reportes/vendido-por-peso?${params}`)
+    vendidoPeso.value = data || { items: [], totales: { peso_total: 0, importe_total: 0, ventas: 0, productos: 0 } }
+  } catch (e) {
+    toast.error(e?.data?.detail || 'Error al cargar el reporte de ventas por peso')
+  } finally {
+    loadingPeso.value = false
+  }
+}
 
 const stockLoteSearch = ref('')
 const loadingLotes = ref(false)
@@ -534,7 +695,7 @@ function mapTopProducts(list) {
 async function syncAll() {
   syncing.value = true
   try {
-    await Promise.all([syncWeekly(true), syncMonthly(true), syncQuarterly(true)])
+    await Promise.all([syncWeekly(true), syncMonthly(true), syncQuarterly(true), loadVendidoPorPeso()])
     toast.success('Datos sincronizados')
   } catch {
     toast.error('No se pudieron sincronizar los datos')
@@ -616,7 +777,7 @@ async function syncQuarterly(silent = false) {
   syncingQuarterly.value = false
 }
 
-onMounted(() => { syncAll(); loadStockPorLote() })
+onMounted(() => { syncAll(); loadStockPorLote(); loadVendidoPorPeso() })
 </script>
 
 <style scoped>
