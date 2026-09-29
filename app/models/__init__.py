@@ -16,6 +16,7 @@ from app.models.lote import Lote
 from app.models.movimiento_stock import MovimientoStock
 from app.models.movimiento_caja import MovimientoCaja
 from app.models.configuracion import Configuracion
+from app.models.denominacion import Denominacion
 from app.models.auditoria import Auditoria
 from app.models.licencia import Licencia
 from app.models.oferta import Oferta
@@ -37,6 +38,7 @@ __all__ = [
     "MovimientoStock",
     "MovimientoCaja",
     "Configuracion",
+    "Denominacion",
     "Auditoria",
     "Licencia",
     "Oferta",

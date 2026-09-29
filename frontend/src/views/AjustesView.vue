@@ -29,6 +29,17 @@ const bancariosExpanded = ref(false)
 const mercadopagoExpanded = ref(false)
 const qrInteropExpanded = ref(false)
 const ventasExpanded = ref(false)
+const denominacionesExpanded = ref(false)
+
+const denominaciones = ref([])
+const denominacionesEliminadas = ref([])
+const guardandoDenoms = ref(false)
+const cargandoDenoms = ref(false)
+
+const TIPOS_DENOM = [
+  { value: 'billete', label: 'Billete' },
+  { value: 'moneda', label: 'Moneda' },
+]
 
 // MercadoPago store/POS creation
 const creandoStore = ref(false)
@@ -219,6 +230,89 @@ async function saveConfig(keys = null) {
     toast.error('Error al guardar configuración')
   }
   saving.value = false
+}
+
+async function loadDenominaciones() {
+  cargandoDenoms.value = true
+  try {
+    const resp = await api.get('/api/denominaciones?incluir_inactivas=true')
+    denominaciones.value = (resp || []).map(d => ({ ...d }))
+    denominacionesEliminadas.value = []
+  } catch {
+    toast.warning('No se pudieron cargar las denominaciones')
+  }
+  cargandoDenoms.value = false
+}
+
+function agregarDenominacion() {
+  const ultimo = denominaciones.value[denominaciones.value.length - 1]
+  denominaciones.value.push({
+    id: null,
+    valor: null,
+    tipo: ultimo ? ultimo.tipo : 'moneda',
+    activo: true,
+  })
+}
+
+function quitarDenominacion(d) {
+  if (d.id) denominacionesEliminadas.value.push(d.id)
+  denominaciones.value = denominaciones.value.filter(x => x !== d)
+}
+
+function cambiarTipoDenominacion(d, tipo) {
+  d.tipo = tipo
+}
+
+function formatearDenominacion(valor) {
+  const n = Number(valor)
+  return n > 0 ? '$ ' + n.toLocaleString('es-AR') : '—'
+}
+
+async function guardarDenominaciones() {
+  const lista = denominaciones.value
+  if (lista.length === 0) {
+    toast.warning('Debe haber al menos una denominación')
+    return
+  }
+  if (lista.some(d => !(Number(d.valor) > 0))) {
+    toast.warning('Todas las denominaciones necesitan un valor mayor a 0')
+    return
+  }
+  const valores = lista.map(d => Number(d.valor))
+  if (new Set(valores).size !== valores.length) {
+    toast.warning('No puede haber dos denominaciones con el mismo valor')
+    return
+  }
+  guardandoDenoms.value = true
+  try {
+    for (const id of denominacionesEliminadas.value) {
+      await api.delete(`/api/denominaciones/${id}`)
+    }
+    for (const d of lista) {
+      const body = { valor: Number(d.valor), tipo: d.tipo, activo: !!d.activo }
+      if (d.id) await api.put(`/api/denominaciones/${d.id}`, body)
+      else await api.post('/api/denominaciones', body)
+    }
+    toast.success('Denominaciones guardadas')
+    await loadDenominaciones()
+  } catch (e) {
+    toast.error(e?.message || 'Error al guardar las denominaciones')
+    await loadDenominaciones()
+  }
+  guardandoDenoms.value = false
+}
+
+async function restaurarDefaultsDenominaciones() {
+  if (!confirm('¿Restaurar las denominaciones por defecto? Se pierden los valores, tipos y estados actuales.')) return
+  guardandoDenoms.value = true
+  try {
+    await api.post('/api/denominaciones/restaurar-defaults')
+    toast.success('Denominaciones restauradas')
+    await loadDenominaciones()
+  } catch {
+    toast.error('Error al restaurar las denominaciones')
+  }
+  guardandoDenoms.value = false
 }
 
 async function crearSucursalMp() {
@@ -426,7 +520,10 @@ function displayCsr() {
   return csrContent.value.replace(/\\n/g, '\n')
 }
 
-onMounted(loadConfig)
+onMounted(async () => {
+  await loadConfig()
+  await loadDenominaciones()
+})
 </script>
 
 <template>
@@ -1044,6 +1141,101 @@ onMounted(loadConfig)
             <i class="fa-solid fa-floppy-disk"></i> Guardar
           </BaseButton>
           <p class="text-[11px] text-slate-400">Los cambios se aplican inmediatamente</p>
+        </div>
+      </div>
+    </BaseCard>
+
+    <BaseCard v-if="!loading">
+      <button class="w-full text-left" @click="denominacionesExpanded = !denominacionesExpanded">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <i class="fa-solid fa-money-bill-wave text-brand-600"></i>
+            Denominaciones de Efectivo
+          </h3>
+          <i :class="['fa-solid fa-chevron-down text-xs transition-transform', denominacionesExpanded ? 'rotate-180' : '']"></i>
+        </div>
+      </button>
+
+      <div v-if="denominacionesExpanded" class="mt-4 space-y-4">
+        <div class="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg p-4">
+          <p class="text-xs text-slate-600 dark:text-slate-400">
+            Definí las denominaciones que aparecen en el <strong>contador de efectivo</strong> de caja
+            (apertura, cierre por método y arqueo). Podés cambiar el valor, el tipo,
+            habilitar o deshabilitar, y agregar nuevas.
+          </p>
+        </div>
+
+        <div v-if="cargandoDenoms" class="flex items-center gap-2 text-xs text-slate-500 py-2">
+          <i class="fa-solid fa-spinner fa-spin"></i> Cargando denominaciones...
+        </div>
+
+        <div v-else class="space-y-2">
+          <div class="hidden sm:grid grid-cols-[1fr_120px_1fr_36px] gap-3 px-3">
+            <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Valor</span>
+            <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Tipo</span>
+            <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Estado</span>
+            <span></span>
+          </div>
+
+          <div
+            v-for="(d, i) in denominaciones"
+            :key="d.id ?? 'nuevo' + i"
+            class="grid grid-cols-1 sm:grid-cols-[1fr_120px_1fr_36px] gap-3 items-center border border-slate-200 dark:border-slate-700 rounded-lg p-3 bg-white dark:bg-slate-900"
+            :class="{ 'opacity-50': !d.activo }"
+          >
+            <div class="flex items-center gap-2">
+              <input
+                v-model.number="d.valor"
+                type="number"
+                min="0"
+                step="1"
+                inputmode="numeric"
+                placeholder="0"
+                class="w-[120px] shrink-0 px-2.5 py-1.5 text-sm text-right font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition"
+              />
+              <span class="text-[11px] text-slate-400 font-mono-data">{{ formatearDenominacion(d.valor) }}</span>
+            </div>
+
+            <BaseSelect
+              :model-value="d.tipo"
+              :options="TIPOS_DENOM"
+              :placeholder="''"
+              size="sm"
+              @update:model-value="cambiarTipoDenominacion(d, $event)"
+            />
+
+            <BaseToggle v-model="d.activo" :label="d.activo ? 'Habilitada' : 'Deshabilitada'" size="sm" />
+
+            <BaseButton
+              variant="ghost"
+              size="xs"
+              icon-only
+              aria-label="Quitar denominación"
+              @click="quitarDenominacion(d)"
+            >
+              <i class="fa-solid fa-trash text-red-500"></i>
+            </BaseButton>
+          </div>
+
+          <p v-if="denominaciones.length === 0" class="text-xs text-slate-500 py-2">
+            No hay denominaciones cargadas. Agregá al menos una.
+          </p>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <BaseButton variant="secondary" size="sm" :disabled="cargandoDenoms" @click="agregarDenominacion">
+            <i class="fa-solid fa-plus"></i> Agregar denominación
+          </BaseButton>
+          <BaseButton variant="ghost" size="sm" :loading="guardandoDenoms" @click="restaurarDefaultsDenominaciones">
+            <i class="fa-solid fa-rotate-left"></i> Restaurar por defecto
+          </BaseButton>
+        </div>
+
+        <div class="flex items-center gap-3 pt-2">
+          <BaseButton variant="primary" :loading="guardandoDenoms" :disabled="cargandoDenoms" @click="guardarDenominaciones">
+            <i class="fa-solid fa-floppy-disk"></i> Guardar
+          </BaseButton>
+          <p class="text-[11px] text-slate-400">Las denominaciones deshabilitadas no aparecen en el contador</p>
         </div>
       </div>
     </BaseCard>

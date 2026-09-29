@@ -474,15 +474,32 @@
 
 | Elemento | Descripción |
 |----------|-------------|
-| **Columna Billetes** | Denominaciones $100.000 / $50.000 / $20.000 / $10.000 / $5.000 / $2.000 / $1.000 con input de cantidad y subtotal |
-| **Columna Monedas** | Denominaciones $500 / $200 / $100 / $50 / $20 / $10 / $5 / $1 con input de cantidad y subtotal |
+| **Columna Billetes** | Denominaciones de tipo `billete` habilitadas en Ajustes (por defecto $100.000 / $50.000 / $20.000 / $10.000 / $5.000 / $2.000 / $1.000) con input de cantidad y subtotal |
+| **Columna Monedas** | Denominaciones de tipo `moneda` habilitadas en Ajustes (por defecto $500 / $200 / $100 / $50 / $20 / $10 / $5 / $1) con input de cantidad y subtotal |
 | **Total contado** | Auto-suma de todos los subtotales + piezas, total de billetes y total de monedas |
 | **Botón "Limpiar"** | Vacía todas las cantidades |
 | **Botón "Usar $X"** | Escribe el total en el campo de monto del modal padre y lo cierra (deshabilitado si el total es 0) |
 | **Precarga** | Al abrir, descompone greedy el monto ya cargado en el campo destino para partir de una base |
+| **Aviso de cobertura** | Si las denominaciones habilitadas no cubren el monto completo, avisa cuánto quedó sin asignar para corregir a mano |
 
 - La suma se aplica al monto real del **efectivo** solamente; débito, crédito y transferencia siguen con carga manual
 - `Esc` cierra solo el modal de conteo (no el modal padre)
+- Al abrir carga `GET /api/denominaciones`; si falla la API o no hay ninguna habilitada, usa la lista por defecto de Argentina
+
+### Ajustes: Denominaciones de Efectivo
+*(tarjeta colapsable en `/ajustes`, define las denominaciones del contador de caja)*
+
+| Elemento | Descripción |
+|----------|-------------|
+| **Fila por denominación** | Input numérico de valor, select Billete/Moneda, toggle Habilitada/Deshabilitada y botón para quitarla |
+| **Botón "Agregar denominación"** | Agrega una fila nueva al final (hereda el tipo de la anterior) |
+| **Botón "Restaurar por defecto"** | `POST /api/denominaciones/restaurar-defaults` — vuelve a la lista estándar de Argentina (con confirmación) |
+| **Botón "Guardar"** | Valida (valor > 0, sin duplicados) y persiste: borra las quitadas, actualiza las existentes y crea las nuevas |
+
+- **Backend:** tabla `denominaciones` (`valor` único, `tipo`, `activo`) + `app/services/denominacion_service.py` con defaults AR
+- **Endpoints:** `GET /api/denominaciones?incluir_inactivas=` (cualquier usuario autenticado, lo usa el contador), `POST` / `PUT /{id}` / `DELETE /{id}` / `POST /restaurar-defaults` (solo `admin`)
+- **Siembra:** `_seed_denominaciones()` en `app/main.py` crea la tabla y la lista por defecto la primera vez que arranca
+- Las deshabilitadas quedan guardadas pero **no aparecen** en el contador de caja
 
 ### Modal: Cierre de Caja (Arqueo)
 *(visible al hacer "Cerrar Caja")*

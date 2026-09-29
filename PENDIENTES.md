@@ -6,6 +6,18 @@
 
 ## ✅ Completados recientemente
 
+### Denominaciones de efectivo configurables desde Ajustes — 29/09/2026
+- Las denominaciones del contador de caja dejan de estar hardcodeadas: ahora se administran en **Ajustes → Denominaciones de Efectivo**
+- **Nueva tabla `denominaciones`** (`valor` único, `tipo` = billete/moneda, `activo`) + `app/services/denominacion_service.py` con la lista por defecto de Argentina
+  - Siembra automática: `_seed_denominaciones()` en `app/main.py` (la tabla la crea `create_all`, no hace falta migración manual)
+- **Endpoints nuevos** en `app/routers/denominaciones.py`:
+  - `GET /api/denominaciones?incluir_inactivas=` — cualquier usuario autenticado (lo consume el contador, que también usan los cajeros)
+  - `POST`, `PUT /{id}`, `DELETE /{id}` y `POST /restaurar-defaults` — solo `admin`
+  - Validaciones: valor > 0, sin denominaciones duplicadas, tipo válido
+- **UI en `AjustesView.vue`:** tarjeta colapsable con una fila por denominación (valor editable, select Billete/Moneda, toggle habilitar/deshabilitar, quitar), botón "Agregar denominación", "Restaurar por defecto" y "Guardar" (borrados +actualizados +nuevos en una sola acción)
+- **`ContadorBilletesModal.vue`:** carga las habilitadas al abrir, separa billetes/monedas, y si no cubren todo el monto avisa cuánto quedó sin asignar; fallback a la lista por defecto si la API falla
+- Deshabilitar una denominación la saca del contador sin borrarla de la configuración
+
 ### Contador de billetes por denominación (efectivo) — 29/09/2026
 - Nuevo componente `frontend/src/components/caja/ContadorBilletesModal.vue`: conteo por denominación con auto-suma
 - Denominaciones AR: billetes $100.000 / $50.000 / $20.000 / $10.000 / $5.000 / $2.000 / $1.000 y monedas $500 / $200 / $100 / $50 / $20 / $10 / $5 / $1

@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from app.config import settings
 from app.database import engine, Base
 from app.models import *  # noqa: F401, F403 — Registrar todos los modelos
-from app.routers import auth, productos, categorias, dashboard, caja, clientes, ventas, proveedores, compras, calendario, backups, usuarios, auditoria, licencia, catalogo, ofertas, facturacion, configuracion as config_router, pagos, lotes
+from app.routers import auth, productos, categorias, dashboard, caja, clientes, ventas, proveedores, compras, calendario, backups, usuarios, auditoria, licencia, catalogo, ofertas, facturacion, configuracion as config_router, pagos, lotes, denominaciones
 
 
 def crear_app() -> FastAPI:
@@ -53,6 +53,7 @@ def crear_app() -> FastAPI:
     app.include_router(config_router.router)
     app.include_router(pagos.router)
     app.include_router(lotes.router)
+    app.include_router(denominaciones.router)
 
     # Servir el frontend Vue 3 (producción)
     @app.get("/app")
@@ -90,6 +91,7 @@ def crear_app() -> FastAPI:
         Base.metadata.create_all(bind=engine)
         _migrate_new_columns()
         _migrate_lotes_iniciales()
+        _seed_denominaciones()
         _seed_database()
         _start_backup_scheduler()
 
@@ -329,6 +331,23 @@ def _migrate_lotes_iniciales():
             print(f"[Lotes] {creados} lote(s) inicial(es) creado(s) para stock preexistente")
     except Exception as e:
         print(f"[Lotes] Error al crear lotes iniciales: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
+def _seed_denominaciones():
+    """Crea las denominaciones de efectivo por defecto si la tabla está vacía."""
+    from app.database import SessionLocal
+    from app.services import denominacion_service
+
+    db = SessionLocal()
+    try:
+        creadas = denominacion_service.asegurar_defaults(db)
+        if creadas:
+            print(f"[Denominaciones] {creadas} denominación(es) por defecto creada(s)")
+    except Exception as e:
+        print(f"[Denominaciones] Error al crear denominaciones por defecto: {e}")
         db.rollback()
     finally:
         db.close()
