@@ -239,6 +239,17 @@
 | **Botón `-`** | `updateCartQty(idx, -1)` — decrementa cantidad |
 | **Botón `+`** | `updateCartQty(idx, +1)` — incrementa cantidad |
 | **Botón eliminar** | `removeFromCart(idx, silent=false)` — quita item con confirmación (`confirm()`). Si `silent=true` (usado desde qty=0), omite confirmación |
+| **Items por kilo (panadería)** | Además del toggle KILO/UNIDAD, muestra dos campos: **Peso** (kg, 3 decimales) e **Importe** ($, lo que realmente se cobra). El importe manda: `updateCartImporte()` recalcula el peso como `importe / precio_por_kilo` redondeado a 3 decimales, así no se pierden centavos por redondeo del peso. Al escribir el peso, el importe se deriva (`peso × precio/kg`) |
+
+#### Venta por peso: importe en lugar de peso
+*(productos `tipo_venta = kilo` o `ambos` con precio por kilo — panadería, fiambre, etc.)*
+
+| Elemento | Comportamiento |
+|----------|----------------|
+| **Importe manda** | El subtotal de la línea es el importe tipeado, no `peso × precio` — el ticket cuadra al peso con lo que se cobró |
+| **Backend** | `POST /api/ventas/{id}/items` acepta `importe`: si viene, el `subtotal` es ese importe exacto y el `peso` se recalcula (3 decimales). `precio_unitario` sigue siendo el precio de lista por kg, así el análisis por precio no se distorsiona |
+| **API de ventas** | `_venta_to_dict` ahora devuelve `por_kilo` y `peso` en cada ítem (antes no venían) para poder analizar lo vendido por kg |
+| **Ticket** | `TicketModal` muestra `peso kg` en la columna Cant y el subtotal real |
 
 #### Resumen
 

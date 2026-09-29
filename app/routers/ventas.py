@@ -45,6 +45,8 @@ def _venta_to_dict(v: Venta) -> dict:
                 "oferta_tipo": i.oferta_tipo,
                 "oferta_valor": i.oferta_valor,
                 "oferta_info": i.oferta_info,
+                "por_kilo": i.por_kilo,
+                "peso": i.peso,
             }
             for i in (v.items or [])
         ],
@@ -67,6 +69,7 @@ class VentaItemAdd(BaseModel):
     oferta_info: Optional[str] = None
     por_kilo: Optional[bool] = False
     peso: Optional[float] = None
+    importe: Optional[float] = Field(None, gt=0, description="Importe a cobrar por peso. Si viene, define el subtotal exacto y el peso se recalcula como importe / precio_unitario.")
 
 
 class VentaConfirmar(BaseModel):
@@ -144,7 +147,7 @@ def agregar_item(
         item = venta_service.agregar_item(
             db, venta, data.producto_id, data.cantidad, data.precio_unitario,
             data.oferta_tipo, data.oferta_valor, data.oferta_info,
-            data.por_kilo, data.peso
+            data.por_kilo, data.peso, data.importe
         )
         db.refresh(venta)
         auditoria_service.registrar(db, user.id, "item_agregado", venta.id, venta.numero, {

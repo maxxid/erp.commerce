@@ -6,6 +6,15 @@
 
 ## ✅ Completados recientemente
 
+### Cobro por importe en productos fraccionados (panadería) — 29/09/2026
+- **Problema:** en productos por kilo solo se podía cargar el peso, y con 2 decimales el subtotal redondeaba (0,333 kg × $3.000 = $999 en vez de $1.000)
+- **Nuevo campo "Importe" ($)** en cada item por kilo del carrito del POS: se tipea lo que se cobra y el peso se calcula solo (`importe / precio_por_kilo`, 3 decimales)
+  - Los dos campos quedan sincronizados: escribir el peso deriva el importe, escribir el importe recalcula el peso
+  - El subtotal de la línea usa el importe tipeado, así el total y el ticket cuadran con lo cobrado
+- **Backend:** `POST /api/ventas/{id}/items` acepta `importe`; si viene, el `subtotal` es ese importe exacto y el `peso` se recalcula. `precio_unitario` sigue siendo el precio de lista por kg (no se distorsiona el análisis)
+- **Análisis:** `_venta_to_dict` ahora devuelve `por_kilo` y `peso` en cada ítem (antes no venían), y el ticket muestra los kg en la columna Cant
+- **Pendiente:** replicar el campo Importe en `CobroMovilView.vue` (misma lógica de kg, hoy solo peso)
+
 ### Denominaciones de efectivo configurables desde Ajustes — 29/09/2026
 - Las denominaciones del contador de caja dejan de estar hardcodeadas: ahora se administran en **Ajustes → Denominaciones de Efectivo**
 - **Nueva tabla `denominaciones`** (`valor` único, `tipo` = billete/moneda, `activo`) + `app/services/denominacion_service.py` con la lista por defecto de Argentina

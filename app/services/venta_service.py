@@ -70,10 +70,15 @@ def agregar_item(
     oferta_info: Optional[str] = None,
     por_kilo: bool = False,
     peso: Optional[float] = None,
+    importe: Optional[float] = None,
 ) -> VentaItem:
     """Agrega un producto a la venta.
 
     Si no se especifica precio_unitario, usa el precio_venta del producto.
+
+    En productos por kilo se puede pasar `importe` (lo que realmente se cobra):
+    el subtotal queda exacto y el peso se recalcula como importe / precio_unitario
+    para no perder centavos por el redondeo del peso.
 
     Raises:
         ValueError: Si la venta no está pendiente o no hay stock.
@@ -91,8 +96,12 @@ def agregar_item(
         else:
             precio_unitario = producto.precio_venta or producto.precio_referencia or 0
 
-    cantidad_final = peso if por_kilo else cantidad
-    subtotal = cantidad_final * precio_unitario
+    if por_kilo and importe and importe > 0 and precio_unitario:
+        peso = round(importe / precio_unitario, 3)
+        subtotal = importe
+    else:
+        cantidad_final = peso if por_kilo else cantidad
+        subtotal = cantidad_final * precio_unitario
 
     item = VentaItem(
         venta_id=venta.id,

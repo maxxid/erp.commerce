@@ -429,7 +429,7 @@
                       <p class="text-xs font-bold text-slate-900 dark:text-white truncate">{{ item.nombre }}</p>
                       <p class="text-[10px] text-slate-400 dark:text-slate-500 font-mono-data">{{ item.codigo_barras }}</p>
                     </div>
-                    <span class="text-sm font-bold font-mono-data text-brand-600 dark:text-brand-400 shrink-0">{{ fc((item._precio_neto || item.precio_unitario) * (item.por_kilo ? (item.peso || 0) : item.cantidad)) }}</span>
+                    <span class="text-sm font-bold font-mono-data text-brand-600 dark:text-brand-400 shrink-0">{{ fc(totalLinea(item)) }}</span>
                   </div>
                   <!-- Toggle kilo/unidad para productos tipo ambos -->
                   <div v-if="item.tipo_venta === 'ambos'" class="flex items-center gap-2 mt-1">
@@ -444,19 +444,32 @@
                       @click="togglePorKilo(idx)"
                     >UNIDAD</button>
                   </div>
-                  <!-- Peso input para venta por kilo -->
-                  <div v-if="item.por_kilo" class="flex items-center gap-2 mt-1.5">
+                  <!-- Peso e importe para venta por kilo -->
+                  <div v-if="item.por_kilo" class="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5">
                     <span class="text-[10px] text-slate-400">Peso:</span>
                     <input
                       type="number"
-                      min="0.01"
-                      step="0.01"
+                      min="0.001"
+                      step="0.001"
                       :value="item.peso"
                       @input="e => updateCartPeso(idx, e.target.value)"
-                      class="w-16 px-2 py-1 text-xs font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-right focus:border-brand-500 outline-none"
+                      class="w-[72px] px-2 py-1 text-xs font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-right focus:border-brand-500 outline-none"
+                      placeholder="0,000"
+                    />
+                    <span class="text-[10px] text-slate-400">kg</span>
+                    <span class="text-[10px] text-slate-300 dark:text-slate-600">|</span>
+                    <span class="text-[10px] text-slate-400">Importe:</span>
+                    <span class="text-[10px] text-slate-400">$</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      :value="item._importe != null ? item._importe : ''"
+                      @input="e => updateCartImporte(idx, e.target.value)"
+                      class="w-[80px] px-2 py-1 text-xs font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-right focus:border-brand-500 outline-none"
                       placeholder="0,00"
                     />
-                    <span class="text-[10px] text-slate-400">kg × {{ fc(item.precio_kilo) }}/kg</span>
+                    <span class="text-[10px] text-slate-400">lista {{ fc(item.precio_kilo) }}/kg</span>
                   </div>
                   <!-- Cantidad para venta por unidad -->
                   <div v-if="!item.por_kilo" class="flex items-center gap-2 mt-1.5">
@@ -1946,6 +1959,7 @@ function addToCart(product, qty = 1, price = null) {
       precio_unidad: product.precio_por_unidad || null,
       por_kilo: product.tipo_venta === 'kilo' || (product.tipo_venta === 'ambos' && basePrice === product.precio_por_kilo),
       peso: product.tipo_venta === 'kilo' ? (qty > 1 ? qty : 1) : null,
+      _importe: product.tipo_venta === 'kilo' ? Math.round((qty > 1 ? qty : 1) * basePrice * 100) / 100 : null,
       _revision: !isManual && product.stock_actual !== undefined && qty > product.stock_actual,
     })
   }
@@ -1977,12 +1991,20 @@ function handlePagoKeydown(event) {
   }
 }
 
+function totalLinea(i) {
+  if (i.por_kilo) {
+    if (i._importe != null && i._importe > 0) return i._importe
+    return (i.precio_unitario || 0) * (i.peso || 0)
+  }
+  return (i._precio_neto || i.precio_unitario || 0) * (i.cantidad || 0)
+}
+
 function recalcCart() {
   cart.subtotal = cart.items.reduce((sum, i) => {
     const porKilo = i.por_kilo
     const qty = porKilo ? (i.peso || 0) : (i.cantidad || 0)
     const unitPrice = i.precio_unitario || 0
-    let lineTotal = unitPrice * qty
+    let lineTotal = totalLinea(i)
 
     if (i.oferta && !porKilo) {
       const req = i.oferta.requiere_cantidad || 2
@@ -2041,8 +2063,10 @@ function togglePorKilo(idx) {
   if (item.por_kilo) {
     item.peso = 1
     item.precio_unitario = item.precio_kilo
+    item._importe = item.precio_kilo || null
   } else {
     item.peso = null
+    item._importe = null
     item.precio_unitario = item.precio_unidad
   }
   recalcCart()
@@ -2052,6 +2076,23 @@ function updateCartPeso(idx, value) {
   const item = cart.items[idx]
   const peso = parseFloat(String(value).replace(',', '.')) || 0
   item.peso = peso > 0 ? peso : null
+  item._importe = peso > 0 ? Math.round(peso * (item.precio_unitario || 0) * 100) / 100 : null
+  recalcCart()
+}
+
+function updateCartImporte(idx, value) {
+  const item = cart.items[idx]
+  const importe = parseFloat(String(value).replace(',', '.')) || 0
+  const precio = item.precio_unitario || 0
+  if (importe > 0 && precio > 0) {
+    item._importe = importe
+    item.peso = Math.round((importe / precio) * 1000) / 1000
+  } else if (importe > 0) {
+    item._importe = importe
+  } else {
+    item._importe = null
+    item.peso = null
+  }
   recalcCart()
 }
 
@@ -2121,12 +2162,13 @@ async function confirmarVenta() {
         await api.post(`/api/ventas/${ventaId}/items`, {
           producto_id: item.producto_id,
           cantidad: item.cantidad,
-          precio_unitario: item._precio_neto || item.precio_unitario,
+          precio_unitario: item.por_kilo ? item.precio_unitario : (item._precio_neto || item.precio_unitario),
           oferta_tipo: item.oferta?.tipo || null,
           oferta_valor: item.oferta?.valor || null,
           oferta_info: item.oferta ? `${item.oferta.tipo === 'porcentaje' ? item.oferta.valor + '% OFF' : item.oferta.tipo === 'monto_fijo' ? '$' + item.oferta.valor + ' OFF' : '2x1'}` : null,
           por_kilo: item.por_kilo || false,
           peso: item.peso || null,
+          importe: item.por_kilo && item._importe ? item._importe : null,
         })
       }
 
@@ -2182,11 +2224,12 @@ async function confirmarVenta() {
         items: cart.items.map(item => ({
           producto_id: item.producto_id,
           cantidad: item.cantidad,
-          precio_unitario: item._precio_neto || item.precio_unitario,
+          precio_unitario: item.por_kilo ? item.precio_unitario : (item._precio_neto || item.precio_unitario),
           oferta_tipo: item.oferta?.tipo || null,
           oferta_valor: item.oferta?.valor || null,
           por_kilo: item.por_kilo || false,
           peso: item.peso || null,
+          importe: item.por_kilo && item._importe ? item._importe : null,
         })),
         medio_pago: cart.medio_pago,
         descuento: cart.descuento || 0,

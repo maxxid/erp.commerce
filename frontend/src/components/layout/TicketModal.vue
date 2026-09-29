@@ -42,9 +42,9 @@
                 {{ item.nombre }}
                 <span v-if="item.oferta" class="text-[9px] text-orange-600 font-bold">[{{ item.oferta.tipo === 'porcentaje' ? item.oferta.valor + '% OFF' : item.oferta.tipo === 'monto_fijo' ? '$' + item.oferta.valor + ' OFF' : '2x1' }}]</span>
               </span>
-              <span class="w-10 text-right">{{ item.cantidad }}</span>
-              <span class="w-20 text-right font-mono-data">{{ fcShort(item._precio_neto || item.precio_unitario) }}</span>
-              <span class="w-20 text-right font-bold">{{ fcShort((item._precio_neto || item.precio_unitario) * item.cantidad) }}</span>
+              <span class="w-10 text-right">{{ item.por_kilo ? (item.peso || 0) + ' kg' : item.cantidad }}</span>
+              <span class="w-20 text-right font-mono-data">{{ fcShort(item.por_kilo ? item.precio_unitario : (item._precio_neto || item.precio_unitario)) }}</span>
+              <span class="w-20 text-right font-bold">{{ fcShort(itemSubtotal(item)) }}</span>
             </div>
           </div>
 
@@ -99,6 +99,15 @@ defineProps({
   ticket: { type: Object, default: () => ({ items: [] }) }
 })
 defineEmits(['close', 'emitir-factura'])
+
+function itemSubtotal(item) {
+  if (item.subtotal != null) return item.subtotal
+  if (item.por_kilo) {
+    if (item._importe != null && item._importe > 0) return item._importe
+    return (item.precio_unitario || 0) * (item.peso || 0)
+  }
+  return (item._precio_neto || item.precio_unitario || 0) * (item.cantidad || 0)
+}
 
 const ticketWidth = computed(() => {
   try {
