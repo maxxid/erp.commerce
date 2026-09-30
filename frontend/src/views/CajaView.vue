@@ -937,6 +937,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
 import { useCajaStore } from '@/stores/caja'
+import { useCarritoStore } from '@/stores/carrito'
 import router from '@/router'
 import api from '@/services/api'
 import { formatCurrency as fc } from '@/composables/useUtils'
@@ -950,11 +951,11 @@ import BaseBadge from '@/components/ui/BaseBadge.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import ContadorBilletesModal from '@/components/caja/ContadorBilletesModal.vue'
 import { useSounds } from '@/composables/useSounds'
-import { useHeldTickets } from '@/composables/useHeldTickets'
 
 const auth = useAuthStore()
 const toast = useToastStore()
 const cajaStore = useCajaStore()
+const carritoStore = useCarritoStore()
 const { playOpenCash, playCloseCash } = useSounds()
 const cajaResumen = reactive({ metodos_cerrados: [], egresos_por_medio: {} })
 // Último arqueo por medio recibido del backend (apertura + ingresos - egresos)
@@ -1604,12 +1605,16 @@ async function confirmarAperturaCaja() {
 }
 
 async function initCierreCaja() {
-  const { heldCount } = useHeldTickets()
-  if (heldCount.value > 0) {
-    if (!confirm(`Hay ${heldCount.value} ticket(s) apartados en POS. Si cerrás la caja sin recuperarlos se marcarán como huérfanos en la auditoría. ¿Cerrar de todas formas?`)) return
-    const held = JSON.parse(localStorage.getItem('apex-pos-held') || '[]')
-    held.forEach(t => { t._orphaned = true })
-    localStorage.setItem('apex-pos-held', JSON.stringify(held))
+  // Los carritos con productos sin cobrar son los que hay que resolver antes de
+  // bajar la caja. Los vacios se ignoran: no son nada pendiente.
+  const abiertos = carritoStore.carritosConItems
+  if (abiertos.length > 0) {
+    const detalle = abiertos.map(c => `  - ${c.nombre}: ${c.items.length} producto(s) por ${fc(c.total)}`).join('\n')
+    if (!confirm(`Hay ${abiertos.length} carrito(s) del POS con productos sin cobrar:\n\n${detalle}\n\nSi cerrás la caja sin cobrarlos quedan como huérfanos en la auditoría. ¿Cerrar de todas formas?`)) return
+    for (const c of abiertos) {
+      carritoStore.auditar('ORPHAN', { carritoId: c.id, nombre: c.nombre, items: c.items.length, total: c.total })
+    }
+    try { localStorage.setItem('apex-pos-caja-cierre', new Date().toISOString()) } catch { /* storage bloqueado */ }
   }
 
   try {

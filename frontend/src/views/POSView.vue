@@ -32,14 +32,14 @@
           {{ cajaStore.abierta ? 'CAJA ABIERTA' : 'CAJA CERRADA' }}
         </BaseBadge>
         <button
-          v-if="heldCount"
+          v-if="carritoStore.cantidadCarritos > 1"
           type="button"
-          class="relative w-9 h-9 rounded-xl flex items-center justify-center border border-slate-200 dark:border-slate-700 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors"
-          title="Tickets apartados"
-          @click="showRecallDropdown = !showRecallDropdown"
+          class="relative w-9 h-9 rounded-xl flex items-center justify-center border border-slate-200 dark:border-slate-700 text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition-colors"
+          title="Cambiar de carrito"
+          @click="showCarritoMenu = !showCarritoMenu"
         >
-          <i class="fa-solid fa-clock-rotate-left text-sm"></i>
-          <span class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-500 text-white text-[8px] font-bold flex items-center justify-center">{{ heldCount }}</span>
+          <i class="fa-solid fa-layer-group text-sm"></i>
+          <span class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-brand-500 text-white text-[8px] font-bold flex items-center justify-center">{{ carritoStore.cantidadCarritos }}</span>
         </button>
       </div>
     </div>
@@ -61,8 +61,8 @@
           <i class="fa-solid fa-clock-rotate-left text-lg"></i>
         </div>
         <div class="flex-1">
-          <p class="text-sm font-bold text-amber-800 dark:text-amber-200">{{ suspiciousTickets.length }} ticket(s) apartados hace más de 2 horas</p>
-          <p class="text-xs text-amber-600 dark:text-amber-300">Posible fraude. Revisar y confirmar/descartar en el panel de tickets apartados.</p>
+          <p class="text-sm font-bold text-amber-800 dark:text-amber-200">{{ carritoStore.sospechosos.length }} carrito(s) abierto(s) hace más de 2 horas</p>
+          <p class="text-xs text-amber-600 dark:text-amber-300">Posible fraude. Revisá el carrito y confirmalo o descartalo desde el selector de carritos.</p>
         </div>
         <button type="button" class="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-amber-400 hover:text-amber-600 hover:bg-amber-100 dark:hover:bg-amber-800/40 transition" @click="showSusWarning = false">
           <i class="fa-solid fa-xmark"></i>
@@ -415,10 +415,104 @@
       <!-- COLUMN 2: Cart (4 cols) -->
       <div class="xl:col-span-4 space-y-4">
         <BaseCard padding="none" class="overflow-hidden">
-          <div class="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
+          <div class="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2 relative">
             <i class="fa-solid fa-cash-register text-brand-500"></i>
-            <span class="text-sm font-bold text-slate-900 dark:text-white">Carrito</span>
-            <BaseBadge variant="default" size="xs" class="ml-auto">{{ cart.items.length }} productos</BaseBadge>
+            <input
+              v-if="editandoNombre"
+              ref="nombreCarritoRef"
+              v-model="nombreEditado"
+              type="text"
+              maxlength="40"
+              class="flex-1 min-w-0 text-sm font-bold text-slate-900 dark:text-white bg-brand-50 dark:bg-brand-900/20 border border-brand-300 dark:border-brand-700 rounded-lg px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+              @keyup.enter="confirmarRenombre"
+              @keyup.esc="editandoNombre = false"
+              @blur="confirmarRenombre"
+            />
+            <button
+              v-else
+              class="flex items-center gap-1.5 min-w-0 text-sm font-bold text-slate-900 dark:text-white hover:text-brand-600 dark:hover:text-brand-400 transition-colors group"
+              title="Renombrar carrito"
+              @click="empezarRenombre"
+            >
+              <span class="truncate">{{ carritoStore.activo.nombre }}</span>
+              <i class="fa-solid fa-pen text-[9px] text-slate-300 group-hover:text-brand-500 shrink-0"></i>
+            </button>
+            <BaseBadge variant="default" size="xs" class="ml-auto shrink-0">{{ cart.items.length }} productos</BaseBadge>
+            <button
+              type="button"
+              class="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition"
+              title="Cambiar de carrito"
+              @click="showCarritoMenu = !showCarritoMenu"
+            >
+              <i class="fa-solid fa-chevron-down text-[10px]" :class="showCarritoMenu ? 'rotate-180' : ''"></i>
+            </button>
+
+            <!-- Panel de carritos -->
+            <div
+              v-if="showCarritoMenu"
+              class="absolute right-3 top-full mt-1 z-30 w-72 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-xl p-2"
+            >
+              <p class="text-[10px] font-bold text-slate-400 uppercase mb-1.5 px-1">Carritos abiertos</p>
+              <div class="space-y-1 max-h-56 overflow-y-auto">
+                <div
+                  v-for="c in carritoStore.carritos"
+                  :key="c.id"
+                  class="flex items-center gap-2 px-2 py-1.5 rounded-lg text-[11px] transition group"
+                  :class="[
+                    c.id === carritoStore.activoId
+                      ? 'bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800'
+                      : 'hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-transparent',
+                    carritoStore.sospechosos.some(s => s.id === c.id) ? 'border-amber-300 dark:border-amber-700' : ''
+                  ]"
+                >
+                  <button class="flex-1 flex items-center gap-2 text-left min-w-0" @click="activarCarrito(c.id)">
+                    <i
+                      class="shrink-0 text-[10px]"
+                      :class="c.id === carritoStore.activoId ? 'fa-solid fa-circle-check text-brand-500' : 'fa-regular fa-circle text-slate-300'"
+                    ></i>
+                    <span class="font-semibold text-slate-700 dark:text-slate-200 truncate">{{ c.nombre }}</span>
+                    <span v-if="c.items.length" class="text-[9px] text-slate-400 shrink-0">{{ c.items.length }}</span>
+                    <span class="text-[9px] text-slate-400 shrink-0 hidden sm:inline">{{ carritoStore.antiguedad(c.creado) }}</span>
+                    <span v-if="c.items.length" class="text-slate-800 dark:text-slate-200 font-bold font-mono-data ml-auto shrink-0">{{ fc(c.total) }}</span>
+                  </button>
+                  <button
+                    v-if="c.items.length"
+                    class="shrink-0 w-5 h-5 rounded flex items-center justify-center text-slate-300 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition"
+                    title="Cerrar y vaciar este carrito"
+                    @click.stop="cerrarCarrito(c.id)"
+                  >
+                    <i class="fa-solid fa-check text-[9px]"></i>
+                  </button>
+                  <button
+                    v-if="carritoStore.cantidadCarritos > 1"
+                    class="shrink-0 w-5 h-5 rounded flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition"
+                    title="Eliminar carrito"
+                    @click.stop="eliminarCarrito(c.id)"
+                  >
+                    <i class="fa-solid fa-xmark text-[10px]"></i>
+                  </button>
+                </div>
+              </div>
+              <div class="flex gap-1.5 mt-2 pt-2 border-t border-slate-100 dark:border-slate-700">
+                <input
+                  v-model="nombreNuevo"
+                  type="text"
+                  maxlength="40"
+                  placeholder="Mesa 2, Mostrador..."
+                  class="flex-1 min-w-0 text-xs rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+                  @keyup.enter="crearCarrito"
+                />
+                <button
+                  type="button"
+                  class="shrink-0 px-2.5 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed"
+                  :disabled="carritoStore.cantidadCarritos >= 12"
+                  title="Abrir un carrito nuevo"
+                  @click="crearCarrito"
+                >
+                  <i class="fa-solid fa-plus"></i>
+                </button>
+              </div>
+            </div>
           </div>
 
           <div class="max-h-[340px] overflow-y-auto">
@@ -714,52 +808,19 @@
             <button
               v-if="cart.items.length"
               type="button"
-              class="flex-1 text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 text-xs font-semibold transition text-center py-1.5 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/10"
-              @click="holdTicket"
-            >
-              <i class="fa-solid fa-clock-rotate-left mr-1"></i> Hold
-            </button>
-            <button
-              v-if="cart.items.length"
-              type="button"
               class="flex-1 text-rose-500 hover:text-rose-600 dark:hover:text-rose-400 text-xs font-semibold transition text-center py-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-900/10"
-              @click="vaciarCarrito"
+              @click="cerrarCarritoActual"
             >
               <i class="fa-solid fa-trash mr-1"></i> Vaciar
             </button>
-          </div>
-
-          <!-- Recall Dropdown -->
-          <div v-if="showRecallDropdown && heldTickets.length" class="border-t border-slate-100 dark:border-slate-700 pt-2 mt-1">
-            <p class="text-[10px] font-bold text-slate-400 uppercase mb-1.5 px-1">Tickets apartados</p>
-            <div class="space-y-1 max-h-40 overflow-y-auto">
-              <div
-                v-for="t in heldTickets"
-                :key="t.id"
-                class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 group transition text-[11px]"
-                :class="t.createdAt && Date.now() - new Date(t.createdAt).getTime() > 2 * 60 * 60 * 1000 ? 'bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30' : ''"
-              >
-                <button
-                  class="flex-1 flex items-center gap-2 text-left min-w-0"
-                  @click="recallTicket(t.id)"
-                >
-                  <i class="fa-solid fa-rotate-left text-amber-500 shrink-0 text-[10px]"></i>
-                  <span class="text-slate-600 dark:text-slate-400 font-medium truncate">{{ t.itemCount }} items</span>
-                  <span class="text-[9px] text-slate-400 ml-1 hidden sm:inline">{{ formatHeldTime(t.createdAt) }}</span>
-                  <span class="text-slate-800 dark:text-slate-200 font-bold font-mono-data ml-auto">{{ fc(t.total) }}</span>
-                </button>
-                <button
-                  class="shrink-0 w-5 h-5 rounded flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition"
-                  title="Descartar (quedará registrado en auditoría)"
-                  @click.stop="deleteHeldTicket(t.id)"
-                >
-                  <i class="fa-solid fa-xmark text-[10px]"></i>
-                </button>
-              </div>
-            </div>
-          </div>
-          <div v-else-if="showRecallDropdown && !heldTickets.length" class="border-t border-slate-100 dark:border-slate-700 pt-2 mt-1">
-            <p class="text-[10px] text-slate-400 text-center py-2">No hay tickets apartados</p>
+            <button
+              v-if="carritoStore.cantidadCarritos > 1"
+              type="button"
+              class="flex-1 text-slate-500 hover:text-brand-600 dark:hover:text-brand-400 text-xs font-semibold transition text-center py-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/40"
+              @click="crearCarrito()"
+            >
+              <i class="fa-solid fa-plus mr-1"></i> Otro carrito
+            </button>
           </div>
         </BaseCard>
       </div>
@@ -1338,6 +1399,7 @@ import { useProductosStore } from '@/stores/productos'
 import { formatCurrency as fc } from '@/composables/useUtils'
 import api from '@/services/api'
 import { useCajaStore } from '@/stores/caja'
+import { useCarritoStore } from '@/stores/carrito'
 import TicketModal from '@/components/layout/TicketModal.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
@@ -1350,13 +1412,13 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import QuickCreateModal from '@/components/pos/QuickCreateModal.vue'
 import { useSounds } from '@/composables/useSounds'
 import { useConfetti } from '@/composables/useConfetti'
-import { useHeldTickets } from '@/composables/useHeldTickets'
 import { useOfflineSales } from '@/composables/useOfflineSales'
 
 const auth = useAuthStore()
 const toast = useToastStore()
 const cajaStore = useCajaStore()
 const productosStore = useProductosStore()
+const carritoStore = useCarritoStore()
 
 const products = computed(() => productosStore.productos)
 const categories = computed(() => productosStore.categorias)
@@ -1419,15 +1481,17 @@ let qiVentaId = null
 let qiVentaNumero = ''
 
 const showStatsPanel = ref(true)
-const showRecallDropdown = ref(false)
 const ticketData = reactive({ items: [], numero: '', fecha: '', total: 0, descuento: 0, medio_pago: '', cliente: '', sucursal: '', venta_id: null })
 
-const {
-  heldTickets, heldCount, suspiciousTickets,
-  holdTicket: _holdTicket, recallTicket: _recallTicket, deleteHeldTicket: _deleteHeldTicket,
-} = useHeldTickets()
+// Selector de carrito: los carritos nombrados son la unidad de trabajo. "Mesa 1"
+// y "Mesa 2" no son otra cosa que carritos con nombre.
+const showCarritoMenu = ref(false)
+const nombreNuevo = ref('')
+const editandoNombre = ref(false)
+const nombreEditado = ref('')
+const nombreCarritoRef = ref(null)
 
-const hasSuspicious = computed(() => suspiciousTickets.value.length > 0)
+const hasSuspicious = computed(() => carritoStore.sospechosos.length > 0)
 const showSusWarning = ref(true)
 
 const textSearchRef = ref(null)
@@ -1486,46 +1550,77 @@ function onProductCreated(product) {
   showCreateModal.value = false
 }
 
-function holdTicket() {
-  const t = _holdTicket(cart)
-  if (!t) { toast.warning('El carrito está vacío'); return }
-  vaciarCarrito()
-  toast.info(`Ticket #${t.id.toString().slice(-6)} apartado (${t.itemCount} items, ${fc(t.total)})`)
-  showRecallDropdown.value = false
-}
-
-function recallTicket(id) {
-  if (cart.items.length) {
-    toast.warning('El carrito actual no está vacío. Vacialo o confirmalo primero.')
+function crearCarrito() {
+  const nombre = nombreNuevo.value.trim()
+  const c = carritoStore.crear(nombre)
+  if (!c) {
+    toast.warning('No se pueden tener mas de 12 carritos abiertos a la vez')
     return
   }
-  const ticket = _recallTicket(id)
-  if (!ticket) return
-  cart.items = ticket.items.map(i => ({ ...i }))
-  cart.subtotal = ticket.subtotal
-  cart.total = ticket.total
-  cart.descuento = ticket.descuento || 0
-  cart.cliente_id = ticket.cliente_id || ''
-  cart.medio_pago = ticket.medio_pago || 'efectivo'
-  showRecallDropdown.value = false
-  toast.info(`Ticket recuperado — ${ticket.itemCount} items`)
+  nombreNuevo.value = ''
+  showCarritoMenu.value = false
+  toast.info(`Carrito "${c.nombre}" listo`)
 }
 
-function deleteHeldTicket(id) {
-  _deleteHeldTicket(id)
-  if (!heldTickets.value.length) showRecallDropdown.value = false
+function activarCarrito(id) {
+  if (id === carritoStore.activoId) { showCarritoMenu.value = false; return }
+  // Cambiar de carrito no pierde nada: el que se deja queda guardado solo. Lo
+  // unico que no se puede interrumpir es una venta ya en curso ni un QR
+  // esperando confirmacion del cliente.
+  if (confirmando.value || mpQrModal.value || qiConfirmando.value) {
+    toast.warning('Esperá a que termine el cobro actual antes de cambiar de carrito')
+    return
+  }
+  const destino = carritoStore.carritos.find(c => c.id === id)
+  carritoStore.activar(id)
+  showCarritoMenu.value = false
+  if (destino) toast.info(`Carrito "${destino.nombre}" — ${destino.items.length} producto(s)`)
 }
 
-function formatHeldTime(iso) {
-  if (!iso) return ''
-  try {
-    const diff = Date.now() - new Date(iso).getTime()
-    const mins = Math.floor(diff / 60000)
-    if (mins < 1) return 'ahora'
-    if (mins < 60) return `hace ${mins}min`
-    const hrs = Math.floor(mins / 60)
-    return `hace ${hrs}h${mins % 60 > 0 ? mins % 60 + 'm' : ''}`
-  } catch { return iso }
+function empezarRenombre() {
+  editandoNombre.value = true
+  nombreEditado.value = carritoStore.activo.nombre
+  nextTick(() => {
+    const el = nombreCarritoRef.value
+    if (!el) return
+    el.focus()
+    el.select()
+  })
+}
+
+function confirmarRenombre() {
+  const nombre = nombreEditado.value.trim()
+  if (nombre) carritoStore.renombrar(carritoStore.activoId, nombre)
+  editandoNombre.value = false
+}
+
+function eliminarCarrito(id) {
+  const c = carritoStore.carritos.find(x => x.id === id)
+  if (!c) return
+  if (carritoStore.cantidadCarritos <= 1) {
+    toast.warning('Siempre tiene que quedar al menos un carrito')
+    return
+  }
+  const detalle = c.items.length ? ` con ${c.items.length} producto(s) por ${fc(c.total)}` : ''
+  if (!confirm(`Eliminar el carrito "${c.nombre}"${detalle}?`)) return
+  carritoStore.eliminar(id)
+  toast.info(`Carrito "${c.nombre}" eliminado`)
+}
+
+function cerrarCarrito(id) {
+  const c = carritoStore.carritos.find(x => x.id === id)
+  if (!c) return
+  if (!c.items.length) { toast.warning('Ese carrito ya esta vacio'); return }
+  if (!confirm(`Cerrar "${c.nombre}" y vaciar sus ${c.items.length} producto(s)?`)) return
+  carritoStore.cerrar(id)
+  toast.info(`Carrito "${c.nombre}" cerrado`)
+}
+
+function cerrarCarritoActual() {
+  if (!cart.items.length) { toast.warning('El carrito esta vacio'); return }
+  if (!confirm(`Vaciar el carrito "${carritoStore.activo.nombre}"?`)) return
+  carritoStore.cerrar()
+  toast.info(`Carrito "${carritoStore.activo.nombre}" vaciado`)
 }
 
 const lookupProduct = reactive({
@@ -1563,17 +1658,25 @@ const mediosPago = [
   { value: 'cta_corriente', label: 'Cta. Cte.', icon: 'fa-file-invoice-dollar' }
 ]
 
- const cart = reactive({
-   items: [],
-   subtotal: 0,
-   total: 0,
-   descuento: 0,
-   recibido: '',
-   efectivo_pagado: '',
-   medio_pago: 'efectivo',
-   cliente_id: '',
-   comprador_cuit: ''
- })
+// El carrito solia ser un reactive() local de este componente, y por eso se
+// perdia al navegar a otra tab: Vue destruia el componente y el carrito con el.
+// Ahora vive en un store, asi que sobrevive al route change.
+//
+// El Proxy hace que las ~100 referencias a `cart.` de esta vista sigan
+// apuntando al carrito activo sin tener que reescribirlas: cada acceso se
+// resuelve contra `carritoStore.activo` en el momento. Cambiar de carrito es
+// cambiar `activoId` y todas las referencias ya ven el nuevo.
+const cart = new Proxy({}, {
+  get: (_t, k) => carritoStore.activo[k],
+  set: (_t, k, v) => { carritoStore.activo[k] = v; return true },
+  deleteProperty: (_t, k) => { delete carritoStore.activo[k]; return true },
+  has: (_t, k) => k in carritoStore.activo,
+  ownKeys: () => Reflect.ownKeys(carritoStore.activo),
+  getOwnPropertyDescriptor: (_t, k) => ({
+    ...Object.getOwnPropertyDescriptor(carritoStore.activo, k),
+    configurable: true,
+  }),
+})
 
 const stats = reactive({
   ventas_hoy: 84500,
@@ -2303,6 +2406,7 @@ function totalLinea(i) {
 }
 
 function recalcCart() {
+  carritoStore.tocar()
   cart.subtotal = cart.items.reduce((sum, i) => {
     const porKilo = i.por_kilo
     const qty = porKilo ? (i.peso || 0) : (i.cantidad || 0)
@@ -2662,6 +2766,16 @@ async function editSale(t) {
     editingVentaId.value = null
     return
   }
+  // Editar una venta carga sus items en el carrito activo. Si ese carrito
+  // tiene algo sin cobrar (por ejemplo el de una mesa), se aparta primero para
+  // no pisarlo.
+  if (cart.items.length) {
+    const apartado = carritoStore.crear(`${carritoStore.activo.nombre} (sin cobrar)`)
+    if (apartado) {
+      carritoStore.activar(apartado.id)
+      toast.info(`"${apartado.nombre}" quedó aparte con ${apartado.items.length} producto(s)`)
+    }
+  }
   cart.items = (t.items || []).map(i => ({ ...i }))
   cart.descuento = t.descuento || 0
   cart.medio_pago = t.medio_pago || 'efectivo'
@@ -2678,6 +2792,13 @@ async function loadSaleForEditing(ventaId) {
     if (!v || !v.items) return
     await api.put(`/api/ventas/${ventaId}/anular?edit=true`, {})
     toast.info('Venta original anulada. Editá el carrito y confirmá.')
+    if (cart.items.length) {
+      const apartado = carritoStore.crear(`${carritoStore.activo.nombre} (sin cobrar)`)
+      if (apartado) {
+        carritoStore.activar(apartado.id)
+        toast.info(`"${apartado.nombre}" quedó aparte con ${apartado.items.length} producto(s)`)
+      }
+    }
     cart.items = (v.items || []).map(i => ({
       producto_id: i.producto_id,
       nombre: i.producto_nombre,

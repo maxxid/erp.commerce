@@ -173,8 +173,8 @@
 | **Toggle panel de estadísticas** | `showStatsPanel = !showStatsPanel` — icono chevron-left/right |
 | **Badge usuario actual** | Muestra nombre del operador |
 | **Badge estado caja** | Verde "Caja abierta" / Rojo "Caja cerrada" |
-| **Botón tickets apartados** | `v-if="heldCount"` — icono reloj con badge contador. Abre dropdown de recall |
-| **Banner tickets sospechosos** | Alerta ámbar cuando hay tickets apartados > 2h. Botón X para descartar |
+| **Botón selector de carritos** | Header del POS, solo si hay más de un carrito. Icono capas con badge contador. Abre el panel de carritos |
+| **Banner carritos sospechosos** | Alerta ámbar cuando hay un carrito abierto > 2h. Botón X para descartar |
 
 ### Banner Caja Cerrada
 *(visible cuando `!cajaStore.abierta`)*
@@ -263,12 +263,13 @@
 | **Medio de Pago** | Botones segmentados: Efectivo | Débito | Crédito | Transferencia | Cta.Cte. Atajos teclado: 1-5, flechas, Enter |
 | **Select Cliente** | Dropdown de clientes + "Consumidor Final" |
 | **Botón "Confirmar Venta"** | `confirmarVenta()` — flujo completo de confirmación |
-| **Link "Vaciar carrito"** | `vaciarCarrito()` — limpia carrito |
-| **Link "Hold"** | `holdTicket()` — aparta el carrito en localStorage, vacía el carrito. Muestra toast con ID del ticket |
+| **Link "Vaciar carrito"** | `cerrarCarritoActual()` — vacía los items del carrito activo pero conserva su nombre |
 | **Botón "Recarga"** | Header del POS — abre el modal de recarga de saldo (ver "Servicio de Recargas") |
-| **Dropdown recall** | `showRecallDropdown` — lista tickets apartados con items, total, tiempo transcurrido. Tickets >2h destacados en ámbar |
-| **Botón recall por ticket** | `recallTicket(id)` — restaura items, subtotal, descuento, cliente, medio de pago |
-| **Botón descartar** | `deleteHeldTicket(id)` — elimina ticket (registra en auditoría local) |
+| **Nombre del carrito** | Header de la columna del carrito. Clic para renombrar en el lugar (ej. "Mesa 2"). `empezarRenombre()` |
+| **Panel de carritos** | Lista todos los carritos con items, total y antigüedad. `activarCarrito(id)` cambia de carrito sin perder el anterior |
+| **Botón cerrar carrito** | Por cada carrito con items: vacía ese carrito conservando el nombre. `cerrarCarrito(id)` |
+| **Botón eliminar carrito** | Por cada carrito: lo borra (registra en auditoría local). No permite borrar el último. `eliminarCarrito(id)` |
+| **Campo "nuevo carrito"** | Input + botón `+` para abrir un carrito con nombre. `crearCarrito()` |
 
 ### Columna 3: Estadísticas e Historial (3 columnas, toggleable)
 
@@ -303,14 +304,52 @@
 
 Si el producto de recarga no está configurado, el modal avisa y ofrece ir a Ajustes (solo admin / encargado).
 
-### Flujo de Apartado (Hold) / Recall
-1. "Hold" → `holdTicket()` guarda carrito en `localStorage('apex-pos-held')` con timestamp, items, total
-2. Carrito se vacía, toast informa ID del ticket
-3. Badge contador en header del POS muestra cantidad de tickets apartados
-4. "Recall" → dropdown lista tickets con items, total y tiempo transcurrido
-5. Click en ticket → `recallTicket(id)` restaura carrito completo
-6. Tickets > 2h se muestran con fondo ámbar y se marcan como sospechosos
-7. Botón X → `deleteHeldTicket(id)` elimina ticket, queda registrado en auditoría local
+### Carritos con nombre (mesas, mostrador, apartado)
+
+El carrito **no pertenece a la pantalla del POS**: vive en un store de Pinia (`frontend/src/stores/carrito.js`) y se persiste en `localStorage('apex-pos-carritos')`. Hay varios carritos a la vez, cada uno con nombre, y uno de ellos es el activo.
+
+Esto resuelve tres cosas que antes no funcionaban:
+
+- **El carrito ya no se pierde al cambiar de tab.** Antes `cart` era un `reactive()` dentro de `POSView`, así que al ir a Productos Vue destruía el componente y el carrito con él. Ahora sobrevive al route change, y también a un F5.
+- **Se pueden tener varios carritos abiertos.** "Mesa 1", "Mesa 2" y "Mostrador" no son una entidad nueva: son carritos con nombre.
+- **Apartar y recuperar se subsumen.** Un carrito aparteado es un carrito con nombre. Ya no hace falta guardar y vaciar: se cambia de carrito y el anterior queda guardado solo.
+
+Flujo:
+
+1. El panel del header lista todos los carritos con items, total y antigüedad
+2. Click en uno → `activarCarrito(id)` lo vuelve activo. No se pide confirmación porque nada se pierde: el que se deja queda guardado
+3. Si hay una venta yendo al backend o un QR esperando confirmación, el cambio se bloquea con un aviso
+4. El nombre del carrito activo se edita en el lugar, clic sobre el nombre
+5. "Vaciar" / el check verde → `cerrarCarrito(id)` vacía los items pero **conserva el nombre**, que es lo que se quiere para una mesa que sigue abierta
+6. La X → `eliminarCarrito(id)` borra el carrito. El último no se puede borrar: el POS siempre necesita uno
+7. Todo queda en `localStorage('apex-pos-held-audit')` con los eventos `HOLD`, `RENAME`, `CLOSE`, `DELETE_HELD` y `RECALL`
+8. Un carrito abierto hace más de 2h aparece en ámbar y se marca como sospechoso
+
+Máximo 12 carritos simultáneos.
+
+**Al editar una venta** que ya estaba cobrada, sus items se cargan en el carrito activo. Si ese carrito tenía algo sin cobrar, se aparta antes con el sufijo "(sin cobrar)" para no pisarlo.
+
+**Al cerrar la caja**, `initCierreCaja()` en `CajaView` avisa cuántos carritos tienen productos sin cobrar, los lista con su total, y registra un evento `ORPHAN` por cada uno. Los carritos vacíos no cuentan: no son nada pendiente.
+
+#### Cómo evita POSView reescribir sus ~100 referencias a `cart.`
+
+`POSView` ya usaba `cart.items`, `cart.total`, `cart.subtotal`... en ~100 lugares. Para no reescribirlas todas, `cart` es un `Proxy` que resuelve cada acceso contra `carritoStore.activo` en el momento:
+
+```js
+const cart = new Proxy({}, {
+  get: (_t, k) => carritoStore.activo[k],
+  set: (_t, k, v) => { carritoStore.activo[k] = v; return true },
+  // ...
+})
+```
+
+Cambiar de carrito es cambiar `activoId`, y todas las referencias existentes ya ven el carrito nuevo.
+
+#### Migración de los tickets apartados anteriores
+
+Los tickets de la versión vieja (`localStorage('apex-pos-held')`) se importan **una sola vez** como carritos llamados "Apartado 1", "Apartado 2", etc. Se filtran los que no tienen items. Si no hay datos viejos, arranca limpio con un "Carrito 1" vacío.
+
+El store normaliza lo que lee: un `items` que no es array, un `total` no numérico o un `activoId` colgado se corrigen en vez de romper el POS. Si el JSON está corrupto se descarta y arranca de cero.
 
 ### Flujo de Búsqueda por Texto + Creación Rápida
 
@@ -512,7 +551,7 @@ Si el producto de recarga no está configurado, el modal avisa y ofrece ir a Aju
 | **Botón "Sincronizar"** | `syncData()` — recarga movimientos y resumen |
 | **Badge estado caja** | Verde "Abierta" / Rojo "Cerrada" |
 | **Botón "Abrir Caja"** | `abrirCaja()` — precarga el último cierre y abre el modal de apertura, POST `/api/caja/apertura` |
-| **Botón "Cerrar Caja"** | `initCierreCaja()` — verifica tickets apartados, luego abre modal de arqueo |
+| **Botón "Cerrar Caja"** | `initCierreCaja()` — verifica los carritos con productos sin cobrar, luego abre modal de arqueo |
 
 ### Modal: Apertura de Caja
 *(visible al hacer "Abrir Caja")*
@@ -617,7 +656,7 @@ Cada apertura de cuenta digital se persiste como movimiento `tipo="apertura"` co
 | **Botón "Contar billetes"** | Solo en Efectivo — abre el modal de conteo por denominación y escribe la auto-suma en el Monto Real |
 | **Comentario general** | Campo opcional para nota al cierre |
 | **Egresos de la sesión** | Bloque rojo (solo si hay egresos con medio definido) con el detalle por medio y el total. No forman parte del conteo físico de cada método |
-| **Alerta tickets apartados** | Si hay tickets en hold: confirmación antes de continuar |
+| **Alerta tickets apartados** | Si hay carritos con productos sin cobrar: confirmación antes de continuar |
 | **Botón "Confirmar Cierre"** | `confirmarCierreCaja()` — cierra cada medio (POST `/api/caja/cierre-metodo`) + cierre-total + logout automático |
 | **Botón "Cancelar"** | Cierra el modal sin cerrar la caja |
 
@@ -650,7 +689,7 @@ Cada medio se concilia por separado: se registra un `cierre_parcial` con `medio_
 
 ### Flujo de Cierre de Caja
 1. "Cerrar Caja" → `initCierreCaja()` → GET `/api/caja/resumen` → obtiene desglose por método
-2. Si hay tickets apartados → confirmación de huérfanos
+2. Si hay carritos con productos sin cobrar → confirmación listándolos, y evento `ORPHAN` por cada uno
 3. Modal muestra montos esperados vs reales por método de pago
 4. Cajero ingresa monto real contado en cada método
 5. Diferencia se calcula y muestra en verde (sobrante) o rojo (faltante)
@@ -1757,44 +1796,49 @@ Al confirmar venta:
       └─ ¿unidades_vendidas >= max_unidades? → activo = false
 ```
 
-### Flujo 8: Apartado (Hold) y Recuperación de Tickets
+### Flujo 8: Carritos con Nombre (mesas y apartado)
 ```
-[HOLD — APARTAR CARRITO]
-Cajero → POS → "Hold"
-  ├─ Guarda carrito completo en localStorage('apex-pos-held'):
-  │   ├─ items, subtotal, descuento, total, medio_pago, cliente_id
-  │   ├─ timestamp creado (createdAt)
-  │   └─ itemCount
-  ├─ Registra auditoría local: evento 'HOLD'
-  ├─ Carrito se vacía
-  └─ Badge contador en POS se actualiza
+[ABRIR UN CARRITO]
+Cajero → POS → panel de carritos → input "+"
+  ├─ crearCarrito(nombre): agrega el carrito y lo deja activo
+  ├─ Persiste en localStorage('apex-pos-carritos')
+  └─ Registra auditoría local: evento 'HOLD'
 
-[RECALL — RECUPERAR]
-Dropdown de tickets apartados:
-  ├─ Muestra items, total, tiempo transcurrido
-  ├─ Tickets >2h resaltados en ámbar (sospechosos)
-  └─ Click → recallTicket(id):
-      ├─ Restaura items, subtotal, descuento, cliente, medio_pago
-      ├─ Elimina ticket de localStorage
-      ├─ Registra auditoría local: evento 'RECALL'
-      └─ Badge contador decrementa
+[CAMBIAR DE CARRITO]
+Click en un carrito del panel → activarCarrito(id):
+  ├─ Cambia carritoStore.activoId
+  ├─ NO se pide confirmación: el carrito que se deja queda guardado solo
+  ├─ Se bloquea si hay venta en curso o QR esperando confirmación
+  └─ Registra auditoría local: evento 'RECALL'
 
-[DESCARTAR]
-Botón X en ticket del dropdown:
-  ├─ Marca _deleted = true + timestamp
-  ├─ Registra auditoría local: evento 'DELETE_HELD'
-  └─ Elimina del array
+[RENOMBRAR]
+Clic sobre el nombre del carrito activo:
+  ├─ Se edita en el lugar, Enter o blur confirma, Esc cancela
+  └─ Registra auditoría local: evento 'RENAME'
 
-[ORPHANED — CIERRE DE CAJA]
-Si hay tickets apartados al cerrar caja:
-  ├─ Advertencia: "Se marcarán como huérfanos"
-  ├─ Marca _orphaned = true en cada ticket
-  └─ Visibles en getHeldAuditLog()
+[VACIAR UN CARRITO]
+Botón "Vaciar" o el check verde del panel → cerrarCarrito(id):
+  ├─ Vacía items, subtotal, total, descuento, recibido, cliente
+  ├─ CONSERVA el nombre (la mesa sigue abierta)
+  └─ Registra auditoría local: evento 'CLOSE'
+
+[ELIMINAR UN CARRITO]
+Botón X del panel → eliminarCarrito(id):
+  ├─ Lo borra del array y de localStorage
+  ├─ Si era el activo, pasa al siguiente
+  ├─ El último carrito no se puede borrar
+  └─ Registra auditoría local: evento 'DELETE_HELD'
+
+[ORPHAN — CIERRE DE CAJA]
+Si hay carritos con productos sin cobrar al cerrar caja (initCierreCaja en CajaView):
+  ├─ Confirmación listando nombre, items y total de cada uno
+  ├─ Registra auditoría local: evento 'ORPHAN' por cada carrito
+  └─ Los carritos vacíos no cuentan
 
 [SOSPECHOSOS]
-Tickets con createdAt > 2hs:
-  ├─ Banner ámbar en POS: "X ticket(s) apartados hace más de 2 horas — Posible fraude"
-  ├─ Dropdown los resalta con fondo ámbar
+Carritos con items y más de 2h de antigüedad:
+  ├─ Banner ámbar en POS: "X carrito(s) abierto(s) hace más de 2 horas"
+  ├─ El panel los resalta con borde ámbar
   └─ No se eliminan automáticamente, requieren acción manual
 ```
 
@@ -1833,10 +1877,11 @@ Cajero escribe en buscador de texto → Enter
 15. **Producto local encontrado en POS**: Se agrega directo al carrito con `addToCart()`, se limpia el input y se re-enfoca el `barcodeInput` vía `nextTick`. No se muestra card ni se require click en "Agregar".
 16. **Focus del escáner POS**: Siempre retorna al `barcodeInput` después de: agregar item, finalizar venta, o cerrar TicketModal. `defineExpose({ focus })` en BaseInput.vue expone la función para ser llamada por ref.
 15. **Confirmación de venta**: Si hay ofertas, se incrementa unidades_vendidas y se verifica desactivación.
-16. **Hold/Recall**: Los tickets apartados se guardan en localStorage y no tienen respaldo en servidor. Si se pierde localStorage, se pierden.
-17. **Sospechosos**: Tickets apartados > 2h se consideran sospechosos (posible fraude) y se destacan visualmente.
-18. **Huérfanos**: Tickets apartados al momento de cerrar caja se marcan como `_orphaned` para auditoría.
+16. **Carritos sin respaldo en servidor**: Viven en localStorage. Si se borra el localStorage del navegador, se pierden. No sobreviven cambiar de terminal.
+17. **Sospechosos**: Carritos con items y más de 2h de antigüedad se consideran sospechosos (posible fraude) y se destacan visualmente.
+18. **Huérfanos**: Al cerrar caja, cada carrito con productos sin cobrar genera un evento `ORPHAN` en la auditoría local.
 19. **Auto-generación de código de barras**: Si se deja vacío al crear producto, se asigna `GEN-XXXXXXXX` secuencial.
+20. **Editar venta con carrito ocupado**: Cargar una venta para editar crea un carrito "(sin cobrar)" con lo que hubiera, para no pisarlo.
 
 ---
 

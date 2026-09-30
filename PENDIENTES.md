@@ -6,6 +6,20 @@
 
 ## ✅ Completados recientemente
 
+### El carrito del POS se perdia al cambiar de tab, y no habia forma de tener varios carritos a la vez — 29/09/2026
+- **El carrito se perdia al navegar.** `cart` era un `reactive()` declarado adentro de `POSView`, sin `keep-alive` en el router. Al ir a la tab de Productos, Vue destruia el componente y el carrito con el. No era un bug de sincronizacion: el carrito nunca existio fuera de esa pantalla. Ahora vive en un store de Pinia y sobrevive al route change y al F5
+- **No se podian tener dos carritos abiertos.** El "Hold" que existia guardaba y **vacia**, y recuperar se negaba si el carrito actual no estaba vacio. Servia para liberar la pantalla, no para atender a dos personas
+- **Se unifico todo en carritos con nombre.** "Mesa 1", "Mesa 2" y "Mostrador" son carritos con nombre, no una entidad nueva. Apartar y recuperar quedan subsumidos: cambiar de carrito ya guarda el anterior solo
+- **Al vaciar un carrito sobrevive el nombre**, que es lo que sirve para una mesa que sigue abierta
+- **Al editar una venta** que ya estaba cobrada, si el carrito activo tenia algo sin cobrar se aparta antes con el sufijo "(sin cobrar)", para no pisarlo
+- **Al cerrar la caja** ahora se listan los carritos con productos sin cobrar, con nombre, items y total, en vez de un conteo generico de "tickets apartados"
+- **Se conserva la migracion de los tickets apartados** de la version anterior: se importan una sola vez como "Apartado 1", "Apartado 2", etc. Quien los use no pierde nada
+- **Se conserva la auditoria** en la misma clave, con los eventos `HOLD`, `RENAME`, `CLOSE`, `DELETE_HELD`, `RECALL` y ahora `ORPHAN`
+- **Store defensivo:** normaliza lo que lee de localStorage. Un `items` que no es array, un `total` no numerico o un `activoId` colgado se corrigen en vez de romper el POS
+- **`useHeldTickets.js` eliminado.** Sus dos consumidores (POSView y CajaView) ahora usan el store, asi que hay una sola fuente de verdad
+- **45 verificaciones** del store en Node (credenciales para no perder carritos, persistencia, migracion, datos corruptos, sospechosos, auditoria). No se commitearon porque el frontend no tiene arnes de tests
+- **Limite conocido:** los carritos viven en localStorage, no en el servidor. No sobreviven cambiar de terminal. Si alguna vez hace falta que dos terminales compartan carritos, hay que backend + tabla
+
 ### Carrefour Maxi (comerciante.carrefour.com.ar): el sitio es B2B con login, no sirve como fuente — 29/09/2026
 - **Se investigo** el portal de compras por volumen de Carrefour, que tiene precios distintos y a veces mejores que el de consumo
 - **El catalogo se puede leer por API** (`GET /products?method=productsList&currentUrl=...`): trae EAN, nombre y sector
