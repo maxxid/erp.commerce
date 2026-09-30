@@ -24,7 +24,7 @@ from app.services import stock_service
 from app.services import catalogo_service
 from app.services import auditoria_service
 from app.services import analisis_precios_service
-from app.services.analisis_precios_pdf import generar_analisis_precios_pdf
+from app.services.analisis_precios_pdf import generar_analisis_precios_pdf, ReportlabNoDisponible
 from app.models.compra import Compra, CompraItem
 from app.models.proveedor import Proveedor
 
@@ -354,7 +354,12 @@ def analisis_precios_pdf(
 ):
     """Descarga la ficha PDF del análisis, para compartir o imprimir."""
     analisis = _analisis_por_id(db, producto_id)
-    pdf = generar_analisis_precios_pdf(analisis)
+    try:
+        pdf = generar_analisis_precios_pdf(analisis)
+    except ReportlabNoDisponible as exc:
+        # Falta una dependencia opcional. No es un 500: el resto de la app
+        # funciona bien y el PDF es lo unico que no.
+        raise HTTPException(status_code=503, detail=str(exc))
 
     nombre = analisis["producto"].get("nombre") or "producto"
     slug = "".join(c if c.isalnum() or c in "-_" else "-" for c in nombre.lower())

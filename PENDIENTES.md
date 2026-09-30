@@ -6,6 +6,18 @@
 
 ## ✅ Completados recientemente
 
+### 502 en producción: reportlab faltaba en el venv del server — 29/09/2026
+- **El síntoma:** 502 en toda la app tras el deploy manual (git pull + `systemctl restart`). En el journal: `ModuleNotFoundError: No module named 'reportlab'`, y el servicio en loop de restart (`restart counter is at 40`)
+- **La cadena que se caía:** `app.main` → `app.routers.productos` → `analisis_precios_pdf` importan reportlab **duro, a nivel de módulo**. Sin reportlab, ningún import de ese árbol podía cargar, así que uvicorn no arrancaba y nginx respondía 502 en todo
+- **No fue culpa del último commit:** el deploy fue frontend-only (`ec64cc3`). El servicio venía corriendo con código viejo en memoria desde antes de que existiera la ficha PDF; el primer restart lo obligó a importar todo de cero y destapó una deuda de muchos commits: `reportlab>=4.0` estaba en `requirements.txt` pero **nunca se instaló en el venv**
+- **El fix inmediato** (corrido a mano en el server): `sudo -u erp bash -c 'source venv/bin/activate && pip install "reportlab>=4.0"'` + `systemctl restart erp-comercio`. Se instaló solo reportlab, no el `requirements.txt` entero, para no mover versiones de otras deps
+- **El fix estructural (este commit):** una librería de PDF no puede tirar abajo el POS.
+  - `analisis_precios_pdf.py` importa reportlab en `try/except ImportError`: la app arranca igual sin ella y solo la ficha PDF falla, con `ReportlabNoDisponible` que dice exactamente qué instalar y cómo reiniciar
+  - Los estilos (`C_10`, `ANCHO_UTIL`, etc.) se usan como **default de argumento** en helpers, y los defaults se evalúan al importar → sin reportlab reventaban con `NameError` y la app seguía sin arrancar. Ahora valen `None` cuando falta la librería, y hay guard que lo prueba con `ImportError` simulado
+  - El router traduce la falta a **503** con el mensaje accionable, no a un traceback de uvicorn
+  - **3 tests nuevos** (`test_arranque_sin_reportlab.py`, 221 en total) que corren en un **subproceso** a propósito: importar `app.main` en el proceso de tests toca la DB y recargar `app.*` resetea el cache global de `lookup_service` que usan otros tests
+- **`DEPLOY.md` ahora tiene el paso `pip install -r requirements.txt` obligatorio** tras el pull y antes del restart (antes no existía), más una sección de diagnóstico para 502 (dónde mirar el error real, qué significa `restart counter` y la tabla síntomas/causa/acción)
+
 ### El carrito del POS se perdia al cambiar de tab, y no habia forma de tener varios carritos a la vez — 29/09/2026
 - **El carrito se perdia al navegar.** `cart` era un `reactive()` declarado adentro de `POSView`, sin `keep-alive` en el router. Al ir a la tab de Productos, Vue destruia el componente y el carrito con el. No era un bug de sincronizacion: el carrito nunca existio fuera de esa pantalla. Ahora vive en un store de Pinia y sobrevive al route change y al F5
 - **No se podian tener dos carritos abiertos.** El "Hold" que existia guardaba y **vacia**, y recuperar se negaba si el carrito actual no estaba vacio. Servia para liberar la pantalla, no para atender a dos personas

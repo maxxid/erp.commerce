@@ -22,10 +22,50 @@ Frontend (solo frontend, no reinicia backend):
 cd /opt/erp-comercio && sudo -u erp git pull origin master
 ```
 
-Backend (Python cambios, requiere restart):
+Backend (cambios en Python, requiere instalar dependencias y reiniciar):
 ```bash
-cd /opt/erp-comercio && sudo -u erp git pull origin master && sudo systemctl restart erp-comercio
+cd /opt/erp-comercio
+sudo -u erp git pull origin master
+sudo -u erp bash -c 'source venv/bin/activate && pip install -r requirements.txt'
+sudo systemctl restart erp-comercio
+sudo systemctl status erp-comercio --no-pager
 ```
+
+**El `pip install` no es opcional.** Si se omite y el commit nuevo toca imports o
+suma una dependencia a `requirements.txt`, el restart tira la app abajo. Paso el
+30/09/2026
+se instaló en el server, y el `systemctl restart` del deploy tumbó la app entera
+(502 en todo, `restart counter is at 40`). El servicio venía corriendo con código
+viejo en memoria desde antes de que ese módulo existiera; el restart lo obligó a
+importar todo de cero.
+
+Los cambios de frontend (solo `frontend/dist`) no necesitan el `pip install`,
+pero correrlo no hace daño.
+
+## Si el servicio no levanta (502 en toda la app)
+
+Un 502 significa que nginx no encuentra el backend. Casi siempre es que uvicorn
+no arrancó. El error real está en el journal, no en el status:
+
+```bash
+sudo systemctl status erp-comercio --no-pager -l
+sudo journalctl -u erp-comercio -n 80 --no-pager
+```
+
+El dato útil es la última línea del traceback. Si el status dice
+`activating (auto-restart)` con `restart counter is at N`, está en loop: paralo
+mientras se arregla, porque quema CPU y llena el journal.
+
+| Síntoma | Causa | Qué hacer |
+|---|---|---|
+| `ModuleNotFoundError: No module named 'X'` con `X` de librería (reportlab, pandas, etc.) | Falta una dependencia en el venv | `pip install -r requirements.txt` y reiniciar |
+| `ModuleNotFoundError` en un módulo propio (`app.*`) | Pull a medias o archivo faltante | `git status`, `git log --oneline -1` |
+| `NameError` al importar | Código a medias en el working tree | `git status`, `git log --oneline -1` |
+
+Si el traceback termina en un import de terceros, casi siempre falta el
+`pip install`. `requirements.txt` es la fuente de verdad: si la librería no está
+ahí, el primer error será un `ModuleNotFoundError` en tiempo de import. Y aunque
+esté ahi, hay que correr el install en el venv del server (`/opt/erp-comercio/venv`).
 
 ## Migraciones de Base de Datos (SQLite)
 

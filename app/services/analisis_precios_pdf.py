@@ -6,31 +6,64 @@ menor precio: el online mas bajo y el menor costo historico.
 
 from io import BytesIO
 from datetime import datetime
+import logging
 
-from reportlab.lib.pagesizes import A4, landscape
-from reportlab.lib.units import mm
-from reportlab.lib import colors
-from reportlab.lib.styles import ParagraphStyle
-from reportlab.platypus import (
-    SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer,
-)
+# reportlab es una dependencia solo de este modulo, pero antes se importaba de
+# forma dura y a nivel de modulo. Eso hacia que `app.routers.productos` no
+# pudiera importarse, `app.main` tampoco, y uvicorn no arrancara: la app entera
+# caia porque faltaba una libreria para generar un PDF. Paso real en
+# produccion el 29/09/2026, con el venv del server sin reportlab instalado.
+#
+# Ahora la app arranca igual sin ella y el PDF falla solo cuando se pide, con un
+# mensaje que dice que hacer.
+try:
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.units import mm
+    from reportlab.lib import colors
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.platypus import (
+        SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer,
+    )
+    REPORTLAB_DISPONIBLE = True
+except ImportError:  # pragma: no cover - depende del entorno
+    REPORTLAB_DISPONIBLE = False
+    logging.getLogger(__name__).warning(
+        "reportlab no esta instalado: la ficha PDF de analisis de precios va a "
+        "fallar. Se instala con: pip install 'reportlab>=4.0'"
+    )
 
 from app.services.lookup_service import nombre_fuente, esta_experimental
 
-ANCHO_UTIL = landscape(A4)[0] - 24 * mm
 
-VERDE = colors.HexColor("#047857")
-VERDE_CLARO = colors.HexColor("#d1fae5")
-AMBAR = colors.HexColor("#b45309")
-AMBAR_CLARO = colors.HexColor("#fef3c7")
-GRIS = colors.HexColor("#6b7280")
-GRIS_LINEA = colors.HexColor("#e5e7eb")
-ROJO = colors.HexColor("#b91c1c")
+class ReportlabNoDisponible(RuntimeError):
+    """Se pidio la ficha PDF sin tener reportlab instalado."""
 
-C_10 = ParagraphStyle("c10", fontSize=9, leading=11)
-C_10_D = ParagraphStyle("c10d", parent=C_10, textColor=colors.white)
-C_TIT = ParagraphStyle("tit", fontSize=16, leading=19, textColor=colors.HexColor("#111827"))
-C_SEC = ParagraphStyle("sec", fontSize=11, leading=14, textColor=colors.HexColor("#374151"), spaceBefore=2)
+
+if REPORTLAB_DISPONIBLE:
+    ANCHO_UTIL = landscape(A4)[0] - 24 * mm
+
+    VERDE = colors.HexColor("#047857")
+    VERDE_CLARO = colors.HexColor("#d1fae5")
+    AMBAR = colors.HexColor("#b45309")
+    AMBAR_CLARO = colors.HexColor("#fef3c7")
+    GRIS = colors.HexColor("#6b7280")
+    GRIS_LINEA = colors.HexColor("#e5e7eb")
+    ROJO = colors.HexColor("#b91c1c")
+
+    C_10 = ParagraphStyle("c10", fontSize=9, leading=11)
+    C_10_D = ParagraphStyle("c10d", parent=C_10, textColor=colors.white)
+    C_TIT = ParagraphStyle("tit", fontSize=16, leading=19, textColor=colors.HexColor("#111827"))
+    C_SEC = ParagraphStyle("sec", fontSize=11, leading=14, textColor=colors.HexColor("#374151"), spaceBefore=2)
+else:
+    # Los estilos se usan como default de argumento en helpers como
+    # `_p(texto, style=C_10)`, y los defaults se evaluan al definir la funcion,
+    # o sea al importar el modulo. Si estos nombres no existieran, el import
+    # reventaria con NameError y la app no arrancaria, que es justo lo que
+    # estamos evitando. None alcanza: generar_analisis_precios_pdf() lanza
+    # ReportlabNoDisponible antes de usar cualquiera de ellos.
+    ANCHO_UTIL = VERDE = VERDE_CLARO = AMBAR = AMBAR_CLARO = None
+    GRIS = GRIS_LINEA = ROJO = None
+    C_10 = C_10_D = C_TIT = C_SEC = None
 
 
 def _texto_oferta(desc):
@@ -183,6 +216,12 @@ def _bloque_recomendacion(analisis):
 
 def generar_analisis_precios_pdf(analisis: dict) -> bytes:
     """Genera la ficha PDF. Devuelve los bytes del archivo."""
+    if not REPORTLAB_DISPONIBLE:
+        raise ReportlabNoDisponible(
+            "No se puede generar la ficha PDF porque falta la libreria reportlab. "
+            "Se instala con: pip install 'reportlab>=4.0' y despues "
+            "sudo systemctl restart erp-comercio"
+        )
     producto = analisis.get("producto") or {}
     buffer = BytesIO()
 
