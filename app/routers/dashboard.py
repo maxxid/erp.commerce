@@ -19,26 +19,39 @@ router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 
 HOY = lambda: datetime.now(timezone.utc)
 
+# Zona horaria Argentina (UTC-3): el "dia" de negocio es local, no UTC.
+TZ_AR = timezone(timedelta(hours=-3))
+
+
+def _a_utc(dt):
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=TZ_AR)
+    return dt.astimezone(timezone.utc)
+
+
+def _local(d):
+    return (d or HOY()).astimezone(TZ_AR)
+
 
 def _inicio_dia(d=None):
-    d = d or HOY()
-    return d.replace(hour=0, minute=0, second=0, microsecond=0)
+    local = _local(d)
+    return _a_utc(local.replace(hour=0, minute=0, second=0, microsecond=0))
 
 
 def _inicio_mes(d=None):
-    d = d or HOY()
-    return d.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    local = _local(d)
+    return _a_utc(local.replace(day=1, hour=0, minute=0, second=0, microsecond=0))
 
 
 def _inicio_semana(d=None):
-    d = d or HOY()
-    return (d - timedelta(days=d.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+    local = _local(d)
+    return _a_utc((local - timedelta(days=local.weekday())).replace(hour=0, minute=0, second=0, microsecond=0))
 
 
 def _inicio_trimestre(d=None):
-    d = d or HOY()
-    trimestre = ((d.month - 1) // 3) * 3 + 1
-    return d.replace(month=trimestre, day=1, hour=0, minute=0, second=0, microsecond=0)
+    local = _local(d)
+    trimestre = ((local.month - 1) // 3) * 3 + 1
+    return _a_utc(local.replace(month=trimestre, day=1, hour=0, minute=0, second=0, microsecond=0))
 
 
 def _fmt_dt(dt):
@@ -399,12 +412,16 @@ def mensual(db: Session = Depends(get_db), user: Usuario = Depends(get_current_u
 @router.get("/trimestral", response_model=RespuestaData)
 def trimestral(db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
     """Reporte trimestral con comparación vs trimestre anterior."""
-    hoy = HOY()
-    mes_actual = hoy.month
-    trim_actual = ((mes_actual - 1) // 3) * 3 + 1
-    inicio_actual = hoy.replace(month=trim_actual, day=1, hour=0, minute=0, second=0, microsecond=0)
-    inicio_anterior = (inicio_actual - timedelta(days=1)).replace(day=1)
-    inicio_anterior = inicio_anterior.replace(month=((inicio_anterior.month - 1) // 3) * 3 + 1, day=1)
+    local = _local(None)
+    trim_actual = ((local.month - 1) // 3) * 3 + 1
+    inicio_actual = _a_utc(local.replace(month=trim_actual, day=1, hour=0, minute=0, second=0, microsecond=0))
+    trim_anterior = trim_actual - 3
+    if trim_anterior < 1:
+        trim_anterior += 12
+    anio_anterior = local.year if trim_anterior > trim_actual else local.year - 1
+    inicio_anterior = _a_utc(
+        datetime(anio_anterior, trim_anterior, 1, tzinfo=TZ_AR)
+    )
 
     def _ventas_trim(desde):
         hasta = (desde.replace(day=28) + timedelta(days=100)).replace(day=1)
