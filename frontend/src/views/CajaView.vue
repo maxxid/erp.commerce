@@ -761,6 +761,19 @@
     <!-- Modal Cierre de Caja -->
     <BaseModal v-model="showCierreModal" title="Cierre de Caja" size="lg" :hide-footer="true">
       <div class="space-y-5">
+        <div v-if="carritoStore.carritosConItems.length" class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-3">
+          <div class="flex items-center gap-2 mb-1">
+            <i class="fa-solid fa-triangle-exclamation text-red-600 dark:text-red-400"></i>
+            <span class="font-semibold text-red-700 dark:text-red-300 text-sm">Carritos sin cobrar</span>
+          </div>
+          <ul class="text-xs text-red-700 dark:text-red-300 space-y-0.5">
+            <li v-for="c in carritoStore.carritosConItems" :key="c.id">— {{ c.nombre }}: {{ c.items.length }} producto(s) por {{ fc(c.total) }}</li>
+          </ul>
+          <p class="text-[10px] text-red-600 dark:text-red-400 mt-1.5">
+            Si cerrás la caja sin cobrarlos quedan como huérfanos en la auditoría.
+          </p>
+        </div>
+
         <div class="bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800 rounded-xl p-4">
           <div class="flex items-center gap-2 mb-2">
             <i class="fa-solid fa-triangle-exclamation text-brand-500"></i>

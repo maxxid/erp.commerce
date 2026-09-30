@@ -388,6 +388,13 @@ Además, dos guards defensivos: `_clean_name` y `_map_categoria` reventaban con 
 
 _(Código pusheado, falta probar end-to-end en navegador — sesión 10/08/2026)_
 
+**Carritos por defecto + atajo "+" + aviso en cierre** (29/09/2026):
+- [ ] En **Ajustes → Carritos del POS** agregar "Mostrador", "Mesa 1" y "Mesa 2", Guardar, y abrir el POS: los tres existen (si ya había carritos, se suman sin duplicar)
+- [ ] En el POS, borrar un default y volver a entrar a la tab → reaparece; renombrarlo y reentrar → reaparece con el nombre de Ajustes
+- [ ] El botón **"+"** del header del carrito (al lado del lápiz) crea un "Carrito N" al instante, sin abrir el panel; sigue funcionando el "+" de abajo del panel con nombre libre
+- [ ] **Cerrar Caja** con un carrito con productos → sigue el confirm nativo, y además el modal de cierre muestra el banner rojo con cada carrito sin cobrar y su total
+- [ ] Cerrar caja sin carritos pendientes → no aparece el banner
+
 **Precios Online** (29/09/2026):
 - [ ] Escanear un código que **sí** esté en el catálogo local → los precios online aparecen con cifras reales (no "—"), con imagen y marca
 - [ ] El primer resultado (más barato) sale con fondo verde + badge "Más barato", y el precio en verde

@@ -128,6 +128,26 @@ export const useCarritoStore = defineStore('carrito', () => {
     return `Carrito ${n}`
   }
 
+  // Los carritos default se eligen en Ajustes ("Mostrador", "Mesa 1", ...) y
+  // son la lista que el local quiere siempre abierta. Se respetan por nombre:
+  // si un default falta (porque se borro o renombro), se vuelve a crear en el
+  // proximo load. Un renombre manual, entonces, dura solo hasta que se recarga
+  // el POS desde la config.
+  function asegurarDefaults(nombres) {
+    if (!Array.isArray(nombres)) return 0
+    let creados = 0
+    for (const crudo of nombres) {
+      const nombre = String(crudo || '').trim().slice(0, 40)
+      if (!nombre || carritos.value.some(c => c.nombre === nombre)) continue
+      if (carritos.value.length >= MAX_CARTS) break
+      const nuevo = carritoVacio(nombre)
+      carritos.value.push(nuevo)
+      auditar('HOLD', { carritoId: nuevo.id, nombre: nuevo.nombre, items: 0, total: 0, origen: 'default' })
+      creados++
+    }
+    return creados
+  }
+
   function guardar() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
@@ -234,6 +254,7 @@ export const useCarritoStore = defineStore('carrito', () => {
     renombrar,
     eliminar,
     cerrar,
+    asegurarDefaults,
     tocar,
     antiguedad,
     auditar,

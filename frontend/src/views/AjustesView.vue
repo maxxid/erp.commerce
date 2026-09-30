@@ -103,6 +103,12 @@ const denominacionesEliminadas = ref([])
 const guardandoDenoms = ref(false)
 const cargandoDenoms = ref(false)
 
+// Carritos del POS por defecto ("Mostrador", "Mesa 1", ...). Se guardan como
+// JSON en la config pos_carritos_default y el POS los respeta por nombre.
+const carritosDefault = ref([])
+const nombreCarritoDefault = ref('')
+const carritosDefaultExpanded = ref(false)
+
 const TIPOS_DENOM = [
   { value: 'billete', label: 'Billete' },
   { value: 'moneda', label: 'Moneda' },
@@ -134,17 +140,18 @@ const cajaForm = ref({
 })
 
 const config = ref({
-  afip_mode: 'testing',
-  facturacion_provider: 's360',
-  afip_cuit: '',
-  afip_pto_vta: '1',
-  afip_cert: '',
-  afip_key: '',
-  facturacion_s360_token: '',
-  banco_nombre: '',
-  banco_titular: '',
-  banco_alias: '',
-  empresa_nombre: '',
+    afip_mode: 'testing',
+    facturacion_provider: 's360',
+    afip_cuit: '',
+    afip_pto_vta: '1',
+    afip_cert: '',
+    afip_key: '',
+    facturacion_s360_token: '',
+    banco_nombre: '',
+    banco_titular: '',
+    banco_alias: '',
+    pos_carritos_default: '',
+    empresa_nombre: '',
   empresa_domicilio: '',
   empresa_condicion_iva: 'responsable_inscripto',
   empresa_ingresos_brutos: '',
@@ -185,6 +192,12 @@ async function loadConfig() {
     if (data) {
       for (const key of Object.keys(config.value)) {
         if (data[key]) config.value[key] = data[key].valor || ''
+      }
+      try {
+        const lista = JSON.parse(config.value.pos_carritos_default || '[]')
+        carritosDefault.value = (Array.isArray(lista) ? lista : []).map(n => String(n).trim()).filter(Boolean)
+      } catch {
+        carritosDefault.value = []
       }
       const medios = ['efectivo', 'debito', 'credito', 'transferencia', 'cta_corriente', 'mercadopago_qr', 'mercadopago_pos']
       for (const medio of medios) {
@@ -295,6 +308,37 @@ async function saveConfig(keys = null) {
     toast.success('Configuración guardada')
   } catch {
     toast.error('Error al guardar configuración')
+  }
+  saving.value = false
+}
+
+function agregarCarritoDefault() {
+  const nombre = nombreCarritoDefault.value.trim().slice(0, 40)
+  if (!nombre) return
+  if (carritosDefault.value.includes(nombre)) {
+    toast.warning(`"${nombre}" ya esta en la lista`)
+    return
+  }
+  carritosDefault.value.push(nombre)
+  nombreCarritoDefault.value = ''
+}
+
+function quitarCarritoDefault(nombre) {
+  carritosDefault.value = carritosDefault.value.filter(n => n !== nombre)
+}
+
+async function saveCarritosDefault() {
+  saving.value = true
+  try {
+    await api.put('/api/config/ajustes', {
+      clave: 'pos_carritos_default',
+      valor: JSON.stringify(carritosDefault.value),
+      descripcion: 'Lista de carritos por defecto del POS (JSON)',
+    })
+    config.value.pos_carritos_default = JSON.stringify(carritosDefault.value)
+    toast.success('Carritos por defecto guardados')
+  } catch {
+    toast.error('Error al guardar la configuración')
   }
   saving.value = false
 }
@@ -861,6 +905,74 @@ onMounted(async () => {
             <i class="fa-solid fa-floppy-disk"></i> Guardar
           </BaseButton>
           <p class="text-[11px] text-slate-400">Los cambios se aplican inmediatamente</p>
+        </div>
+      </div>
+    </BaseCard>
+
+    <BaseCard v-if="!loading">
+      <button class="w-full text-left" @click="carritosDefaultExpanded = !carritosDefaultExpanded">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <i class="fa-solid fa-cash-register text-emerald-600"></i>
+            Carritos del POS
+          </h3>
+          <div class="flex items-center gap-3">
+            <span v-if="carritosDefault.length" class="text-xs text-slate-500 dark:text-slate-400">{{ carritosDefault.length }} carrito(s)</span>
+            <span v-else class="text-xs text-amber-500">
+              <i class="fa-solid fa-circle-xmark mr-1"></i>No configurado
+            </span>
+            <i :class="['fa-solid fa-chevron-down text-xs transition-transform', carritosDefaultExpanded ? 'rotate-180' : '']"></i>
+          </div>
+        </div>
+      </button>
+
+      <div v-if="carritosDefaultExpanded" class="mt-4 space-y-4 max-w-lg">
+        <div class="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded p-3 mb-1">
+          <p class="text-xs text-emerald-700 dark:text-emerald-300">
+            <i class="fa-solid fa-circle-info mr-1"></i>
+            Estos carritos quedan <strong>siempre abiertos</strong> en el POS: si alguien los borra o renombra, se vuelven a crear al recargar. Ejemplos: Mostrador, Mesa 1, Mesa 2...
+          </p>
+        </div>
+
+        <div class="space-y-1.5">
+          <div
+            v-for="nombre in carritosDefault"
+            :key="nombre"
+            class="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-sm text-slate-700 dark:text-slate-200"
+          >
+            <i class="fa-solid fa-receipt text-emerald-500 text-xs"></i>
+            <span class="flex-1 truncate">{{ nombre }}</span>
+            <button
+              type="button"
+              class="shrink-0 w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition"
+              title="Quitar de la lista"
+              @click="quitarCarritoDefault(nombre)"
+            >
+              <i class="fa-solid fa-xmark text-[10px]"></i>
+            </button>
+          </div>
+          <p v-if="!carritosDefault.length" class="text-xs text-slate-400 italic">Sin carritos por defecto. Agregá los que quieras siempre abiertos.</p>
+        </div>
+
+        <div class="flex gap-2">
+          <input
+            v-model="nombreCarritoDefault"
+            type="text"
+            maxlength="40"
+            placeholder="Mostrador, Mesa 1..."
+            class="flex-1 min-w-0 text-sm rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+            @keyup.enter="agregarCarritoDefault"
+          />
+          <BaseButton variant="secondary" :disabled="!nombreCarritoDefault.trim()" @click="agregarCarritoDefault">
+            <i class="fa-solid fa-plus"></i> Agregar
+          </BaseButton>
+        </div>
+
+        <div class="flex items-center gap-3 pt-2">
+          <BaseButton variant="primary" :loading="saving" @click="saveCarritosDefault">
+            <i class="fa-solid fa-floppy-disk"></i> Guardar
+          </BaseButton>
+          <p class="text-[11px] text-slate-400">Se aplican al recargar el POS</p>
         </div>
       </div>
     </BaseCard>

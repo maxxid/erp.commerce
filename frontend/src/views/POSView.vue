@@ -441,6 +441,14 @@
             <button
               type="button"
               class="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition"
+              title="Abrir un carrito nuevo"
+              @click="crearCarritoRapido"
+            >
+              <i class="fa-solid fa-plus text-[11px]"></i>
+            </button>
+            <button
+              type="button"
+              class="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition"
               title="Cambiar de carrito"
               @click="showCarritoMenu = !showCarritoMenu"
             >
@@ -1562,6 +1570,16 @@ function crearCarrito() {
   toast.info(`Carrito "${c.nombre}" listo`)
 }
 
+// Atajo del header: sin tipear nombre, se crea con el proximo "Carrito N".
+function crearCarritoRapido() {
+  if (carritoStore.cantidadCarritos >= 12) {
+    toast.warning('No se pueden tener mas de 12 carritos abiertos a la vez')
+    return
+  }
+  const c = carritoStore.crear('')
+  if (c) toast.info(`Carrito "${c.nombre}" listo`)
+}
+
 function activarCarrito(id) {
   if (id === carritoStore.activoId) { showCarritoMenu.value = false; return }
   // Cambiar de carrito no pierde nada: el que se deja queda guardado solo. Lo
@@ -1777,6 +1795,15 @@ onMounted(async () => {
       if (cfg.banco_alias) bankConfig.banco_alias = cfg.banco_alias.valor || ''
       if (cfg.mercadopago_qr_fijo_url) mpConfig.qr_fijo_url = cfg.mercadopago_qr_fijo_url.valor || ''
       if (cfg.mercadopago_qr_fijo_modo) mpConfig.qr_fijo_modo = cfg.mercadopago_qr_fijo_modo.valor || 'dinamico'
+      // Carritos default de Ajustes: se respetan por nombre. Los que falten
+      // (borrados o renombrados) se vuelven a crear aca en cada recarga.
+      if (cfg.pos_carritos_default?.valor) {
+        try {
+          const nombres = JSON.parse(cfg.pos_carritos_default.valor)
+          const creados = carritoStore.asegurarDefaults(nombres)
+          if (creados > 0) toast.info(`${creados} carrito(s) por defecto restaurado(s): ${nombres.filter(n => carritoStore.carritos.some(c => c.nombre === n)).join(', ')}`)
+        } catch { /* lista default corrupta: se ignora y se sigue con lo que hay */ }
+      }
     }
   } catch { /* sin datos */ }
 
