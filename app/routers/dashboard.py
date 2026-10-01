@@ -1,12 +1,13 @@
 """Router de Dashboard: KPIs + analíticas (picos, rankings, alertas, margen, semanal)."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime, timezone, timedelta
 from app.database import get_db
 from app.models.producto import Producto
 from app.models.venta import Venta, VentaItem
+from app.models.categoria import Categoria
 from app.models.cliente import Cliente
 from app.models.licencia import Licencia
 from app.models.movimiento_caja import MovimientoCaja
@@ -64,6 +65,59 @@ def _costo_ventas(db, desde):
         Venta, VentaItem.venta_id == Venta.id
     ).filter(Venta.estado == "confirmada", Venta.fecha >= desde).scalar() or 0
     return float(costo)
+
+
+# Métricas del gráfico de categorías. "margen_pct" responde "¿en qué categoría
+# gano más por peso vendido?", que importe/ganancia/cantidad no muestran: una
+# categoría puede ser la de mayor venta y ser la de peor margen.
+METRICAS_CATEGORIA = ("importe", "ganancia", "cantidad", "margen_pct")
+PERIODOS_CATEGORIA = ("hoy", "semana", "mes", "trimestre")
+SIN_CATEGORIA = "sin_categoria"
+
+
+def _add_meses(desde, n):
+    """Primer día del mes n meses después de ``desde``."""
+    total = desde.month - 1 + n
+    return desde.replace(year=desde.year + total // 12, month=total % 12 + 1, day=1)
+
+
+def _ventana(periodo):
+    """Devuelve (desde, hasta) en UTC para el período pedido."""
+    if periodo == "hoy":
+        desde = _inicio_dia()
+        return desde, desde + timedelta(days=1)
+    if periodo == "semana":
+        desde = _inicio_semana()
+        return desde, desde + timedelta(days=7)
+    if periodo == "trimestre":
+        desde = _inicio_trimestre()
+        return desde, _add_meses(desde, 3)
+    desde = _inicio_mes()
+    return desde, _add_meses(desde, 1)
+
+
+def _raices_categorias(db):
+    """Para cada categoría, su raíz en la jerarquía y el nombre de esa raíz.
+
+    Las categorías son anidadas (Bebidas -> Gaseosas -> Cola). Un gráfico con los
+    tres niveles a la vez es ilegible, así que todo se agrupa en la raíz. También
+    toleramos ciclos en la base, que si no dejarían el while colgado.
+    """
+    info = {c.id: {"nombre": c.nombre, "padre": c.padre_id} for c in db.query(Categoria).all()}
+
+    def raiz(cid):
+        actual, visto = cid, set()
+        while True:
+            cat = info.get(actual)
+            if not cat or cat["padre"] is None or cat["padre"] not in info or actual in visto:
+                return actual
+            visto.add(actual)
+            actual = cat["padre"]
+
+    mapa = {cid: raiz(cid) for cid in info}
+    # El nombre va del de la raíz, no del de la categoría consultada.
+    nombres = {cid: info[raiz(cid)]["nombre"] for cid in info}
+    return mapa, nombres
 
 
 @router.get("/resumen", response_model=RespuestaData)
@@ -193,6 +247,112 @@ def resumen(db: Session = Depends(get_db), user: Usuario = Depends(get_current_u
         "ventas_por_hora": {"labels": horas_labels, "valores": horas_valores},
         "top_productos_mes": top_productos,
         "stock_critico": criticos_lista, "sin_stock": sin_stock_lista,
+    })
+
+
+@router.get("/por-categoria", response_model=RespuestaData)
+def por_categoria(
+    metrica: str = Query("importe", description=f"Una de: {', '.join(METRICAS_CATEGORIA)}"),
+    periodo: str = Query("mes", description=f"Una de: {', '.join(PERIODOS_CATEGORIA)}"),
+    limite: int = Query(10, ge=3, le=30, description="Máximo de categorías a devolver"),
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """Ventas agrupadas por categoría, con la métrica y el período a elección.
+
+    Devuelve las tres métricas más el margen por categoría en una sola respuesta,
+    para que el front no tenga que pedir de nuevo al cambiar de métrica.
+    """
+    if metrica not in METRICAS_CATEGORIA:
+        raise HTTPException(status_code=400, detail=f"metrica inválida. Opciones: {', '.join(METRICAS_CATEGORIA)}")
+    if periodo not in PERIODOS_CATEGORIA:
+        raise HTTPException(status_code=400, detail=f"periodo inválido. Opciones: {', '.join(PERIODOS_CATEGORIA)}")
+
+    desde, hasta = _ventana(periodo)
+    mapa_raiz, nombres_raiz = _raices_categorias(db)
+
+    filas = db.query(
+        Producto.categoria_id,
+        func.coalesce(func.sum(VentaItem.subtotal), 0).label("importe"),
+        func.coalesce(func.sum(VentaItem.cantidad), 0).label("cantidad"),
+        func.coalesce(func.sum(VentaItem.cantidad * func.coalesce(VentaItem.precio_costo, 0)), 0).label("costo"),
+        func.count(VentaItem.id).label("items"),
+        func.count(VentaItem.precio_costo).label("items_con_costo"),
+    ).join(
+        VentaItem, VentaItem.producto_id == Producto.id
+    ).join(
+        Venta, VentaItem.venta_id == Venta.id
+    ).filter(
+        Venta.estado == "confirmada", Venta.fecha >= desde, Venta.fecha < hasta
+    ).group_by(Producto.categoria_id).all()
+
+    # Acumulamos por categoría raíz. Sin categoría propia cae en un grupo aparte,
+    # con clave propia (no null) para que el front pueda usarla de :key.
+    grupos = {}
+    for cat_id, importe, cantidad, costo, items, con_costo in filas:
+        raiz = mapa_raiz.get(cat_id) if cat_id is not None else None
+        clave = raiz if raiz is not None else SIN_CATEGORIA
+        g = grupos.setdefault(
+            clave,
+            {"importe": 0.0, "cantidad": 0.0, "costo": 0.0, "items": 0, "items_con_costo": 0},
+        )
+        g["importe"] += float(importe or 0)
+        g["cantidad"] += float(cantidad or 0)
+        g["costo"] += float(costo or 0)
+        g["items"] += items or 0
+        g["items_con_costo"] += con_costo or 0
+
+    def _fila(clave, nombre, g):
+        ganancia = g["importe"] - g["costo"]
+        return {
+            "clave": clave,
+            "categoria": nombre,
+            "importe": round(g["importe"], 2),
+            "costo": round(g["costo"], 2),
+            "ganancia": round(ganancia, 2),
+            "cantidad": round(g["cantidad"], 2),
+            "margen_pct": round((ganancia / g["importe"] * 100), 1) if g["importe"] > 0 else 0.0,
+            "items": g["items"],
+            # Si faltan costos, la ganancia/margen de esa categoría no es confiable.
+            "items_sin_costo": g["items"] - g["items_con_costo"],
+        }
+
+    lista = [
+        _fila(clave, "Sin categoría" if clave == SIN_CATEGORIA else nombres_raiz.get(clave, "?"), g)
+        for clave, g in grupos.items()
+    ]
+    lista.sort(key=lambda r: r[metrica], reverse=True)
+
+    # El resto se agrupa en "Otras" para que el gráfico siga siendo legible.
+    # Los porcentajes se recalculan sobre los totales, no se promedian.
+    top = lista[:limite]
+    resto = lista[limite:]
+    if resto:
+        agregado = {
+            "importe": sum(r["importe"] for r in resto),
+            "cantidad": sum(r["cantidad"] for r in resto),
+            "costo": sum(r["costo"] for r in resto),
+            "items": sum(r["items"] for r in resto),
+            "items_con_costo": sum(r["items"] - r["items_sin_costo"] for r in resto),
+        }
+        top.append(_fila("otras", f"Otras ({len(resto)})", agregado))
+
+    totales = {
+        "importe": round(sum(r["importe"] for r in lista), 2),
+        "costo": round(sum(r["costo"] for r in lista), 2),
+        "ganancia": round(sum(r["ganancia"] for r in lista), 2),
+        "cantidad": round(sum(r["cantidad"] for r in lista), 2),
+    }
+    totales["margen_pct"] = (
+        round(totales["ganancia"] / totales["importe"] * 100, 1) if totales["importe"] > 0 else 0.0
+    )
+
+    return RespuestaData(data={
+        "metrica": metrica,
+        "periodo": periodo,
+        "categorias": top,
+        "totales": totales,
+        "cantidad_categorias": len(lista),
     })
 
 
@@ -381,7 +541,6 @@ def mensual(db: Session = Depends(get_db), user: Usuario = Depends(get_current_u
                   "cantidad": float(t.qty), "total": float(t.total)} for t in top]
 
     # Ventas por categoría
-    from app.models.categoria import Categoria
     cats = db.query(
         Categoria.nombre, func.coalesce(func.sum(VentaItem.subtotal), 0)
     ).join(Producto, Producto.categoria_id == Categoria.id).join(

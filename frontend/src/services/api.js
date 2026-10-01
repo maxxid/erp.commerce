@@ -16,7 +16,18 @@ function touchSync() {
   try { localStorage.setItem('apex-last-sync', String(Date.now())) } catch {}
 }
 
-async function request(method, path, body = null) {
+function buildQuery(params) {
+  if (!params) return ''
+  const search = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === '') continue
+    search.append(key, value)
+  }
+  const qs = search.toString()
+  return qs ? `?${qs}` : ''
+}
+
+async function request(method, path, body = null, params = null) {
   const headers = { 'Content-Type': 'application/json' }
   const token = getToken()
   if (token) headers['Authorization'] = `Bearer ${token}`
@@ -26,7 +37,7 @@ async function request(method, path, body = null) {
     options.body = JSON.stringify(body)
   }
 
-  const response = await fetch(`${API_BASE}${path}`, options)
+  const response = await fetch(`${API_BASE}${path}${buildQuery(params)}`, options)
   const text = await response.text()
   let data
   try { data = JSON.parse(text) } catch { data = { detail: text } }
@@ -51,7 +62,7 @@ export default {
   getToken,
   setToken,
   clearToken,
-  get(path) { return request('GET', path) },
+  get(path, params) { return request('GET', path, null, params) },
   post(path, body) { return request('POST', path, body) },
   put(path, body) { return request('PUT', path, body) },
   patch(path, body) { return request('PATCH', path, body) },
