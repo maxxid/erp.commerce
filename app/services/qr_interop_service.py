@@ -14,7 +14,9 @@ BCRA "A" 6425 (texto ordenado SNP - Servicios de pago, punto 4.1):
     - Campo ID 52: Merchant Category Code (MCC), obligatorio en EMVCo MPM.
       Default "9700" (mismo valor que usan los QRs interoperables AR reales).
     - Campo ID 53: Moneda de transacción = "032" (ARS)
-    - Campo ID 54: Importe (sin separador decimal; exponente ISO 4217, ARS = 2)
+    - Campo ID 54: Importe en formato NNNN.DD (punto decimal, siempre 2 decimales),
+      que es lo que usan los QR de transferencia inmediata en Argentina. No es el
+      formato de unidades menores del exponente ISO 4217.
     - Campo ID 58: País = "AR"
     - Campo ID 59: Nombre del comercio
     - Campo ID 60: Ciudad del comercio
@@ -143,12 +145,12 @@ def generar_qr_interoperable(
     if ciudad:
         ciudad = _ascii(ciudad).strip()[:_MAX_LEN["60"]]
 
-    monto_centavos = None
+    monto_str = None
     if dinamico:
-        monto_centavos = int(round(float(monto) * 100))
-        if monto_centavos <= 0:
+        monto_str = f"{float(monto):.2f}"
+        if float(monto_str) <= 0:
             raise ValueError("El monto debe ser mayor a cero")
-        if len(str(monto_centavos)) > _MAX_LEN["54"]:
+        if len(monto_str) > _MAX_LEN["54"]:
             raise ValueError("El monto es demasiado grande")
 
     partes = [_tlv("00", "01")]
@@ -157,8 +159,8 @@ def generar_qr_interoperable(
     partes.append(_tlv_template("51", cuenta))
     partes.append(_tlv("52", mcc))
     partes.append(_tlv("53", "032"))
-    if monto_centavos is not None:
-        partes.append(_tlv("54", str(monto_centavos)))
+    if monto_str is not None:
+        partes.append(_tlv("54", monto_str))
     partes.append(_tlv("58", "AR"))
     partes.append(_tlv("59", nombre))
     if ciudad:
