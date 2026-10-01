@@ -94,6 +94,109 @@ class ConfirmarCierreRequest(BaseModel):
     sucursal_id: int = 1
 
 
+class RetiroCierreRequest(BaseModel):
+    monto: float = Field(..., gt=0)
+    motivo: str = ""
+    cierre_id: Optional[int] = Field(
+        None,
+        description="Sesión a la que pertenece la extracción. Sin esto va a la sesión abierta.",
+    )
+    medio_pago: str = Field("efectivo", description="De qué cuenta sale el dinero")
+    sucursal_id: int = 1
+
+
+@router.get("/cierre/{cierre_id}/arqueo", response_model=RespuestaData)
+def arqueo_cierre(
+    cierre_id: int,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "encargado")),
+):
+    """Arqueo por medio de una sesión, con las extracciones y arqueos ya cargados."""
+    try:
+        return RespuestaData(data=caja_service.obtener_arqueo_sesion(db, cierre_id))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/cierre/{cierre_id}/metodo", response_model=RespuestaData)
+def cierre_metodo_sesion(
+    cierre_id: int,
+    data: CierreMetodoRequest,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "cajero")),
+):
+    """Arquea un medio de pago de una sesión que el sistema ya cerró sola."""
+    try:
+        mov, esperado, diferencia = caja_service.cerrar_metodo_sesion(
+            db, cierre_id, data.medio_pago, data.monto_real, user.id,
+            data.comentario, data.sucursal_id,
+        )
+        auditoria_service.registrar(db, user.id, "cierre_caja_sesion", mov.id, None, {
+            "cierre_id": cierre_id,
+            "medio_pago": data.medio_pago,
+            "monto_real": data.monto_real,
+            "esperado": esperado,
+            "diferencia": diferencia,
+            "sucursal_id": data.sucursal_id,
+        })
+        return RespuestaData(
+            data={
+                "id": mov.id,
+                "medio_pago": data.medio_pago,
+                "monto_real": mov.monto,
+                "saldo_esperado": esperado,
+                "diferencia": diferencia,
+            },
+            message=f"{caja_service.nombre_medio(data.medio_pago)} arqueado. Diferencia: ${diferencia:,.2f}",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/retiro-cierre", response_model=RespuestaData)
+def retiro_cierre(
+    data: RetiroCierreRequest,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "cajero")),
+):
+    """Registra la plata que se saca del cajón al cerrar la jornada."""
+    try:
+        mov = caja_service.registrar_retiro_cierre(
+            db, data.monto, data.motivo, user.id,
+            cierre_id=data.cierre_id,
+            sucursal_id=data.sucursal_id,
+            medio_pago=data.medio_pago,
+        )
+        auditoria_service.registrar(db, user.id, "retiro_cierre_caja", mov.id, None, {
+            "monto": data.monto,
+            "motivo": data.motivo,
+            "medio_pago": data.medio_pago,
+            "cierre_id": data.cierre_id,
+            "sucursal_id": data.sucursal_id,
+        })
+        return RespuestaData(
+            data={"id": mov.id, "monto": mov.monto, "descripcion": mov.descripcion},
+            message=f"Extracción de ${data.monto:,.2f} registrada",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete("/retiro-cierre/{retiro_id}", response_model=RespuestaData)
+def borrar_retiro_cierre(
+    retiro_id: int,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "cajero")),
+):
+    """Da de baja una extracción mal cargada."""
+    try:
+        caja_service.eliminar_retiro_cierre(db, retiro_id)
+        auditoria_service.registrar(db, user.id, "borrar_retiro_cierre_caja", retiro_id, None, {})
+        return RespuestaData(data={"id": retiro_id}, message="Extracción anulada")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.put("/cierre/{cierre_id}/confirmar", response_model=RespuestaData)
 def confirmar_cierre(
     cierre_id: int,

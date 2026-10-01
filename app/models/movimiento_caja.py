@@ -32,6 +32,7 @@ class MovimientoCaja(Base):
     confirmado_at = Column(DateTime, nullable=True)
     fue_automatico = Column(Boolean, default=False)    # True = cierre automático por cambio de día
     comentario_concil = Column(Text, nullable=True)    # nota al confirmar/ajustar
+    saldo_efectivo = Column(Float, nullable=True)      # efectivo que quedó en el cajón (base para la apertura siguiente)
 
     usuario = relationship("Usuario", foreign_keys=[usuario_id], back_populates="movimientos_caja")
     confirmado_por = relationship("Usuario", foreign_keys=[confirmado_por_id])

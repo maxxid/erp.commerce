@@ -12,6 +12,7 @@ Reglas de negocio:
 
 from typing import Optional, List, Tuple
 from datetime import datetime, timezone, timedelta
+import sqlalchemy as sa
 from sqlalchemy.orm import Session
 from app.models.movimiento_caja import MovimientoCaja
 
@@ -51,6 +52,18 @@ def nombre_medio(medio_pago: Optional[str]) -> str:
 def _es_apertura_de_caja(m: MovimientoCaja) -> bool:
     """True si el movimiento es la apertura de la sesión (cajón)."""
     return m.tipo == "apertura" and not m.medio_pago
+
+
+def _fila_saldo() -> dict:
+    """Fila vacía de saldos por medio de pago."""
+    return {"apertura": 0.0, "ingresos": 0.0, "egresos": 0.0, "esperado": 0.0}
+
+
+def _calcular_esperados(saldos: dict) -> None:
+    """Resuelve esperado = apertura + ingresos - egresos en cada medio."""
+    for fila in saldos.values():
+        fila["esperado"] = fila["apertura"] + fila["ingresos"] - fila["egresos"]
+
 
 
 def _ahora_local() -> datetime:
@@ -133,6 +146,7 @@ def cerrar_sesion_anterior_automaticamente(db: Session, sucursal_id: int = 1) ->
         tipo="cierre",
         monto=total,
         monto_esperado=total,
+        saldo_efectivo=round(desglose.get("saldo_efectivo", 0.0), 2),
         descripcion=desc,
         medio_pago=None,
         fue_automatico=True,
@@ -279,14 +293,27 @@ def obtener_ultimo_cierre(db: Session, sucursal_id: int = 1) -> Optional[dict]:
     
     fecha_utc = ultimo_cierre.created_at
     fecha_local = _a_local(fecha_utc) if fecha_utc else None
-    
+
     # Detectar si fue automático por la descripción
     fue_automatico = bool(ultimo_cierre.fue_automatico) or "automático" in (ultimo_cierre.descripcion or "").lower()
-    
+
+    saldo_efectivo = ultimo_cierre.saldo_efectivo
+    if saldo_efectivo is None:
+        # Cierres anteriores a la columna: el efectivo de esa sesión se recalcula
+        # desde su apertura, así la apertura siguiente no sugiere abrir el cajón
+        # con la suma de todas las cuentas digitales.
+        try:
+            _, apertura_sesion = obtener_sesion_por_cierre(db, ultimo_cierre.id)
+            saldos_sesion = _saldos_de_sesion(db, apertura_sesion, ultimo_cierre.id)
+            saldo_efectivo = round(saldos_sesion.get("efectivo", {}).get("esperado", 0.0), 2)
+        except ValueError:
+            saldo_efectivo = None
+
     return {
         "monto": ultimo_cierre.monto or 0.0,
         "monto_esperado": ultimo_cierre.monto_esperado or ultimo_cierre.monto,
         "monto_confirmado": ultimo_cierre.monto_confirmado,
+        "saldo_efectivo": saldo_efectivo,
         "fecha_utc": fecha_utc.isoformat() if fecha_utc else None,
         "fecha_local": fecha_local.isoformat() if fecha_local else None,
         "fecha_local_str": fecha_local.strftime("%d/%m/%Y %H:%M") if fecha_local else None,
@@ -336,6 +363,324 @@ def confirmar_cierre(
     db.commit()
     db.refresh(cierre)
     return cierre
+
+
+def obtener_sesion_por_cierre(db: Session, cierre_id: int, sucursal_id: int = 1) -> Tuple[MovimientoCaja, MovimientoCaja]:
+    """Devuelve (cierre, apertura) de la sesión que terminó en ese cierre total.
+
+    El arqueo de una sesión ya cerrada (la que el sistema cerró sola al cambiar de
+    día) se calcula entre su apertura y su cierre, no desde la última apertura.
+    Así el cierre se puede completar aunque ya haya una caja nueva abierta.
+    """
+    cierre = (
+        db.query(MovimientoCaja)
+        .filter(
+            MovimientoCaja.id == cierre_id,
+            MovimientoCaja.sucursal_id == sucursal_id,
+            MovimientoCaja.tipo == "cierre",
+            MovimientoCaja.medio_pago == None,
+        )
+        .first()
+    )
+    if not cierre:
+        raise ValueError("El cierre no existe o no es un cierre total de caja.")
+
+    anteriores = (
+        db.query(MovimientoCaja)
+        .filter(MovimientoCaja.sucursal_id == sucursal_id, MovimientoCaja.id < cierre.id)
+        .order_by(MovimientoCaja.id.desc())
+        .all()
+    )
+    for m in anteriores:
+        if m.tipo == "cierre" and not m.medio_pago:
+            break
+        if _es_apertura_de_caja(m):
+            return cierre, m
+    raise ValueError("Ese cierre no tiene una apertura de caja asociada.")
+
+
+def _exigir_sesion_arqueable(db: Session, cierre_id: int, sucursal_id: int = 1) -> Tuple[MovimientoCaja, MovimientoCaja]:
+    """Como obtener_sesion_por_cierre, pero rechaza las sesiones ya conciliadas.
+
+    Conciliar es el último paso del cierre: una vez que hay monto confirmado el
+    resultado es inmutable, así que ni arqueos ni extracciones pueden tocarlo.
+    """
+    cierre, apertura = obtener_sesion_por_cierre(db, cierre_id, sucursal_id)
+    if cierre.monto_confirmado is not None:
+        raise ValueError("Este cierre ya fue conciliado: no se puede modificar.")
+    return cierre, apertura
+
+
+def _movimientos_de_sesion(db: Session, apertura: MovimientoCaja, cierre_id: int, sucursal_id: int = 1) -> List[MovimientoCaja]:
+    """Movimientos que pertenecen a una sesión.
+
+    Son los que caen entre su apertura y su cierre, más los que se le registraron
+    después. Esto último pasa siempre que el sistema cierra solo: el arqueo
+    diferido y las extracciones se guardan tomando el id del cierre como
+    referencia, así que quedan con un id mayor al del cierre y no entrarían en el
+    rango, y sin ellos el arqueo de esa sesión daría el saldo previo a la
+    extracción.
+    """
+    return (
+        db.query(MovimientoCaja)
+        .filter(
+            MovimientoCaja.sucursal_id == sucursal_id,
+            sa.or_(
+                sa.and_(MovimientoCaja.id > apertura.id, MovimientoCaja.id < cierre_id),
+                sa.and_(MovimientoCaja.id > cierre_id, MovimientoCaja.referencia_id == cierre_id),
+            ),
+        )
+        .order_by(MovimientoCaja.id.desc())
+        .all()
+    )
+
+
+def _saldos_de_sesion(db: Session, apertura: MovimientoCaja, cierre_id: int, sucursal_id: int = 1) -> dict:
+    """Saldos por medio acotados a una sesión (lo que pasó entre su apertura y su cierre)."""
+    saldos: dict = {}
+    fila = saldos.setdefault("efectivo", _fila_saldo())
+    fila["apertura"] += apertura.monto or 0.0
+
+    for m in _movimientos_de_sesion(db, apertura, cierre_id, sucursal_id):
+        if m.tipo == "apertura" and m.medio_pago:
+            fila = saldos.setdefault(m.medio_pago, _fila_saldo())
+            fila["apertura"] += m.monto or 0.0
+        elif m.tipo == "ingreso":
+            fila = saldos.setdefault(m.medio_pago or "efectivo", _fila_saldo())
+            fila["ingresos"] += m.monto or 0.0
+        elif m.tipo == "egreso":
+            fila = saldos.setdefault(m.medio_pago or "efectivo", _fila_saldo())
+            fila["egresos"] += m.monto or 0.0
+        # cierre_parcial es informativo, no afecta el saldo
+
+    _calcular_esperados(saldos)
+    return saldos
+
+
+def _cierres_parciales_de_sesion(db: Session, apertura: MovimientoCaja, cierre_id: int, sucursal_id: int = 1) -> dict:
+    """Medios ya arqueados en la sesión: {medio: movimiento}, el más reciente de cada uno."""
+    movimientos = [
+        m for m in _movimientos_de_sesion(db, apertura, cierre_id, sucursal_id)
+        if m.tipo == "cierre_parcial"
+    ]
+    return {m.medio_pago: m for m in movimientos if m.medio_pago}
+
+
+def obtener_arqueo_sesion(db: Session, cierre_id: int, sucursal_id: int = 1) -> dict:
+    """Arqueo por medio de una sesión, con lo que ya tiene registrado.
+
+    Sirve para dos cosas: la pantalla de arqueo de la caja abierta y el cierre
+    diferido de una sesión que el sistema ya cerró sola.
+    """
+    cierre, apertura = obtener_sesion_por_cierre(db, cierre_id, sucursal_id)
+    por_medio = _armar_arqueo(_saldos_de_sesion(db, apertura, cierre.id, sucursal_id))
+
+    cerrados = _cierres_parciales_de_sesion(db, apertura, cierre.id, sucursal_id)
+    for fila in por_medio:
+        mov = cerrados.get(fila["medio_pago"])
+        fila["cerrado"] = mov is not None
+        fila["monto_real"] = round(mov.monto or 0.0, 2) if mov else None
+        fila["diferencia"] = round((mov.monto or 0.0) - fila["esperado"], 2) if mov else None
+        fila["comentario"] = mov.descripcion if mov else ""
+
+    retiros = (
+        db.query(MovimientoCaja)
+        .filter(
+            MovimientoCaja.sucursal_id == sucursal_id,
+            MovimientoCaja.tipo == "egreso",
+            MovimientoCaja.referencia_tipo == "retiro_cierre",
+            MovimientoCaja.referencia_id == cierre.id,
+        )
+        .order_by(MovimientoCaja.id.desc())
+        .all()
+    )
+
+    saldo_efectivo = next((f["esperado"] for f in por_medio if f["medio_pago"] == "efectivo"), 0.0)
+    pendientes = [f["medio_pago"] for f in por_medio if f["esperado"] > 0 and not f["cerrado"]]
+    return {
+        "cierre_id": cierre.id,
+        "apertura_id": apertura.id,
+        "apertura_monto": round(apertura.monto or 0.0, 2),
+        "apertura_fecha": apertura.created_at.isoformat() if apertura.created_at else None,
+        "cierre_fecha": cierre.created_at.isoformat() if cierre.created_at else None,
+        "fue_automatico": bool(cierre.fue_automatico),
+        "confirmado": cierre.monto_confirmado is not None,
+        "monto_confirmado": cierre.monto_confirmado,
+        "confirmado_por_id": cierre.confirmado_por_id,
+        "monto_esperado": round(cierre.monto_esperado if cierre.monto_esperado is not None else cierre.monto or 0.0, 2),
+        "saldo_esperado": round(sum(f["esperado"] for f in por_medio), 2),
+        "saldo_efectivo_esperado": round(saldo_efectivo, 2),
+        "total_retiros": round(sum(m.monto or 0.0 for m in retiros), 2),
+        "medios_pendientes": pendientes,
+        "por_medio": por_medio,
+        "retiros": _serializar_retiros(retiros),
+    }
+
+
+def _serializar_retiros(retiros: List[MovimientoCaja]) -> List[dict]:
+    """Extracciones de efectivo ya registradas, para mostrarlas y borrarlas."""
+    return [
+        {
+            "id": m.id,
+            "monto": round(m.monto or 0.0, 2),
+            "medio_pago": m.medio_pago or "efectivo",
+            "descripcion": m.descripcion,
+            "fecha": m.created_at.isoformat() if m.created_at else None,
+        }
+        for m in retiros
+    ]
+
+
+def _recalcular_cierre(db: Session, cierre: MovimientoCaja, sucursal_id: int = 1) -> None:
+    """Recalcula el monto esperado del cierre cuando cambia algo de la sesión.
+
+    El cierre guarda el total que el sistema esperaba al momento de cerrarse. Si
+    después se registra (o se borra) una extracción, ese total quedaría desfasado
+    y la conciliación mostraría una diferencia que no existe.
+    """
+    _, apertura = obtener_sesion_por_cierre(db, cierre.id, sucursal_id)
+    por_medio = _armar_arqueo(_saldos_de_sesion(db, apertura, cierre.id, sucursal_id))
+    total = round(sum(f["esperado"] for f in por_medio), 2)
+    efectivo = next((f["esperado"] for f in por_medio if f["medio_pago"] == "efectivo"), 0.0)
+    cierre.monto = total
+    cierre.monto_esperado = total
+    cierre.saldo_efectivo = round(efectivo, 2)
+    db.commit()
+
+
+def registrar_retiro_cierre(
+    db: Session,
+    monto: float,
+    motivo: str,
+    usuario_id: int,
+    cierre_id: Optional[int] = None,
+    sucursal_id: int = 1,
+    medio_pago: str = "efectivo",
+) -> MovimientoCaja:
+    """Registra la plata que se saca del cajón al cerrar la jornada.
+
+    Queda como egreso de la sesión con su motivo, igual que el retiro de apertura:
+    el cajón no tiene por qué quedar lleno de plata al cerrar. Con `cierre_id` el
+    egreso pertenece a una sesión ya cerrada y el monto esperado del cierre se
+    recalcula; sin `cierre_id` es el retiro de la sesión abierta.
+    """
+    if monto <= 0:
+        raise ValueError("El monto a extraer tiene que ser mayor a 0.")
+    if medio_pago not in MEDIOS_INGRESO:
+        raise ValueError("Medio de pago inválido para la extracción.")
+
+    cierre = None
+    if cierre_id is not None:
+        cierre, _ = _exigir_sesion_arqueable(db, cierre_id, sucursal_id)
+    elif not caja_abierta(db, sucursal_id):
+        raise ValueError("No hay caja abierta para registrar la extracción.")
+
+    descripcion = "Extracción de dinero al cerrar caja"
+    if motivo:
+        descripcion += f": {motivo}"
+
+    movimiento = MovimientoCaja(
+        tipo="egreso",
+        monto=float(monto),
+        descripcion=descripcion,
+        medio_pago=medio_pago,
+        referencia_tipo="retiro_cierre",
+        referencia_id=cierre.id if cierre is not None else None,
+        usuario_id=usuario_id,
+        sucursal_id=sucursal_id,
+    )
+    db.add(movimiento)
+    db.commit()
+    db.refresh(movimiento)
+
+    if cierre is not None:
+        _recalcular_cierre(db, cierre, sucursal_id)
+    return movimiento
+
+
+def eliminar_retiro_cierre(db: Session, retiro_id: int, sucursal_id: int = 1) -> None:
+    """Da de baja una extracción mal cargada, si su sesión todavía es arqueable."""
+    movimiento = (
+        db.query(MovimientoCaja)
+        .filter(
+            MovimientoCaja.id == retiro_id,
+            MovimientoCaja.sucursal_id == sucursal_id,
+            MovimientoCaja.tipo == "egreso",
+            MovimientoCaja.referencia_tipo == "retiro_cierre",
+        )
+        .first()
+    )
+    if not movimiento:
+        raise ValueError("La extracción no existe.")
+
+    cierre = None
+    if movimiento.referencia_id is not None:
+        cierre, _ = _exigir_sesion_arqueable(db, movimiento.referencia_id, sucursal_id)
+    elif not caja_abierta(db, sucursal_id):
+        raise ValueError("No hay caja abierta para modificar la extracción.")
+
+    db.delete(movimiento)
+    db.commit()
+
+    if cierre is not None:
+        _recalcular_cierre(db, cierre, sucursal_id)
+
+
+def cerrar_metodo_sesion(
+    db: Session,
+    cierre_id: int,
+    medio_pago: str,
+    monto_real: float,
+    usuario_id: int,
+    comentario: str = "",
+    sucursal_id: int = 1,
+) -> Tuple[MovimientoCaja, float, float]:
+    """Arquea un medio de pago de una sesión que el sistema ya cerró sola.
+
+    A diferencia de cerrar_metodo(), que exige la caja abierta, este completa el
+    arqueo de una sesión cerrada por cambio de día. Volver a guardar un medio ya
+    arqueado en esa sesión corrige el número en vez de duplicarlo.
+
+    Returns:
+        (movimiento, saldo_esperado, diferencia)
+    """
+    if monto_real < 0:
+        raise ValueError("El monto real no puede ser negativo.")
+
+    cierre, apertura = _exigir_sesion_arqueable(db, cierre_id, sucursal_id)
+    arqueo = _armar_arqueo(_saldos_de_sesion(db, apertura, cierre.id, sucursal_id))
+    fila = next((f for f in arqueo if f["medio_pago"] == medio_pago), None)
+    if fila is None:
+        raise ValueError(f"El medio '{nombre_medio(medio_pago)}' no tiene movimientos en esta sesión.")
+    esperado = fila["esperado"]
+    diferencia = round(monto_real - esperado, 2)
+
+    desc = f"Cierre {nombre_medio(medio_pago)}. Esperado: ${esperado:,.2f}. Diferencia: ${diferencia:,.2f}"
+    if comentario:
+        desc += f" — {comentario}"
+
+    movimiento = _cierres_parciales_de_sesion(db, apertura, cierre.id, sucursal_id).get(medio_pago)
+    if movimiento is None:
+        movimiento = MovimientoCaja(
+            tipo="cierre_parcial",
+            monto=float(monto_real),
+            medio_pago=medio_pago,
+            descripcion=desc,
+            referencia_tipo="cierre_total",
+            referencia_id=cierre.id,
+            usuario_id=usuario_id,
+            sucursal_id=sucursal_id,
+        )
+        db.add(movimiento)
+    else:
+        movimiento.monto = float(monto_real)
+        movimiento.descripcion = desc
+        movimiento.referencia_tipo = "cierre_total"
+        movimiento.referencia_id = cierre.id
+        movimiento.usuario_id = usuario_id
+    db.commit()
+    db.refresh(movimiento)
+    return movimiento, esperado, diferencia
 
 
 def cerrar_metodo(
@@ -423,6 +768,7 @@ def cerrar_todo(
         tipo="cierre",
         monto=total,
         monto_esperado=total,
+        saldo_efectivo=round(desglose.get("saldo_efectivo", 0.0), 2),
         descripcion=desc,
         usuario_id=usuario_id,
         sucursal_id=sucursal_id,
@@ -518,37 +864,28 @@ def obtener_saldo_por_medio(db: Session, sucursal_id: int = 1) -> dict:
             break
         # Apertura del cajón: fin de la sesión actual (su monto es el fondo inicial)
         if _es_apertura_de_caja(m):
-            fila = saldos.setdefault(
-                "efectivo",
-                {"apertura": 0.0, "ingresos": 0.0, "egresos": 0.0, "esperado": 0.0},
-            )
+            fila = saldos.setdefault("efectivo", _fila_saldo())
             fila["apertura"] += m.monto or 0.0
             break
 
         if m.tipo == "apertura" and m.medio_pago:
             # Saldo inicial de una cuenta digital
-            fila = saldos.setdefault(
-                m.medio_pago,
-                {"apertura": 0.0, "ingresos": 0.0, "egresos": 0.0, "esperado": 0.0},
-            )
+            fila = saldos.setdefault(m.medio_pago, _fila_saldo())
             fila["apertura"] += m.monto or 0.0
         elif m.tipo == "ingreso":
-            fila = saldos.setdefault(
-                m.medio_pago or "efectivo",
-                {"apertura": 0.0, "ingresos": 0.0, "egresos": 0.0, "esperado": 0.0},
-            )
+            fila = saldos.setdefault(m.medio_pago or "efectivo", _fila_saldo())
             fila["ingresos"] += m.monto or 0.0
         elif m.tipo == "egreso":
-            fila = saldos.setdefault(
-                m.medio_pago or "efectivo",
-                {"apertura": 0.0, "ingresos": 0.0, "egresos": 0.0, "esperado": 0.0},
-            )
+            # Una extracción anotada con cierre pertenece a la sesión de ese
+            # cierre, no a la que está abierta: contarla acá bajaría de más el
+            # cajón de hoy (que ya se abrió con lo que quedó de la anterior).
+            if m.referencia_tipo == "retiro_cierre" and m.referencia_id is not None:
+                continue
+            fila = saldos.setdefault(m.medio_pago or "efectivo", _fila_saldo())
             fila["egresos"] += m.monto or 0.0
         # cierre_parcial es informativo, no afecta el saldo
 
-    for fila in saldos.values():
-        fila["esperado"] = fila["apertura"] + fila["ingresos"] - fila["egresos"]
-
+    _calcular_esperados(saldos)
     return saldos
 
 
@@ -655,6 +992,10 @@ def obtener_resumen_por_medio_pago(db: Session, sucursal_id: int = 1) -> dict:
             if m.referencia_tipo == "venta":
                 desglose[mp] = desglose.get(mp, 0) + m.monto
         elif m.tipo == "egreso":
+            # Las extracciones de sesiones ya cerradas se informan en su propio
+            # arqueo: acá van solo las de la sesión abierta.
+            if m.referencia_tipo == "retiro_cierre" and m.referencia_id is not None:
+                continue
             egresos_total += m.monto
             if m.medio_pago:
                 egresos_por_medio[m.medio_pago] = egresos_por_medio.get(m.medio_pago, 0) + m.monto
@@ -689,6 +1030,10 @@ def obtener_resumen_por_medio_pago(db: Session, sucursal_id: int = 1) -> dict:
     # cierres parciales (débito/crédito/transferencia incluidos).
     saldo_medios_total = sum(f["esperado"] for f in por_medio)
 
+    retiros = [
+        m for m in movimientos
+        if m.tipo == "egreso" and m.referencia_tipo == "retiro_cierre" and m.referencia_id is None
+    ]
     return {
         "desglose": desglose,
         "total_ingresos": sum(desglose.values()),
@@ -701,19 +1046,24 @@ def obtener_resumen_por_medio_pago(db: Session, sucursal_id: int = 1) -> dict:
         "saldo_cuenta_total": saldo_cuenta_total,
         "saldo_total": saldo_efectivo + saldo_cuenta_total,
         "saldo_medios_total": saldo_medios_total,
+        "total_retiros": round(sum(m.monto or 0.0 for m in retiros), 2),
+        "retiros": _serializar_retiros(retiros),
     }
 
 
 def _construir_arqueo_por_medio(db: Session, sucursal_id: int = 1) -> List[dict]:
-    """Arma la lista de medios a arquear con su saldo esperado.
+    """Arma la lista de medios a arquear con su saldo esperado de la sesión abierta."""
+    return _armar_arqueo(obtener_saldo_por_medio(db, sucursal_id))
+
+
+def _armar_arqueo(saldos: dict) -> List[dict]:
+    """Lista de medios a arquear a partir de sus saldos.
 
     Incluye siempre efectivo, débito, crédito y transferencia, más las cuentas
     digitales (SmartPoint, MP, etc.) que tengan movimiento o saldo inicial en la
     sesión. Cada medio se cuadra por separado: el saldo de una cuenta digital
     nunca se compensa con el del cajón.
     """
-    saldos = obtener_saldo_por_medio(db, sucursal_id)
-
     medios = list(MEDIOS_ESPERADOS_ARQUEO)
     for medio in MEDIOS_CUENTA:
         fila = saldos.get(medio)
@@ -726,7 +1076,7 @@ def _construir_arqueo_por_medio(db: Session, sucursal_id: int = 1) -> List[dict]
 
     arqueo = []
     for medio in medios:
-        fila = saldos.get(medio, {"apertura": 0.0, "ingresos": 0.0, "egresos": 0.0, "esperado": 0.0})
+        fila = saldos.get(medio, _fila_saldo())
         es_cuenta = medio in MEDIOS_CUENTA
         arqueo.append({
             "medio_pago": medio,

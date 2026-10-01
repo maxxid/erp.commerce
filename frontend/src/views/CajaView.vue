@@ -49,53 +49,6 @@
       </BaseCard>
     </div>
 
-    <!-- Cierre Parcial por Método -->
-    <BaseCard v-if="cajaStore.abierta" padding="md" class="space-y-4">
-      <div class="flex items-center justify-between">
-        <h3 class="font-bold text-slate-900 text-sm">Cerrar por Método</h3>
-        <span class="text-[10px] text-slate-400">Se cuenta cada medio por separado: el efectivo y las cuentas digitales se cuadran por su cuenta</span>
-      </div>
-      <div class="flex flex-wrap gap-2">
-        <BaseButton v-for="metodo in metodosPago" :key="metodo.valor"
-                    :variant="cierreParcial.activo && cierreParcial.metodo === metodo.valor ? 'primary' : 'secondary'"
-                    :disabled="cerrandoMetodo || cajaResumen.metodos_cerrados?.includes(metodo.valor)"
-                    size="sm"
-                    @click="seleccionarCierreParcial(metodo)">
-          <i v-if="cajaResumen.metodos_cerrados?.includes(metodo.valor)" class="fa-solid fa-check text-xs"></i>
-          {{ metodo.label }}
-        </BaseButton>
-      </div>
-
-      <div v-if="cierreParcial.activo" class="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-        <div class="flex items-center justify-between">
-          <span class="text-xs font-bold text-slate-600">
-            Cerrando: <span class="text-brand-600">{{ MEDIO_LABELS[cierreParcial.metodo] || cierreParcial.metodo }}</span>
-          </span>
-          <div class="flex items-center gap-2">
-            <span class="text-xs font-mono-data font-semibold text-slate-500">Esperado: {{ fc(cierreParcial.esperado) }}</span>
-            <BaseButton variant="ghost" size="xs" iconOnly @click="cancelarCierre">
-              <i class="fa-solid fa-xmark"></i>
-            </BaseButton>
-          </div>
-        </div>
-        <BaseInput v-model.number="cierreParcial.monto_real" :label="esCuentaDigital(cierreParcial.metodo) ? 'Saldo real en la cuenta' : 'Monto Real'" type="number" placeholder="0.00" input-class="font-mono-data" />
-        <p v-if="esCuentaDigital(cierreParcial.metodo)" class="text-[10px] text-slate-400">
-          Cargá el saldo que muestra la app: saldo inicial + ingresos - egresos = {{ fc(cierreParcial.esperado) }}
-        </p>
-        <BaseButton v-if="cierreParcial.metodo === 'efectivo'" variant="ghost" size="xs" @click="abrirContadorBilletes('parcial')">
-          <i class="fa-solid fa-money-bill-wave"></i> Contar billetes por denominación
-        </BaseButton>
-        <BaseInput v-model="cierreParcial.comentario" label="Comentario (opcional)" placeholder="Nota del cierre" />
-        <div class="flex gap-2 pt-1">
-          <BaseButton variant="secondary" size="sm" block @click="cancelarCierre">Cancelar</BaseButton>
-          <BaseButton :loading="cerrandoMetodo" :disabled="cerrandoMetodo" variant="primary" size="sm" block @click="cerrarMetodo">
-            <i :class="cerrandoMetodo ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-lock'"></i>
-            {{ cerrandoMetodo ? 'Cerrando...' : 'Cerrar Método' }}
-          </BaseButton>
-        </div>
-      </div>
-    </BaseCard>
-
     <div v-if="!cajaStore.abierta" class="bg-amber-50 border border-amber-200 p-4 rounded-2xl text-sm text-amber-700 font-semibold flex items-center gap-2">
       <i class="fa-solid fa-triangle-exclamation"></i>
       La caja está cerrada. Abrila para registrar operaciones.
@@ -295,7 +248,8 @@
                     v-if="esCierreConfirmable(sesion)"
                     variant="primary"
                     size="xs"
-                    @click="abrirConfirmarCierreDeSesion(sesion)"
+                    :title="'Conciliar sesión'"
+                    @click="abrirCierreSesion(sesion.cierre_id)"
                   >
                     <i class="fa-solid fa-check"></i>
                   </BaseButton>
@@ -338,8 +292,8 @@
               <div class="text-[10px] text-emerald-600">por {{ sesionSeleccionada.cierre_confirmado_por || '—' }} · {{ formatFechaHora(sesionSeleccionada.cierre_confirmado_at) }}</div>
             </div>
             <div v-else-if="sesionSeleccionada.fue_automatico" class="mt-2">
-              <BaseButton variant="primary" size="xs" :loading="confirming" @click="abrirConfirmarCierreDeSesion(sesionSeleccionada)">
-                <i class="fa-solid fa-check mr-1"></i>Confirmar cierre
+              <BaseButton variant="primary" size="xs" @click="abrirCierreSesion(sesionSeleccionada.cierre_id)">
+                <i class="fa-solid fa-check mr-1"></i>Conciliar sesión
               </BaseButton>
             </div>
           </div>
@@ -473,14 +427,15 @@
                   <span class="text-xs text-slate-500">{{ formatFechaHora(cierre.created_at) }}</span>
                   <span class="text-xs text-slate-400">por {{ cierre.usuario_nombre }}</span>
                 </div>
-                <BaseButton v-if="cierre.monto_confirmado == null" :loading="confirming" variant="primary" size="xs"
-                  @click="abrirConfirmarCierreDeDia(cierre)">
-                  <i class="fa-solid fa-check mr-1"></i>Confirmar
+                <BaseButton v-if="cierre.monto_confirmado == null && cierre.fue_automatico" :loading="cargandoArqueoSesion" variant="primary" size="xs"
+                  @click="abrirCierreSesion(cierre.id)">
+                  <i class="fa-solid fa-check mr-1"></i>Conciliar sesión
                 </BaseButton>
-                <BaseBadge v-else variant="success" size="xs">
+                <BaseBadge v-else-if="cierre.monto_confirmado != null" variant="success" size="xs">
                   <i class="fa-solid fa-circle-check mr-1"></i>Confirmado {{ fc(cierre.monto_confirmado) }}
                   <span v-if="cierre.confirmado_por" class="ml-1">por {{ cierre.confirmado_por }}</span>
                 </BaseBadge>
+                <span v-else class="text-[10px] text-slate-400">cerrada con arqueo</span>
               </div>
               <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs mt-2">
                 <div><span class="text-slate-400">Sistema:</span> <span class="font-mono-data font-semibold">{{ fc(cierre.monto_esperado) }}</span></div>
@@ -558,56 +513,98 @@
       </div>
     </BaseModal>
 
-    <!-- Modal Confirmar Cierre -->
-    <BaseModal v-model="showConfirmarCierre" title="Confirmar Cierre de Caja" size="md" :hide-footer="true">
-      <div v-if="cierreAConfirmar" class="space-y-4">
-        <div v-if="cierreAConfirmar.fue_automatico" class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-xs">
+    <!-- Modal Arqueo de sesión (cierre diferido de una sesión auto-cerrada) -->
+    <BaseModal v-model="showCierreSesion" title="Conciliar sesión de caja" size="lg" :hide-footer="true">
+      <div v-if="arqueoSesion" class="space-y-5">
+        <div v-if="arqueoSesion.fue_automatico" class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-xs text-amber-700 dark:text-amber-300">
           <i class="fa-solid fa-triangle-exclamation text-amber-500 mr-1"></i>
-          Este cierre fue generado <b>automáticamente</b> por cambio de día con el monto calculado por el sistema. Confirmá el monto real contado.
+          Esta sesión se cerró <b>automáticamente</b> por cambio de día con el monto del sistema ({{ fc(arqueoSesion.monto_esperado) }}). Contá el efectivo y las cuentas digitales para dejarla conciliada.
+        </div>
+        <div v-else-if="arqueoSesion.confirmado" class="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 text-xs text-emerald-700 dark:text-emerald-300">
+          <i class="fa-solid fa-circle-check text-emerald-500 mr-1"></i>
+          Esta sesión ya fue conciliada. Solo se puede consultar.
         </div>
 
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div class="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3">
-            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Monto del sistema (esperado)</div>
-            <div class="font-mono-data font-bold text-lg text-slate-900 dark:text-white">{{ fc(cierreAConfirmar.monto_esperado) }}</div>
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Apertura</div>
+            <div class="font-mono-data font-bold text-slate-900 dark:text-white">{{ fc(arqueoSesion.apertura_monto) }}</div>
+            <div class="text-[10px] text-slate-400">{{ arqueoSesion.apertura_fecha ? formatFechaHora(arqueoSesion.apertura_fecha) : '—' }}</div>
+          </div>
+          <div class="bg-rose-50 dark:bg-rose-900/20 rounded-xl p-3">
+            <div class="text-[10px] uppercase tracking-wider text-rose-400 font-semibold">Extracciones</div>
+            <div class="font-mono-data font-bold text-rose-600 dark:text-rose-300">{{ fc(arqueoSesion.total_retiros) }}</div>
+            <div class="text-[10px] text-rose-400">ya descontadas del cajón</div>
+          </div>
+          <div class="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Cierre</div>
+            <div class="font-mono-data font-bold text-slate-900 dark:text-white">{{ fc(arqueoSesion.confirmado ? arqueoSesion.monto_confirmado : arqueoSesion.monto_esperado) }}</div>
+            <div class="text-[10px] text-slate-400">{{ arqueoSesion.cierre_fecha ? formatFechaHora(arqueoSesion.cierre_fecha) : '—' }}</div>
           </div>
           <div class="bg-brand-50 dark:bg-brand-900/20 rounded-xl p-3">
-            <div class="text-[10px] uppercase tracking-wider text-brand-600 font-semibold">Diferencia</div>
-            <div class="font-mono-data font-bold text-lg" :class="Math.abs(Number(confirmarCierreForm.monto) - Number(cierreAConfirmar.monto_esperado)) > 0.01 ? 'text-amber-600' : 'text-brand-700'">
-              {{ diferenciaPreviewText }}
-            </div>
+            <div class="text-[10px] uppercase tracking-wider text-brand-400 font-semibold">Saldo esperado</div>
+            <div class="font-mono-data font-bold text-brand-600 dark:text-brand-300">{{ fc(arqueoSesion.saldo_esperado) }}</div>
+            <div class="text-[10px] text-brand-400">cajón + cuentas</div>
           </div>
         </div>
 
-        <BaseInput
-          v-model.number="confirmarCierreForm.monto"
-          label="Monto real confirmado"
-          type="number"
-          min="0"
-          step="0.01"
-          placeholder="0.00"
-          input-class="font-mono-data"
-        />
-        <BaseInput
-          v-model="confirmarCierreForm.comentario"
-          label="Comentario de conciliación (opcional)"
-          placeholder="Ej: el efectivo contado dio distinto al sistema..."
-          input-class="text-sm"
-        />
-
-        <div v-if="confirmarCierreForm.monto != null && Math.abs(Number(confirmarCierreForm.monto) - Number(cierreAConfirmar.monto_esperado)) > 0.01" class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-xs text-amber-700 dark:text-amber-300">
-          <i class="fa-solid fa-circle-info mr-1"></i>Al confirmar este monto quedará la diferencia registrada y el día pasará a <b>amarillo</b> (corrección). Podés seguir vendiendo normalmente.
+        <div v-if="cargandoArqueoSesion" class="flex items-center justify-center py-10 text-slate-400 text-sm">
+          <i class="fa-solid fa-circle-notch animate-spin mr-2"></i> Cargando arqueo...
         </div>
 
+        <template v-else>
+          <ArqueoMedios
+            :filas="filasCierreSesion"
+            :retiros="retirosCierreSesion"
+            :disabled="conciliandoSesion || arqueoSesion.confirmado"
+            :guardando-retiro="guardandoRetiroSesion"
+            :bloquear-cerrados="false"
+            @contar="abrirContadorBilletes('arqueo', $event)"
+            @agregar-retiro="agregarRetiroSesion"
+            @borrar-retiro="borrarRetiro($event, true)"
+          />
+
+          <div class="bg-slate-100 dark:bg-slate-800 rounded-xl p-4 space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Total esperado</span>
+              <span class="font-mono-data font-bold text-slate-900 dark:text-white">{{ fc(totalEsperadoSesion) }}</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Total real cargado</span>
+              <span class="font-mono-data font-bold text-lg" :class="totalRealSesion === totalEsperadoSesion ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'">{{ fc(totalRealSesion) }}</span>
+            </div>
+            <div v-if="totalRealSesion !== totalEsperadoSesion" class="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-700">
+              <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Diferencia</span>
+              <span class="font-mono-data font-bold text-lg" :class="diferenciaTotalSesion >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'">
+                {{ diferenciaTotalSesion >= 0 ? '+' : '' }}{{ fc(diferenciaTotalSesion) }}
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <label class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block mb-1">Observaciones de la conciliación</label>
+            <input
+              v-model="comentarioCierreSesion"
+              type="text"
+              placeholder="Observaciones generales del cierre de la sesión..."
+              class="w-full px-3 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition"
+              :disabled="conciliandoSesion"
+            />
+          </div>
+        </template>
+
         <div class="flex gap-3 pt-2">
-          <BaseButton variant="secondary" class="flex-1" :disabled="confirming" @click="showConfirmarCierre = false">Cancelar</BaseButton>
-          <BaseButton variant="primary" class="flex-1" :loading="confirming" :disabled="confirming || !confirmarCierreForm.monto" @click="confirmarCierreFinal">
-            <i :class="confirming ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-check'"></i>
-            {{ confirming ? 'Guardando...' : 'Confirmar monto' }}
+          <BaseButton variant="secondary" class="flex-1" :disabled="conciliandoSesion" @click="cerrarModalCierreSesion">Cerrar</BaseButton>
+          <BaseButton v-if="!arqueoSesion.confirmado" variant="primary" class="flex-1" :loading="conciliandoSesion" :disabled="conciliandoSesion || cargandoArqueoSesion" @click="conciliarSesion">
+            <i class="fa-solid fa-check"></i> {{ conciliandoSesion ? 'Conciliando...' : 'Conciliar sesión' }}
           </BaseButton>
         </div>
       </div>
+      <div v-else-if="cargandoArqueoSesion" class="flex items-center justify-center py-12 text-slate-400">
+        <i class="fa-solid fa-circle-notch animate-spin mr-2"></i> Cargando...
+      </div>
     </BaseModal>
+
 
     <!-- Modal Nuevo Movimiento -->
     <BaseModal v-model="showNuevoMovimiento" title="Nuevo Movimiento" size="md">
@@ -784,86 +781,15 @@
           </p>
         </div>
 
-        <div class="space-y-3">
-          <div v-for="metodo in metodosArqueo" :key="metodo.valor" class="rounded-xl p-4 border" :class="metodo.es_cuenta_digital ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700'">
-            <div class="flex items-center justify-between mb-3">
-              <div class="flex items-center gap-2">
-                <span class="w-2 h-2 rounded-full" :class="metodo.colorClass"></span>
-                <span class="font-semibold text-slate-900 dark:text-white text-sm">{{ metodo.label }}</span>
-                <span v-if="metodo.es_cuenta_digital" class="text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 font-bold">CUENTA DIGITAL</span>
-                <span v-if="metodo.cerrado" class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 font-bold">CERRADO</span>
-              </div>
-              <div class="text-right">
-                <p class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Esperado</p>
-                <p class="font-mono-data font-bold text-slate-900 dark:text-white">{{ fc(metodo.esperado) }}</p>
-              </div>
-            </div>
-
-            <div v-if="metodo.es_cuenta_digital" class="flex flex-wrap items-center gap-x-4 gap-y-1 mb-3 text-[10px] font-mono-data text-slate-500 dark:text-slate-400">
-              <span>Saldo inicial {{ fc(metodo.apertura) }}</span>
-              <span class="text-emerald-600 dark:text-emerald-400">+ ingresos {{ fc(metodo.ingresos) }}</span>
-              <span class="text-rose-600 dark:text-rose-400">- egresos {{ fc(metodo.egresos) }}</span>
-            </div>
-
-            <div v-if="metodo.falta_saldo_inicial" class="flex items-start gap-2 mb-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-2">
-              <i class="fa-solid fa-circle-exclamation text-amber-500 mt-0.5"></i>
-              <p class="text-[10px] text-amber-700 dark:text-amber-300">
-                Esta cuenta se movió pero se abrió caja sin su saldo inicial. Cargá el saldo real de la app igual, pero la diferencia no va a cuadrar hasta que registres el saldo inicial al abrir.
-              </p>
-            </div>
-
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <div class="flex items-center justify-between gap-2 mb-1">
-                  <label class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">{{ metodo.es_cuenta_digital ? 'Saldo real en la app' : 'Monto Real Contado' }}</label>
-                  <BaseButton
-                    v-if="metodo.valor === 'efectivo'"
-                    variant="ghost"
-                    size="xs"
-                    :disabled="metodo.cerrado || closing"
-                    @click="abrirContadorBilletes('arqueo', metodo)"
-                  >
-                    <i class="fa-solid fa-money-bill-wave"></i> Contar billetes
-                  </BaseButton>
-                </div>
-                <input
-                  v-model.number="metodo.montoReal"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="0.00"
-                  class="w-full px-3 py-2 text-sm font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition"
-                  :disabled="metodo.cerrado || closing"
-                />
-              </div>
-              <div>
-                <label class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block mb-1">Diferencia</label>
-                <div class="h-[38px] px-3 py-2 flex items-center rounded-lg border border-slate-200 dark:border-slate-700"
-                  :class="{
-                    'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800': (metodo.montoReal || 0) - metodo.esperado > 0,
-                    'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800': (metodo.montoReal || 0) - metodo.esperado < 0,
-                    'bg-slate-50 dark:bg-slate-800': (metodo.montoReal || 0) - metodo.esperado === 0 || !metodo.montoReal
-                  }"
-                >
-                  <span v-if="!metodo.montoReal" class="text-xs text-slate-400">—</span>
-                  <span v-else-if="(metodo.montoReal || 0) - metodo.esperado > 0" class="font-mono-data font-bold text-emerald-600 dark:text-emerald-400">+{{ fc((metodo.montoReal || 0) - metodo.esperado) }}</span>
-                  <span v-else-if="(metodo.montoReal || 0) - metodo.esperado < 0" class="font-mono-data font-bold text-red-600 dark:text-red-400">{{ fc((metodo.montoReal || 0) - metodo.esperado) }}</span>
-                  <span v-else class="font-mono-data font-bold text-slate-500">OK</span>
-                </div>
-              </div>
-            </div>
-
-            <div v-if="metodo.montoReal && (metodo.montoReal || 0) - metodo.esperado !== 0" class="mt-2">
-              <input
-                v-model="metodo.comentario"
-                type="text"
-                placeholder="Comentario por diferencia (ej: faltante por robo, sobrante por error de precio)"
-                class="w-full px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none transition"
-                :disabled="closing"
-              />
-            </div>
-          </div>
-        </div>
+        <ArqueoMedios
+          :filas="metodosArqueo"
+          :retiros="retirosCierreActual"
+          :disabled="closing"
+          :guardando-retiro="guardandoRetiroActual"
+          @contar="abrirContadorBilletes('arqueo', $event)"
+          @agregar-retiro="agregarRetiroCierreActual"
+          @borrar-retiro="borrarRetiro($event, false)"
+        />
 
         <!-- Egresos de la sesión: ya están descontados del esperado de cada medio -->
         <div v-if="egresosPorMedio.length" class="bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-xl p-4">
@@ -883,6 +809,9 @@
               <span class="font-semibold text-rose-700 dark:text-rose-300">Total egresado</span>
               <span class="font-mono-data font-bold text-rose-600 dark:text-rose-400">-{{ fc(totalEgresos) }}</span>
             </div>
+            <p v-if="totalRetirosCierreActual > 0" class="text-[10px] text-rose-500 dark:text-rose-400 text-right">
+              Incluye {{ fc(totalRetirosCierreActual) }} de extracción.
+            </p>
           </div>
         </div>
 
@@ -925,7 +854,7 @@
         </div>
 
         <div class="flex gap-3 pt-2">
-          <BaseButton variant="secondary" class="flex-1" :disabled="closing" @click="showCierreModal = false">
+          <BaseButton variant="secondary" class="flex-1" :disabled="closing" @click="cancelarCierreCaja">
             Cancelar
           </BaseButton>
           <BaseButton variant="danger" class="flex-1" :loading="closing" :disabled="closing" @click="confirmarCierreCaja">
@@ -963,6 +892,7 @@ import BaseTable from '@/components/ui/BaseTable.vue'
 import BaseBadge from '@/components/ui/BaseBadge.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import ContadorBilletesModal from '@/components/caja/ContadorBilletesModal.vue'
+import ArqueoMedios from '@/components/caja/ArqueoMedios.vue'
 import { useSounds } from '@/composables/useSounds'
 
 const auth = useAuthStore()
@@ -970,10 +900,7 @@ const toast = useToastStore()
 const cajaStore = useCajaStore()
 const carritoStore = useCarritoStore()
 const { playOpenCash, playCloseCash } = useSounds()
-const cajaResumen = reactive({ metodos_cerrados: [], egresos_por_medio: {} })
-// Último arqueo por medio recibido del backend (apertura + ingresos - egresos)
-let arqueoResumen = []
-const cierreParcial = reactive({ activo: false, metodo: '', monto_real: 0, comentario: '', esperado: 0 })
+const cajaResumen = reactive({ metodos_cerrados: [], egresos_por_medio: {}, retiros: [], total_retiros: 0 })
 
 const movements = ref([])
 
@@ -981,7 +908,7 @@ const syncing = ref(false)
 const opening = ref(false)
 const closing = ref(false)
 const saving = ref(false)
-const cerrandoMetodo = ref(false)
+const guardandoRetiroActual = ref(false)
 
 const showNuevoMovimiento = ref(false)
 const showCierreModal = ref(false)
@@ -1007,7 +934,6 @@ const contadorContexto = ref(null)
 
 const TITULOS_CONTADOR = {
   apertura: 'Contar efectivo — Apertura de caja',
-  parcial: 'Contar efectivo — Cierre por método',
   arqueo: 'Contar efectivo — Cierre de caja',
 }
 
@@ -1017,19 +943,17 @@ const valorActualContador = computed(() => {
   const ctx = contadorContexto.value
   if (!ctx) return 0
   if (ctx === 'apertura') return Number(aperturaForm.monto_inicial) || 0
-  if (ctx === 'parcial') return Number(cierreParcial.monto_real) || 0
-  return Number(ctx.metodo?.montoReal) || 0
+  return Number(ctx?.metodo?.montoReal) || 0
 })
 
-function abrirContadorBilletes(contexto) {
-  contadorContexto.value = contexto
+function abrirContadorBilletes(contexto, metodo = null) {
+  contadorContexto.value = metodo ? { contexto, metodo } : contexto
   showContadorBilletes.value = true
 }
 
 function aplicarConteoBilletes(total) {
   const ctx = contadorContexto.value
   if (ctx === 'apertura') aperturaForm.monto_inicial = total
-  else if (ctx === 'parcial') cierreParcial.monto_real = total
   else if (ctx?.metodo) ctx.metodo.montoReal = total
   toast.success(`Total contado: ${fc(total)}`)
 }
@@ -1056,10 +980,6 @@ const MEDIO_COLORS = {
   debito: 'bg-blue-500',
   credito: 'bg-purple-500',
   transferencia: 'bg-amber-500',
-}
-
-function esCuentaDigital(medio) {
-  return MEDIOS_CUENTA.includes(medio)
 }
 
 const cuentasDigitales = computed(() => MEDIOS_CUENTA.map(v => ({ valor: v, label: MEDIO_LABELS[v] || v })))
@@ -1125,20 +1045,6 @@ const egresosHoy = computed(() => movements.value.filter(m => m.tipo === 'Egreso
 const movimientosIngresos = computed(() => movements.value.filter(m => m.tipo === 'Ingreso' && esDeHoy(m)).length)
 const movimientosEgresos = computed(() => movements.value.filter(m => m.tipo === 'Egreso' && esDeHoy(m)).length)
 
-const metodosPago = computed(() => {
-  const base = [
-    { label: 'Efectivo', valor: 'efectivo' },
-    { label: 'Débito', valor: 'debito' },
-    { label: 'Crédito', valor: 'credito' },
-    { label: 'Transferencia', valor: 'transferencia' },
-  ]
-  // Las cuentas digitales que tengan saldo inicial o movimientos también se cierran
-  const enUso = arqueoResumen
-    .filter(f => esCuentaDigital(f.medio_pago))
-    .map(f => ({ label: f.nombre || MEDIO_LABELS[f.medio_pago], valor: f.medio_pago }))
-  return [...base, ...enUso]
-})
-
 const movementColumns = [
   { key: 'fecha', label: 'Fecha' },
   { key: 'tipo', label: 'Tipo' },
@@ -1175,11 +1081,16 @@ const showDetalleDia = ref(false)
 const detalleDia = ref(null)
 const detalleDiaEstado = ref('sin_operacion')
 
-// Confirmar cierre
-const showConfirmarCierre = ref(false)
-const confirmando = ref(false)
-const cierreAConfirmar = ref(null)
-const confirmarCierreForm = reactive({ monto: 0, comentario: '' })
+// Arqueo/cierre diferido de una sesión que el sistema ya cerró sola
+const showCierreSesion = ref(false)
+const cierreSesionId = ref(null)
+const arqueoSesion = ref(null)
+const filasCierreSesion = ref([])
+const retirosCierreSesion = ref([])
+const comentarioCierreSesion = ref('')
+const cargandoArqueoSesion = ref(false)
+const conciliandoSesion = ref(false)
+const guardandoRetiroSesion = ref(false)
 
 // Detalle de ticket
 const showTicketDetalle = ref(false)
@@ -1304,71 +1215,104 @@ function esCierreConfirmable(sesion) {
   return !!sesion.fue_automatico && sesion.cierre_monto_confirmado == null
 }
 
-function abrirConfirmarCierreDeSesion(sesion) {
-  cierreAConfirmar.value = {
-    id: sesion.cierre_id,
-    monto_esperado: sesion.cierre_monto_esperado || sesion.cierre_monto || 0,
-    monto_confirmado_form: null,
-    fue_automatico: sesion.fue_automatico,
-    origen: 'sesion',
-    sesion: sesion,
+// Arqueo de una sesión que el sistema cerró sola. Se puede hacer aunque haya otra
+// caja abierta: el backend acota el arqueo a la sesión del cierre y, si la caja
+// abierta es la misma, recalcula el esperado de cada medio con la extracción.
+async function abrirCierreSesion(cierreId) {
+  if (!cierreId) {
+    toast.error('La sesión no tiene cierre asociado')
+    return
   }
-  confirmarCierreForm.monto = cierreAConfirmar.value.monto_esperado
-  confirmarCierreForm.comentario = ''
+  cierreSesionId.value = cierreId
+  arqueoSesion.value = null
+  filasCierreSesion.value = []
+  retirosCierreSesion.value = []
+  comentarioCierreSesion.value = ''
   showDetalleSesion.value = false
-  showConfirmarCierre.value = true
+  showDetalleDia.value = false
+  showCierreSesion.value = true
+  await cargarArqueoSesion()
 }
 
-function abrirConfirmarCierreDeDia(cierre) {
-  cierreAConfirmar.value = {
-    id: cierre.id,
-    monto_esperado: cierre.monto_esperado || cierre.monto || 0,
-    monto_confirmado_form: null,
-    fue_automatico: cierre.fue_automatico,
-    origen: 'dia',
-  }
-  confirmarCierreForm.monto = cierreAConfirmar.value.monto_esperado
-  confirmarCierreForm.comentario = ''
-  showConfirmarCierre.value = true
-}
-
-const diferenciaPreviewText = computed(() => {
-  if (!cierreAConfirmar.value || confirmarCierreForm.monto == null) return '—'
-  const diff = Number(confirmarCierreForm.monto) - Number(cierreAConfirmar.value.monto_esperado)
-  return `${diff > 0 ? '+' : ''}${fc(diff)}`
-})
-
-async function confirmarCierreFinal() {
-  if (!cierreAConfirmar.value) return
-  confirmando.value = true
+async function cargarArqueoSesion() {
+  if (!cierreSesionId.value) return
+  cargandoArqueoSesion.value = true
   try {
-    const payload = {
-      monto_confirmado: Number(confirmarCierreForm.monto),
-      comentario: confirmarCierreForm.comentario || '',
-    }
-    await api.put(`/api/caja/cierre/${cierreAConfirmar.value.id}/confirmar`, payload)
-    toast.success('Cierre conciliado correctamente')
-    showConfirmarCierre.value = false
-    // Recargar vistas
-    const fecha = detalleDia.value?.fecha
-    if (fecha) {
-      const resp = await api.get(`/api/caja/dia?fecha=${fecha}`)
-      detalleDia.value = resp
-    }
-    await fetchCalendario()
-    await fetchReportes()
-    if (cierreAConfirmar.value.origen === 'sesion') {
-      const sesion = cierreAConfirmar.value.sesion
-      sesion.cierre_monto_confirmado = Number(confirmarCierreForm.monto)
-      sesion.cierre_confirmado_por = auth.currentUser?.nombre || 'Yo'
-      sesion.cierre_confirmado_at = new Date().toISOString()
-      verDetalleSesion(sesion)
-    }
+    const data = await api.get(`/api/caja/cierre/${cierreSesionId.value}/arqueo`)
+    arqueoSesion.value = data
+    filasCierreSesion.value = construirMetodosArqueo(data, {
+      cerrados: (data.por_medio || []).filter(f => f.cerrado).map(f => f.medio_pago),
+      prellenar: true,
+    })
+    retirosCierreSesion.value = data.retiros || []
   } catch (e) {
-    toast.error('Error al confirmar el cierre: ' + (e?.data?.detail || e?.message || ''))
+    toast.error('Error al cargar el arqueo: ' + (e?.data?.detail || e?.message || ''))
+    showCierreSesion.value = false
   } finally {
-    confirmando.value = false
+    cargandoArqueoSesion.value = false
   }
+}
+
+const totalEsperadoSesion = computed(() => filasCierreSesion.value.reduce((s, f) => s + (f.esperado || 0), 0))
+const totalRealSesion = computed(() => filasCierreSesion.value.reduce((s, f) => s + (Number(f.montoReal) || 0), 0))
+const diferenciaTotalSesion = computed(() => totalRealSesion.value - totalEsperadoSesion.value)
+
+function cerrarModalCierreSesion() {
+  showCierreSesion.value = false
+  cierreSesionId.value = null
+  arqueoSesion.value = null
+}
+
+async function conciliarSesion() {
+  if (!arqueoSesion.value || arqueoSesion.value.confirmado) return
+  const pendiente = (arqueoSesion.value.medios_pendientes || []).filter(m => {
+    const fila = filasCierreSesion.value.find(f => f.valor === m)
+    return !fila || fila.montoReal == null || fila.montoReal === ''
+  })
+  if (pendiente.length) {
+    toast.warning('Contá el monto de: ' + pendiente.map(m => MEDIO_LABELS[m] || m).join(', '))
+    return
+  }
+  const conDiferencia = filasCierreSesion.value.filter(f => (Number(f.montoReal) || 0) - (f.esperado || 0) !== 0)
+  if (conDiferencia.length && !confirm(
+    `Hay ${conDiferencia.length} medio(s) con diferencia:\n\n` +
+    conDiferencia.map(f => `  - ${f.label}: esperado ${fc(f.esperado)} · contado ${fc(f.montoReal)}`).join('\n') +
+    '\n\nAl conciliar queda registrada la diferencia y el día pasa a amarillo (corrección). ¿Conciliar igual?'
+  )) return
+
+  conciliandoSesion.value = true
+  try {
+    for (const fila of filasCierreSesion.value) {
+      if (fila.montoReal == null || fila.montoReal === '') continue
+      await api.post(`/api/caja/cierre/${cierreSesionId.value}/metodo`, {
+        medio_pago: fila.valor,
+        monto_real: Number(fila.montoReal),
+        comentario: fila.comentario || comentarioCierreSesion.value || '',
+      })
+    }
+    await api.put(`/api/caja/cierre/${cierreSesionId.value}/confirmar`, {
+      monto_confirmado: totalRealSesion.value,
+      comentario: comentarioCierreSesion.value || '',
+    })
+    toast.success('Sesión conciliada')
+    cerrarModalCierreSesion()
+    await recargarVistasCierre()
+  } catch (e) {
+    toast.error('Error al conciliar la sesión: ' + (e?.data?.detail || e?.message || ''))
+  } finally {
+    conciliandoSesion.value = false
+  }
+}
+
+async function recargarVistasCierre() {
+  const fecha = detalleDia.value?.fecha
+  if (fecha) {
+    try {
+      detalleDia.value = await api.get(`/api/caja/dia?fecha=${fecha}`)
+    } catch { /* el detalle del día es informativo */ }
+  }
+  await fetchCalendario()
+  await fetchReportes()
 }
 
 async function verTicketDetalle(ventaId) {
@@ -1519,7 +1463,8 @@ async function fetchResumen() {
     if (data) {
       cajaResumen.metodos_cerrados = data.metodos_cerrados || []
       cajaResumen.egresos_por_medio = data.egresos_por_medio || {}
-      arqueoResumen = data.por_medio || []
+      cajaResumen.retiros = data.retiros || []
+      cajaResumen.total_retiros = data.total_retiros || 0
     }
   } catch { /* fallback to mock */ }
   await cajaStore.fetchEstado()
@@ -1542,8 +1487,11 @@ async function abrirCaja() {
   await cajaStore.fetchUltimoCierre()
   await cargarSaldosCuentasSugeridos()
 
+  // Se sugiere solo el efectivo que quedó en el cajón: el total del cierre suma
+  // también las cuentas digitales, que van por su propia cuenta.
   const ultimo = cajaStore.ultimoCierre
-  aperturaForm.monto_inicial = (ultimo && ultimo.monto > 0) ? ultimo.monto : 0
+  const efectivo = ultimo ? (ultimo.saldo_efectivo ?? ultimo.monto) : 0
+  aperturaForm.monto_inicial = efectivo > 0 ? efectivo : 0
   aperturaForm.monto_retiro = 0
   aperturaForm.motivo_retiro = ''
   showAperturaModal.value = true
@@ -1631,10 +1579,7 @@ async function initCierreCaja() {
   }
 
   try {
-    const data = await api.get('/api/caja/resumen')
-    if (data) {
-      metodosArqueo.splice(0, metodosArqueo.length, ...construirMetodosArqueo(data))
-    }
+    await cargarResumenCierreActual()
     cierreComentario.value = ''
     showCierreModal.value = true
   } catch (e) {
@@ -1642,17 +1587,35 @@ async function initCierreCaja() {
   }
 }
 
+async function cargarResumenCierreActual() {
+  const data = await api.get('/api/caja/resumen')
+  if (!data) return
+  metodosArqueo.splice(0, metodosArqueo.length, ...construirMetodosArqueo(data))
+  retirosCierreActual.value = data.retiros || []
+}
+
 // Arma las filas del arqueo a partir del resumen del backend: efectivo y medios
 // clásicos siempre, más las cuentas digitales que tengan saldo inicial o
-// movimientos en la sesión.
-function construirMetodosArqueo(data) {
+// movimientos en la sesión. `prellenar` es para el arqueo diferido, donde las
+// filas arrancan con el monto que ya se había cargado en un intento anterior.
+function construirMetodosArqueo(data, { cerrados = null, prellenar = false } = {}) {
   const porMedio = data.por_medio || []
-  const cerrados = data.metodos_cerrados || []
+  const listaCerrados = cerrados || data.metodos_cerrados || []
+  const previos = new Map(metodosArqueo.map(f => [f.valor, f]))
+  const montoDe = (medio, porDefecto) => {
+    if (prellenar) return porDefecto ?? null
+    const previo = previos.get(medio)
+    return previo ? previo.montoReal : 0
+  }
+  const comentarioDe = (medio) => {
+    if (prellenar) return ''
+    return previos.get(medio)?.comentario || ''
+  }
   if (!porMedio.length) {
     return ['efectivo', 'debito', 'credito', 'transferencia'].map(v => ({
       label: MEDIO_LABELS[v], valor: v, esperado: 0, apertura: 0, ingresos: 0, egresos: 0,
-      montoReal: 0, comentario: '', cerrado: cerrados.includes(v), es_cuenta_digital: false,
-      falta_saldo_inicial: false,
+      montoReal: montoDe(v, null), comentario: comentarioDe(v), cerrado: listaCerrados.includes(v),
+      es_cuenta_digital: false, falta_saldo_inicial: false,
       colorClass: MEDIO_COLORS[v] || 'bg-slate-400',
     }))
   }
@@ -1663,23 +1626,65 @@ function construirMetodosArqueo(data) {
     apertura: f.apertura || 0,
     ingresos: f.ingresos || 0,
     egresos: f.egresos || 0,
-    montoReal: 0,
-    comentario: '',
-    cerrado: cerrados.includes(f.medio_pago),
+    montoReal: montoDe(f.medio_pago, f.monto_real),
+    comentario: prellenar ? (f.comentario || '') : comentarioDe(f.medio_pago),
+    cerrado: listaCerrados.includes(f.medio_pago),
     es_cuenta_digital: !!f.es_cuenta_digital,
     falta_saldo_inicial: !!f.falta_saldo_inicial,
     colorClass: f.es_cuenta_digital ? 'bg-indigo-500' : (MEDIO_COLORS[f.medio_pago] || 'bg-slate-400'),
   }))
 }
 
-// Cierre de un medio suelto (incluye cuentas digitales)
-function seleccionarCierreParcial(metodo) {
-  const fila = arqueoResumen.find(f => f.medio_pago === metodo.valor)
-  cierreParcial.activo = true
-  cierreParcial.metodo = metodo.valor
-  cierreParcial.monto_real = 0
-  cierreParcial.comentario = ''
-  cierreParcial.esperado = fila ? (fila.esperado || 0) : 0
+const retirosCierreActual = ref([])
+const totalRetirosCierreActual = computed(() => retirosCierreActual.value.reduce((s, r) => s + (Number(r.monto) || 0), 0))
+
+async function agregarRetiroCierreActual({ monto, motivo }) {
+  guardandoRetiroActual.value = true
+  try {
+    await api.post('/api/caja/retiro-cierre', { monto, motivo: motivo || '' })
+    toast.success('Extracción registrada')
+    await cargarResumenCierreActual()
+    await fetchMovimientos()
+  } catch (e) {
+    toast.error('Error al registrar la extracción: ' + (e?.data?.detail || e?.message || ''))
+  } finally {
+    guardandoRetiroActual.value = false
+  }
+}
+
+async function agregarRetiroSesion({ monto, motivo }) {
+  guardandoRetiroSesion.value = true
+  try {
+    await api.post('/api/caja/retiro-cierre', { cierre_id: cierreSesionId.value, monto, motivo: motivo || '' })
+    toast.success('Extracción registrada')
+    await cargarArqueoSesion()
+    await fetchResumen()
+  } catch (e) {
+    toast.error('Error al registrar la extracción: ' + (e?.data?.detail || e?.message || ''))
+  } finally {
+    guardandoRetiroSesion.value = false
+  }
+}
+
+async function borrarRetiro(retiro, deSesion) {
+  try {
+    await api.delete(`/api/caja/retiro-cierre/${retiro.id}`)
+    if (deSesion) await cargarArqueoSesion()
+    else {
+      await cargarResumenCierreActual()
+      await fetchMovimientos()
+    }
+    await fetchResumen()
+  } catch (e) {
+    toast.error('Error al borrar la extracción: ' + (e?.data?.detail || e?.message || ''))
+  }
+}
+
+function cancelarCierreCaja() {
+  if (totalRetirosCierreActual.value > 0 && !confirm(
+    `Registraste una extracción de ${fc(totalRetirosCierreActual.value)} que queda como egreso de caja aunque cierres este modal. ¿Cerrar igual?`
+  )) return
+  showCierreModal.value = false
 }
 
 async function confirmarCierreCaja() {
@@ -1744,41 +1749,6 @@ async function registrarMovimiento() {
     toast.error('Error al registrar movimiento: ' + (e?.data?.detail || e?.message || ''))
   } finally {
     saving.value = false
-  }
-}
-
-function cancelarCierre() {
-  cierreParcial.activo = false
-  cierreParcial.metodo = ''
-  cierreParcial.monto_real = 0
-  cierreParcial.comentario = ''
-  cierreParcial.esperado = 0
-}
-
-async function cerrarMetodo() {
-  if (!cierreParcial.monto_real || cierreParcial.monto_real <= 0) {
-    toast.warning('Ingresá un monto real válido')
-    return
-  }
-  cerrandoMetodo.value = true
-  try {
-    await api.post('/api/caja/cierre-metodo', {
-      medio_pago: cierreParcial.metodo,
-      monto_real: cierreParcial.monto_real,
-      comentario: cierreParcial.comentario || '',
-    })
-    toast.success(`${MEDIO_LABELS[cierreParcial.metodo] || cierreParcial.metodo} cerrado correctamente`)
-    cierreParcial.activo = false
-    cierreParcial.metodo = ''
-    cierreParcial.monto_real = 0
-    cierreParcial.comentario = ''
-    cierreParcial.esperado = 0
-    await fetchMovimientos()
-    await fetchResumen()
-  } catch {
-    toast.error('Error al cerrar el método')
-  } finally {
-    cerrandoMetodo.value = false
   }
 }
 </script>

@@ -579,7 +579,7 @@ Cada apertura de cuenta digital se persiste como movimiento `tipo="apertura"` co
 | **Egresos del Día** | Suma de egresos (de todos los medios; el detalle por medio sale del arqueo) |
 
 ### Arqueo por Medio de Pago
-*(tarjeta de arqueo visible cuando caja abierta)*
+*(componente `ArqueoMedios.vue`, se usa en el cierre de la caja abierta y en la conciliación de una sesión ya cerrada)*
 
 | Columna | Descripción |
 |---------|-------------|
@@ -590,17 +590,23 @@ Cada apertura de cuenta digital se persiste como movimiento `tipo="apertura"` co
 | **Esperado** | `apertura + ingresos - egresos` |
 | **Monto Real** | Input por medio; en efectivo abre "Contar billetes" |
 
-### Cierre por Método de Pago
-*(visible cuando caja abierta)*
+### Extracción de Efectivo al Cerrar
+*(bloque al pie del arqueo, tanto en el cierre de la caja abierta como en la conciliación de una sesión cerrada)*
 
-| Elemento | Acción |
-|----------|--------|
-| **Botones de método** | Efectivo \| Débito \| Crédito \| Transferencia + las cuentas digitales. `@click` activa formulario de cierre |
-| **Badge "Cerrado"** | Métodos ya cerrados muestran check verde |
-| **Formulario activo** | Monto Real + Comentario + Cancelar/Cerrar. En **Efectivo** aparece además el botón "Contar billetes" |
+| Elemento | Descripción |
+|----------|-------------|
+| **Monto a extraer + Motivo** | Input del monto que sale del cajón y su motivo (opcional) |
+| **Botón "Registrar extracción"** | `POST /api/caja/retiro-cierre` — el monto queda como egreso de la sesión y se descuenta del efectivo esperado |
+| **Lista de extracciones** | Cada extracción registrada con su monto y motivo, y un botón para deshacerla (`DELETE /api/caja/retiro-cierre/{id}`) |
+| **"Queda en el cajón"** | Muestra el efectivo esperado una vez descontadas las extracciones |
+
+- La extracción **neutraliza** la diferencia, no la crea: si el cajón esperaba $30.000 y extraés $25.000, el arqueo espera $5.000 y el operador cuenta $5.000. Por eso la cuenta digital sigue cuadrando con lo que muestra la app
+- Queda registrado como `MovimientoCaja` tipo `egreso` con `referencia_tipo="retiro_cierre"`, así que aparece en el detalle de la sesión
+- Con `cierre_id` pertenece a esa sesión (y recalcula el monto esperado del cierre); sin `cierre_id` es de la sesión abierta
+- Las extracciones de sesiones ya cerradas no cuentan en el saldo de la caja abierta, y las de la sesión abierta no cuentan en el arqueo de una sesión cerrada
 
 ### Modal: Conteo de Billetes (Efectivo)
-*(componente `ContadorBilletesModal.vue`, se abre desde Apertura, Cierre por Método y Arqueo)*
+*(componente `ContadorBilletesModal.vue`, se abre desde Apertura y desde el Arqueo)*
 
 | Elemento | Descripción |
 |----------|-------------|
@@ -652,15 +658,32 @@ Cada apertura de cuenta digital se persiste como movimiento `tipo="apertura"` co
 
 | Elemento | Descripción |
 |----------|-------------|
-| **Métodos de pago** | Lista con: Esperado (calculado), Monto Real (input), Diferencia (color verde/rojo). En **Efectivo** el label "Monto Real Contado" lleva el botón "Contar billetes" |
+| **Métodos de pago** | `ArqueoMedios.vue` con: Esperado (calculado), Monto Real (input), Diferencia (color verde/rojo). En **Efectivo** el label "Monto Real Contado" lleva el botón "Contar billetes" |
 | **Botón "Contar billetes"** | Solo en Efectivo — abre el modal de conteo por denominación y escribe la auto-suma en el Monto Real |
+| **Extracción de efectivo** | Ver "Extracción de Efectivo al Cerrar" |
 | **Comentario general** | Campo opcional para nota al cierre |
 | **Egresos de la sesión** | Bloque rojo (solo si hay egresos con medio definido) con el detalle por medio y el total. No forman parte del conteo físico de cada método |
 | **Alerta tickets apartados** | Si hay carritos con productos sin cobrar: confirmación antes de continuar |
 | **Botón "Confirmar Cierre"** | `confirmarCierreCaja()` — cierra cada medio (POST `/api/caja/cierre-metodo`) + cierre-total + logout automático |
-| **Botón "Cancelar"** | Cierra el modal sin cerrar la caja |
+| **Botón "Cancelar"** | `cancelarCierreCaja()` — avisa que la extracción registrada queda como egreso y cierra el modal |
 
 Cada medio se concilia por separado: se registra un `cierre_parcial` con `medio_pago`, `monto_esperado`, `monto_confirmado` y la diferencia. El cierre total usa `saldo_total` (cajón + cuentas digitales).
+
+### Conciliación de Sesión (cierre diferido)
+*(modal `Conciliar sesión de caja`, desde el botón ✓ del Historial de Caja o de "Detalle del día" en una sesión con cierre automático)*
+
+| Elemento | Descripción |
+|----------|-------------|
+| **Datos de la sesión** | Apertura, cierre, extracciones y saldo esperado de esa jornada |
+| **Arqueo por medio** | `ArqueoMedios.vue` con las filas ya cargadas: lo que ya se contó queda precargado y editable, lo que falta arranca vacío |
+| **Total esperado / real / diferencia** | Resumen de la conciliación |
+| **Botón "Conciliar sesión"** | `conciliarSesion()` — arquea cada medio con monto cargado (POST `/api/caja/cierre/{id}/metodo`) y confirma (PUT `/api/caja/cierre/{id}/confirmar`) |
+| **Botón "Cerrar"** | Cierra el modal sin conciliar; el arqueo queda como estaba |
+
+- Solo aplica a sesiones con **cierre automático** y sin monto confirmado. Una vez conciliada queda inmutable: ni arqueos ni extracciones pueden tocarla
+- Se puede conciliar **aunque haya otra caja abierta**: el arqueo se acota entre la apertura y el cierre de esa sesión y no toma los movimientos de la caja nueva
+- Exige contar todos los medios con saldo esperado (`medios_pendientes`); si alguno quedó con diferencia pide confirmación
+- Los movimientos que se registran para la sesión (arqueo, extracción) se guardan con el `id` del cierre como referencia, así que quedan fuera del rango de la sesión pero el arqueo los sigue contando
 
 ### Movimientos del Día
 
@@ -693,17 +716,23 @@ Cada medio se concilia por separado: se registra un `cierre_parcial` con `medio_
 3. Modal muestra montos esperados vs reales por método de pago
 4. Cajero ingresa monto real contado en cada método
 5. Diferencia se calcula y muestra en verde (sobrante) o rojo (faltante)
-6. "Confirmar Cierre" → POST `/api/caja/cierre-metodo` por cada método + POST `/api/caja/cierre-total`
-7. Logout automático → redirige a `/login`
+6. Si deja plata en el cajón o la lleva a la caja fuerte → la registra como extracción (queda como egreso y baja el esperado del efectivo)
+7. "Confirmar Cierre" → POST `/api/caja/cierre-metodo` por cada método + POST `/api/caja/cierre-total`
+8. Logout automático → redirige a `/login`
 
 ### API Calls
 - `GET /api/caja/movimientos` — listar movimientos
-- `GET /api/caja/resumen` — resumen por medio (`por_medio` con apertura/ingresos/egresos/esperado por método, más `saldo_efectivo`, `saldo_cuenta_total`, `saldo_total`)
+- `GET /api/caja/resumen` — resumen por medio (`por_medio` con apertura/ingresos/egresos/esperado por método, más `saldo_efectivo`, `saldo_cuenta_total`, `saldo_total`, `retiros` y `total_retiros` de la sesión abierta)
 - `GET /api/caja/estado` — estado actual (cajón y cuentas por separado)
 - `GET /api/caja/saldos-cuentas-sugeridos` — últimos saldos reales por cuenta digital para precargar la apertura
 - `POST /api/caja/apertura` — abrir caja (cajón + `saldos_cuentas`)
 - `POST /api/caja/cierre-total` — cerrar caja + logout automático
 - `POST /api/caja/cierre-metodo` — cerrar un medio con monto real y comentario
+- `POST /api/caja/retiro-cierre` — registrar extracción de efectivo (`monto`, `motivo`, `cierre_id` opcional)
+- `DELETE /api/caja/retiro-cierre/{id}` — dar de baja una extracción mal cargada
+- `GET /api/caja/cierre/{cierre_id}/arqueo` — arqueo de una sesión (admin/encargado)
+- `POST /api/caja/cierre/{cierre_id}/metodo` — arquear un medio de una sesión ya cerrada (admin/cajero)
+- `PUT /api/caja/cierre/{cierre_id}/confirmar` — conciliar la sesión con el monto real total
 - `POST /api/caja/ingreso` — ingreso manual
 - `POST /api/caja/egreso` — egreso manual
 
@@ -714,10 +743,15 @@ Cada medio se concilia por separado: se registra un `cierre_parcial` con `medio_
 - `saldo_actual` conserva el nombre histórico pero representa solo el cajón; para el total usar `saldo_total`.
 - Sin apertura de la cuenta, el arqueo marca `falta_saldo_inicial` para ese medio.
 
+### Apertura: Cuánto Sugerir
+- El monto sugerido es el **efectivo** del último cierre (`saldo_efectivo`), no el total: el total del cierre suma las cuentas digitales, que van por su cuenta
+- `MovimientoCaja.saldo_efectivo` guarda el cajón del cierre; los cierres manuales también lo llenan
+
 ### Auto-cierre por Cambio de Día
 - En `caja_service.caja_abierta()` compara fecha de apertura vs fecha actual
 - Si es otro día, crea automáticamente `MovimientoCaja` tipo "cierre" y retorna `False`
 - Previene vender con caja del día anterior
+- Ese cierre **se puede completar después** desde el Historial: arqueo por medio, extracción y conciliación. Ver "Conciliación de Sesión"
 
 ---
 
@@ -1692,28 +1726,30 @@ La ficha PDF (`app/services/analisis_precios_pdf.py`, ReportLab) es landscape po
 ```
 [ABRIR]
 Cajero → /caja → "Abrir Caja"
-  ├─ Prompt: "Monto inicial $X"
+  ├─ Sugiere el efectivo del último cierre (saldo_efectivo)
+  ├─ Opcional: retiro al abrir + saldos iniciales de cuentas digitales
   └─ POST /api/caja/apertura → caja abierta
 
 [OPERAR DÍA]
 Cada venta confirmada → MovimientoCaja ingreso
 Puede haber ingresos/egresos manuales
 
-[CIERRE POR MÉTODO]
-Por cada método de pago:
-  "Cerrar Método" → input monto real → POST /api/caja/cierre-metodo
-  Sistema calcula diferencia vs esperado
-
 [CIERRE TOTAL]
 "Cerrar Caja" → initCierreCaja() → GET /api/caja/resumen
   ├─ Modal muestra montos esperados vs reales por método
-  ├─ Cajero ingresa monto real de cada método
-  └─ "Confirmar Cierre" → POST /api/caja/cierre-metodo (por método)
+  ├─ Cajero ingresa monto real de cada medio
+  ├─ Extracción de efectivo (opcional) → POST /api/caja/retiro-cierre
+  │    └─ Baja el esperado del cajón; queda como egreso de la sesión
+  └─ "Confirmar Cierre" → POST /api/caja/cierre-metodo (por medio)
   └─ POST /api/caja/cierre-total → logout automático → /login
 
 [CIERRE AUTOMÁTICO]
 Al iniciar día siguiente: `caja_abierta()` detecta cambio de fecha
   └─ Crea cierre automático → obliga a nueva apertura
+  └─ Después se completa desde el Historial ("Conciliar sesión"):
+       GET /api/caja/cierre/{id}/arqueo →Extacción (POST retiro-cierre)
+       → arqueo por medio (POST /cierre/{id}/metodo)
+       → PUT /cierre/{id}/confirmar
 ```
 
 ### Flujo 3: Compra y Recepción
