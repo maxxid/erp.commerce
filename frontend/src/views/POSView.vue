@@ -438,14 +438,24 @@
               <i class="fa-solid fa-pen text-[9px] text-slate-300 group-hover:text-brand-500 shrink-0"></i>
             </button>
             <BaseBadge variant="default" size="xs" class="ml-auto shrink-0">{{ cart.items.length }} productos</BaseBadge>
-            <button
-              type="button"
-              class="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition"
-              title="Abrir un carrito nuevo"
-              @click="crearCarritoRapido"
-            >
-              <i class="fa-solid fa-plus text-[11px]"></i>
-            </button>
+            <div v-if="carritoStore.cantidadCarritos > 1" class="flex items-center gap-0.5 shrink-0">
+              <button
+                type="button"
+                class="w-6 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition"
+                title="Carrito anterior"
+                @click="moverCarrito(-1)"
+              >
+                <i class="fa-solid fa-chevron-left text-[10px]"></i>
+              </button>
+              <button
+                type="button"
+                class="w-6 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition"
+                title="Carrito siguiente"
+                @click="moverCarrito(1)"
+              >
+                <i class="fa-solid fa-chevron-right text-[10px]"></i>
+              </button>
+            </div>
             <button
               type="button"
               class="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition"
@@ -1570,14 +1580,17 @@ function crearCarrito() {
   toast.info(`Carrito "${c.nombre}" listo`)
 }
 
-// Atajo del header: sin tipear nombre, se crea con el proximo "Carrito N".
-function crearCarritoRapido() {
-  if (carritoStore.cantidadCarritos >= 12) {
-    toast.warning('No se pueden tener mas de 12 carritos abiertos a la vez')
-    return
-  }
-  const c = carritoStore.crear('')
-  if (c) toast.info(`Carrito "${c.nombre}" listo`)
+// Las flechas del header recorren los carritos en el orden en que estan
+// abiertos y dan la vuelta. No hay "primer" ni "ultimo", asi que no se puede
+// quedar trabado en un extremo. Pasa por activarCarrito y no por el store
+// directo para respetar el bloqueo de un cobro en curso.
+function moverCarrito(delta) {
+  const lista = carritoStore.carritos
+  if (lista.length < 2) return
+  const i = lista.findIndex(c => c.id === carritoStore.activoId)
+  const desde = i === -1 ? 0 : i
+  const destino = lista[(desde + delta + lista.length) % lista.length]
+  activarCarrito(destino.id)
 }
 
 function activarCarrito(id) {
