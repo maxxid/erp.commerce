@@ -409,6 +409,15 @@ Además, dos guards defensivos: `_clean_name` y `_map_categoria` reventaban con 
 
 _(Código pusheado, falta probar end-to-end en navegador — sesión 10/08/2026)_
 
+**Entrada manual `*Nombre*Precio` del POS** (01/10/2026):
+- [ ] Escribir `*copias` y después el segundo `*` → **no** salta ningún aviso y el input **no** se borra (antes se disparaba el alta en el segundo `*` y tiraba "Formato: *Nombre*Precio…")
+- [ ] Seguir con el precio (`*copias*1500`) y **pausar un instante** → el producto se agrega solo al carrito y el input queda limpio
+- [ ] Con el precio a medias (`*copias*1`) y siguiendo tipeando → no se agrega nada hasta que pare (el timer se reinicia en cada tecla)
+- [ ] Con `*copias*` a medio escribir y **Enter** → avisa del formato, pero **conserva** lo escrito para poder corregirlo
+- [ ] Meter dos productos manuales seguidos → los códigos `GEN-…` son distintos (ya no salen de una secuencia sobre la grilla filtrada, que chocaba con el UNIQUE)
+- [ ] Confirmar la venta con un producto manual pendiente → se crea el producto en la BD sin error
+- [ ] El escáner normal (13+ dígitos) sigue agregando al carrito como siempre
+
 **3 bugs del POS/Productos reportados por el usuario** (01/10/2026):
 - [ ] **POS → Carritos**: abrir el desplegable de "Carritos abiertos" → el panel se ve **completo**, saliéndose del card (antes `overflow-hidden` lo cortaba)
 - [ ] Con un carrito abierto de ayer, **abrir caja hoy** → el carrito deja de decir "hace 38h" y arranca su reloj con la caja nueva (y no queda marcado como sospechoso de una)

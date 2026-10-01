@@ -198,9 +198,11 @@
 
 #### Buscador por Código de Barras
 
+> **Entrada manual `*Nombre*Precio`.** Al escribir algo que empieza con `*`, el producto se confirma **cuando el operador deja de escribir** (700 ms de pausa), no al escribir el segundo `*`: el precio va después del segundo asterisco, así que dispararlo ahí saltaba el aviso de formato y borraba lo tipeado. A medio escribir no se avisa ni se borra nada; el aviso "Formato: *Nombre*Precio" queda solo para cuando el error fue un **Enter** explícito. El producto entra al carrito como pendiente (`_pending`) y se crea en la BD al confirmar la venta.
+
 | Elemento | Acción |
 |----------|--------|
-| **Input de código de barras** | `v-model="posLookupCode"`, `@input="handlePOSInput"`, Enter → `triggerPOSLookup()` |
+| **Input de código de barras** | `v-model="posLookupCode"`, `@input="handlePOSInput"`, Enter → `triggerPOSLookup()`. Acepta escáner y **entrada manual `*Nombre*Precio`** (ej. `*COCA 1.5L*1500`) |
 | **Contenedor de resultado** | Muestra según estado: |
 
 **Estados del lookup:**
@@ -360,7 +362,7 @@ El store normaliza lo que lee: un `items` que no es array, un `total` no numéri
 3. Presionar Enter sin resultados → diálogo "Producto no registrado, ¿desea crearlo?"
 4. Sí → abre QuickCreateModal con código pre-cargado (si el texto son 8+ dígitos)
 5. En el modal: botón 🔍 busca en fuentes externas (deshabilita Nombre/Marca mientras busca)
-6. Si código de barras vacío al guardar → se asigna `GEN-XXXXXXXX` secuencial
+6. Si código de barras vacío al guardar → se asigna un `GEN-XXXXXXXX` interno, derivado de la hora (`nextGenCode()`, no una secuencia: la grilla del POS viene filtrada y paginada y el número se repetía, chocando con el UNIQUE de `codigo_barras`)
 7. Guardar → POST `/api/productos` → producto se agrega a la grilla local
 8. No → cierra diálogo, focus vuelve al buscador
 
@@ -368,7 +370,7 @@ El store normaliza lo que lee: un `items` que no es array, un `total` no numéri
 
 | Campo | Tipo | Detalle |
 |-------|------|---------|
-| **Código de Barras** | Input + botón 🔍 suffix | `lookupBarcode()` — busca en fuentes externas. Si vacío al guardar, auto-asigna `GEN-XXXXXXXX` |
+| **Código de Barras** | Input + botón 🔍 suffix | `lookupBarcode()` — busca en fuentes externas. Si vacío al guardar, auto-asigna un `GEN-XXXXXXXX` (derivado de la hora, `nextGenCode()`) |
 | **Nombre del Producto** | Input text | Requerido, deshabilitado durante búsqueda externa |
 | **Marca** | Input text | Deshabilitado durante búsqueda externa |
 | **Precio Venta** | Input number | Requerido |
@@ -1889,7 +1891,7 @@ Cajero escribe en buscador de texto → Enter
   └─ filteredPOSProducts está vacío → diálogo "Producto no registrado, ¿desea crearlo?"
       ├─ Sí (Enter) → abre QuickCreateModal
       │   ├─ Si texto son 8+ dígitos → pre-carga como código de barras
-      │   ├─ Si vacío → auto-asigna GEN-XXXXXXXX secuencial
+      │   ├─ Si vacío → auto-asigna un GEN-XXXXXXXX (derivado de la hora, `nextGenCode()`)
       │   ├─ Botón 🔍 → POST /api/productos/lookup → deshabilita Nombre/Marca
       │   ├─ Guardar → POST /api/productos → agrega a grilla local
       │   └─ Cierra modal, focus a grilla
@@ -1920,7 +1922,7 @@ Cajero escribe en buscador de texto → Enter
 16. **Carritos sin respaldo en servidor**: Viven en localStorage. Si se borra el localStorage del navegador, se pierden. No sobreviven cambiar de terminal.
 17. **Sospechosos**: Carritos con items y más de 2h de antigüedad se consideran sospechosos (posible fraude) y se destacan visualmente.
 18. **Huérfanos**: Al cerrar caja, cada carrito con productos sin cobrar genera un evento `ORPHAN` en la auditoría local.
-19. **Auto-generación de código de barras**: Si se deja vacío al crear producto, se asigna `GEN-XXXXXXXX` secuencial.
+19. **Auto-generación de código de barras**: Si se deja vacío al crear producto, se asigna un `GEN-XXXXXXXX` derivado de la hora (`nextGenCode()`). No es una secuencia sobre la grilla: al venir filtrada y paginada se repetía y el UNIQUE de `codigo_barras` rechazaba el alta, dejando la venta sin crear el producto.
 20. **Editar venta con carrito ocupado**: Cargar una venta para editar crea un carrito "(sin cobrar)" con lo que hubiera, para no pisarlo.
 
 ---

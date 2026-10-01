@@ -106,7 +106,7 @@
             input-class="font-mono-data"
             size="lg"
           @input="handlePOSInput"
-          @enter="triggerPOSLookup"
+          @enter="triggerPOSLookup()"
           >
             <template #label>
               Código de Barras
@@ -957,7 +957,7 @@
     :show="showCreateModal"
     :barcode="createBarcode"
     :categories="categories"
-    :next-gen-code="nextGenCode"
+    :next-gen-code="nextGenCode()"
     @close="showCreateModal = false"
     @created="onProductCreated"
   />
@@ -1526,14 +1526,14 @@ const showMissingDialog = ref(false)
 const showCreateModal = ref(false)
 const createBarcode = ref('')
 
-const nextGenCode = computed(() => {
-  const codes = products.value
-    .filter(p => p.codigo_barras?.startsWith('GEN-'))
-    .map(p => parseInt(p.codigo_barras.replace('GEN-', ''), 10))
-    .filter(n => !isNaN(n))
-  const maxSeq = codes.length ? Math.max(...codes) : 0
-  return `GEN-${String(maxSeq + 1).padStart(8, '0')}`
-})
+// Codigo interno para los productos cargados a mano. Va con la hora y no con la
+// cantidad de GEN- de la grilla: esa grilla viene filtrada y paginada, asi que el
+// numero se repetia y el UNIQUE de productos.codigo_barras rechazaba el alta (la
+// venta terminaba sin crear el producto). El prefijo GEN- se mantiene porque el
+// POS y el cobro movil lo usan para marcar los productos manuales.
+// Es funcion y no computed a proposito: un computed sin dependencias se cachea
+// una vez y proponia el mismo codigo para dos productos seguidos.
+const nextGenCode = () => `GEN-${String(Date.now()).slice(-8)}`
 
 function handleTextSearchEnter() {
   const q = posTextSearch.value.trim()
@@ -1976,21 +1976,23 @@ function selectProductForLookup(product) {
   })
 }
 
-async function triggerPOSLookup() {
+async function triggerPOSLookup({ automatico = false } = {}) {
   const raw = posLookupCode.value.trim()
   if (!raw) return
 
   if (raw.startsWith('*')) {
-    posLookupCode.value = ''
+    clearTimeout(timerEntradaManual)
     const parts = raw.split('*')
     const nombre = (parts[1] || '').trim()
     const precio = parseFloat(parts[2] || '0')
-    if (!nombre || precio <= 0) {
-      toast.warning('Formato: *Nombre*Precio. Ej: *COCA 1.5L*1500')
+    if (!nombre || !(precio > 0)) {
+      // A medio escribir no se avisa ni se borra nada: el operador todavia esta
+      // tipeando el precio. El aviso queda para cuando el error fue el Enter.
+      if (!automatico) toast.warning('Formato: *Nombre*Precio. Ej: *COCA 1.5L*1500')
       return
     }
-    const seq = products.value.filter(p => p.codigo_barras && (p.codigo_barras.startsWith('GEN-') || p.codigo_barras.startsWith('*MANUAL*'))).length + 1
-    const cleanCode = `GEN-${String(seq).padStart(8, '0')}`
+    posLookupCode.value = ''
+    const cleanCode = `GEN-${String(Date.now()).slice(-8)}`
     const tempProd = {
       id: Date.now() + Math.random(),
       codigo_barras: cleanCode,
@@ -2212,15 +2214,23 @@ function closeLookupPanel() {
   lookupProduct._barcode = ''
 }
 
+// La entrada manual *Nombre*Precio se confirma sola cuando el operador deja de
+// escribir. Antes se disparaba en el SEGUNDO '*', cuando el precio todavia no
+// estaba tipeado: saltaba el aviso de formato y se borraba lo escrito.
+const MS_ESPERA_ENTRADA_MANUAL = 700
+let timerEntradaManual = null
+
 function handlePOSInput() {
   const val = posLookupCode.value.trim()
   if (val.length >= 13 && !val.startsWith('*')) {
     triggerPOSLookup()
     return
   }
-  if (val.startsWith('*') && val.includes('*', 2)) {
-    triggerPOSLookup()
-    return
+  clearTimeout(timerEntradaManual)
+  // Solo cuando ya hay algo despues del segundo '*': con el precio a medias se
+  // sigue escribiendo y el input se deja como esta.
+  if (val.startsWith('*') && /^\*[^*]+\*\d/.test(val)) {
+    timerEntradaManual = setTimeout(() => triggerPOSLookup({ automatico: true }), MS_ESPERA_ENTRADA_MANUAL)
   }
   lookupProduct._searched = false
   lookupProduct.id = null
