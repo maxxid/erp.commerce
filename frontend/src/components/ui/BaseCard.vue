@@ -1,6 +1,10 @@
 <script setup>
 const props = defineProps({
   padding: { type: String, default: 'md' }, // none, sm, md, lg
+  // Los menus que se abren posicionados relative al card (ej. el selector de
+  // carritos del POS) quedan recortados por el overflow-hidden. Con
+  // overflow=false el card deja de recortar y el panel puede salir flotando.
+  overflow: { type: Boolean, default: true },
   hover: { type: Boolean, default: false },
   interactive: { type: Boolean, default: false },
   active: { type: Boolean, default: false },
@@ -17,9 +21,10 @@ const paddingClass = {
 
 <template>
   <div
-    class="relative bg-white dark:bg-slate-900 rounded-xl border transition-all duration-200 ease-out-expo overflow-hidden"
+    class="relative bg-white dark:bg-slate-900 rounded-xl border transition-all duration-200 ease-out-expo"
     :class="[
       paddingClass,
+      overflow ? 'overflow-hidden' : '',
       active
         ? 'border-brand-400 dark:border-brand-500 shadow-glow ring-1 ring-brand-500/20'
         : 'border-slate-200/70 dark:border-slate-700/70 shadow-sm',

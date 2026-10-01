@@ -82,21 +82,30 @@ def obtener_por_barcode(db: Session, codigo_barras: str) -> Optional[Producto]:
     )
 
 
+def _generar_codigo_barras(db: Session) -> str:
+    """Arma el siguiente codigo interno (MAN-XXXXXXXXXX) para un producto sin codigo real.
+
+    codigo_barras es NOT NULL y UNIQUE: escribir "" en dos productos revienta la
+    BD. Por eso un producto sin codigo recibe siempre uno generado aca.
+    """
+    existing = db.query(Producto).filter(
+        Producto.codigo_barras.like("MAN-%")
+    ).order_by(Producto.id.desc()).first()
+    seq = 1
+    if existing and existing.codigo_barras:
+        try:
+            seq = int(existing.codigo_barras.split("-")[1]) + 1
+        except (ValueError, IndexError):
+            pass
+    return f"MAN-{seq:010d}"
+
+
 def crear_producto(db: Session, data: dict) -> Producto:
     """Crea un producto nuevo con stock inicial."""
     cantidad_inicial = data.pop("cantidad_inicial", 0) or data.pop("stock_actual", 0) or 0
 
     if not data.get("codigo_barras"):
-        existing = db.query(Producto).filter(
-            Producto.codigo_barras.like("MAN-%")
-        ).order_by(Producto.id.desc()).first()
-        seq = 1
-        if existing and existing.codigo_barras:
-            try:
-                seq = int(existing.codigo_barras.split("-")[1]) + 1
-            except:
-                pass
-        data["codigo_barras"] = f"MAN-{seq:010d}"
+        data["codigo_barras"] = _generar_codigo_barras(db)
 
     producto = Producto(**data)
     producto.stock_actual = cantidad_inicial
@@ -131,6 +140,11 @@ def actualizar_producto(db: Session, producto: Producto, data: dict) -> Producto
     for field in updatable:
         if field in data and data[field] is not None:
             setattr(producto, field, data[field])
+
+    # Borrar el campo de codigo no deja el producto sin el: se le asigna uno
+    # interno, porque la columna es NOT NULL y UNIQUE.
+    if "codigo_barras" in data and not str(data["codigo_barras"] or "").strip():
+        producto.codigo_barras = _generar_codigo_barras(db)
 
     if "activo" in data:
         producto.activo = data["activo"]

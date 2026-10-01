@@ -6,6 +6,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
+from sqlalchemy.exc import IntegrityError
 from app.database import get_db
 from app.schemas.producto import (
     ProductoCreate, ProductoUpdate, ProductoOut,
@@ -438,6 +439,28 @@ def obtener(
     return RespuestaData(data=producto)
 
 
+def _integridad_a_409(db: Session, e: IntegrityError, codigo_barras: Optional[str]) -> HTTPException:
+    """Traduce un IntegrityError de la BD a un error que el usuario pueda entender.
+
+    codigo_barras es UNIQUE: si el guardado deja dos productos con el mismo
+    codigo, SQLite revienta el INSERT/UPDATE y el cliente se comia un
+    "Internal Server Error" sin ninguna pista de cual era el problema.
+    """
+    db.rollback()  # tras el error la sesion queda sucia: sin esto, todo lo que siga explota
+    if codigo_barras and "codigo_barras" in str(getattr(e, "orig", e)):
+        return HTTPException(
+            status_code=409,
+            detail=(
+                f"Ya existe otro producto con el código {codigo_barras}. "
+                "Usá otro código o dejalo vacío para que el sistema le asigne uno."
+            ),
+        )
+    return HTTPException(
+        status_code=409,
+        detail="No se pudo guardar el producto: los datos chocan con otro registro.",
+    )
+
+
 @router.post("", response_model=RespuestaData[ProductoOut])
 def crear(
     data: ProductoCreate,
@@ -451,7 +474,10 @@ def crear(
             status_code=400,
             detail=f"Ya existe un producto con código {data.codigo_barras}"
         )
-    producto = producto_service.crear_producto(db, data.model_dump())
+    try:
+        producto = producto_service.crear_producto(db, data.model_dump())
+    except IntegrityError as e:
+        raise _integridad_a_409(db, e, data.codigo_barras)
     auditoria_service.registrar(db, user.id, "producto_creado", None, None,
                                {"producto_id": producto.id, "nombre": producto.nombre, "precio_venta": producto.precio_venta})
     return RespuestaData(data=producto, message="Producto creado")
@@ -492,9 +518,12 @@ def actualizar(
                 }
             )
 
-    producto = producto_service.actualizar_producto(
-        db, producto, update_data
-    )
+    try:
+        producto = producto_service.actualizar_producto(
+            db, producto, update_data
+        )
+    except IntegrityError as e:
+        raise _integridad_a_409(db, e, update_data.get("codigo_barras"))
     auditoria_service.registrar(db, user.id, "producto_actualizado", None, None,
                                {"producto_id": producto.id, "nombre": producto.nombre, "campos_actualizados": list(update_data.keys())})
     return RespuestaData(data=producto, message="Producto actualizado")

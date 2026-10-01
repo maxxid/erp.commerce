@@ -406,10 +406,12 @@ function openEditModal(product) {
   editingProduct.value = product
   formError.value = ''
   showBarcodeHint.value = false
-  let barcode = product.codigo_barras
-  if (barcode && (barcode.startsWith('*MANUAL*') || barcode.startsWith('GEN-'))) {
-    const seq = products.value.filter(p => p.codigo_barras && (p.codigo_barras.startsWith('*MANUAL*') || p.codigo_barras.startsWith('GEN-'))).length + 1
-    barcode = `GEN-${String(seq).padStart(8, '0')}`
+  // El codigo de un producto existente no se toca: `*MANUAL*` y `GEN-` son
+  // marcadores que el POS y el cobro movil usan para saber que fue cargado a
+  // mano. Antes se regeneraba un GEN-XXXX aqui con el numero de la lista
+  // filtrada, que podia chocar con otro producto y dejar el guardado en 500.
+  const barcode = product.codigo_barras
+  if (!barcode || String(barcode).trim() === '') {
     showBarcodeHint.value = true
     setTimeout(() => { showBarcodeHint.value = false }, 5000)
   }

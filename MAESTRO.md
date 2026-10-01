@@ -173,8 +173,10 @@
 | **Toggle panel de estadísticas** | `showStatsPanel = !showStatsPanel` — icono chevron-left/right |
 | **Badge usuario actual** | Muestra nombre del operador |
 | **Badge estado caja** | Verde "Caja abierta" / Rojo "Caja cerrada" |
-| **Botón selector de carritos** | Header del POS, solo si hay más de un carrito. Icono capas con badge contador. Abre el panel de carritos |
-| **Banner carritos sospechosos** | Alerta ámbar cuando hay un carrito abierto > 2h. Botón X para descartar |
+| **Botón selector de carritos** | Header del POS, solo si hay más de un carrito. Icono capas con badge contador. Abre el panel de carritos (el card va con `:overflow="false"`: con el `overflow-hidden` de `BaseCard` el panel quedaba recortado) |
+| **Banner carritos sospechosos** | Alerta ámbar cuando hay un carrito abierto > 2h **dentro de la sesión de caja actual**. Botón X para descartar |
+
+> **La vida de un carrito se cuenta dentro de la sesión de caja.** `/api/caja/estado` devuelve `sesion_id` y `sesion_inicio` (UTC con "Z"); el store de caja llama a `carritoStore.sincronizarSesion()` en cada `fetchEstado()`. Cuando arranca una caja nueva, los carritos que seguían abiertos reinician su reloj con ella (un carrito de ayer ya no dice "hace 38h" al abrir caja hoy). La sesión vigente se guarda en `localStorage` (`apex-pos-carritos.sesionId`), así que recargar el POS no reinicia nada.
 
 ### Banner Caja Cerrada
 *(visible cuando `!cajaStore.abierta`)*
@@ -266,7 +268,7 @@
 | **Link "Vaciar carrito"** | `cerrarCarritoActual()` — vacía los items del carrito activo pero conserva su nombre |
 | **Botón "Recarga"** | Header del POS — abre el modal de recarga de saldo (ver "Servicio de Recargas") |
 | **Nombre del carrito** | Header de la columna del carrito. Clic para renombrar en el lugar (ej. "Mesa 2"). `empezarRenombre()` |
-| **Panel de carritos** | Lista todos los carritos con items, total y antigüedad. `activarCarrito(id)` cambia de carrito sin perder el anterior |
+| **Panel de carritos** | Lista todos los carritos con items, total y antigüedad (dentro de la sesión de caja actual). `activarCarrito(id)` cambia de carrito sin perder el anterior. Se renderiza absoluto y **fuera** del `overflow-hidden` del card |
 | **Botón cerrar carrito** | Por cada carrito con items: vacía ese carrito conservando el nombre. `cerrarCarrito(id)` |
 | **Botón eliminar carrito** | Por cada carrito: lo borra (registra en auditoría local). No permite borrar el último. `eliminarCarrito(id)` |
 | **Campo "nuevo carrito"** | Input + botón `+` para abrir un carrito con nombre. `crearCarrito()` |
@@ -436,7 +438,7 @@ El store normaliza lo que lee: un `items` que no es array, un `total` no numéri
 
 | Campo | Tipo | Detalle |
 |-------|------|---------|
-| Código de barras | Input text | Enter → `lookupBarcode()` busca en fuentes externas |
+| Código de barras | Input text | Enter → `lookupBarcode()` busca en fuentes externas. **Al editar, el código de un producto existente no se modifica** (ni `*MANUAL*` ni `GEN-`): antes se regeneraba un `GEN-XXXX` con el número de la lista filtrada, que podía chocar con otro producto y dejar el guardado en 500. Si el campo llega vacío, el backend asigna un `MAN-XXXXXXXXXX` |
 | Marca | Input text | — |
 | Nombre | Input text | Requerido |
 | Precio costo | Input number | — |
@@ -447,6 +449,8 @@ El store normaliza lo que lee: un `items` que no es array, un `total` no numéri
 | Categoría | BaseSelect + botón `+` | Quick-create inline: nombre + botón Crear |
 | Proveedor | Combobox + botón `+` | Quick-create inline: nombre + CUIT |
 | Fecha vencimiento | Input date | Opcional |
+
+> `productos.codigo_barras` es NOT NULL y UNIQUE. POST/PUT de productos traducen un `IntegrityError` a un **409 con mensaje legible** ("Ya existe otro producto con el código …"), y `_generar_codigo_barras()` asigna un `MAN-…` cuando el campo viene vacío, para que nunca queden dos productos en blanco.
 | Observaciones | Textarea | Opcional |
 | **Botón "Guardar"** | Primary | `saveProduct()` |
 | **Botón "Cancelar"** | Ghost | `closeModal()` |

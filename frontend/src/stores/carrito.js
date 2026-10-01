@@ -77,15 +77,15 @@ function cargar() {
     if (raw && Array.isArray(raw.carritos) && raw.carritos.length) {
       const carritos = raw.carritos.slice(0, MAX_CARTS).map(normalizar)
       const activoId = carritos.some(c => c.id === raw.activoId) ? raw.activoId : carritos[0].id
-      return { carritos, activoId }
+      return { carritos, activoId, sesionId: raw.sesionId || '' }
     }
   } catch {
     // dato corrupto: se descarta y se arranca de cero
   }
   const legacy = migrarLegacy()
-  if (legacy) return legacy
+  if (legacy) return { ...legacy, sesionId: '' }
   const primero = carritoVacio('Carrito 1')
-  return { carritos: [primero], activoId: primero.id }
+  return { carritos: [primero], activoId: primero.id, sesionId: '' }
 }
 
 function auditar(evento, detalle) {
@@ -106,6 +106,7 @@ export const useCarritoStore = defineStore('carrito', () => {
   const inicial = cargar()
   const carritos = ref(inicial.carritos)
   const activoId = ref(inicial.activoId)
+  const sesionId = ref(inicial.sesionId)
 
   const activo = computed(() => carritos.value.find(c => c.id === activoId.value) || carritos.value[0])
 
@@ -153,10 +154,40 @@ export const useCarritoStore = defineStore('carrito', () => {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         carritos: carritos.value,
         activoId: activoId.value,
+        sesionId: sesionId.value,
       }))
     } catch {
       // cuota llena o storage bloqueado: el carrito sigue en memoria
     }
+  }
+
+  // La vida de un carrito se cuenta dentro de la sesion de caja. Un carrito que
+  // quedo abierto de ayer seguia marcando sus 38 horas hoy, despues de abrir
+  // caja: engaaba y lo marcaba como sospechoso al instante. Cuando arranca una
+  // sesion nueva, los carritos que ya estaban abiertos arrancan su reloj con
+  // ella; los creados en esta sesion no se tocan.
+  function sincronizarSesion(id, inicio) {
+    if (!id || id === sesionId.value) return 0
+    const arranque = inicio ? new Date(inicio) : new Date()
+    const desde = isNaN(arranque.getTime()) || arranque > new Date() ? new Date().toISOString() : arranque.toISOString()
+    let reiniciados = 0
+    for (const c of carritos.value) {
+      const creado = new Date(c.creado || '')
+      if (!c.creado || isNaN(creado.getTime()) || creado < arranque) {
+        c.creado = desde
+        const actualizado = new Date(c.actualizado || '')
+        if (!c.actualizado || isNaN(actualizado.getTime()) || actualizado < arranque) {
+          c.actualizado = desde
+        }
+        reiniciados++
+      }
+    }
+    sesionId.value = id
+    guardar()
+    if (reiniciados) {
+      auditar('SESSION', { sesionId: id, carritosReiniciados: reiniciados, desde })
+    }
+    return reiniciados
   }
 
   function crear(nombre) {
@@ -244,6 +275,7 @@ export const useCarritoStore = defineStore('carrito', () => {
   return {
     carritos,
     activoId,
+    sesionId,
     activo,
     cantidadCarritos,
     carritosConItems,
@@ -255,6 +287,7 @@ export const useCarritoStore = defineStore('carrito', () => {
     eliminar,
     cerrar,
     asegurarDefaults,
+    sincronizarSesion,
     tocar,
     antiguedad,
     auditar,

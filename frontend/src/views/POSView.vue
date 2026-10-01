@@ -414,7 +414,7 @@
 
       <!-- COLUMN 2: Cart (4 cols) -->
       <div class="xl:col-span-4 space-y-4">
-        <BaseCard padding="none" class="overflow-hidden">
+        <BaseCard padding="none" :overflow="false">
           <div class="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2 relative">
             <i class="fa-solid fa-cash-register text-brand-500"></i>
             <input

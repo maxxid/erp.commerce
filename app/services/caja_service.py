@@ -918,6 +918,9 @@ def obtener_estado_caja(db: Session, sucursal_id: int = 1) -> dict:
         if medio in MEDIOS_CUENTA
     }
     metodos_cerrados = _metodos_ya_cerrados(db, sucursal_id) if abierta else []
+    # Identidad de la sesion: el POS la usa para saber cuando arranco una caja
+    # nueva (los carritos que quedaron abiertos cuentan su vida desde aca).
+    apertura = _apertura_sesion_actual(db, sucursal_id) if abierta else None
 
     return {
         "abierta": abierta,
@@ -927,6 +930,14 @@ def obtener_estado_caja(db: Session, sucursal_id: int = 1) -> dict:
         "saldo_cuenta_total": sum(saldos_cuentas.values()),
         "saldo_total": saldo_efectivo + sum(saldos_cuentas.values()),
         "metodos_cerrados": metodos_cerrados,
+        "sesion_id": apertura.id if apertura else None,
+        # Con "Z" explícito: created_at se guarda en UTC y el navegador lo parsea
+        # como hora local si el string no dice nada, corriendo la sesión unas horas.
+        "sesion_inicio": (
+            apertura.created_at.isoformat() + "Z"
+            if apertura and apertura.created_at
+            else None
+        ),
     }
 
 

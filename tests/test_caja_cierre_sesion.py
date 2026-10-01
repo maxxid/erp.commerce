@@ -376,3 +376,29 @@ class TestConciliacionCompleta:
         assert len(resumen["retiros"]) == 1
         assert resumen["saldo_efectivo"] == 15000.0
 
+
+class TestIdentidadDeSesion:
+    """El POS reinicia la vida de los carritos cuando arranca una caja nueva,
+    asi que el estado tiene que decir cual es la sesion vigente."""
+
+    def test_el_estado_expone_la_sesion_abierta(self, db):
+        apertura = _abrir_jornada(db, monto_inicial=20000.0)
+
+        estado = cs.obtener_estado_caja(db)
+
+        assert estado["sesion_id"] == apertura.id
+        assert estado["sesion_inicio"] == apertura.created_at.isoformat() + "Z"
+
+    def test_cerrar_y_reabrir_cambia_la_sesion(self, db):
+        primera = _abrir_jornada(db, monto_inicial=20000.0)
+        user_id = db.query(Usuario).first().id
+
+        cs.cerrar_todo(db, user_id, "Cierre de prueba")
+        segunda = _abrir_jornada(db, monto_inicial=30000.0)
+
+        estado = cs.obtener_estado_caja(db)
+        assert estado["sesion_id"] == segunda.id != primera.id
+
+    def test_sin_caja_abierta_no_hay_sesion(self, db):
+        assert cs.obtener_estado_caja(db)["sesion_id"] is None
+

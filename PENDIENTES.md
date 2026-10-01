@@ -409,6 +409,14 @@ Además, dos guards defensivos: `_clean_name` y `_map_categoria` reventaban con 
 
 _(Código pusheado, falta probar end-to-end en navegador — sesión 10/08/2026)_
 
+**3 bugs del POS/Productos reportados por el usuario** (01/10/2026):
+- [ ] **POS → Carritos**: abrir el desplegable de "Carritos abiertos" → el panel se ve **completo**, saliéndose del card (antes `overflow-hidden` lo cortaba)
+- [ ] Con un carrito abierto de ayer, **abrir caja hoy** → el carrito deja de decir "hace 38h" y arranca su reloj con la caja nueva (y no queda marcado como sospechoso de una)
+- [ ] Recargar el POS sin cambiar de caja → las antigüedades **no** se reinician (la sesión se recuerda en `localStorage`)
+- [ ] **Productos → Editar un fraccionado (Mignon)** → desactivar "Controlar stock" → Guardar: se guarda y **el código de barras no cambia** (antes se regeneraba `GEN-XXXX` y reventaba con 500)
+- [ ] Un producto con código `*MANUAL*` conserva ese código al editarlo; si se borra el campo, el sistema le asigna uno `MAN-…` y lo dice
+- [ ] Forzar un código duplicado → el error es "Ya existe otro producto con el código …" (409), no "Internal Server Error"
+
 **Carritos por defecto + atajo "+" + aviso en cierre** (29/09/2026):
 - [ ] En **Ajustes → Carritos del POS** agregar "Mostrador", "Mesa 1" y "Mesa 2", Guardar, y abrir el POS: los tres existen (si ya había carritos, se suman sin duplicar)
 - [ ] En el POS, borrar un default y volver a entrar a la tab → reaparece; renombrarlo y reentrar → reaparece con el nombre de Ajustes
