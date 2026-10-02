@@ -3,6 +3,18 @@ export function formatCurrency(v) {
   return '$ ' + Number(v).toLocaleString('es-AR', { minimumFractionDigits: 2 })
 }
 
+// Versión corta para los números que van arriba de una barra del dashboard:
+// con "$ 123.456,00" los rótulos se pisan entre sí. Sin decimales porque en
+// una barra la precisión al centavo no dice nada.
+export function formatCurrencyShort(v) {
+  const n = Number(v) || 0
+  const abs = Math.abs(n)
+  const signo = n < 0 ? '-' : ''
+  if (abs >= 1000000) return signo + '$ ' + (abs / 1000000).toLocaleString('es-AR', { maximumFractionDigits: 1 }) + 'M'
+  if (abs >= 1000) return signo + '$ ' + (abs / 1000).toLocaleString('es-AR', { maximumFractionDigits: 1 }) + 'k'
+  return signo + '$ ' + abs.toLocaleString('es-AR', { maximumFractionDigits: 0 })
+}
+
 export function formatDateShort(dateStr) {
   if (!dateStr) return '\u2014'
   const d = new Date(dateStr)

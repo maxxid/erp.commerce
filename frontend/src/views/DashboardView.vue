@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { formatCurrency as fc } from '@/composables/useUtils'
+import { formatCurrency as fc, formatCurrencyShort as fcCorto } from '@/composables/useUtils'
 import api from '@/services/api'
 import KpiCard from '@/components/ui/KpiCard.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
@@ -60,6 +60,10 @@ const RANGOS = [
   { value: 'semana_anterior', label: 'Semana pasada' },
   { value: 'mes', label: 'Este mes' },
   { value: 'mes_anterior', label: 'Mes pasado' },
+  // Los mismos dos meses pero agrupados por día de la semana: 7 barras que
+  // dicen qué día se mueve más, que con 4 semanas promediadas no se ve.
+  { value: 'mes_por_dia', label: 'Este mes · por día' },
+  { value: 'mes_anterior_por_dia', label: 'Mes pasado · por día' },
 ]
 const tendLabels = computed(() => tendData.value?.labels || [])
 const tendVals = computed(() => tendData.value?.valores || [])
@@ -408,7 +412,7 @@ function buildLoteAlerts() {
             <BaseBadge variant="brand" size="xs">{{ fc(tendData?.total || 0) }} total</BaseBadge>
             <select
               v-model="tendPeriodo"
-              class="text-[11px] font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-2 py-1.5 focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+              class="text-[11px] font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-2 py-1.5 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 max-w-[150px]"
               @change="loadTendencia"
             >
               <option v-for="r in RANGOS" :key="r.value" :value="r.value">{{ r.label }}</option>
@@ -442,8 +446,12 @@ function buildLoteAlerts() {
           <div
             v-for="(v, i) in tendVals"
             :key="i"
-            class="flex-1 flex flex-col items-center gap-2 group min-w-0 h-full"
+            class="flex-1 flex flex-col items-center gap-1 group min-w-0 h-full"
           >
+            <span
+              class="text-[9px] font-semibold text-slate-500 dark:text-slate-400 tabular-nums truncate w-full text-center leading-none"
+              :title="fc(v)"
+            >{{ fcCorto(v) }}</span>
             <div class="w-full flex-1 min-h-0 bg-slate-100 dark:bg-slate-800 rounded-t-lg relative overflow-hidden">
               <div
                 class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-brand-600 to-brand-400 rounded-t-lg transition-all duration-500 ease-out-expo group-hover:from-brand-500 group-hover:to-brand-300"
@@ -491,6 +499,10 @@ function buildLoteAlerts() {
           :key="h.label"
           class="flex-1 flex flex-col items-center gap-1 group min-w-0 h-full"
         >
+          <span
+            class="text-[9px] font-semibold text-slate-500 dark:text-slate-400 tabular-nums truncate w-full text-center leading-none"
+            :title="fc(h.valor)"
+          >{{ fcCorto(h.valor) }}</span>
           <div class="w-full flex-1 min-h-0 bg-slate-100 dark:bg-slate-800 rounded-t-sm relative overflow-hidden">
             <div
               class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-emerald-500 to-emerald-300 rounded-t-sm transition-all duration-500 ease-out-expo group-hover:from-emerald-400 group-hover:to-emerald-200"

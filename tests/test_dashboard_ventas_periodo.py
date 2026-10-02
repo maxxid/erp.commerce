@@ -200,14 +200,27 @@ class TestVentasPeriodo:
         u = Sembrador(db)
         res = _res(db, u.user, "7dias")
         # Último bucket = hoy (martes 29), primero = miércoles 23.
-        assert res["labels"][-1] == "Tue 29"
-        assert res["labels"][0] == "Wed 23"
+        assert res["labels"][-1] == "Mar 29"
+        assert res["labels"][0] == "Mie 23"
 
     def test_semana_actual_empieza_el_lunes(self, db):
         u = Sembrador(db)
         res = _res(db, u.user, "semana")
-        assert res["labels"][0] == "Mon 28"
-        assert res["labels"][-1] == "Sun 04"
+        assert res["labels"][0] == "Lun 28"
+        assert res["labels"][-1] == "Dom 04"
+
+    def test_los_rotulos_no_dependen_del_locale_del_servidor(self, db):
+        """strftime("%a") devuelve "Fri" en un server con locale inglés.
+
+        Va a mano a propósito: si algún día se vuelve a usar %a, este test falla
+        en vez de mandar "Fri 25" al frontend.
+        """
+        res = _res(db, Sembrador(db).user, "7dias")
+        assert all(
+            any(d in lab for d in ("Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom"))
+            for lab in res["labels"]
+        )
+        assert not any(lab.startswith(("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")) for lab in res["labels"])
 
     def test_semana_y_semana_anterior_no_se_mezclan(self, db):
         u = Sembrador(db)
@@ -241,6 +254,52 @@ class TestVentasPeriodo:
         u.vender(db, datetime(2026, 9, 10, 15, 0, tzinfo=UTC), 700.0)
         assert _res(db, u.user, "mes")["total"] == 700.0
         assert _res(db, u.user, "mes_anterior")["total"] == 500.0
+
+    def test_mes_por_dia_suma_por_dia_de_la_semana(self, db):
+        """El rango nuevo: 7 barras, una por día de la semana, sumando el mes.
+
+        Es lo que pedía "ver qué día hay más movimiento": con 30 barras finas no
+        se ve el patrón.
+        """
+        u = Sembrador(db)
+        # Dos lunes de septiembre (7 y 14), un martes y un miércoles.
+        u.vender(db, datetime(2026, 9, 7, 15, 0, tzinfo=UTC), 1000.0)
+        u.vender(db, datetime(2026, 9, 14, 15, 0, tzinfo=UTC), 2000.0)
+        u.vender(db, datetime(2026, 9, 15, 15, 0, tzinfo=UTC), 500.0)
+        u.vender(db, datetime(2026, 9, 16, 15, 0, tzinfo=UTC), 300.0)
+
+        res = _res(db, u.user, "mes_por_dia")
+        assert res["granularidad"] == "dia_semana"
+        assert res["labels"] == ["Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom"]
+        assert res["valores"][0] == 3000.0   # lunes, dos ventas
+        assert res["valores"][1] == 500.0
+        assert res["valores"][2] == 300.0
+        assert res["total"] == 3800.0
+
+    def test_mes_anterior_por_dia_no_toma_ventas_del_mes_actual(self, db):
+        u = Sembrador(db)
+        u.vender(db, datetime(2026, 8, 10, 15, 0, tzinfo=UTC), 800.0)   # lunes
+        u.vender(db, datetime(2026, 9, 7, 15, 0, tzinfo=UTC), 4000.0)    # lunes
+        res = _res(db, u.user, "mes_anterior_por_dia")
+        assert res["total"] == 800.0
+        assert res["valores"][0] == 800.0
+        assert res["desde"] == "01/08"
+        assert res["hasta"] == "31/08"
+
+    def test_los_cuatro_rangos_de_mensual_no_se_pisan(self, db):
+        u = Sembrador(db)
+        u.vender(db, datetime(2026, 9, 10, 15, 0, tzinfo=UTC), 700.0)
+        u.vender(db, datetime(2026, 8, 10, 15, 0, tzinfo=UTC), 500.0)
+        # El agrupado y el por-día cubren el mismo período: mismo total.
+        assert _res(db, u.user, "mes")["total"] == 700.0
+        assert _res(db, u.user, "mes_por_dia")["total"] == 700.0
+        assert _res(db, u.user, "mes_anterior")["total"] == 500.0
+        assert _res(db, u.user, "mes_anterior_por_dia")["total"] == 500.0
+
+    def test_periodo_invalido_400(self, db):
+        with pytest.raises(HTTPException) as ei:
+            _res(db, Sembrador(db).user, "mes_por_ano")
+        assert ei.value.status_code == 400
 
     def test_ventas_anuladas_no_cuentan(self, db):
         u = Sembrador(db)

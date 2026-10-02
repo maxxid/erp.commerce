@@ -34,6 +34,17 @@ def _local(d):
     return (d or HOY()).astimezone(TZ_AR)
 
 
+def _local_venta(fecha):
+    """Fecha local de una venta, partiendo de una guardada en UTC.
+
+    Misma conversión que _hora_local_venta(); esta devuelve la fecha entera, que
+    es lo que hace falta para armar el bucket por día de la semana.
+    """
+    if fecha.tzinfo is None:
+        fecha = fecha.replace(tzinfo=timezone.utc)
+    return fecha.astimezone(TZ_AR)
+
+
 def _hora_local_venta(fecha):
     """Hora local (0-23) de una venta, partiendo de un fecha guardada en UTC.
 
@@ -113,7 +124,13 @@ def _ventana(periodo):
     return desde, _add_meses(desde, 1)
 
 
-PERIODOS_VENTAS = ("7dias", "semana", "semana_anterior", "mes", "mes_anterior")
+PERIODOS_VENTAS = (
+    "7dias", "semana", "semana_anterior",
+    "mes", "mes_anterior", "mes_por_dia", "mes_anterior_por_dia",
+)
+# Rótulos de día en español. strftime("%a") devuelve el día según el locale del
+# proceso, que en el server es inglés ("Fri 25"), así que no sirve.
+DIAS_ES = ("Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom")
 # "hoy" no está en PERIODOS_VENTAS porque la serie por día no lo distingue de
 # 7dias, pero el gráfico por hora sí lo necesita.
 PERIODOS_HORA = ("hoy",) + PERIODOS_VENTAS
@@ -141,8 +158,14 @@ def _ventana_ventas(periodo):
     if periodo == "mes":
         desde = _inicio_mes()
         return desde, _add_meses(desde, 1), "semana"
+    if periodo == "mes_anterior":
+        hasta = _inicio_mes()
+        return _add_meses(hasta, -1), hasta, "semana"
+    if periodo == "mes_por_dia":
+        desde = _inicio_mes()
+        return desde, _add_meses(desde, 1), "dia_semana"
     hasta = _inicio_mes()
-    return _add_meses(hasta, -1), hasta, "semana"
+    return _add_meses(hasta, -1), hasta, "dia_semana"
 
 
 def _buckets(desde, hasta, granularidad):
@@ -153,7 +176,7 @@ def _buckets(desde, hasta, granularidad):
     while cursor < hasta:
         if granularidad == "dia":
             fin = cursor + timedelta(days=1)
-            label = cursor.strftime("%a %d")
+            label = f"{DIAS_ES[cursor.weekday()]} {cursor.day:02d}"
         else:
             fin = min(cursor + timedelta(days=7), hasta)
             label = f"S{n} {cursor.strftime('%d/%m')}"
@@ -161,6 +184,28 @@ def _buckets(desde, hasta, granularidad):
         out.append((cursor, fin, label))
         cursor = fin
     return out
+
+
+def _ventas_por_dia_semana(db, desde, hasta):
+    """Suma de ventas por día de la semana (Lun..Dom) dentro del rango.
+
+    Para ver qué día de la semana se vende más, no sirve el día del mes: con 30
+    barras finas no se ve el patrón.
+
+    Ojo: no se puede hacer con 7 ventanas semanales, porque se solapan y cada
+    venta contaría hasta 4 veces. Se agrupa en memoria con el weekday de la
+    fecha local de cada venta.
+    """
+    filas = (
+        db.query(Venta.fecha, Venta.total)
+        .filter(Venta.estado == "confirmada", Venta.fecha >= desde, Venta.fecha < hasta)
+        .all()
+    )
+    valores = [0.0] * 7
+    for fecha, total in filas:
+        if fecha:
+            valores[_local_venta(fecha).weekday()] += total
+    return [DIAS_ES[i] for i in range(7)], [round(v, 2) for v in valores]
 
 
 def _rutas_categorias(db):
@@ -478,13 +523,17 @@ def ventas_periodo(
         raise HTTPException(status_code=400, detail=f"periodo inválido. Opciones: {', '.join(PERIODOS_VENTAS)}")
 
     desde, hasta, granularidad = _ventana_ventas(periodo)
-    labels, valores = [], []
-    for ini, fin, label in _buckets(desde, hasta, granularidad):
-        total = db.query(func.coalesce(func.sum(Venta.total), 0)).filter(
-            Venta.estado == "confirmada", Venta.fecha >= ini, Venta.fecha < fin
-        ).scalar() or 0
-        labels.append(label)
-        valores.append(round(float(total), 2))
+    if granularidad == "dia_semana":
+        # No son tramos con una consulta cada uno: se agrupa en memoria.
+        labels, valores = _ventas_por_dia_semana(db, desde, hasta)
+    else:
+        labels, valores = [], []
+        for ini, fin, label in _buckets(desde, hasta, granularidad):
+            total = db.query(func.coalesce(func.sum(Venta.total), 0)).filter(
+                Venta.estado == "confirmada", Venta.fecha >= ini, Venta.fecha < fin
+            ).scalar() or 0
+            labels.append(label)
+            valores.append(round(float(total), 2))
 
     return RespuestaData(data={
         "periodo": periodo,
