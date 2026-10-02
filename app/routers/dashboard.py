@@ -109,6 +109,9 @@ def _ventana(periodo):
 
 
 PERIODOS_VENTAS = ("7dias", "semana", "semana_anterior", "mes", "mes_anterior")
+# "hoy" no está en PERIODOS_VENTAS porque la serie por día no lo distingue de
+# 7dias, pero el gráfico por hora sí lo necesita.
+PERIODOS_HORA = ("hoy",) + PERIODOS_VENTAS
 
 
 def _ventana_ventas(periodo):
@@ -118,6 +121,9 @@ def _ventana_ventas(periodo):
     en media pantalla quedan de 4px y no se leen. La granularidad se devuelve
     para que el front rotule el eje y no haya que adivinarla.
     """
+    if periodo == "hoy":
+        hoy = _inicio_dia()
+        return hoy, hoy + timedelta(days=1), "hora"
     if periodo == "7dias":
         hoy = _inicio_dia()
         return hoy - timedelta(days=6), hoy + timedelta(days=1), "dia"
@@ -275,12 +281,11 @@ def resumen(db: Session = Depends(get_db), user: Usuario = Depends(get_current_u
         dias_labels.append(dia.strftime("%a %d"))
         dias_valores.append(float(total_dia))
 
-    # Picos por hora (hoy)
-    # Ojo con la hora: venta.fecha es UTC (así se guarda) y el local abre a las 9,
-    # así que con v.fecha.hour la venta de las 9 local caía en el horario 12 y
-    # el gráfico mostraba el día corrido tres horas. Va hora local, como el resto
-    # del dashboard, que ya trabaja en UTC-3.
-    horas = [0] * 24
+    # Picos por hora (hoy). El dashboard ya consume /por-hora, que además deja
+    # elegir el rango; esto se queda por compatibilidad con /resumen.
+    # Hora local, no v.fecha.hour: la columna guarda UTC y el local abre a las 9,
+    # así que la hora UTC corría el gráfico tres horas.
+    horas = [0.0] * 24
     for v in ventas_hoy_rows:
         if v.fecha:
             horas[_hora_local_venta(v.fecha)] += v.total
@@ -480,6 +485,42 @@ def ventas_periodo(
         "labels": labels,
         "valores": valores,
         "total": round(sum(valores), 2),
+    })
+
+
+@router.get("/por-hora", response_model=RespuestaData)
+def ventas_por_hora(
+    periodo: str = Query("hoy", description=f"Una de: {', '.join(PERIODOS_HORA)}"),
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """Distribución de ventas por hora del día en un rango.
+
+    El de /resumen está clavado en "hoy". Mirar solo el día de hoy esconde el
+    patrón real del local: si siempre se vende entre 9 y 13, la hora promedio
+    cacarea y el resto parece que no vende nada.
+    """
+    if periodo not in PERIODOS_HORA:
+        raise HTTPException(status_code=400, detail=f"periodo inválido. Opciones: {', '.join(PERIODOS_HORA)}")
+
+    desde, hasta, _ = _ventana_ventas(periodo)
+    filas = (
+        db.query(Venta.fecha, Venta.total)
+        .filter(Venta.estado == "confirmada", Venta.fecha >= desde, Venta.fecha < hasta)
+        .all()
+    )
+
+    horas = [0.0] * 24
+    for fecha, total in filas:
+        if fecha:
+            horas[_hora_local_venta(fecha)] += total
+
+    return RespuestaData(data={
+        "periodo": periodo,
+        "labels": [f"{h:02d}:00" for h in range(24)],
+        "valores": [round(h, 2) for h in horas],
+        "total": round(sum(horas), 2),
+        "horas_con_venta": sum(1 for h in horas if h > 0),
     })
 
 

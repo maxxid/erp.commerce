@@ -31,8 +31,8 @@ const mockData = {
   margen_pct_hoy: 36, margen_pct_mes: 36,
   margen_bruto_semana: 24000, margen_bruto_trimestre: 65000,
   margen_pct_semana: 34, margen_pct_trimestre: 33,
-  // Mismo formato de rótulos que manda el backend, así el fallback se ve igual
-  ventas_por_hora: { valores: [0,0,0,2,1,0,3,5,8,6,4,2,0,0,1,3,5,4,2,1,0,0,0,0], labels: Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0') + ':00') },
+  // ventas_por_hora no va acá: el gráfico por hora tiene su propio endpoint con
+  // rango propio, así que el fallback no lo necesita.
   top_productos_mes: [
     { id: 1, nombre: 'Coca Cola 2.25L', cantidad_vendida: 24, total_vendido: 60000 },
     { id: 2, nombre: 'Yerba Mate Playadito 1kg', cantidad_vendida: 15, total_vendido: 48000 },
@@ -64,11 +64,21 @@ const RANGOS = [
 const tendLabels = computed(() => tendData.value?.labels || [])
 const tendVals = computed(() => tendData.value?.valores || [])
 
+// Para los textos de estado vacío: nombrar el rango elegido en vez de decir
+// "sin datos" a secas, que no dice si hay que cambiar el filtro o no.
+function rangoActual(cual) {
+  const lista = cual === 'hora' ? RANGOS_HORA : RANGOS
+  const valor = cual === 'hora' ? horaPeriodo.value : tendPeriodo.value
+  return lista.find((r) => r.value === valor) || lista[0]
+}
+
 async function loadTendencia() {
   tendLoading.value = true
   try {
+    // Ojo: api.get(path, params) recibe los params sueltos, no un { params: {...} }.
+    // Envueltos salían como ?params[periodo]=7dias y el backend los ignoraba.
     tendData.value = await api.get('/api/dashboard/ventas-periodo', {
-      params: { periodo: tendPeriodo.value },
+      periodo: tendPeriodo.value,
     })
   } catch {
     tendData.value = null
@@ -80,8 +90,8 @@ async function loadTendencia() {
 // Sólo las horas con venta: el backend manda 24 y casi todas valen 0, así que
 // mostrar las 24 deja las barras finísimas y los rótulos ilegibles.
 const horasConVenta = computed(() => {
-  const labels = data.value.ventas_por_hora?.labels || []
-  const valores = data.value.ventas_por_hora?.valores || []
+  const labels = horaData.value?.labels || []
+  const valores = horaData.value?.valores || []
   return labels
     .map((l, i) => ({ label: l, valor: valores[i] || 0 }))
     .filter((h) => h.valor > 0)
@@ -91,6 +101,33 @@ const maxHour = computed(() => {
   const vals = horasConVenta.value.map((h) => h.valor)
   return Math.max(...vals, 1)
 })
+
+// --- Ventas por hora ---
+// Estaba clavado en "hoy" dentro de /resumen. Mirar un solo día esconde el
+// patrón del local: si siempre se vende de 9 a 13, la hora promedio cacarea y
+// el resto del día parece que no vende nada.
+const horaPeriodo = ref('hoy')
+const horaData = ref(null)
+const horaLoading = ref(false)
+const RANGOS_HORA = [
+  { value: 'hoy', label: 'Hoy' },
+  { value: '7dias', label: '7 días' },
+  { value: 'semana', label: 'Esta semana' },
+  { value: 'semana_anterior', label: 'Semana pasada' },
+  { value: 'mes', label: 'Este mes' },
+  { value: 'mes_anterior', label: 'Mes pasado' },
+]
+
+async function loadHoras() {
+  horaLoading.value = true
+  try {
+    horaData.value = await api.get('/api/dashboard/por-hora', { periodo: horaPeriodo.value })
+  } catch {
+    horaData.value = null
+  } finally {
+    horaLoading.value = false
+  }
+}
 
 // --- Ventas por categoría ---
 const catMetrica = ref('importe')
@@ -136,7 +173,9 @@ async function loadCategorias() {
   catLoading.value = true
   try {
     const resp = await api.get('/api/dashboard/por-categoria', {
-      params: { metrica: catMetrica.value, periodo: catPeriodo.value, limite: 10 },
+      metrica: catMetrica.value,
+      periodo: catPeriodo.value,
+      limite: 10,
     })
     catData.value = resp
   } catch {
@@ -181,12 +220,10 @@ async function toggleCategoria(fila) {
   catAbiertas.value[fila.clave] = 'cargando'
   try {
     const resp = await api.get('/api/dashboard/por-categoria/productos', {
-      params: {
-        categoria: fila.clave,
-        periodo: catPeriodo.value,
-        metrica: catMetrica.value,
-        limite: 15,
-      },
+      categoria: fila.clave,
+      periodo: catPeriodo.value,
+      metrica: catMetrica.value,
+      limite: 15,
     })
     catProductos.value[fila.clave] = resp.productos || []
     catAbiertas.value[fila.clave] = 'listo'
@@ -228,10 +265,11 @@ async function load() {
   } finally {
     loading.value = false
   }
-  // El gráfico de categorías es independiente: si este endpoint falla, el resto
-  // del dashboard sigue funcionando igual.
+  // Los tres gráficos son independientes: si uno de estos endpoints falla, el
+  // resto del dashboard sigue funcionando igual.
   loadCategorias()
   loadTendencia()
+  loadHoras()
 }
 
 // Alturas de skeleton estables: Math.random() en el template se re-evalúa en
@@ -390,8 +428,8 @@ function buildLoteAlerts() {
         <EmptyState
           v-else-if="tendSinDatos"
           icon="fa-calendar-xmark"
-          title="Sin ventas en el período"
-          text="Probá con otro rango: no hay ventas confirmadas para estas fechas."
+        title="Sin ventas en el período"
+        :text="`No hay ventas confirmadas para ${rangoActual('venta').label.toLowerCase()}. Probá con un rango más amplio.`"
           compact
         />
         <div v-else class="h-40 flex items-end gap-3">
@@ -414,22 +452,31 @@ function buildLoteAlerts() {
         </div>
       </BaseCard>
 
-      <BaseCard padding="lg">
-        <div class="flex items-center justify-between mb-5">
-          <h3 class="font-bold text-slate-900 dark:text-white text-sm">Picos por Hora (Hoy)</h3>
-          <BaseBadge variant="success" size="xs">{{ horasConVenta.length || 0 }} hs</BaseBadge>
-        </div>
-        <p class="text-[10px] text-slate-400 dark:text-slate-500 -mt-3 mb-3">Horario local</p>
-        <div v-if="loading" class="h-40 flex items-end gap-1">
-          <BaseSkeleton v-for="n in 12" :key="n" class="flex-1 rounded-t-sm" :style="{ height: skeletonHeight(n, 50) }" />
-        </div>
-        <EmptyState
-          v-else-if="!horasConVenta.length"
-          icon="fa-clock"
-          title="Sin ventas hoy"
-          text="Todavía no hay ventas registradas para graficar por hora."
-          compact
-        />
+    <BaseCard padding="lg">
+      <div class="flex items-center justify-between mb-5">
+        <h3 class="font-bold text-slate-900 dark:text-white text-sm">Picos por Hora</h3>
+        <BaseBadge variant="success" size="xs">{{ horasConVenta.length || 0 }} hs</BaseBadge>
+      </div>
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        <span class="text-[10px] text-slate-400 dark:text-slate-500">Horario local</span>
+        <select
+          :value="horaPeriodo"
+          class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-medium text-slate-700 dark:text-slate-200 focus:ring-brand-500"
+          @change="horaPeriodo = $event.target.value; loadHoras()"
+        >
+          <option v-for="r in RANGOS_HORA" :key="r.value" :value="r.value">{{ r.label }}</option>
+        </select>
+      </div>
+      <div v-if="loading || horaLoading" class="h-40 flex items-end gap-1">
+        <BaseSkeleton v-for="n in 12" :key="n" class="flex-1 rounded-t-sm" :style="{ height: skeletonHeight(n, 50) }" />
+      </div>
+      <EmptyState
+        v-else-if="!horasConVenta.length"
+        icon="fa-clock"
+        title="Sin ventas en el período"
+        :text="`No hay ventas registradas para ${rangoActual('hora').label.toLowerCase()}. Probá con un rango más amplio.`"
+        compact
+      />
         <div v-else class="h-40 flex items-end gap-1">
           <div
             v-for="h in horasConVenta"

@@ -68,6 +68,83 @@ def _res(db, user, periodo):
     return dash.ventas_periodo(db=db, user=user, periodo=periodo).data
 
 
+class TestVentasPorHora:
+    """/por-hora: el gráfico por hora tenía el rango clavado en "hoy"."""
+
+    def _res(self, db, user, periodo):
+        return dash.ventas_por_hora(db=db, user=user, periodo=periodo).data
+
+    def test_hoy_solo_toma_el_dia_de_hoy(self, db):
+        u = Sembrador(db)
+        u.vender(db, datetime(2026, 9, 29, 16, 0, tzinfo=UTC), 5000.0)  # hoy 13:00
+        u.vender(db, datetime(2026, 9, 26, 16, 0, tzinfo=UTC), 9000.0)  # sábado
+        res = self._res(db, u.user, "hoy")
+        assert res["total"] == 5000.0
+        assert res["valores"][13] == 5000.0
+
+    def test_7dias_agrega_los_dias_anteriores(self, db):
+        u = Sembrador(db)
+        u.vender(db, datetime(2026, 9, 29, 16, 0, tzinfo=UTC), 5000.0)
+        u.vender(db, datetime(2026, 9, 26, 16, 0, tzinfo=UTC), 9000.0)
+        res = self._res(db, u.user, "7dias")
+        assert res["total"] == 14000.0
+        assert res["valores"][13] == 14000.0  # mismo bucket horario, dos días
+
+    def test_solo_ventas_confirmadas(self, db):
+        u = Sembrador(db)
+        u.vender(db, datetime(2026, 9, 29, 16, 0, tzinfo=UTC), 5000.0)
+        anulada = Venta(
+            numero=f"V-AN-{uuid.uuid4().hex[:6]}", usuario_id=u.user.id,
+            sucursal_id=1, estado="anulada", subtotal=7000, total=7000,
+            fecha=datetime(2026, 9, 29, 18, 0, tzinfo=UTC),
+        )
+        db.add(anulada)
+        db.commit()
+        res = self._res(db, u.user, "hoy")
+        assert res["total"] == 5000.0
+
+    def test_devuelve_las_24_horas_para_el_eje(self, db):
+        res = self._res(db, Sembrador(db).user, "hoy")
+        assert len(res["labels"]) == 24
+        assert len(res["valores"]) == 24
+        assert res["labels"][0] == "00:00"
+        assert res["labels"][23] == "23:00"
+
+    def test_horas_con_venta_no_cuenta_las_vacias(self, db):
+        u = Sembrador(db)
+        u.vender(db, datetime(2026, 9, 29, 16, 0, tzinfo=UTC), 5000.0)
+        u.vender(db, datetime(2026, 9, 29, 20, 0, tzinfo=UTC), 1000.0)
+        res = self._res(db, u.user, "hoy")
+        assert res["horas_con_venta"] == 2
+
+    def test_hora_local_no_utc(self, db):
+        u = Sembrador(db)
+        u.vender(db, datetime(2026, 9, 29, 16, 0, tzinfo=UTC), 5000.0)  # 13:00 local
+        res = self._res(db, u.user, "hoy")
+        assert res["valores"][13] == 5000.0
+        assert res["valores"][16] == 0.0
+
+    def test_sin_ventas_devuelve_ceros_y_no_falla(self, db):
+        res = self._res(db, Sembrador(db).user, "mes")
+        assert res["total"] == 0.0
+        assert res["horas_con_venta"] == 0
+        assert len(res["valores"]) == 24
+
+    def test_periodo_invalido_400(self, db):
+        with pytest.raises(HTTPException) as ei:
+            self._res(db, Sembrador(db).user, "trimestre")
+        assert ei.value.status_code == 400
+
+    def test_hoy_no_es_lo_mismo_que_mes(self, db):
+        # Regresión: "hoy" caía en el else de _ventana_ventas y devolvía el mes
+        # anterior, así que el combobox "Hoy" mentía.
+        u = Sembrador(db)
+        u.vender(db, datetime(2026, 9, 29, 16, 0, tzinfo=UTC), 5000.0)
+        u.vender(db, datetime(2026, 9, 10, 16, 0, tzinfo=UTC), 3000.0)
+        assert self._res(db, u.user, "hoy")["total"] == 5000.0
+        assert self._res(db, u.user, "mes")["total"] == 8000.0
+
+
 class TestResumenPicosPorHora:
     """El gráfico por hora usaba v.fecha.hour, que es la hora UTC.
 
