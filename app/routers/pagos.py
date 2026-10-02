@@ -29,6 +29,26 @@ class CrearOrdenInteroperableRequest(BaseModel):
     monto: Optional[float] = None
 
 
+class QrPruebaRequest(BaseModel):
+    """Laboratorio de QR: genera payloads para probar contra una billetera real.
+
+    Todo es opcional: si viene vacío se toma lo configurado en Ajustes, así se
+    puede probar sin tocar la configuración de producción.
+    """
+
+    cuit: Optional[str] = None
+    cuenta: Optional[str] = None
+    nombre: Optional[str] = None
+    ciudad: Optional[str] = None
+    mcc: Optional[str] = None
+    monto: float = 100.0
+    dinamico: bool = True
+
+
+class QrAnalizarRequest(BaseModel):
+    payload: str
+
+
 class WebhookPayload(BaseModel):
     action: Optional[str] = None
     data: Optional[dict] = None
@@ -159,6 +179,179 @@ def crear_orden_interoperable(
         "venta_id": venta.id,
         "venta_numero": venta.numero,
         "monto": monto,
+    }
+
+
+def _describir_payload(payload: str) -> list:
+    """Desarma el TLV del payload para poder mostrarlo en el laboratorio."""
+    campos = []
+    i = 0
+    while i + 4 <= len(payload):
+        tag = payload[i : i + 2]
+        if not tag.isdigit():
+            break
+        largo = int(payload[i + 2 : i + 4])
+        valor = payload[i + 4 : i + 4 + largo]
+        if len(valor) != largo:
+            break
+        campos.append({"tag": tag, "largo": largo, "valor": valor})
+        i += 4 + largo
+    return campos
+
+
+@router.post("/qr-interop/analizar")
+def analizar_qr_interop(
+    req: QrAnalizarRequest,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin")),
+):
+    """Desarma un payload de QR ajeno y lo compara contra el estándar local.
+
+    Sirve para ver cómo arma el QR el banco, un PSP u otro ERP, y decidir si la
+    diferencia está en el estándar o en algún campo que el nuestro no manda.
+    """
+    from app.services import qr_interop_service
+
+    payload = (req.payload or "").strip()
+    if not payload:
+        raise HTTPException(status_code=400, detail="Pegá un payload de QR")
+
+    campos = _describir_payload(payload)
+    if not campos:
+        raise HTTPException(
+            status_code=400,
+            detail="No se pudo leer como TLV. Revisá que no tenga espacios ni saltos de línea.",
+        )
+
+    cubierto = sum(4 + c["largo"] for c in campos)
+
+    # El CRC se calcula sobre todo lo anterior al campo 63, así que primero hay
+    # que ubicar dónde arranca ese campo.
+    desplazamiento = 0
+    inicio_crc = None
+    largo_crc = 0
+    for c in campos:
+        if c["tag"] == "63":
+            inicio_crc = desplazamiento
+            largo_crc = c["largo"]
+            break
+        desplazamiento += 4 + c["largo"]
+
+    if inicio_crc is None:
+        cuerpo = payload
+        crc_declarado = ""
+    else:
+        # El CRC cubre el payload entero, incluido el identificador y el largo
+        # del propio campo 63. Por eso el cuerpo llega hasta el final del 6304.
+        cuerpo = payload[: inicio_crc + 4]
+        crc_declarado = payload[inicio_crc + 4 : inicio_crc + 4 + largo_crc]
+
+    crc_ok = bool(crc_declarado) and qr_interop_service.crc16_ccitt(cuerpo) == crc_declarado
+
+    por_tag = {c["tag"]: c["valor"] for c in campos}
+    comentarios = []
+
+    if not crc_ok:
+        comentarios.append(
+            "El CRC no cierra: el payload cambió de largo o se copió con caracteres de más."
+        )
+    if cubierto != len(payload):
+        comentarios.append(
+            f"Hay {len(payload) - cubierto} caracteres después del último campo."
+        )
+    if "00" in por_tag and por_tag["00"] != "01":
+        comentarios.append(f"Indicador de formato inesperado: {por_tag['00']!r} (esperado '01').")
+    if "01" in por_tag and por_tag["01"] not in ("11", "12"):
+        comentarios.append(
+            f"Punto de iniciación inesperado: {por_tag['01']!r} (esperado '11' estático o '12' dinámico)."
+        )
+    if "50" not in por_tag:
+        comentarios.append("No trae la CUIT del comercio en el campo 50 (obligatorio por la Com. A 6425).")
+    if "54" in por_tag:
+        comentarios.append(f"Lleva importe en el campo 54: {por_tag['54']}.")
+    else:
+        comentarios.append("No lleva importe: la billetera le pregunta el monto al cliente.")
+    if "51" in por_tag:
+        cuenta = por_tag["51"]
+        if cuenta.startswith("00"):
+            cuenta = cuenta[2 + 2 :]
+        if cuenta.isdigit() and len(cuenta) == 22:
+            if qr_interop_service.cbu_es_valida(cuenta):
+                comentarios.append("El campo 51 trae una CBU con dígitos verificadores correctos.")
+            else:
+                comentarios.append("El campo 51 trae una CBU de 22 dígitos que no cierra sus verificadores.")
+        else:
+            comentarios.append(
+                "El campo 51 no parece una CBU de 22 dígitos (puede ser un alias)."
+            )
+
+    return {
+        "success": True,
+        "payload": payload,
+        "campos": campos,
+        "crc": crc_declarado,
+        "crc_ok": crc_ok,
+        "completo": cubierto == len(payload),
+        "comentarios": comentarios,
+    }
+
+
+@router.post("/qr-interop/laboratorio")
+def laboratorio_qr_interop(
+    req: QrPruebaRequest,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin")),
+):
+    """Genera un QR de prueba y devuelve su payload desarmado.
+
+    Sirve para comparar contra el QR que emite el banco o un PSP, sin tener que
+    deployar: se puede probar cualquier combinación de CBU, MCC, nombre, etc.
+    """
+    from app.services import config_service
+    from app.services import qr_interop_service
+
+    def cfg(campo):
+        """Usa lo que venga en el request y, si falta, lo de Ajustes."""
+        valor = getattr(req, campo)
+        if valor is not None:
+            return valor
+        return config_service.get_config(db, f"qr_interop_{campo}") or ""
+
+    try:
+        payload = qr_interop_service.generar_qr_interoperable(
+            cuit=cfg("cuit"),
+            cuenta=cfg("cuenta"),
+            monto=req.monto,
+            nombre_comercio=cfg("nombre"),
+            ciudad=cfg("ciudad"),
+            dinamico=req.dinamico,
+            mcc=cfg("mcc") or "9700",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    campos = _describir_payload(payload)
+    cuenta = cfg("cuenta").strip()
+
+    avisos = []
+    if cuenta.isdigit() and len(cuenta) == 22:
+        if not qr_interop_service.cbu_es_valida(cuenta):
+            avisos.append("La CBU no cierra sus dígitos verificadores.")
+    elif cuenta:
+        avisos.append(
+            "La cuenta configurada no es una CBU de 22 dígitos (parece un alias). "
+            "Algunas billeteras no resuelven alias desde el QR."
+        )
+
+    return {
+        "success": True,
+        "qr_data": payload,
+        "campos": campos,
+        "crc_ok": qr_interop_service.crc16_ccitt(payload[:-4]) == payload[-4:],
+        "crc": payload[-4:],
+        "dinamico": req.dynamico,
+        "monto": req.monto,
+        "avisos": avisos,
     }
 
 

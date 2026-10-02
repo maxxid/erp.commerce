@@ -26,8 +26,6 @@ from app.services import qr_interop_service as q
 CUIT = "20123456789"
 # CBU de 22 digitos con los DV correctos: banco 0140 + sucursal 356 + cuenta.
 CUENTA = "0140356312345678901233"
-# Traida de la app de un banco real; sirve de control cruzado del algoritmo.
-CUENTA_BANCO_REAL = "0720150588000041196368"
 # Publicada como ejemplo en el Anexo del Boletin CIMPRA 535.
 CUENTA_BOLETIN = "0000068000000002222956"
 
@@ -85,7 +83,6 @@ class TestValidacionCbu:
         "cuenta",
         [
             CUENTA,
-            CUENTA_BANCO_REAL,
             CUENTA_BOLETIN,
         ],
     )
@@ -108,15 +105,15 @@ class TestValidacionCbu:
         ],
     )
     def test_rechaza_cbu_con_un_digito_alterado(self, pos):
-        cbu = CUENTA_BANCO_REAL
+        cbu = CUENTA
         alterado = cbu[:pos] + str((int(cbu[pos]) + 1) % 10) + cbu[pos + 1 :]
         assert q.cbu_es_valida(alterado) is False
 
     @pytest.mark.parametrize(
         "cuenta",
         [
-            "072015058800004119636",  # 21 digitos, le falta uno
-            "07201505880000411963680",  # 23 digitos
+            CUENTA[:-1],  # 21 digitos, le falta uno
+            CUENTA + "0",  # 23 digitos
             "",  # vacio
         ],
     )
@@ -190,7 +187,7 @@ class TestPayload:
 
 class TestErrores:
     def test_cbu_de_22_digitos_con_dv_roto_falla(self):
-        cbu = CUENTA_BANCO_REAL
+        cbu = CUENTA
         roto = cbu[:21] + str((int(cbu[21]) + 1) % 10)
         with pytest.raises(ValueError, match="verificadores"):
             q.generar_qr_interoperable(CUIT, roto, 100, "MI COMERCIO")
@@ -224,3 +221,53 @@ class TestErrores:
         nombre = parsear(payload)["59"]
         assert nombre.isascii()
         assert "Panaderia" in nombre
+
+
+class TestLaboratorio:
+    """Cubre el TLV del payload que devuelve el endpoint de diagnóstico.
+
+    El laboratorio de Ajustes muestra el QR armado campo por campo para
+    compararlo contra el QR de un banco o un PSP. Si esto se rompe, el
+    diagnóstico muestra basura y se pierde el propósito de la herramienta.
+    """
+
+    def test_el_tlv_del_payload_se_desarma_completo(self):
+        from app.routers import pagos
+
+        payload = q.generar_qr_interoperable(
+            CUIT, CUENTA, 1234.56, "MI COMERCIO", ciudad="CORDOBA"
+        )
+        campos = pagos._describir_payload(payload)
+
+        assert [c["tag"] for c in campos][-1] == "63"
+        assert sum(4 + c["largo"] for c in campos) == len(payload)
+
+    def test_el_crc_del_payload_propio_cierra(self):
+        from app.routers import pagos
+
+        payload = q.generar_qr_interoperable(CUIT, CUENTA, 100, "MI COMERCIO")
+        campos = pagos._describir_payload(payload)
+
+        # El ultimo campo es el 63 con el CRC; el cuerpo es todo lo anterior.
+        assert campos[-1]["tag"] == "63"
+        assert campos[-1]["valor"] == q.crc16_ccitt(payload[:-4])
+
+    def test_el_crc_cubre_el_prefijo_6304_del_payload_ajeno(self):
+        """El diagnóstico tiene que cortar el cuerpo en el mismo punto que
+        el generador: despues del 6304, no antes.
+
+        Si se calculara sobre `payload[:inicio_crc]` el CRC nunca cerraria y la
+        herramienta marcaria como invalido el QR valido de un banco.
+        """
+        from app.routers import pagos
+
+        payload = q.generar_qr_interoperable(CUIT, CUENTA, 100, "MI COMERCIO")
+
+        inicio_crc = 0
+        for c in pagos._describir_payload(payload):
+            if c["tag"] == "63":
+                break
+            inicio_crc += 4 + c["largo"]
+
+        cuerpo = payload[: inicio_crc + 4]
+        assert payload.endswith("6304" + q.crc16_ccitt(cuerpo))

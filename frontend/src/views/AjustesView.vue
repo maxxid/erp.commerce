@@ -7,6 +7,7 @@ import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseToggle from '@/components/ui/BaseToggle.vue'
+import LaboratorioQr from '@/components/ajustes/LaboratorioQr.vue'
 
 const toast = useToastStore()
 
@@ -28,6 +29,7 @@ const facturacionExpanded = ref(false)
 const bancariosExpanded = ref(false)
 const mercadopagoExpanded = ref(false)
 const qrInteropExpanded = ref(false)
+const qrLaboratorioExpanded = ref(false)
 const ventasExpanded = ref(false)
 const denominacionesExpanded = ref(false)
 const recargasExpanded = ref(false)
@@ -1249,6 +1251,31 @@ onMounted(async () => {
           </BaseButton>
           <p class="text-[11px] text-slate-400">Los cambios se aplican inmediatamente</p>
         </div>
+      </div>
+    </BaseCard>
+
+    <BaseCard v-if="!loading">
+      <button class="w-full text-left" @click="qrLaboratorioExpanded = !qrLaboratorioExpanded">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <i class="fa-solid fa-flask text-violet-600"></i>
+            Laboratorio de QR
+          </h3>
+          <div class="flex items-center gap-3">
+            <span class="text-xs text-slate-400">Probar billeteras sin deployar</span>
+            <i :class="['fa-solid fa-chevron-down text-xs transition-transform', qrLaboratorioExpanded ? 'rotate-180' : '']"></i>
+          </div>
+        </div>
+      </button>
+
+      <div v-if="qrLaboratorioExpanded" class="mt-4">
+        <LaboratorioQr
+          :cuit="config.qr_interop_cuit"
+          :cuenta="config.qr_interop_cuenta"
+          :nombre="config.qr_interop_nombre"
+          :ciudad="config.qr_interop_ciudad"
+          :mcc="config.qr_interop_mcc"
+        />
       </div>
     </BaseCard>
 
