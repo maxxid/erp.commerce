@@ -24,7 +24,23 @@ from app.services import qr_interop_service as q
 
 
 CUIT = "20123456789"
-CUENTA = "0140356690000000123457"  # CBU de 22 digitos con DV correctos
+# CBU de 22 digitos con los DV correctos: banco 0140 + sucursal 356 + cuenta.
+CUENTA = "0140356312345678901233"
+# Traida de la app de un banco real; sirve de control cruzado del algoritmo.
+CUENTA_BANCO_REAL = "0720150588000041196368"
+# Publicada como ejemplo en el Anexo del Boletin CIMPRA 535.
+CUENTA_BOLETIN = "0000068000000002222956"
+
+
+def armar_cbu(banco, sucursal, cuenta):
+    """Arma una CBU de 22 digitos calculando los dos digitos verificadores."""
+    return (
+        banco
+        + sucursal
+        + str(q._digito_verificador(banco + sucursal, q._PESOS_B1))
+        + cuenta
+        + str(q._digito_verificador(cuenta, q._PESOS_B2))
+    )
 
 
 def parsear(payload):
@@ -68,26 +84,48 @@ class TestValidacionCbu:
     @pytest.mark.parametrize(
         "cuenta",
         [
-            "0140356690000000123457",  # DV correctos
+            CUENTA,
+            CUENTA_BANCO_REAL,
+            CUENTA_BOLETIN,
         ],
     )
     def test_acepta_cbu_con_dv_correctos(self, cuenta):
         assert q.cbu_es_valida(cuenta) is True
 
+    def test_armar_y_validar_es_consistente(self):
+        cbu = armar_cbu("0140", "356", "1234567890123")
+        assert len(cbu) == 22
+        assert q.cbu_es_valida(cbu) is True
+
+    @pytest.mark.parametrize(
+        "pos",
+        [
+            0,   # banco
+            5,   # sucursal
+            6,   # dv1
+            9,   # cuenta
+            21,  # dv2
+        ],
+    )
+    def test_rechaza_cbu_con_un_digito_alterado(self, pos):
+        cbu = CUENTA_BANCO_REAL
+        alterado = cbu[:pos] + str((int(cbu[pos]) + 1) % 10) + cbu[pos + 1 :]
+        assert q.cbu_es_valida(alterado) is False
+
     @pytest.mark.parametrize(
         "cuenta",
         [
-            "0140356690000000123458",  # DV2 +1
-            "0140356690000000123447",  # DV2 desfasado
-            "0140356680000000123457",  # DV1 +1
+            "072015058800004119636",  # 21 digitos, le falta uno
+            "07201505880000411963680",  # 23 digitos
+            "",  # vacio
         ],
     )
-    def test_rechaza_cbu_con_dv_roto(self, cuenta):
+    def test_rechaza_largo_incorrecto(self, cuenta):
         assert q.cbu_es_valida(cuenta) is False
 
     @pytest.mark.parametrize(
         "cuenta",
-        ["123", "014035669000000012345", "01403566900000001234570", "mi.empresa.erp", ""],
+        ["123", "01403563123456789012", "01403563123456789012345", "mi.empresa.erp", ""],
     )
     def test_rechaza_lo_que_no_es_cbu(self, cuenta):
         assert q.cbu_es_valida(cuenta) is False
@@ -115,6 +153,7 @@ class TestPayload:
         assert campos["50"] == "0011" + CUIT
         # 51 de uso exclusivo para el alias/CBU.
         assert campos["51"] == "0022" + CUENTA
+        assert len(CUENTA) == 22
         assert campos["52"] == "9700"
         assert campos["53"] == "032"
         assert campos["54"] == "1234.56"
@@ -151,10 +190,10 @@ class TestPayload:
 
 class TestErrores:
     def test_cbu_de_22_digitos_con_dv_roto_falla(self):
+        cbu = CUENTA_BANCO_REAL
+        roto = cbu[:21] + str((int(cbu[21]) + 1) % 10)
         with pytest.raises(ValueError, match="verificadores"):
-            q.generar_qr_interoperable(
-                CUIT, "0140356690000000123458", 100, "MI COMERCIO"
-            )
+            q.generar_qr_interoperable(CUIT, roto, 100, "MI COMERCIO")
 
     @pytest.mark.parametrize(
         "cuit,error",

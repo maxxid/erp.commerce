@@ -51,9 +51,11 @@ _MAX_LEN = {
 # Longitud máxima de CBU/CVU/alias (el dato va envuelto en sub-ID 00 + len).
 _MAX_CUENTA = 29
 
-# Pesos de los dígitos verificadores de la CBU (bloques 1 y 2).
-_PESOS_B1 = [7, 1, 3, 9, 7, 1, 3, 9]
-_PESOS_B2 = [7, 1, 3, 9, 7, 1, 3, 9, 7, 1, 3, 9]
+# Pesos de los dígitos verificadores de la CBU. El bloque 1 (banco + sucursal)
+# son 7 dígitos con pesos 7,1,3,9,7,1,3 y el bloque 2 (cuenta) son 13 con la
+# serie corrida 3,9,7,1. Total 7 + 1 dv + 13 + 1 dv = 22 dígitos.
+_PESOS_B1 = [7, 1, 3, 9, 7, 1, 3]
+_PESOS_B2 = [3, 9, 7, 1, 3, 9, 7, 1, 3, 9, 7, 1, 3]
 
 
 def _digito_verificador(bloque: str, pesos: list) -> int:
@@ -65,13 +67,13 @@ def _digito_verificador(bloque: str, pesos: list) -> int:
 def cbu_es_valida(cbu: str) -> bool:
     """Valida los dígitos verificadores de una CBU/CVU de 22 dígitos.
 
-    Estructura: bloque 1 (8) + dv1 (1) + bloque 2 (12) + dv2 (1).
+    Estructura: banco (4) + sucursal (3) + dv1 (1) + cuenta (13) + dv2 (1).
     """
     cbu = str(cbu).strip()
     if len(cbu) != 22 or not cbu.isdigit():
         return False
-    b1, dv1 = cbu[0:8], cbu[8]
-    b2, dv2 = cbu[9:21], cbu[21]
+    b1, dv1 = cbu[0:7], cbu[7]
+    b2, dv2 = cbu[8:21], cbu[21]
     return dv1 == str(_digito_verificador(b1, _PESOS_B1)) and dv2 == str(
         _digito_verificador(b2, _PESOS_B2)
     )
