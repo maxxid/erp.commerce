@@ -82,12 +82,19 @@ def _fmt_dt(dt):
     return dt.isoformat() if dt else None
 
 
-def _costo_ventas(db, desde):
-    """Suma el costo total de los items vendidos en un período."""
-    costo = db.query(func.coalesce(func.sum(VentaItem.cantidad * func.coalesce(VentaItem.precio_costo, 0)), 0)).join(
+def _costo_ventas(db, desde, hasta=None):
+    """Suma el costo total de los items vendidos en un período.
+
+    ``hasta`` es opcional por compatibilidad con las llamadas viejas, que dejan
+    la ventana abierta: sin tope, el costo arrastra ventas de cualquier fecha
+    futura. Las ventanas nuevas siempre lo pasan.
+    """
+    q = db.query(func.coalesce(func.sum(VentaItem.cantidad * func.coalesce(VentaItem.precio_costo, 0)), 0)).join(
         Venta, VentaItem.venta_id == Venta.id
-    ).filter(Venta.estado == "confirmada", Venta.fecha >= desde).scalar() or 0
-    return float(costo)
+    ).filter(Venta.estado == "confirmada", Venta.fecha >= desde)
+    if hasta is not None:
+        q = q.filter(Venta.fecha < hasta)
+    return float(q.scalar() or 0)
 
 
 # Métricas del gráfico de categorías. "margen_pct" responde "¿en qué categoría
@@ -176,7 +183,10 @@ def _buckets(desde, hasta, granularidad):
     while cursor < hasta:
         if granularidad == "dia":
             fin = cursor + timedelta(days=1)
-            label = f"{DIAS_ES[cursor.weekday()]} {cursor.day:02d}"
+            # _local y no cursor.weekday() directo: el corte cae a las 03:00 UTC,
+            # que es el mismo día local, pero si se mueve el rótulo se corre.
+            local = _local(cursor)
+            label = f"{DIAS_ES[local.weekday()]} {local.day:02d}"
         else:
             fin = min(cursor + timedelta(days=7), hasta)
             label = f"S{n} {cursor.strftime('%d/%m')}"
@@ -266,6 +276,215 @@ def _raices_categorias(db):
     return mapa, nombres
 
 
+def _var_pct(actual, anterior):
+    """Variación porcentual, o None si el período anterior no da base.
+
+    Con anterior == 0 el porcentaje no significa nada (de 0 a 50 es +infinito,
+    no +100%), así que se devuelve None y el front no muestra flecha.
+    """
+    if not anterior:
+        return None
+    return round(((actual - anterior) / anterior) * 100, 1)
+
+
+def _comparativa(db, desde, hasta):
+    """Ventas, cantidad, ticket y margen de una ventana, para comparar.
+
+    Se usa para el "vs. período anterior" de cada KPI: se corre dos veces, una
+    por ventana, y se restan los resultados.
+    """
+    ventas = db.query(func.coalesce(func.sum(Venta.total), 0)).filter(
+        Venta.estado == "confirmada", Venta.fecha >= desde, Venta.fecha < hasta
+    ).scalar() or 0
+    cant = db.query(func.count(Venta.id)).filter(
+        Venta.estado == "confirmada", Venta.fecha >= desde, Venta.fecha < hasta
+    ).scalar() or 0
+    costo = _costo_ventas(db, desde, hasta)
+    return {
+        "ventas": float(ventas),
+        "cantidad": int(cant),
+        "ticket": round(ventas / cant, 2) if cant else 0.0,
+        "margen": round(float(ventas) - costo, 2),
+        "margen_pct": round(((float(ventas) - costo) / ventas) * 100, 1) if ventas else 0.0,
+    }
+
+
+def _comparativa_vs_anterior(db, desde, hasta):
+    """{metrica: {"actual": x, "anterior": y, "pct": z}} para la ventana dada.
+
+    La ventana anterior es del mismo largo, corrida hacia atrás. Para "hoy" es
+    ayer, para el mes es el mes anterior, y así.
+    """
+    actual = _comparativa(db, desde, hasta)
+    largo = hasta - desde
+    anterior = _comparativa(db, desde - largo, desde)
+    return {
+        k: {
+            "actual": actual[k],
+            "anterior": anterior[k],
+            "pct": _var_pct(actual[k], anterior[k]),
+        }
+        for k in ("ventas", "cantidad", "ticket", "margen", "margen_pct")
+    }
+
+
+@router.get("/stock-por-velocidad", response_model=RespuestaData)
+def stock_por_velocidad(
+    dias: int = Query(30, ge=7, le=180, description="Ventana para estimar el ritmo de venta"),
+    limite: int = Query(10, ge=1, le=50, description="Máximo de productos a devolver"),
+    solo_criticos: bool = Query(True, description="True = solo los que se van a agotar pronto"),
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """Productos con poco stock para la velocidad a la que se están vendiendo.
+
+    El "stock crítico" del dashboard compara contra un mínimo estático que alguien
+    cargó a mano, y ese mínimo no sabe si un producto sale 2 o 50 por día. Acá se
+    cruza el     stock real con cuánto se vendió en los últimos días y se calcula cuántos
+    días quedan: "quedan 3 y vendés 8 por día → se agota en 4 horas".
+
+    Es la alerta que decide qué comprar hoy. El mínimo estático no dice eso.
+    """
+    if dias < 7 or dias > 180:
+        raise HTTPException(status_code=400, detail="dias debe estar entre 7 y 180")
+    desde = _inicio_dia() - timedelta(days=dias - 1)
+    hasta = _inicio_dia() + timedelta(days=1)
+
+    # Ritmo por producto, en la misma consulta: cantidad vendida en la ventana.
+    vendidos = dict(
+        db.query(VentaItem.producto_id, func.coalesce(func.sum(VentaItem.cantidad), 0))
+        .join(Venta, VentaItem.venta_id == Venta.id)
+        .filter(Venta.estado == "confirmada", Venta.fecha >= desde, Venta.fecha < hasta)
+        .group_by(VentaItem.producto_id)
+        .all()
+    )
+
+    prods = db.query(Producto).filter(Producto.activo == True).all()
+    filas = []
+    for p in prods:
+        stock = float(p.stock_actual or 0)
+        vendido = float(vendidos.get(p.id, 0) or 0)
+        por_dia = vendido / dias
+        if por_dia > 0:
+            dias_stock = stock / por_dia
+        else:
+            # Sin ventas en la ventana no hay proyección: se deja None para no
+            # inventar un "dura 999 días" que engaña.
+            dias_stock = None
+        # Para qué comprar antes: se llega al mínimo manual en menos de 7 días.
+        minimo = float(p.stock_minimo or 0)
+        urgente = por_dia > 0 and stock <= minimo
+        soon = dias_stock is not None and dias_stock <= 7
+
+        if solo_criticos and not (urgente or soon):
+            continue
+
+        filas.append({
+            "id": p.id,
+            "nombre": p.nombre,
+            "codigo_barras": p.codigo_barras,
+            "stock_actual": round(stock, 2),
+            "stock_minimo": round(minimo, 2),
+            "vendido_periodo": round(vendido, 2),
+            "por_dia": round(por_dia, 2),
+            "dias_stock": round(dias_stock, 1) if dias_stock is not None else None,
+            "urgente": urgente,
+        })
+
+    # Lo más urgente arriba: primero los que se agotan en menos días, y los que
+    # ya están en el mínimo manual antes que los que solo se acercan.
+    filas.sort(key=lambda r: (r["dias_stock"] is None, r["dias_stock"] if r["dias_stock"] is not None else 9999))
+
+    return RespuestaData(data={
+        "dias": dias,
+        "productos": filas[:limite],
+        "total_criticos": len(filas),
+    })
+
+
+@router.get("/datos-sucios", response_model=RespuestaData)
+def datos_sucios(
+    periodo: str = Query("mes", description=f"Una de: {', '.join(PERIODOS_CATEGORIA)}"),
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """Productos sin costo o sin categoría, y cuánta venta se distorsiona por eso.
+
+    El gráfico por categoría ya advierte que el margen miente cuando falta el
+    costo, pero es un aviso pasivo: no dice cuáles productos ni cuánta plata
+    hay detrás. Acá van los nombres y el porcentaje de venta afectado, que es
+    el número que hace que la limpieza se haga.
+
+    - sin costo: el margen % de ese producto se infla (se cuenta como si fuera
+      100% ganancia), así que el margen del período está sobreestimado
+    - sin categoría: el producto no aparece en el gráfico por categoría, así
+      que la lectura de "qué se vende más" los deja afuera
+    """
+    if periodo not in PERIODOS_CATEGORIA:
+        raise HTTPException(status_code=400, detail=f"periodo inválido. Opciones: {', '.join(PERIODOS_CATEGORIA)}")
+    desde, hasta = _ventana(periodo)
+
+    # Solo los productos que efectivamente se vendieron en el período: un producto
+    # sin costo que nadie compró no distorsiona ningún número.
+    filas = (
+        db.query(
+            VentaItem.producto_id,
+            func.coalesce(func.sum(VentaItem.subtotal), 0).label("importe"),
+        )
+        .join(Venta, VentaItem.venta_id == Venta.id)
+        .filter(Venta.estado == "confirmada", Venta.fecha >= desde, Venta.fecha < hasta)
+        .group_by(VentaItem.producto_id)
+        .all()
+    )
+    if not filas:
+        return RespuestaData(data={
+            "periodo": periodo, "sin_costo": [], "sin_categoria": [],
+            "importe_total": 0.0, "importe_afectado": 0.0, "pct_afectado": 0.0,
+            "cantidad": 0,
+        })
+
+    ids = [f.producto_id for f in filas]
+    importes = {f.producto_id: float(f.importe) for f in filas}
+    prods = db.query(Producto).filter(Producto.id.in_(ids)).all()
+    info = {p.id: p for p in prods}
+
+    sin_costo, sin_categoria = [], []
+    for pid, importe in importes.items():
+        p = info.get(pid)
+        if p is None:
+            continue
+        nombre = p.nombre
+        if p.precio_costo is None or p.precio_costo <= 0:
+            sin_costo.append({
+                "id": p.id, "nombre": nombre, "codigo_barras": p.codigo_barras,
+                "importe": round(importe, 2),
+            })
+        if p.categoria_id is None:
+            sin_categoria.append({
+                "id": p.id, "nombre": nombre, "codigo_barras": p.codigo_barras,
+                "importe": round(importe, 2),
+            })
+
+    sin_costo.sort(key=lambda r: -r["importe"])
+    sin_categoria.sort(key=lambda r: -r["importe"])
+
+    # Importe que pasa por al menos uno de los dos problemas. Se cuenta una vez
+    # por producto para no sumar dos veces un producto que está en las dos listas.
+    ids_afectados = {r["id"] for r in sin_costo} | {r["id"] for r in sin_categoria}
+    importe_afectado = sum(importes[i] for i in ids_afectados)
+    importe_total = sum(importes.values())
+
+    return RespuestaData(data={
+        "periodo": periodo,
+        "sin_costo": sin_costo[:10],
+        "sin_categoria": sin_categoria[:10],
+        "importe_total": round(importe_total, 2),
+        "importe_afectado": round(importe_afectado, 2),
+        "pct_afectado": round((importe_afectado / importe_total) * 100, 1) if importe_total else 0.0,
+        "cantidad": len(ids_afectados),
+    })
+
+
 @router.get("/resumen", response_model=RespuestaData)
 def resumen(db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
     """Dashboard completo con KPIs, analíticas y alertas."""
@@ -328,7 +547,11 @@ def resumen(db: Session = Depends(get_db), user: Usuario = Depends(get_current_u
         dia_sig = dia + timedelta(days=1)
         total_dia = db.query(func.coalesce(func.sum(Venta.total), 0)).filter(
             Venta.estado == "confirmada", Venta.fecha >= dia, Venta.fecha < dia_sig).scalar() or 0
-        dias_labels.append(dia.strftime("%a %d"))
+        # _local y no dia.weekday() directo: el bucket arranca a las 03:00 UTC,
+        # que es el mismo día local, pero si algún día el corte se mueve el
+        # rótulo se corre un día sin avisar.
+        dia_local = _local(dia)
+        dias_labels.append(f"{DIAS_ES[dia_local.weekday()]} {dia_local.day:02d}")
         dias_valores.append(float(total_dia))
 
     # Picos por hora (hoy). El dashboard ya consume /por-hora, que además deja
@@ -380,6 +603,11 @@ def resumen(db: Session = Depends(get_db), user: Usuario = Depends(get_current_u
     recargas_hoy = recarga_service.resumen(db, hoy, hoy + timedelta(days=1))["totales"]
     recargas_mes = recarga_service.resumen(db, inicio_mes, hoy + timedelta(days=1))["totales"]
 
+    # "vs. período anterior" de cada KPI. Se compara contra la ventana anterior
+    # del mismo largo, así que la lectura no depende de qué día sea hoy.
+    vs_hoy = _comparativa_vs_anterior(db, hoy, hoy + timedelta(days=1))
+    vs_mes = _comparativa_vs_anterior(db, inicio_mes, hoy + timedelta(days=1))
+
     return RespuestaData(data={
         "total_productos": total_productos, "valor_stock": valor_stock,
         "total_clientes": total_clientes, "stock_bajo": stock_bajo,
@@ -396,6 +624,7 @@ def resumen(db: Session = Depends(get_db), user: Usuario = Depends(get_current_u
         "ventas_por_hora": {"labels": horas_labels, "valores": horas_valores},
         "top_productos_mes": top_productos,
         "stock_critico": criticos_lista, "sin_stock": sin_stock_lista,
+        "vs_hoy": vs_hoy, "vs_mes": vs_mes,
     })
 
 
