@@ -30,6 +30,12 @@ const bancariosExpanded = ref(false)
 const mercadopagoExpanded = ref(false)
 const qrInteropExpanded = ref(false)
 const qrLaboratorioExpanded = ref(false)
+
+// Laboratorio de QR: oculto a pedido del usuario. El componente, los endpoints
+// y qr_interop_service.py siguen en el repo. Revertir a `true` para volver a
+// mostrarlo (los QR generados por el propio ERP no son aceptados por las
+// billeteras: ver notas de diagnostico).
+const MOSTRAR_LABORATORIO_QR = false
 const ventasExpanded = ref(false)
 const denominacionesExpanded = ref(false)
 const recargasExpanded = ref(false)
@@ -1254,7 +1260,7 @@ onMounted(async () => {
       </div>
     </BaseCard>
 
-    <BaseCard v-if="!loading">
+    <BaseCard v-if="!loading && MOSTRAR_LABORATORIO_QR">
       <button class="w-full text-left" @click="qrLaboratorioExpanded = !qrLaboratorioExpanded">
         <div class="flex items-center justify-between">
           <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
