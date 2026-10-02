@@ -131,6 +131,46 @@ def test_ningun_frontend_usa_params_anidado():
     )
 
 
+# --- Codificación: los acentos que se ven en el navegador ---
+
+
+def test_ningun_archivo_frontend_tiene_mojibake():
+    """El banner decía "prÃ³ximos 7 dÃ­as" en pantalla.
+
+    UTF-8 decodificado como latin-1 y vuelto a guardar: cada "ó" queda como los
+    cuatro bytes C3 83 C2 B3. El archivo sigue siendo UTF-8 válido, así que
+    Python, git y el editor lo muestran bien y el bug no se ve hasta que lo
+    renderiza el navegador. De ahí que un grep de texto no lo encuentre.
+    """
+    # Los tres marcadores en su forma ya decodificada.
+    MARCAS = ("Ã", "Â", "â€")
+
+    offenders = []
+    for path in RAIZ_FRONTS.rglob("*"):
+        if path.suffix not in (".vue", ".js", ".json") or not path.is_file():
+            continue
+        texto = path.read_text(encoding="utf-8", errors="replace")
+        n = sum(texto.count(m) for m in MARCAS)
+        if n:
+            rel = path.relative_to(RAIZ_FRONTS)
+            offenders.append(f"{rel}: {n} marcadores")
+
+    assert not offenders, (
+        "Mojibake: UTF-8 guardado como si fuera latin-1. Se ve en el navegador "
+        f"como 'Ã³' y no en el editor. Arreglar con "
+        f"texto.encode('cp1252').decode('utf-8'). Archivos: {offenders}"
+    )
+
+
+def test_el_banner_de_vencimiento_se_lee_bien():
+    """El texto exacto que reportó el usuario, verificado sobre los caracteres."""
+    vue = (RAIZ_FRONTS / "views" / "DashboardView.vue").read_text(encoding="utf-8")
+    assert "vence(n) en los próximos 7 días" in vue
+    assert "vence(n) en los próximos 15 días" in vue
+    # Y que no aparezca la forma rota, que es la que llega al browser.
+    assert "prÃ³ximos" not in vue
+
+
 # --- Las URLs que el front arma, pegadas a los endpoints de verdad ---
 
 

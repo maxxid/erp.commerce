@@ -18,7 +18,7 @@ const loading = ref(true)
 const alertas = ref([])
 const data = ref({})
 const alertasLotes = ref({})
-// true cuando la API fallÃ³ y estamos mostrando el mockData: los nÃºmeros de
+// true cuando la API falló y estamos mostrando el mockData: los números de
 // abajo son de ejemplo y el template avisa con un banner.
 const datosDemo = ref(false)
 
@@ -31,8 +31,8 @@ const mockData = {
   margen_pct_hoy: 36, margen_pct_mes: 36,
   margen_bruto_semana: 24000, margen_bruto_trimestre: 65000,
   margen_pct_semana: 34, margen_pct_trimestre: 33,
-  // ventas_por_hora no va acÃ¡: el grÃ¡fico por hora tiene su propio endpoint con
-  // rango propio, asÃ­ que el fallback no lo necesita.
+  // ventas_por_hora no va acá: el gráfico por hora tiene su propio endpoint con
+  // rango propio, así que el fallback no lo necesita.
   top_productos_mes: [
     { id: 1, nombre: 'Coca Cola 2.25L', cantidad_vendida: 24, total_vendido: 60000 },
     { id: 2, nombre: 'Yerba Mate Playadito 1kg', cantidad_vendida: 15, total_vendido: 48000 },
@@ -40,14 +40,14 @@ const mockData = {
   stock_critico: [{ id: 3, nombre: 'Aceite de Girasol Natura 1.5L', stock_actual: 2, stock_minimo: 8 }],
   sin_stock: [],
   efectivo_hoy: 12000, transferencia_hoy: 5500,
-  // vs_hoy/vs_mes: los KPIs muestran la flecha de variaciÃ³n. Sin esto, el
-  // fallback los deja sin delta, que es el dato mÃ¡s Ãºtil del card.
+  // vs_hoy/vs_mes: los KPIs muestran la flecha de variación. Sin esto, el
+  // fallback los deja sin delta, que es el dato más útil del card.
   vs_hoy: { ventas: { actual: 0, anterior: 0, pct: null }, margen: { actual: 0, anterior: 0, pct: null }, ticket: { actual: 0, anterior: 0, pct: null } },
   vs_mes: { ventas: { actual: 0, anterior: 0, pct: null }, margen: { actual: 0, anterior: 0, pct: null } }
 }
 
-// --- "vs. perÃ­odo anterior" ---
-// El backend ya devuelve actual/anterior/pct por KPI. AcÃ¡ solo se formatea.
+// --- "vs. período anterior" ---
+// El backend ya devuelve actual/anterior/pct por KPI. Acá solo se formatea.
 function delta(que, metrica) {
   return data.value[que]?.[metrica]?.pct ?? null
 }
@@ -55,7 +55,7 @@ function delta(que, metrica) {
 function textoDelta(que) {
   if (que === 'vs_hoy') return 'vs ayer'
   if (que === 'vs_mes') return 'vs mes anterior'
-  return 'vs perÃ­odo anterior'
+  return 'vs período anterior'
 }
 
 const maxBar = computed(() => {
@@ -64,27 +64,27 @@ const maxBar = computed(() => {
 })
 const tendSinDatos = computed(() => tendVals.value.length > 0 && tendVals.value.every((v) => !v))
 
-// --- GrÃ¡fico de ventas por perÃ­odo ---
-// Antes el backend clavaba "Ãºltimos 7 dÃ­as" y el front no tenÃ­a por dÃ³nde
+// --- Gráfico de ventas por período ---
+// Antes el backend clavaba "últimos 7 días" y el front no tenía por dónde
 // mirar la semana ni el mes anterior.
 const tendPeriodo = ref('7dias')
 const tendData = ref(null)
 const tendLoading = ref(false)
 const RANGOS = [
-  { value: '7dias', label: '7 dÃ­as' },
+  { value: '7dias', label: '7 días' },
   { value: 'semana', label: 'Esta semana' },
   { value: 'semana_anterior', label: 'Semana pasada' },
   { value: 'mes', label: 'Este mes' },
   { value: 'mes_anterior', label: 'Mes pasado' },
-  // Los mismos dos meses pero agrupados por dÃ­a de la semana: 7 barras que
-  // dicen quÃ© dÃ­a se mueve mÃ¡s, que con 4 semanas promediadas no se ve.
-  { value: 'mes_por_dia', label: 'Este mes Â· por dÃ­a' },
-  { value: 'mes_anterior_por_dia', label: 'Mes pasado Â· por dÃ­a' },
+  // Los mismos dos meses pero agrupados por día de la semana: 7 barras que
+  // dicen qué día se mueve más, que con 4 semanas promediadas no se ve.
+  { value: 'mes_por_dia', label: 'Este mes · por día' },
+  { value: 'mes_anterior_por_dia', label: 'Mes pasado · por día' },
 ]
 const tendLabels = computed(() => tendData.value?.labels || [])
 const tendVals = computed(() => tendData.value?.valores || [])
 
-// Para los textos de estado vacÃ­o: nombrar el rango elegido en vez de decir
+// Para los textos de estado vacío: nombrar el rango elegido en vez de decir
 // "sin datos" a secas, que no dice si hay que cambiar el filtro o no.
 function rangoActual(cual) {
   const lista = cual === 'hora' ? RANGOS_HORA : RANGOS
@@ -96,7 +96,7 @@ async function loadTendencia() {
   tendLoading.value = true
   try {
     // Ojo: api.get(path, params) recibe los params sueltos, no un { params: {...} }.
-    // Envueltos salÃ­an como ?params[periodo]=7dias y el backend los ignoraba.
+    // Envueltos salían como ?params[periodo]=7dias y el backend los ignoraba.
     tendData.value = await api.get('/api/dashboard/ventas-periodo', {
       periodo: tendPeriodo.value,
     })
@@ -107,8 +107,8 @@ async function loadTendencia() {
   }
 }
 
-// SÃ³lo las horas con venta: el backend manda 24 y casi todas valen 0, asÃ­ que
-// mostrar las 24 deja las barras finÃ­simas y los rÃ³tulos ilegibles.
+// Sólo las horas con venta: el backend manda 24 y casi todas valen 0, así que
+// mostrar las 24 deja las barras finísimas y los rótulos ilegibles.
 const horasConVenta = computed(() => {
   const labels = horaData.value?.labels || []
   const valores = horaData.value?.valores || []
@@ -123,15 +123,15 @@ const maxHour = computed(() => {
 })
 
 // --- Ventas por hora ---
-// Estaba clavado en "hoy" dentro de /resumen. Mirar un solo dÃ­a esconde el
-// patrÃ³n del local: si siempre se vende de 9 a 13, la hora promedio cacarea y
-// el resto del dÃ­a parece que no vende nada.
+// Estaba clavado en "hoy" dentro de /resumen. Mirar un solo día esconde el
+// patrón del local: si siempre se vende de 9 a 13, la hora promedio cacarea y
+// el resto del día parece que no vende nada.
 const horaPeriodo = ref('hoy')
 const horaData = ref(null)
 const horaLoading = ref(false)
 const RANGOS_HORA = [
   { value: 'hoy', label: 'Hoy' },
-  { value: '7dias', label: '7 dÃ­as' },
+  { value: '7dias', label: '7 días' },
   { value: 'semana', label: 'Esta semana' },
   { value: 'semana_anterior', label: 'Semana pasada' },
   { value: 'mes', label: 'Este mes' },
@@ -149,7 +149,7 @@ async function loadHoras() {
   }
 }
 
-// --- Ventas por categorÃ­a ---
+// --- Ventas por categoría ---
 const catMetrica = ref('importe')
 const catPeriodo = ref('mes')
 const catLoading = ref(false)
@@ -176,7 +176,7 @@ function pctCat(v) {
   return ((v || 0) / maxCat.value) * 100
 }
 
-// Formatea el valor de la mÃ©trica elegida. Sirve para categorÃ­as y productos:
+// Formatea el valor de la métrica elegida. Sirve para categorías y productos:
 // la respuesta trae siempre las cuatro columnas.
 function fmtMetrica(r) {
   const m = metricaActual.value
@@ -205,8 +205,8 @@ async function loadCategorias() {
   }
 }
 
-// Al cambiar de mÃ©trica o perÃ­odo, lo que quedÃ³ desplegado pasa a ser de otro
-// corte: cerrarlo siempre es mÃ¡s simple que invalidarlo en cada fila.
+// Al cambiar de métrica o período, lo que quedó desplegado pasa a ser de otro
+// corte: cerrarlo siempre es más simple que invalidarlo en cada fila.
 function resetDesplegado() {
   catAbiertas.value = {}
   catProductos.value = {}
@@ -224,13 +224,13 @@ function setCatMetrica(m) {
   loadCategorias()
 }
 
-// --- Drill-down de categorÃ­as ---
+// --- Drill-down de categorías ---
 // Por cada clave: 'cargando' | 'listo' | 'error'
 const catAbiertas = ref({})
 const catProductos = ref({})
 
 async function toggleCategoria(fila) {
-  // "Otras" es un agrupamiento del grÃ¡fico, no una categorÃ­a real: no tiene
+  // "Otras" es un agrupamiento del gráfico, no una categoría real: no tiene
   // productos que mirar.
   if (fila.clave === 'otras') return
   if (catAbiertas.value[fila.clave] === 'listo') {
@@ -258,9 +258,9 @@ function irAProducto(p) {
 }
 
 // --- Stock por velocidad de venta ---
-// El "stock crÃ­tico" clÃ¡sico compara contra un mÃ­nimo estÃ¡tico que alguien cargÃ³
-// a mano, y ese mÃ­nimo no sabe si un producto sale 2 o 50 por dÃ­a. AcÃ¡ se cruza
-// con el ritmo real de venta, que es lo que dice quÃ© comprar hoy.
+// El "stock crítico" clásico compara contra un mínimo estático que alguien cargó
+// a mano, y ese mínimo no sabe si un producto sale 2 o 50 por día. Acá se cruza
+// con el ritmo real de venta, que es lo que dice qué comprar hoy.
 const velDias = ref(30)
 const velData = ref(null)
 const velLoading = ref(false)
@@ -281,18 +281,18 @@ async function loadVelocidad() {
   }
 }
 
-// "4 hs", "2 dÃ­as", "1,5 meses". El nÃºmero crudo en dÃ­as no sirve para 45.
+// "4 hs", "2 días", "1,5 meses". El número crudo en días no sirve para 45.
 function diasLegibles(d) {
-  if (d == null) return 'â€”'
+  if (d == null) return '—'
   if (d < 1) return `${Math.max(1, Math.round(d * 24))} hs`
-  if (d < 2) return '1 dÃ­a'
-  if (d < 60) return `${Math.round(d)} dÃ­as`
+  if (d < 2) return '1 día'
+  if (d < 60) return `${Math.round(d)} días`
   return `${(d / 30).toFixed(1).replace('.', ',')} meses`
 }
 
 // --- Datos sucios ---
-// Falta de costo infla el margen; falta de categorÃ­a saca el producto del
-// grÃ¡fico. Con el importe afectado se ve si vale la pena ir a corregirlo.
+// Falta de costo infla el margen; falta de categoría saca el producto del
+// gráfico. Con el importe afectado se ve si vale la pena ir a corregirlo.
 const sucioPeriodo = ref('mes')
 const sucioData = ref(null)
 const sucioLoading = ref(false)
@@ -327,7 +327,7 @@ async function load() {
       api.get('/api/dashboard/alertas-lotes').catch(() => null),
     ])
     // Ojo: antes se chequeaba `resp.total_productos`, que es 0 en una
-    // instalaciÃ³n reciÃ©n vacÃ­a, y eso mandaba al mockData con la API
+    // instalación recién vacía, y eso mandaba al mockData con la API
     // funcionando. Alcanza con que la respuesta exista.
     if (resp) {
       data.value = resp
@@ -344,7 +344,7 @@ async function load() {
   } finally {
     loading.value = false
   }
-  // Los tres grÃ¡ficos son independientes: si uno de estos endpoints falla, el
+  // Los tres gráficos son independientes: si uno de estos endpoints falla, el
   // resto del dashboard sigue funcionando igual.
   loadCategorias()
   loadTendencia()
@@ -353,7 +353,7 @@ async function load() {
   loadSucios()
 }
 
-// Alturas de skeleton estables: Math.random() en el template se re-evalÃºa en
+// Alturas de skeleton estables: Math.random() en el template se re-evalúa en
 // cada render y las barras dan saltos.
 function skeletonHeight(n, base = 60) {
   return `${20 + ((n * 37) % base)}%`
@@ -367,20 +367,20 @@ function buildLoteAlerts() {
     alertas.value.push({
       tipo: 'lotes_vencidos',
       nivel: 'danger',
-      mensaje: `${t.vencidos} lote(s) vencido(s) con stock. RevisÃ¡ el stock antes de seguir vendiendo.`,
+      mensaje: `${t.vencidos} lote(s) vencido(s) con stock. Revisá el stock antes de seguir vendiendo.`,
     })
   }
   if (t.por_vencer_7d > 0) {
     alertas.value.push({
       tipo: 'lotes_por_vencer_7d',
       nivel: 'danger',
-      mensaje: `${t.por_vencer_7d} lote(s) vence(n) en los prÃ³ximos 7 dÃ­as.`,
+      mensaje: `${t.por_vencer_7d} lote(s) vence(n) en los próximos 7 días.`,
     })
   } else if (t.por_vencer_15d > 0) {
     alertas.value.push({
       tipo: 'lotes_por_vencer_15d',
       nivel: 'warning',
-      mensaje: `${t.por_vencer_15d} lote(s) vence(n) en los prÃ³ximos 15 dÃ­as.`,
+      mensaje: `${t.por_vencer_15d} lote(s) vence(n) en los próximos 15 días.`,
     })
   }
 }
@@ -417,9 +417,9 @@ function buildLoteAlerts() {
     >
       <i class="fa-solid fa-triangle-exclamation text-red-500 mt-0.5"></i>
       <span>
-        No se pudo sincronizar con el servidor. Los nÃºmeros de abajo son
-        <strong>datos de ejemplo, no ventas reales</strong>. RevisÃ¡ la conexiÃ³n y
-        volvÃ© a tocar <em>Sincronizar</em>.
+        No se pudo sincronizar con el servidor. Los números de abajo son
+        <strong>datos de ejemplo, no ventas reales</strong>. Revisá la conexión y
+        volvé a tocar <em>Sincronizar</em>.
       </span>
     </div>
 
@@ -454,7 +454,7 @@ function buildLoteAlerts() {
       <KpiCard label="Ganancia Hoy" :value="data.margen_bruto_hoy || 0" prefix="$" :loading="loading" :trend="delta('vs_hoy', 'margen')" trend-label="vs ayer" :sublabel="(data.margen_pct_hoy || 0) + '% de margen'" icon="fa-coins" icon-color="warning" />
       <KpiCard label="Efectivo Hoy" :value="data.efectivo_hoy || 0" prefix="$" :loading="loading" icon="fa-money-bill-wave" icon-color="brand" />
       <KpiCard label="Transferencia" :value="data.transferencia_hoy || 0" prefix="$" :loading="loading" icon="fa-mobile-screen-button" icon-color="info" />
-      <KpiCard label="Stock CrÃ­tico" :value="data.stock_bajo || 0" :loading="loading" icon="fa-triangle-exclamation" icon-color="danger" sublabel="bajo mÃ­nimo" />
+      <KpiCard label="Stock Crítico" :value="data.stock_bajo || 0" :loading="loading" icon="fa-triangle-exclamation" icon-color="danger" sublabel="bajo mínimo" />
     </div>
 
     <div v-else class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -464,9 +464,9 @@ function buildLoteAlerts() {
       <KpiCard label="Ganancia Semana" :value="data.margen_bruto_semana || 0" prefix="$" :loading="loading" :sublabel="(data.margen_pct_semana || 0) + '% de margen'" icon="fa-coins" icon-color="warning" />
       <KpiCard label="Ganancia Mes" :value="data.margen_bruto_mes || 0" prefix="$" :loading="loading" :trend="delta('vs_mes', 'margen')" trend-label="vs mes anterior" :sublabel="(data.margen_pct_mes || 0) + '% de margen'" icon="fa-coins" icon-color="warning" />
       <KpiCard label="Ganancia Trim." :value="data.margen_bruto_trimestre || 0" prefix="$" :loading="loading" :sublabel="(data.margen_pct_trimestre || 0) + '% de margen'" icon="fa-coins" icon-color="warning" />
-      <KpiCard label="Ticket Prom." :value="data.ticket_promedio || 0" prefix="$" :loading="loading" icon="fa-receipt" icon-color="info" :trend="delta('vs_hoy', 'ticket')" trend-label="vs ayer" :sublabel="'Medio: ' + (data.medio_favorito || 'â€”')" />
+      <KpiCard label="Ticket Prom." :value="data.ticket_promedio || 0" prefix="$" :loading="loading" icon="fa-receipt" icon-color="info" :trend="delta('vs_hoy', 'ticket')" trend-label="vs ayer" :sublabel="'Medio: ' + (data.medio_favorito || '—')" />
       <KpiCard label="Stock" :value="data.valor_stock || 0" prefix="$" :loading="loading" icon="fa-boxes-stacked" icon-color="warning" :sublabel="(data.total_productos || 0) + ' productos'" />
-      <KpiCard label="Stock CrÃ­tico" :value="data.stock_bajo || 0" :loading="loading" icon="fa-triangle-exclamation" icon-color="danger" sublabel="bajo mÃ­nimo" />
+      <KpiCard label="Stock Crítico" :value="data.stock_bajo || 0" :loading="loading" icon="fa-triangle-exclamation" icon-color="danger" sublabel="bajo mínimo" />
       <KpiCard label="Tendencia" :value="data.tendencia || 0" suffix="%" :trend="data.tendencia || 0" trend-label="vs semana anterior" :loading="loading" icon="fa-arrow-trend-up" icon-color="success" />
       <KpiCard
         v-if="data.recargas_hoy && data.recargas_hoy.recargas"
@@ -476,7 +476,7 @@ function buildLoteAlerts() {
         :loading="loading"
         icon="fa-mobile-screen-button"
         icon-color="brand"
-        :sublabel="(data.recargas_hoy.recargas || 0) + ' recargas Â· +$' + (data.recargas_hoy.ganancia || 0)"
+        :sublabel="(data.recargas_hoy.recargas || 0) + ' recargas · +$' + (data.recargas_hoy.ganancia || 0)"
       />
     </div>
 
@@ -496,9 +496,9 @@ function buildLoteAlerts() {
             </select>
           </div>
         </div>
-        <!-- Las fechas del rango: al 1Âº del mes "Semana" arranca el lunes
-             anterior y puede dar mÃ¡s que "Mes". Mostrarlas evita que el nÃºmero
-             parezca un error de cÃ¡lculo. -->
+        <!-- Las fechas del rango: al 1º del mes "Semana" arranca el lunes
+             anterior y puede dar más que "Mes". Mostrarlas evita que el número
+             parezca un error de cálculo. -->
         <p v-if="tendData?.desde" class="text-[10px] text-slate-400 dark:text-slate-500 -mt-3 mb-3">
           {{ tendData.desde }} &ndash; {{ tendData.hasta }}
         </p>
@@ -509,14 +509,14 @@ function buildLoteAlerts() {
           v-else-if="!tendLabels.length"
           icon="fa-chart-line"
           title="Sin datos de ventas"
-          text="No se pudo obtener la serie para este perÃ­odo."
+          text="No se pudo obtener la serie para este período."
           compact
         />
         <EmptyState
           v-else-if="tendSinDatos"
           icon="fa-calendar-xmark"
-        title="Sin ventas en el perÃ­odo"
-        :text="`No hay ventas confirmadas para ${rangoActual('venta').label.toLowerCase()}. ProbÃ¡ con un rango mÃ¡s amplio.`"
+        title="Sin ventas en el período"
+        :text="`No hay ventas confirmadas para ${rangoActual('venta').label.toLowerCase()}. Probá con un rango más amplio.`"
           compact
         />
         <div v-else class="h-40 flex items-stretch gap-3">
@@ -566,8 +566,8 @@ function buildLoteAlerts() {
       <EmptyState
         v-else-if="!horasConVenta.length"
         icon="fa-clock"
-        title="Sin ventas en el perÃ­odo"
-        :text="`No hay ventas registradas para ${rangoActual('hora').label.toLowerCase()}. ProbÃ¡ con un rango mÃ¡s amplio.`"
+        title="Sin ventas en el período"
+        :text="`No hay ventas registradas para ${rangoActual('hora').label.toLowerCase()}. Probá con un rango más amplio.`"
         compact
       />
       <div v-else class="h-40 flex items-stretch gap-1">
@@ -595,12 +595,12 @@ function buildLoteAlerts() {
       </BaseCard>
     </div>
 
-    <!-- Ventas por categorÃ­a -->
+    <!-- Ventas por categoría -->
     <BaseCard padding="lg">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
         <h3 class="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-2">
           <i class="fa-solid fa-layer-group text-brand-500"></i>
-          Ventas por CategorÃ­a
+          Ventas por Categoría
         </h3>
         <div class="flex items-center gap-2 flex-wrap">
           <div class="flex items-center gap-1 p-0.5 bg-slate-100 dark:bg-slate-800 rounded-lg">
@@ -636,8 +636,8 @@ function buildLoteAlerts() {
       <EmptyState
         v-else-if="!catFilas.length"
         icon="fa-layer-group"
-        title="Sin ventas por categorÃ­a"
-        text="No hay ventas confirmadas en el perÃ­odo seleccionado."
+        title="Sin ventas por categoría"
+        text="No hay ventas confirmadas en el período seleccionado."
         compact
       />
       <div v-else class="space-y-2">
@@ -664,7 +664,7 @@ function buildLoteAlerts() {
                 <i
                   v-if="r.items_sin_costo > 0"
                   class="fa-solid fa-circle-exclamation text-amber-500 text-[10px] shrink-0"
-                  :title="`${r.items_sin_costo} producto(s) sin costo cargado: la ganancia de esta categorÃ­a no es exacta`"
+                  :title="`${r.items_sin_costo} producto(s) sin costo cargado: la ganancia de esta categoría no es exacta`"
                 ></i>
               </span>
               <span class="text-xs font-mono-data font-semibold text-slate-800 dark:text-slate-100 shrink-0">
@@ -683,8 +683,8 @@ function buildLoteAlerts() {
             </div>
           </button>
 
-          <!-- Productos de la categorÃ­a: para ver cuÃ¡les son los que venden y
-               de quÃ© subcategorÃ­a viene cada uno (ojo si no corresponde) -->
+          <!-- Productos de la categoría: para ver cuáles son los que venden y
+               de qué subcategoría viene cada uno (ojo si no corresponde) -->
           <div v-if="catAbierta(r.clave)" class="px-3 pb-2.5">
             <div class="border-t border-slate-100 dark:border-slate-800 pt-2 space-y-0.5">
               <div v-if="catAbiertas[r.clave] === 'cargando'" class="space-y-2 pt-1">
@@ -730,7 +730,7 @@ function buildLoteAlerts() {
           </div>
         </div>
         <p v-if="catData?.categorias?.some((r) => r.clave === 'otras')" class="text-[10px] text-slate-400 dark:text-slate-500 pt-1 px-3">
-          {{ catData.cantidad_categorias }} categorÃ­as con ventas; las Ãºltimas estÃ¡n agrupadas en "Otras".
+          {{ catData.cantidad_categorias }} categorías con ventas; las últimas están agrupadas en "Otras".
         </p>
       </div>
     </BaseCard>
@@ -759,7 +759,7 @@ function buildLoteAlerts() {
             <span class="font-mono-data font-semibold text-emerald-600 dark:text-emerald-400">{{ fc(p.total_vendido) }}</span>
           </div>
         </div>
-        <EmptyState v-else icon="fa-cart-arrow-down" title="Sin ventas este mes" text="AÃºn no hay productos destacados." compact />
+        <EmptyState v-else icon="fa-cart-arrow-down" title="Sin ventas este mes" text="Aún no hay productos destacados." compact />
       </BaseCard>
 
       <BaseCard padding="lg">
@@ -774,7 +774,7 @@ function buildLoteAlerts() {
         </div>
         <div v-else-if="(data.stock_critico || []).length || (data.sin_stock || []).length" class="space-y-4">
           <div v-if="(data.stock_critico || []).length">
-            <p class="text-[10px] font-bold text-red-500 uppercase tracking-wider mb-2">CrÃ­ticos (bajo mÃ­nimo)</p>
+            <p class="text-[10px] font-bold text-red-500 uppercase tracking-wider mb-2">Críticos (bajo mínimo)</p>
             <div v-for="p in data.stock_critico" :key="'c'+p.id" class="flex justify-between text-sm p-3 bg-red-50 dark:bg-red-900/20 rounded-xl mb-2">
               <span class="font-medium truncate flex-1 text-slate-800 dark:text-slate-100">{{ p.nombre }}</span>
               <span class="font-mono-data font-semibold text-red-600 dark:text-red-300">{{ p.stock_actual }} / {{ p.stock_minimo }}</span>
@@ -792,7 +792,7 @@ function buildLoteAlerts() {
       </BaseCard>
     </div>
 
-    <!-- QuÃ© comprar: stock real cruzado con el ritmo de venta -->
+    <!-- Qué comprar: stock real cruzado con el ritmo de venta -->
     <BaseCard padding="lg" class="mt-6">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
         <h3 class="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-2">
@@ -812,9 +812,9 @@ function buildLoteAlerts() {
             class="text-[11px] font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-2 py-1.5"
             @change="velDias = +$event.target.value; loadVelocidad()"
           >
-            <option :value="7">Ritmo 7 dÃ­as</option>
-            <option :value="30">Ritmo 30 dÃ­as</option>
-            <option :value="90">Ritmo 90 dÃ­as</option>
+            <option :value="7">Ritmo 7 días</option>
+            <option :value="30">Ritmo 30 días</option>
+            <option :value="90">Ritmo 90 días</option>
           </select>
         </div>
       </div>
@@ -835,8 +835,8 @@ function buildLoteAlerts() {
             <div class="min-w-0 flex-1">
               <p class="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">{{ p.nombre }}</p>
               <p class="text-[11px] text-slate-500 dark:text-slate-400">
-                quedan {{ p.stock_actual }} &middot; vende {{ p.por_dia }}/dÃ­a
-                <span v-if="p.stock_minimo > 0"> &middot; mÃ­nimo {{ p.stock_minimo }}</span>
+                quedan {{ p.stock_actual }} &middot; vende {{ p.por_dia }}/día
+                <span v-if="p.stock_minimo > 0"> &middot; mínimo {{ p.stock_minimo }}</span>
               </p>
             </div>
             <span
@@ -851,21 +851,21 @@ function buildLoteAlerts() {
           </div>
         </div>
         <p class="text-[10px] text-slate-400 dark:text-slate-500 mt-3">
-          Calculado con las ventas de los Ãºltimos {{ velData.dias }} dÃ­as.
+          Calculado con las ventas de los últimos {{ velData.dias }} días.
         </p>
       </template>
       <EmptyState
         v-else
         icon="fa-check-circle"
-        title="Nada se estÃ¡ agotando"
+        title="Nada se está agotando"
         :text="velTodos
-          ? 'No hay productos activos en el catÃ¡logo.'
-          : `NingÃºn producto baja de 7 dÃ­as de stock con el ritmo de los Ãºltimos ${velData?.dias || velDias} dÃ­as.`"
+          ? 'No hay productos activos en el catálogo.'
+          : `Ningún producto baja de 7 días de stock con el ritmo de los últimos ${velData?.dias || velDias} días.`"
         compact
       />
     </BaseCard>
 
-    <!-- Calidad de datos: lo que hace que los nÃºmeros de arriba mientan -->
+    <!-- Calidad de datos: lo que hace que los números de arriba mientan -->
     <BaseCard padding="lg" class="mt-6">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
         <h3 class="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-2">
@@ -894,7 +894,7 @@ function buildLoteAlerts() {
             <strong>{{ sucioData.cantidad }}</strong> producto{{ sucioData.cantidad === 1 ? '' : 's' }}
             con datos incompletos representa{{ sucioData.cantidad === 1 ? '' : 'n' }}
             <strong>{{ fc(sucioData.importe_afectado) }}</strong>
-            ({{ sucioData.pct_afectado }}% de lo vendido en el perÃ­odo).
+            ({{ sucioData.pct_afectado }}% de lo vendido en el período).
           </p>
         </div>
 
@@ -923,7 +923,7 @@ function buildLoteAlerts() {
           </div>
           <div v-if="sucioData.sin_categoria.length">
             <p class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-              Sin categorÃ­a (no aparece en el grÃ¡fico)
+              Sin categoría (no aparece en el gráfico)
             </p>
             <div
               v-for="p in sucioData.sin_categoria"
@@ -941,7 +941,7 @@ function buildLoteAlerts() {
         v-else
         icon="fa-check-circle"
         title="Datos completos"
-        text="Todos los productos vendidos en el perÃ­odo tienen costo y categorÃ­a."
+        text="Todos los productos vendidos en el período tienen costo y categoría."
         compact
       />
     </BaseCard>
