@@ -349,7 +349,7 @@ def laboratorio_qr_interop(
         "campos": campos,
         "crc_ok": qr_interop_service.crc16_ccitt(payload[:-4]) == payload[-4:],
         "crc": payload[-4:],
-        "dinamico": req.dynamico,
+        "dinamico": req.dinamico,
         "monto": req.monto,
         "avisos": avisos,
     }

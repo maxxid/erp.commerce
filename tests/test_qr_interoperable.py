@@ -18,6 +18,8 @@ El checksum se contrasta contra el ejemplo publicado en el Boletín CIMPRA 525
 (Anexo I), que es el mismo que usa la docstring del servicio.
 """
 
+import re
+
 import pytest
 
 from app.services import qr_interop_service as q
@@ -224,12 +226,41 @@ class TestErrores:
 
 
 class TestLaboratorio:
-    """Cubre el TLV del payload que devuelve el endpoint de diagnóstico.
+    """Cubre el endpoint de diagnóstico de Ajustes.
 
-    El laboratorio de Ajustes muestra el QR armado campo por campo para
-    compararlo contra el QR de un banco o un PSP. Si esto se rompe, el
-    diagnóstico muestra basura y se pierde el propósito de la herramienta.
+    El laboratorio muestra el QR armado campo por campo y genera QRs de
+    prueba. Los campos del request se leen por nombre, asi que un typo en un
+    `req.<campo>` revienta el endpoint con un 500 en vez de un 400 claro.
     """
+
+    def test_los_campos_del_request_existen_en_el_modelo(self):
+        """Cada `req.<campo>` del endpoint tiene que existir en el modelo.
+
+        Un `dynamico` en vez de `dinamico` devolvio un Internal Server Error
+        desde el boton de Ajustes sin dejar rastro en el cliente.
+        """
+        import inspect
+
+        from app.routers import pagos
+
+        fuente = inspect.getsource(pagos.laboratorio_qr_interop)
+        usados = set(re.findall(r"req\.([a-z_]+)", fuente))
+        declarados = set(pagos.QrPruebaRequest.model_fields)
+
+        assert usados, "no se encontro ningun req.<campo> que verificar"
+        assert usados <= declarados, f"campos inexistentes: {usados - declarados}"
+
+    def test_los_campos_que_usa_cfg_existen_en_el_modelo(self):
+        """`cfg(campo)` accede por atributo, asi que tambien puede fallar."""
+        import inspect
+
+        from app.routers import pagos
+
+        fuente = inspect.getsource(pagos.laboratorio_qr_interop)
+        usados = set(re.findall(r'cfg\("([a-z_]+)"\)', fuente))
+        declarados = set(pagos.QrPruebaRequest.model_fields)
+
+        assert usados <= declarados, f"campos inexistentes: {usados - declarados}"
 
     def test_el_tlv_del_payload_se_desarma_completo(self):
         from app.routers import pagos
