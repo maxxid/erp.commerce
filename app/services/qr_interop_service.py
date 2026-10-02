@@ -51,6 +51,37 @@ _MAX_LEN = {
 # Longitud máxima de CBU/CVU/alias (el dato va envuelto en sub-ID 00 + len).
 _MAX_CUENTA = 29
 
+# Pesos de los dígitos verificadores de la CBU (bloques 1 y 2).
+_PESOS_B1 = [7, 1, 3, 9, 7, 1, 3, 9]
+_PESOS_B2 = [7, 1, 3, 9, 7, 1, 3, 9, 7, 1, 3, 9]
+
+
+def _digito_verificador(bloque: str, pesos: list) -> int:
+    suma = sum(int(d) * p for d, p in zip(bloque, pesos))
+    resto = 10 - (suma % 10)
+    return 0 if resto == 10 else resto
+
+
+def cbu_es_valida(cbu: str) -> bool:
+    """Valida los dígitos verificadores de una CBU/CVU de 22 dígitos.
+
+    Estructura: bloque 1 (8) + dv1 (1) + bloque 2 (12) + dv2 (1).
+    """
+    cbu = str(cbu).strip()
+    if len(cbu) != 22 or not cbu.isdigit():
+        return False
+    b1, dv1 = cbu[0:8], cbu[8]
+    b2, dv2 = cbu[9:21], cbu[21]
+    return dv1 == str(_digito_verificador(b1, _PESOS_B1)) and dv2 == str(
+        _digito_verificador(b2, _PESOS_B2)
+    )
+
+
+def es_alias(cuenta: str) -> bool:
+    """El alias no es numérico de 22 dígitos: es un alias del BCRA."""
+    cuenta = str(cuenta).strip()
+    return not (cuenta.isdigit() and len(cuenta) == 22)
+
 
 def _ascii(text: str) -> str:
     """Normaliza a ASCII imprimible (EMVCo solo admite 0x20-0x7E)."""
@@ -131,6 +162,12 @@ def generar_qr_interoperable(
         raise ValueError("Falta la CBU, CVU o alias de la cuenta receptora")
     if len(cuenta) > _MAX_CUENTA:
         raise ValueError(f"La CBU/CVU/alias no puede superar {_MAX_CUENTA} caracteres")
+    if cuenta.isdigit() and len(cuenta) == 22 and not cbu_es_valida(cuenta):
+        raise ValueError(
+            "La CBU/CVU tiene 22 dígitos pero los dígitos verificadores no "
+            "coinciden. Revisala en Ajustes: un dígito mal tipeado hace que la "
+            "billetera rechace el pago."
+        )
 
     mcc = str(mcc or "9700").strip()
     if not mcc.isdigit() or len(mcc) != 4:
