@@ -291,6 +291,10 @@ def _migrate_new_columns():
             ("fue_automatico", "INTEGER NOT NULL DEFAULT 0"),
             ("comentario_concil", "TEXT"),
             ("saldo_efectivo", "FLOAT"),
+            # Egresos de cierre que además apuntan a un tercero (pago a
+            # proveedor): el id del proveedor va en referencia_id y el de la
+            # sesión acá.
+            ("sesion_cierre_id", "INTEGER"),
         ]:
             if col not in existentes_mc:
                 conn.execute(sa.text(f"ALTER TABLE movimientos_caja ADD COLUMN {col} {tipo}"))

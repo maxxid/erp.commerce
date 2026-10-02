@@ -558,10 +558,14 @@
             :retiros="retirosCierreSesion"
             :disabled="conciliandoSesion || arqueoSesion.confirmado"
             :guardando-retiro="guardandoRetiroSesion"
+            :guardando-pago="guardandoPago"
+            :proveedores="proveedores"
             :bloquear-cerrados="false"
             @contar="abrirContadorBilletes('arqueo', $event)"
+            @contar-medio="abrirContadorTransferencias($event)"
             @agregar-retiro="agregarRetiroSesion"
             @borrar-retiro="borrarRetiro($event, true)"
+            @pago-proveedor="registrarPagoProveedor($event, cierreSesionId)"
           />
 
           <div class="bg-slate-100 dark:bg-slate-800 rounded-xl p-4 space-y-2">
@@ -700,12 +704,25 @@
               </BaseButton>
             </div>
             <p class="text-[10px] text-slate-400 mb-2">
-              Cargá el saldo que muestra hoy cada app. Es el punto de partida para cuadrar esa cuenta al cerrar.
+              Cargá el saldo que muestra hoy cada app. Arranca en 0: se anota lo que ves
+              ahora, no lo que quedó ayer.
             </p>
             <div v-if="abrirCuentasDigitales" class="space-y-2">
               <div v-for="cuenta in cuentasDigitales" :key="cuenta.valor" class="flex items-center gap-2">
                 <div class="flex-1">
-                  <label class="text-xs text-slate-600 dark:text-slate-300">{{ cuenta.label }}</label>
+                  <div class="flex items-center justify-between gap-2">
+                    <label class="text-xs text-slate-600 dark:text-slate-300">{{ cuenta.label }}</label>
+                    <!-- El saldo de ayer, a la vista pero no cargado. -->
+                    <button
+                      v-if="saldosUltimosCuentas[cuenta.valor] > 0"
+                      type="button"
+                      class="text-[10px] text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 transition shrink-0"
+                      title="Cargar el saldo con el que quedó en el último cierre"
+                      @click="aperturaForm.saldos_cuentas[cuenta.valor] = saldosUltimosCuentas[cuenta.valor]"
+                    >
+                      ayer {{ fc(saldosUltimosCuentas[cuenta.valor]) }}
+                    </button>
+                  </div>
                   <div class="relative mt-0.5">
                     <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold">$</span>
                     <input
@@ -713,15 +730,13 @@
                       type="number"
                       min="0"
                       step="0.01"
+                      inputmode="decimal"
                       class="w-full pl-7 pr-3 py-2 text-sm font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition"
                       placeholder="0.00"
                     />
                   </div>
                 </div>
               </div>
-              <p v-if="!cajasConCuentaUsada.length" class="text-[10px] text-slate-400">
-                Sin cuentas usadas en las últimas sesiones: dejá 0 o poné el saldo real si igual querés controlarlas.
-              </p>
             </div>
             <p v-else-if="totalSaldosCuentasApertura > 0" class="text-[10px] text-slate-500">
               Cuentas a controlar: {{ cuentasConSaldoApertura }} — total {{ fc(totalSaldosCuentasApertura) }}
@@ -786,9 +801,13 @@
           :retiros="retirosCierreActual"
           :disabled="closing"
           :guardando-retiro="guardandoRetiroActual"
+          :guardando-pago="guardandoPago"
+          :proveedores="proveedores"
           @contar="abrirContadorBilletes('arqueo', $event)"
+          @contar-medio="abrirContadorTransferencias($event)"
           @agregar-retiro="agregarRetiroCierreActual"
           @borrar-retiro="borrarRetiro($event, false)"
+          @pago-proveedor="registrarPagoProveedor($event)"
         />
 
         <!-- Egresos de la sesión: ya están descontados del esperado de cada medio -->
@@ -871,6 +890,15 @@
       :valor-actual="valorActualContador"
       @aplicar="aplicarConteoBilletes"
     />
+
+    <ContadorTransferenciasModal
+      v-model="showContadorTransferencias"
+      :titulo="tituloContadorTransferencias"
+      :valor-actual="valorActualContador"
+      :valor-esperado="valorEsperadoTransferencias"
+      :medio-por-defecto="contadorContexto?.metodo?.valor || 'transferencia'"
+      @aplicar="aplicarConteoTransferencias"
+    />
   </div>
 </template>
 
@@ -892,6 +920,7 @@ import BaseTable from '@/components/ui/BaseTable.vue'
 import BaseBadge from '@/components/ui/BaseBadge.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import ContadorBilletesModal from '@/components/caja/ContadorBilletesModal.vue'
+import ContadorTransferenciasModal from '@/components/caja/ContadorTransferenciasModal.vue'
 import ArqueoMedios from '@/components/caja/ArqueoMedios.vue'
 import { useSounds } from '@/composables/useSounds'
 
@@ -923,13 +952,16 @@ const aperturaForm = reactive({
 })
 
 const abrirCuentasDigitales = ref(false)
-const cajasConCuentaUsada = ref({})
+// Saldo con el que quedó cada cuenta en el último cierre. Se muestra como
+// referencia al lado del input, pero nunca se precarga: las cuentas abren en 0.
+const saldosUltimosCuentas = ref({})
 
 const montoFinalApertura = computed(() => {
   return Math.max(0, aperturaForm.monto_inicial - aperturaForm.monto_retiro)
 })
 
 const showContadorBilletes = ref(false)
+const showContadorTransferencias = ref(false)
 const contadorContexto = ref(null)
 
 const TITULOS_CONTADOR = {
@@ -956,6 +988,78 @@ function aplicarConteoBilletes(total) {
   if (ctx === 'apertura') aperturaForm.monto_inicial = total
   else if (ctx?.metodo) ctx.metodo.montoReal = total
   toast.success(`Total contado: ${fc(total)}`)
+}
+
+// El mismo contador pero para transferencias: se abre desde la fila del medio
+// que sea, con el esperado de esa fila como referencia del aviso.
+const tituloContadorTransferencias = computed(() => {
+  const medio = contadorContexto.value?.metodo
+  return medio ? `Contar ${medio.label}` : 'Contar transferencias'
+})
+
+const valorEsperadoTransferencias = computed(() => {
+  const medio = contadorContexto.value?.metodo
+  return medio ? Number(medio.esperado) || 0 : 0
+})
+
+function aplicarConteoTransferencias(total) {
+  const ctx = contadorContexto.value
+  if (ctx?.metodo) ctx.metodo.montoReal = total
+  toast.success(`Total contado: ${fc(total)}`)
+}
+
+// Se abre desde cualquier medio que no sea efectivo: el efectivo tiene su
+// contador de billetes y este es para las cuentas.
+function abrirContadorTransferencias(metodo) {
+  if (metodo?.valor === 'efectivo') {
+    abrirContadorBilletes('arqueo', metodo)
+    return
+  }
+  contadorContexto.value = { contexto: 'arqueo', metodo }
+  showContadorTransferencias.value = true
+}
+
+// --- Proveedores, para el pago del cierre ---
+// Se cargan al abrir el cierre y no antes: la lista puede estar larga y hasta
+// ese momento no se necesitan.
+const proveedores = ref([])
+
+async function cargarProveedores() {
+  if (proveedores.value.length) return
+  try {
+    const data = await api.get('/api/proveedores', { page_size: 100000 })
+    proveedores.value = Array.isArray(data) ? data : []
+  } catch {
+    proveedores.value = []
+  }
+}
+
+const guardandoPago = ref(false)
+
+async function registrarPagoProveedor({ monto, proveedor_id, proveedor_nombre, descripcion, medio_pago }, cierreId = null) {
+  guardandoPago.value = true
+  try {
+    await api.post('/api/caja/pago-proveedor', {
+      monto,
+      proveedor_id,
+      proveedor_nombre,
+      descripcion: descripcion || '',
+      medio_pago,
+      ...(cierreId ? { cierre_id: cierreId } : {}),
+    })
+    toast.success(`Pago a ${proveedor_nombre} registrado: ${fc(monto)}`)
+    if (cierreId) {
+      await cargarArqueoSesion()
+    } else {
+      await cargarResumenCierreActual()
+    }
+    await fetchResumen()
+    await fetchMovimientos()
+  } catch (e) {
+    toast.error('Error al registrar el pago: ' + (e?.data?.detail || e?.message || ''))
+  } finally {
+    guardandoPago.value = false
+  }
 }
 
 const metodosArqueo = reactive([])
@@ -1497,17 +1601,23 @@ async function abrirCaja() {
   showAperturaModal.value = true
 }
 
-// Trae el saldo con el que quedó cada cuenta digital en el último cierre para
-// que el operador solo confirme el número que ve hoy en la app.
+// Las cuentas digitales abren siempre en 0.
+//
+// Antes se precargaban con el saldo del último cierre, y el resultado era que
+// un clic de más abría la caja con un saldo inventado: si el cajero no miraba
+// el campo y confirmaba directo, el arqueo del día ya nacía con una diferencia
+// que no se explica. El saldo real de la app se escribe a mano; el de ayer
+// queda a la vista como referencia, no como valor.
 async function cargarSaldosCuentasSugeridos() {
   const saldos = {}
   MEDIOS_CUENTA.forEach(m => { saldos[m] = 0 })
   try {
     const data = await api.get('/api/caja/saldos-cuentas')
     const sugeridos = data?.saldos || {}
-    cajasConCuentaUsada.value = sugeridos
+    // Se guarda aparte, solo para mostrarlo al lado del input.
+    saldosUltimosCuentas.value = {}
     MEDIOS_CUENTA.forEach(m => {
-      if (sugeridos[m] != null) saldos[m] = Number(sugeridos[m]) || 0
+      if (sugeridos[m] != null) saldosUltimosCuentas.value[m] = Number(sugeridos[m]) || 0
     })
   } catch { /* sin sugeridos: quedan en 0 */ }
   aperturaForm.saldos_cuentas = saldos
@@ -1580,6 +1690,8 @@ async function initCierreCaja() {
 
   try {
     await cargarResumenCierreActual()
+    // El bloque de pago a proveedor necesita la lista, y solo se usa acá.
+    await cargarProveedores()
     cierreComentario.value = ''
     showCierreModal.value = true
   } catch (e) {
@@ -1638,11 +1750,15 @@ function construirMetodosArqueo(data, { cerrados = null, prellenar = false } = {
 const retirosCierreActual = ref([])
 const totalRetirosCierreActual = computed(() => retirosCierreActual.value.reduce((s, r) => s + (Number(r.monto) || 0), 0))
 
-async function agregarRetiroCierreActual({ monto, motivo }) {
+async function agregarRetiroCierreActual({ monto, motivo, por_dejo, deja }) {
   guardandoRetiroActual.value = true
   try {
     await api.post('/api/caja/retiro-cierre', { monto, motivo: motivo || '' })
-    toast.success('Extracción registrada')
+    // El mensaje dice las dos mitades porque es lo que hay que saber al
+    // cerrar: cuánto salió y cuánto queda adentro.
+    toast.success(por_dejo
+      ? `Dejaste ${fc(deja)} y te llevaste ${fc(monto)}`
+      : 'Extracción registrada')
     await cargarResumenCierreActual()
     await fetchMovimientos()
   } catch (e) {
@@ -1652,11 +1768,13 @@ async function agregarRetiroCierreActual({ monto, motivo }) {
   }
 }
 
-async function agregarRetiroSesion({ monto, motivo }) {
+async function agregarRetiroSesion({ monto, motivo, por_dejo, deja }) {
   guardandoRetiroSesion.value = true
   try {
     await api.post('/api/caja/retiro-cierre', { cierre_id: cierreSesionId.value, monto, motivo: motivo || '' })
-    toast.success('Extracción registrada')
+    toast.success(por_dejo
+      ? `Dejaste ${fc(deja)} y te llevaste ${fc(monto)}`
+      : 'Extracción registrada')
     await cargarArqueoSesion()
     await fetchResumen()
   } catch (e) {
@@ -1667,16 +1785,24 @@ async function agregarRetiroSesion({ monto, motivo }) {
 }
 
 async function borrarRetiro(retiro, deSesion) {
+  // La lista mezcla extracciones y pagos a proveedor: cada uno tiene su
+  // endpoint porque cada uno valida su propia sesión.
+  const esPago = retiro.tipo === 'pago_proveedor'
+  const base = esPago ? 'pago-proveedor' : 'retiro-cierre'
   try {
-    await api.delete(`/api/caja/retiro-cierre/${retiro.id}`)
+    await api.delete(`/api/caja/${base}/${retiro.id}`)
     if (deSesion) await cargarArqueoSesion()
     else {
       await cargarResumenCierreActual()
       await fetchMovimientos()
     }
     await fetchResumen()
+    toast.success(esPago ? 'Pago anulado' : 'Extracción deshecha')
   } catch (e) {
-    toast.error('Error al borrar la extracción: ' + (e?.data?.detail || e?.message || ''))
+    toast.error(
+      (esPago ? 'Error al anular el pago: ' : 'Error al borrar la extracción: ')
+      + (e?.data?.detail || e?.message || '')
+    )
   }
 }
 

@@ -56,6 +56,28 @@ class MovimientoRequest(BaseModel):
         return v
 
 
+class PagoProveedorRequest(BaseModel):
+    monto: float = Field(..., gt=0)
+    proveedor_id: Optional[int] = Field(None, description="Proveedor de la lista. Si no, se escribe el nombre a mano")
+    proveedor_nombre: Optional[str] = Field(None, description="Nombre a mano, para pagar a alguien que no está cargado")
+    descripcion: str = Field("", description="Detalle del pago (qué se compró)")
+    medio_pago: str = Field("efectivo", description="De qué cuenta sale el dinero")
+    cierre_id: Optional[int] = Field(
+        None,
+        description="Sesión a la que pertenece. Sin esto va a la sesión abierta.",
+    )
+    sucursal_id: int = 1
+
+    @field_validator("medio_pago")
+    @classmethod
+    def _validar_medio_pago(cls, v):
+        if v not in caja_service.MEDIOS_INGRESO:
+            raise ValueError(
+                f"Medio de pago inválido. Opciones: {', '.join(caja_service.MEDIOS_INGRESO)}"
+            )
+        return v
+
+
 class EgresoEspecialRequest(BaseModel):
     monto: float = Field(..., gt=0)
     descripcion: str = ""
@@ -424,6 +446,62 @@ def egreso_especial(
         },
         message=f"Egreso especial registrado. {'Notificación WhatsApp lista.' if whatsapp_url else 'Sin número de dueño configurado.'}",
     )
+
+
+@router.post("/pago-proveedor", response_model=RespuestaData)
+def pago_proveedor(
+    data: PagoProveedorRequest,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "cajero")),
+):
+    """Registra el pago a un proveedor con plata de la caja.
+
+    A diferencia de /egreso-especial, este acepta `cierre_id` para que el pago
+    pueda anotarse también al conciliar una sesión que el sistema ya cerró sola,
+    y `medio_pago` para que se registre de qué cuenta salió el dinero.
+    """
+    try:
+        mov = caja_service.registrar_pago_proveedor(
+            db, data.monto, user.id,
+            proveedor_id=data.proveedor_id,
+            proveedor_nombre=data.proveedor_nombre or "",
+            descripcion=data.descripcion or "",
+            cierre_id=data.cierre_id,
+            medio_pago=data.medio_pago,
+            sucursal_id=data.sucursal_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    auditoria_service.registrar(db, user.id, "pago_proveedor_caja", mov.id, None, {
+        "monto": data.monto,
+        "proveedor_id": data.proveedor_id,
+        "proveedor_nombre": data.proveedor_nombre,
+        "descripcion": data.descripcion,
+        "medio_pago": data.medio_pago,
+        "cierre_id": data.cierre_id,
+        "sucursal_id": data.sucursal_id,
+    })
+    quien = data.proveedor_nombre or (f"proveedor #{data.proveedor_id}" if data.proveedor_id else "el proveedor")
+    return RespuestaData(
+        data={"id": mov.id, "monto": mov.monto, "descripcion": mov.descripcion},
+        message=f"Pago a {quien} registrado: ${data.monto:,.2f}",
+    )
+
+
+@router.delete("/pago-proveedor/{pago_id}", response_model=RespuestaData)
+def borrar_pago_proveedor(
+    pago_id: int,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "cajero")),
+):
+    """Da de baja un pago a proveedor mal cargado."""
+    try:
+        caja_service.eliminar_pago_proveedor(db, pago_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    auditoria_service.registrar(db, user.id, "borrar_pago_proveedor_caja", pago_id, None, {})
+    return RespuestaData(data={"id": pago_id}, message="Pago a proveedor anulado")
 
 
 @router.get("/calendario", response_model=RespuestaData)

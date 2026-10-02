@@ -34,6 +34,12 @@ class MovimientoCaja(Base):
     comentario_concil = Column(Text, nullable=True)    # nota al confirmar/ajustar
     saldo_efectivo = Column(Float, nullable=True)      # efectivo que quedó en el cajón (base para la apertura siguiente)
 
+    # A qué sesión (cierre) pertenece un egreso registrado durante el cierre.
+    # Hace falta aparte de referencia_id porque un pago a proveedor usa
+    # referencia_id para el proveedor y el cierre va acá: con una sola columna
+    # no se podrían guardar los dos.
+    sesion_cierre_id = Column(Integer, nullable=True)
+
     usuario = relationship("Usuario", foreign_keys=[usuario_id], back_populates="movimientos_caja")
     confirmado_por = relationship("Usuario", foreign_keys=[confirmado_por_id])
     sucursal = relationship("Sucursal", back_populates="movimientos_caja")

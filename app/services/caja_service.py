@@ -41,6 +41,12 @@ MEDIOS_INGRESO = {
 
 MEDIOS_ESPERADOS_ARQUEO = ["efectivo", "debito", "credito", "transferencia"]
 
+# Egresos que se registran durante el cierre y cuyo referencia_id apunta al
+# cierre al que pertenecen (o, con sesion_cierre_id, a su sesión). Los dos
+# informan por igual el arqueo: bajan el esperado del medio de pago del que
+# salió el dinero.
+REFERENCIAS_EGRESO_CIERRE = ("retiro_cierre", "pago_proveedor")
+
 
 def nombre_medio(medio_pago: Optional[str]) -> str:
     """Nombre legible del medio de pago."""
@@ -420,6 +426,9 @@ def _movimientos_de_sesion(db: Session, apertura: MovimientoCaja, cierre_id: int
     referencia, así que quedan con un id mayor al del cierre y no entrarían en el
     rango, y sin ellos el arqueo de esa sesión daría el saldo previo a la
     extracción.
+
+    El pago a proveedor se anota con sesion_cierre_id porque su referencia_id
+    lo ocupa el proveedor, así que entra por esa rama y no por la otra.
     """
     return (
         db.query(MovimientoCaja)
@@ -427,7 +436,19 @@ def _movimientos_de_sesion(db: Session, apertura: MovimientoCaja, cierre_id: int
             MovimientoCaja.sucursal_id == sucursal_id,
             sa.or_(
                 sa.and_(MovimientoCaja.id > apertura.id, MovimientoCaja.id < cierre_id),
-                sa.and_(MovimientoCaja.id > cierre_id, MovimientoCaja.referencia_id == cierre_id),
+                # Todo lo que se anotó tomando este cierre como referencia, sin
+                # filtrar por tipo: el arqueo de un medio (cierre_total) y las
+                # extracciones también entran así.
+                sa.and_(
+                    MovimientoCaja.id > cierre_id,
+                    MovimientoCaja.referencia_id == cierre_id,
+                ),
+                # El pago a proveedor no puede usar referencia_id (lo ocupa el
+                # proveedor), así que apunta a su sesión por otra columna.
+                sa.and_(
+                    MovimientoCaja.id > cierre_id,
+                    MovimientoCaja.sesion_cierre_id == cierre_id,
+                ),
             ),
         )
         .order_by(MovimientoCaja.id.desc())
@@ -488,8 +509,11 @@ def obtener_arqueo_sesion(db: Session, cierre_id: int, sucursal_id: int = 1) -> 
         .filter(
             MovimientoCaja.sucursal_id == sucursal_id,
             MovimientoCaja.tipo == "egreso",
-            MovimientoCaja.referencia_tipo == "retiro_cierre",
-            MovimientoCaja.referencia_id == cierre.id,
+            MovimientoCaja.referencia_tipo.in_(REFERENCIAS_EGRESO_CIERRE),
+            sa.or_(
+                MovimientoCaja.referencia_id == cierre.id,
+                MovimientoCaja.sesion_cierre_id == cierre.id,
+            ),
         )
         .order_by(MovimientoCaja.id.desc())
         .all()
@@ -518,13 +542,20 @@ def obtener_arqueo_sesion(db: Session, cierre_id: int, sucursal_id: int = 1) -> 
 
 
 def _serializar_retiros(retiros: List[MovimientoCaja]) -> List[dict]:
-    """Extracciones de efectivo ya registradas, para mostrarlas y borrarlas."""
+    """Egresos de cierre ya registrados, para mostrarlos y borrarlos.
+
+    Van juntos porque los dos se muestran en el mismo lugar del arqueo, pero
+    cada uno lleva su tipo: el front usa eso para ofrecer el botón que
+    corresponde y para no mandar a borrar un pago por la vía de las extracciones.
+    """
     return [
         {
             "id": m.id,
+            "tipo": m.referencia_tipo or "retiro_cierre",
             "monto": round(m.monto or 0.0, 2),
             "medio_pago": m.medio_pago or "efectivo",
             "descripcion": m.descripcion,
+            "proveedor_id": m.referencia_id if m.referencia_tipo == "pago_proveedor" else None,
             "fecha": m.created_at.isoformat() if m.created_at else None,
         }
         for m in retiros
@@ -618,6 +649,100 @@ def eliminar_retiro_cierre(db: Session, retiro_id: int, sucursal_id: int = 1) ->
         cierre, _ = _exigir_sesion_arqueable(db, movimiento.referencia_id, sucursal_id)
     elif not caja_abierta(db, sucursal_id):
         raise ValueError("No hay caja abierta para modificar la extracción.")
+
+    db.delete(movimiento)
+    db.commit()
+
+    if cierre is not None:
+        _recalcular_cierre(db, cierre, sucursal_id)
+
+
+def registrar_pago_proveedor(
+    db: Session,
+    monto: float,
+    usuario_id: int,
+    proveedor_id: Optional[int] = None,
+    proveedor_nombre: str = "",
+    descripcion: str = "",
+    cierre_id: Optional[int] = None,
+    medio_pago: str = "efectivo",
+    sucursal_id: int = 1,
+) -> MovimientoCaja:
+    """Registra el pago a un proveedor hecho con plata de la caja.
+
+    Es un egreso más de la sesión, así que baja el esperado del medio de pago
+    del que salió el dinero y aparece junto a las extracciones en el arqueo.
+    Lo que lo distingue es que guarda contra quién se pagó: el proveedor va en
+    referencia_id y la sesión en sesion_cierre_id.
+
+    El nombre del proveedor se copia a la descripción porque el arqueo se lee
+    sin joins: si el proveedor se renombra después, el cierre del día anterior
+    tiene que seguir diciendo a quién se le pagó.
+    """
+    if monto <= 0:
+        raise ValueError("El monto del pago tiene que ser mayor a 0.")
+    if medio_pago not in MEDIOS_INGRESO:
+        raise ValueError(f"Medio de pago inválido. Opciones: {', '.join(MEDIOS_INGRESO)}")
+    if proveedor_id is None and not proveedor_nombre:
+        raise ValueError("Elegí un proveedor o escribí a quién le pagaste.")
+
+    cierre = None
+    if cierre_id is not None:
+        cierre, _ = _exigir_sesion_arqueable(db, cierre_id, sucursal_id)
+    elif not caja_abierta(db, sucursal_id):
+        raise ValueError("No hay caja abierta para registrar el pago.")
+
+    quien = (proveedor_nombre or "").strip()
+    partes = []
+    if quien:
+        partes.append(quien)
+    if descripcion.strip():
+        partes.append(descripcion.strip())
+    detalle = ": ".join(partes)
+    texto = "Pago a proveedor"
+    if detalle:
+        texto += f": {detalle}"
+
+    movimiento = MovimientoCaja(
+        tipo="egreso",
+        monto=float(monto),
+        descripcion=texto,
+        medio_pago=medio_pago,
+        referencia_tipo="pago_proveedor",
+        referencia_id=proveedor_id,
+        sesion_cierre_id=cierre.id if cierre is not None else None,
+        usuario_id=usuario_id,
+        sucursal_id=sucursal_id,
+    )
+    db.add(movimiento)
+    db.commit()
+    db.refresh(movimiento)
+
+    if cierre is not None:
+        _recalcular_cierre(db, cierre, sucursal_id)
+    return movimiento
+
+
+def eliminar_pago_proveedor(db: Session, pago_id: int, sucursal_id: int = 1) -> None:
+    """Da de baja un pago a proveedor mal cargado, si su sesión es arqueable."""
+    movimiento = (
+        db.query(MovimientoCaja)
+        .filter(
+            MovimientoCaja.id == pago_id,
+            MovimientoCaja.sucursal_id == sucursal_id,
+            MovimientoCaja.tipo == "egreso",
+            MovimientoCaja.referencia_tipo == "pago_proveedor",
+        )
+        .first()
+    )
+    if not movimiento:
+        raise ValueError("El pago no existe.")
+
+    cierre = None
+    if movimiento.sesion_cierre_id is not None:
+        cierre, _ = _exigir_sesion_arqueable(db, movimiento.sesion_cierre_id, sucursal_id)
+    elif not caja_abierta(db, sucursal_id):
+        raise ValueError("No hay caja abierta para modificar el pago.")
 
     db.delete(movimiento)
     db.commit()
@@ -876,10 +1001,18 @@ def obtener_saldo_por_medio(db: Session, sucursal_id: int = 1) -> dict:
             fila = saldos.setdefault(m.medio_pago or "efectivo", _fila_saldo())
             fila["ingresos"] += m.monto or 0.0
         elif m.tipo == "egreso":
-            # Una extracción anotada con cierre pertenece a la sesión de ese
-            # cierre, no a la que está abierta: contarla acá bajaría de más el
-            # cajón de hoy (que ya se abrió con lo que quedó de la anterior).
+            # Un egreso de cierre con sesión asignada pertenece a la sesión de
+            # ese cierre, no a la que está abierta: contarlo acá bajaría de
+            # más el cajón de hoy (que ya se abrió con lo que quedó de la
+            # anterior).
+            #
+            # Cada tipo marca su sesión distinto: la extracción lo tiene en
+            # referencia_id, el pago a proveedor en sesion_cierre_id (porque
+            # referencia_id lo ocupa el proveedor). Un pago a proveedor de la
+            # sesión abierta tiene proveedor pero ninguna sesión, y sí cuenta.
             if m.referencia_tipo == "retiro_cierre" and m.referencia_id is not None:
+                continue
+            if m.referencia_tipo == "pago_proveedor" and m.sesion_cierre_id is not None:
                 continue
             fila = saldos.setdefault(m.medio_pago or "efectivo", _fila_saldo())
             fila["egresos"] += m.monto or 0.0

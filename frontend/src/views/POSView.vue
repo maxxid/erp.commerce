@@ -1364,11 +1364,22 @@
             </BaseButton>
           </div>
           <p class="text-[10px] text-slate-400 mb-2">
-            Dejá en 0 las que no uses. El saldo que cargues acá es con el que se va a cuadrar esa cuenta al cerrar.
+            Cargá el saldo que muestra hoy cada app. Arranca en 0: dejá en 0 las que no uses.
           </p>
           <div v-if="abrirCuentasDigitales" class="space-y-2">
             <div v-for="cuenta in cuentasDigitales" :key="cuenta.valor">
-              <label class="text-xs text-slate-600 dark:text-slate-300">{{ cuenta.label }}</label>
+              <div class="flex items-center justify-between gap-2">
+                <label class="text-xs text-slate-600 dark:text-slate-300">{{ cuenta.label }}</label>
+                <button
+                  v-if="saldosUltimosCuentasPos[cuenta.valor] > 0"
+                  type="button"
+                  class="text-[10px] text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 transition shrink-0"
+                  title="Cargar el saldo con el que quedó en el último cierre"
+                  @click="aperturaForm.saldos_cuentas[cuenta.valor] = saldosUltimosCuentasPos[cuenta.valor]"
+                >
+                  ayer {{ fc(saldosUltimosCuentasPos[cuenta.valor]) }}
+                </button>
+              </div>
               <div class="relative mt-0.5">
                 <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold">$</span>
                 <input
@@ -1376,6 +1387,7 @@
                   type="number"
                   min="0"
                   step="0.01"
+                  inputmode="decimal"
                   class="w-full pl-7 pr-3 py-2 text-sm font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition"
                   placeholder="0.00"
                 />
@@ -1461,6 +1473,8 @@ const abriendoCaja = ref(false)
 const aperturaForm = reactive({ monto_inicial: 0, monto_retiro: 0, motivo_retiro: '', saldos_cuentas: {} })
 const montoFinalApertura = computed(() => Math.max(0, aperturaForm.monto_inicial - aperturaForm.monto_retiro))
 const abrirCuentasDigitales = ref(false)
+// Saldo del último cierre, solo como referencia. Las cuentas abren en 0.
+const saldosUltimosCuentasPos = ref({})
 const MEDIO_LABELS_CUENTA = {
   smartpoint: 'SmartPoint',
   mercadopago_qr: 'QR MercadoPago',
@@ -1881,16 +1895,21 @@ async function abrirCajaDesdePos() {
   return await new Promise(resolve => { aperturaResolver = resolve })
 }
 
-// Saldo con el que quedó cada cuenta digital en el último cierre: el operador
-// solo confirma el número que ve hoy en la app.
+// Las cuentas digitales abren siempre en 0.
+//
+// Se dejó de precargar con el saldo del último cierre porque abrir la caja con
+// un saldo que nadie miró en la app generaba diferencias fantasma en el arqueo
+// del día. Acá se anota lo que se ve hoy; el saldo de ayer queda a la vista
+// como referencia, y se usa con un clic si coincide.
 async function cargarSaldosCuentasSugeridosPos() {
   const saldos = {}
   MEDIOS_CUENTA.forEach(m => { saldos[m] = 0 })
   try {
     const data = await api.get('/api/caja/saldos-cuentas')
     const sugeridos = data?.saldos || {}
+    saldosUltimosCuentasPos.value = {}
     MEDIOS_CUENTA.forEach(m => {
-      if (sugeridos[m] != null) saldos[m] = Number(sugeridos[m]) || 0
+      if (sugeridos[m] != null) saldosUltimosCuentasPos.value[m] = Number(sugeridos[m]) || 0
     })
   } catch { /* sin sugeridos: quedan en 0 */ }
   aperturaForm.saldos_cuentas = saldos
