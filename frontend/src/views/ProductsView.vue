@@ -374,10 +374,38 @@ async function fetchProductsData(checkPendientes = false) {
   }
 }
 
-onMounted(() => { fetchProductsData(true); fetchProveedores() })
-watch(() => route.path, (path) => {
-  if (path === '/products') fetchProductsData()
+onMounted(async () => {
+  await fetchProductsData(true)
+  fetchProveedores()
+  abrirDesdeQuery()
 })
+watch(() => route.path, async (path) => {
+  if (path === '/products') {
+    await fetchProductsData()
+    abrirDesdeQuery()
+  }
+})
+watch(() => route.query.editar, abrirDesdeQuery)
+
+// El dashboard manda ?editar=<id> cuando desplegás una categoría y tocás un
+// producto, para corregir de una qué categoría tiene puesta. Espera a que los
+// productos estén cargados: si no, no lo encuentra en la lista y no abre nada.
+async function abrirDesdeQuery() {
+  const id = Number(route.query.editar)
+  if (!id) return
+  if (editingProduct.value?.id === id && showModal.value) return
+  let p = products.value.find(x => x.id === id)
+  if (!p) {
+    // La lista puede estar filtrada o paginada: el id puede no estar en memoria.
+    p = await api.get(`/api/productos/${id}`).catch(() => null)
+  }
+  if (!p) {
+    toast.error('No se encontró el producto')
+    return
+  }
+  highlightedIds.value = new Set([id])
+  openEditModal(p)
+}
 
 async function syncProducts() {
   syncing.value = true

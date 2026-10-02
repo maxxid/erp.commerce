@@ -34,6 +34,18 @@ def _local(d):
     return (d or HOY()).astimezone(TZ_AR)
 
 
+def _hora_local_venta(fecha):
+    """Hora local (0-23) de una venta, partiendo de un fecha guardada en UTC.
+
+    La columna DateTime no guarda zona: SQLite la devuelve naive, y esa naive
+    es UTC (así se guardó). Ojo con _a_utc() acá, que interpreta un naive como
+    hora local y correría el gráfico al revés.
+    """
+    if fecha.tzinfo is None:
+        fecha = fecha.replace(tzinfo=timezone.utc)
+    return fecha.astimezone(TZ_AR).hour
+
+
 def _inicio_dia(d=None):
     local = _local(d)
     return _a_utc(local.replace(hour=0, minute=0, second=0, microsecond=0))
@@ -94,6 +106,84 @@ def _ventana(periodo):
         return desde, _add_meses(desde, 3)
     desde = _inicio_mes()
     return desde, _add_meses(desde, 1)
+
+
+PERIODOS_VENTAS = ("7dias", "semana", "semana_anterior", "mes", "mes_anterior")
+
+
+def _ventana_ventas(periodo):
+    """(desde, hasta, granularidad) para el gráfico de ventas por período.
+
+    Los rangos de semana se muestran por día y los de mes por semana: 30 barras
+    en media pantalla quedan de 4px y no se leen. La granularidad se devuelve
+    para que el front rotule el eje y no haya que adivinarla.
+    """
+    if periodo == "7dias":
+        hoy = _inicio_dia()
+        return hoy - timedelta(days=6), hoy + timedelta(days=1), "dia"
+    if periodo == "semana":
+        desde = _inicio_semana()
+        return desde, desde + timedelta(days=7), "dia"
+    if periodo == "semana_anterior":
+        desde = _inicio_semana() - timedelta(days=7)
+        return desde, desde + timedelta(days=7), "dia"
+    if periodo == "mes":
+        desde = _inicio_mes()
+        return desde, _add_meses(desde, 1), "semana"
+    hasta = _inicio_mes()
+    return _add_meses(hasta, -1), hasta, "semana"
+
+
+def _buckets(desde, hasta, granularidad):
+    """Corta el período en tramos con su rótulo."""
+    out = []
+    cursor = desde
+    n = 1
+    while cursor < hasta:
+        if granularidad == "dia":
+            fin = cursor + timedelta(days=1)
+            label = cursor.strftime("%a %d")
+        else:
+            fin = min(cursor + timedelta(days=7), hasta)
+            label = f"S{n} {cursor.strftime('%d/%m')}"
+            n += 1
+        out.append((cursor, fin, label))
+        cursor = fin
+    return out
+
+
+def _rutas_categorias(db):
+    """id -> ruta completa, ej. "Bebidas / Gaseosas".
+
+    Sirve para ver de qué subcategoría viene realmente cada producto, que es lo
+    que delata un producto mal cargado.
+    """
+    info = {c.id: {"nombre": c.nombre, "padre": c.padre_id} for c in db.query(Categoria).all()}
+    rutas = {}
+    for cid in info:
+        partes, actual, vistos = [], cid, set()
+        while actual in info and actual not in vistos:
+            vistos.add(actual)
+            partes.insert(0, info[actual]["nombre"])
+            actual = info[actual]["padre"]
+        rutas[cid] = " / ".join(partes)
+    return rutas
+
+
+def _descendientes(db, raiz_id):
+    """ids de la categoría raíz y todas sus hijas."""
+    hijos = {}
+    for c in db.query(Categoria.id, Categoria.padre_id).all():
+        hijos.setdefault(c.padre_id, []).append(c.id)
+    out, pila, vistos = set(), [raiz_id], set()
+    while pila:
+        cid = pila.pop()
+        if cid in vistos:
+            continue
+        vistos.add(cid)
+        out.add(cid)
+        pila.extend(hijos.get(cid, []))
+    return out
 
 
 def _raices_categorias(db):
@@ -174,7 +264,8 @@ def resumen(db: Session = Depends(get_db), user: Usuario = Depends(get_current_u
         Venta.estado == "confirmada", Venta.fecha >= hace_14_dias, Venta.fecha < hace_7_dias).scalar() or 0
     tendencia = round(((ventas_semana_actual - ventas_semana_anterior) / max(ventas_semana_anterior, 1)) * 100, 1)
 
-    # Últimos 7 días
+    # Últimos 7 días. Lo consume el mini-dashboard del POS; el dashboard
+    # completo usa /ventas-periodo, que sí deja elegir el rango.
     dias_labels, dias_valores = [], []
     for i in range(6, -1, -1):
         dia = hoy - timedelta(days=i)
@@ -185,11 +276,14 @@ def resumen(db: Session = Depends(get_db), user: Usuario = Depends(get_current_u
         dias_valores.append(float(total_dia))
 
     # Picos por hora (hoy)
+    # Ojo con la hora: venta.fecha es UTC (así se guarda) y el local abre a las 9,
+    # así que con v.fecha.hour la venta de las 9 local caía en el horario 12 y
+    # el gráfico mostraba el día corrido tres horas. Va hora local, como el resto
+    # del dashboard, que ya trabaja en UTC-3.
     horas = [0] * 24
     for v in ventas_hoy_rows:
         if v.fecha:
-            h = v.fecha.hour
-            horas[h] += v.total
+            horas[_hora_local_venta(v.fecha)] += v.total
     horas_labels = [f"{h:02d}:00" for h in range(24)]
     horas_valores = [float(round(h, 2)) for h in horas]
 
@@ -353,6 +447,125 @@ def por_categoria(
         "categorias": top,
         "totales": totales,
         "cantidad_categorias": len(lista),
+    })
+
+
+@router.get("/ventas-periodo", response_model=RespuestaData)
+def ventas_periodo(
+    periodo: str = Query("7dias", description=f"Una de: {', '.join(PERIODOS_VENTAS)}"),
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """Serie de ventas por día o por semana para el período pedido.
+
+    El dashboard Hardcodeaba 'los últimos 7 días': no había forma de mirar la
+    semana que pasó ni el mes anterior, que es justo la comparación que sirve
+    para decidir si una venta fue buena o mala.
+    """
+    if periodo not in PERIODOS_VENTAS:
+        raise HTTPException(status_code=400, detail=f"periodo inválido. Opciones: {', '.join(PERIODOS_VENTAS)}")
+
+    desde, hasta, granularidad = _ventana_ventas(periodo)
+    labels, valores = [], []
+    for ini, fin, label in _buckets(desde, hasta, granularidad):
+        total = db.query(func.coalesce(func.sum(Venta.total), 0)).filter(
+            Venta.estado == "confirmada", Venta.fecha >= ini, Venta.fecha < fin
+        ).scalar() or 0
+        labels.append(label)
+        valores.append(round(float(total), 2))
+
+    return RespuestaData(data={
+        "periodo": periodo,
+        "granularidad": granularidad,
+        "labels": labels,
+        "valores": valores,
+        "total": round(sum(valores), 2),
+    })
+
+
+@router.get("/por-categoria/productos", response_model=RespuestaData)
+def productos_por_categoria(
+    categoria: str = Query(..., description="id de la categoría raíz, o 'sin_categoria'"),
+    periodo: str = Query("mes", description=f"Una de: {', '.join(PERIODOS_CATEGORIA)}"),
+    metrica: str = Query("importe", description=f"Una de: {', '.join(METRICAS_CATEGORIA)}"),
+    limite: int = Query(15, ge=1, le=100, description="Máximo de productos a devolver"),
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """Productos que más pesan dentro de una categoría, con su ruta real.
+
+    Cada producto trae la categoría de la que viene de verdad, no la raíz del
+    agrupado: un "Aceite" que aparece bajo Bebidas / Gaseosas delata que está mal
+    cargado, que es el motivo de agrupar por jerarquía.
+    """
+    if periodo not in PERIODOS_CATEGORIA:
+        raise HTTPException(status_code=400, detail=f"periodo inválido. Opciones: {', '.join(PERIODOS_CATEGORIA)}")
+    if metrica not in METRICAS_CATEGORIA:
+        raise HTTPException(status_code=400, detail=f"metrica inválida. Opciones: {', '.join(METRICAS_CATEGORIA)}")
+    if categoria == "otras":
+        raise HTTPException(status_code=400, detail="'otras' es un agrupamiento, no se puede drill-down")
+
+    desde, hasta = _ventana(periodo)
+
+    q = db.query(
+        VentaItem.producto_id,
+        func.coalesce(func.sum(VentaItem.subtotal), 0).label("importe"),
+        func.coalesce(func.sum(VentaItem.cantidad), 0).label("cantidad"),
+        func.coalesce(func.sum(VentaItem.cantidad * func.coalesce(VentaItem.precio_costo, 0)), 0).label("costo"),
+        func.count(VentaItem.id).label("items"),
+        func.count(VentaItem.precio_costo).label("items_con_costo"),
+    ).join(
+        Venta, VentaItem.venta_id == Venta.id
+    ).join(
+        Producto, Producto.id == VentaItem.producto_id
+    ).filter(
+        Venta.estado == "confirmada", Venta.fecha >= desde, Venta.fecha < hasta
+    )
+
+    if categoria == SIN_CATEGORIA:
+        q = q.filter(Producto.categoria_id.is_(None))
+    else:
+        try:
+            raiz_id = int(categoria)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="categoria debe ser un id numérico o 'sin_categoria'")
+        if not db.query(Categoria.id).filter(Categoria.id == raiz_id).first():
+            raise HTTPException(status_code=404, detail="categoría inexistente")
+        q = q.filter(Producto.categoria_id.in_(_descendientes(db, raiz_id)))
+
+    filas = q.group_by(VentaItem.producto_id).all()
+
+    ids = [f.producto_id for f in filas]
+    productos = {p.id: p for p in db.query(Producto).filter(Producto.id.in_(ids)).all()} if ids else {}
+    rutas = _rutas_categorias(db)
+
+    lista = []
+    for prod_id, importe, cantidad, costo, items, con_costo in filas:
+        prod = productos.get(prod_id)
+        if not prod:
+            continue
+        importe = float(importe or 0)
+        ganancia = importe - float(costo or 0)
+        lista.append({
+            "id": prod.id,
+            "nombre": prod.nombre,
+            "codigo_barras": prod.codigo_barras,
+            "categoria": rutas.get(prod.categoria_id, "Sin categoría"),
+            "categoria_id": prod.categoria_id,
+            "importe": round(importe, 2),
+            "ganancia": round(ganancia, 2),
+            "cantidad": round(float(cantidad or 0), 2),
+            "margen_pct": round((ganancia / importe * 100), 1) if importe > 0 else 0.0,
+            "items_sin_costo": (items or 0) - (con_costo or 0),
+        })
+    lista.sort(key=lambda r: r[metrica], reverse=True)
+
+    return RespuestaData(data={
+        "categoria": categoria,
+        "periodo": periodo,
+        "metrica": metrica,
+        "productos": lista[:limite],
+        "total_productos": len(lista),
     })
 
 

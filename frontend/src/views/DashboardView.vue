@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { formatCurrency as fc } from '@/composables/useUtils'
 import api from '@/services/api'
@@ -11,6 +12,7 @@ import BaseSkeleton from '@/components/ui/BaseSkeleton.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 
 const auth = useAuthStore()
+const router = useRouter()
 const simple = ref(false)
 const loading = ref(true)
 const alertas = ref([])
@@ -29,7 +31,6 @@ const mockData = {
   margen_pct_hoy: 36, margen_pct_mes: 36,
   margen_bruto_semana: 24000, margen_bruto_trimestre: 65000,
   margen_pct_semana: 34, margen_pct_trimestre: 33,
-  ventas_7_dias: { valores: [5000, 8000, 3000, 12000, 6000, 9000, 7000], labels: ['Lun','Mar','Mie','Jue','Vie','Sab','Dom'] },
   // Mismo formato de rótulos que manda el backend, así el fallback se ve igual
   ventas_por_hora: { valores: [0,0,0,2,1,0,3,5,8,6,4,2,0,0,1,3,5,4,2,1,0,0,0,0], labels: Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0') + ':00') },
   top_productos_mes: [
@@ -42,9 +43,39 @@ const mockData = {
 }
 
 const maxBar = computed(() => {
-  const vals = data.value.ventas_7_dias?.valores || []
+  const vals = tendVals.value
   return Math.max(...vals, 1)
 })
+const tendSinDatos = computed(() => tendVals.value.length > 0 && tendVals.value.every((v) => !v))
+
+// --- Gráfico de ventas por período ---
+// Antes el backend clavaba "últimos 7 días" y el front no tenía por dónde
+// mirar la semana ni el mes anterior.
+const tendPeriodo = ref('7dias')
+const tendData = ref(null)
+const tendLoading = ref(false)
+const RANGOS = [
+  { value: '7dias', label: '7 días' },
+  { value: 'semana', label: 'Esta semana' },
+  { value: 'semana_anterior', label: 'Semana pasada' },
+  { value: 'mes', label: 'Este mes' },
+  { value: 'mes_anterior', label: 'Mes pasado' },
+]
+const tendLabels = computed(() => tendData.value?.labels || [])
+const tendVals = computed(() => tendData.value?.valores || [])
+
+async function loadTendencia() {
+  tendLoading.value = true
+  try {
+    tendData.value = await api.get('/api/dashboard/ventas-periodo', {
+      params: { periodo: tendPeriodo.value },
+    })
+  } catch {
+    tendData.value = null
+  } finally {
+    tendLoading.value = false
+  }
+}
 
 // Sólo las horas con venta: el backend manda 24 y casi todas valen 0, así que
 // mostrar las 24 deja las barras finísimas y los rótulos ilegibles.
@@ -88,11 +119,17 @@ function pctCat(v) {
   return ((v || 0) / maxCat.value) * 100
 }
 
-function fmtCat(r) {
+// Formatea el valor de la métrica elegida. Sirve para categorías y productos:
+// la respuesta trae siempre las cuatro columnas.
+function fmtMetrica(r) {
   const m = metricaActual.value
   if (m.money) return fc(r[m.value] || 0)
   if (m.value === 'cantidad') return (r.cantidad || 0) + ' u'
   return (r.margen_pct || 0) + '%'
+}
+
+function catAbierta(clave) {
+  return catAbiertas.value[clave] === 'listo' || catAbiertas.value[clave] === 'cargando'
 }
 
 async function loadCategorias() {
@@ -107,6 +144,60 @@ async function loadCategorias() {
   } finally {
     catLoading.value = false
   }
+}
+
+// Al cambiar de métrica o período, lo que quedó desplegado pasa a ser de otro
+// corte: cerrarlo siempre es más simple que invalidarlo en cada fila.
+function resetDesplegado() {
+  catAbiertas.value = {}
+  catProductos.value = {}
+}
+
+function setCatPeriodo(p) {
+  catPeriodo.value = p
+  resetDesplegado()
+  loadCategorias()
+}
+
+function setCatMetrica(m) {
+  catMetrica.value = m
+  resetDesplegado()
+  loadCategorias()
+}
+
+// --- Drill-down de categorías ---
+// Por cada clave: 'cargando' | 'listo' | 'error'
+const catAbiertas = ref({})
+const catProductos = ref({})
+
+async function toggleCategoria(fila) {
+  // "Otras" es un agrupamiento del gráfico, no una categoría real: no tiene
+  // productos que mirar.
+  if (fila.clave === 'otras') return
+  if (catAbiertas.value[fila.clave] === 'listo') {
+    delete catAbiertas.value[fila.clave]
+    return
+  }
+  catAbiertas.value[fila.clave] = 'cargando'
+  try {
+    const resp = await api.get('/api/dashboard/por-categoria/productos', {
+      params: {
+        categoria: fila.clave,
+        periodo: catPeriodo.value,
+        metrica: catMetrica.value,
+        limite: 15,
+      },
+    })
+    catProductos.value[fila.clave] = resp.productos || []
+    catAbiertas.value[fila.clave] = 'listo'
+  } catch {
+    catProductos.value[fila.clave] = []
+    catAbiertas.value[fila.clave] = 'error'
+  }
+}
+
+function irAProducto(p) {
+  router.push({ name: 'products', query: { editar: p.id } })
 }
 
 onMounted(() => load())
@@ -140,6 +231,7 @@ async function load() {
   // El gráfico de categorías es independiente: si este endpoint falla, el resto
   // del dashboard sigue funcionando igual.
   loadCategorias()
+  loadTendencia()
 }
 
 // Alturas de skeleton estables: Math.random() en el template se re-evalúa en
@@ -272,18 +364,41 @@ function buildLoteAlerts() {
     <!-- Charts -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <BaseCard padding="lg">
-        <div class="flex items-center justify-between mb-5">
-          <h3 class="font-bold text-slate-900 dark:text-white text-sm">Ventas — Últimos 7 Días</h3>
-          <BaseBadge variant="brand" size="xs">{{ Math.floor((data.ventas_7_dias?.valores || []).reduce((a, b) => a + b, 0)) }} total</BaseBadge>
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+          <h3 class="font-bold text-slate-900 dark:text-white text-sm">Ventas</h3>
+          <div class="flex items-center gap-2">
+            <BaseBadge variant="brand" size="xs">{{ fc(tendData?.total || 0) }} total</BaseBadge>
+            <select
+              v-model="tendPeriodo"
+              class="text-[11px] font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-2 py-1.5 focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+              @change="loadTendencia"
+            >
+              <option v-for="r in RANGOS" :key="r.value" :value="r.value">{{ r.label }}</option>
+            </select>
+          </div>
         </div>
-        <div v-if="loading" class="h-40 flex items-end gap-2">
+        <div v-if="tendLoading" class="h-40 flex items-end gap-3">
           <BaseSkeleton v-for="n in 7" :key="n" class="flex-1 rounded-t-lg" :style="{ height: skeletonHeight(n, 60) }" />
         </div>
+        <EmptyState
+          v-else-if="!tendLabels.length"
+          icon="fa-chart-line"
+          title="Sin datos de ventas"
+          text="No se pudo obtener la serie para este período."
+          compact
+        />
+        <EmptyState
+          v-else-if="tendSinDatos"
+          icon="fa-calendar-xmark"
+          title="Sin ventas en el período"
+          text="Probá con otro rango: no hay ventas confirmadas para estas fechas."
+          compact
+        />
         <div v-else class="h-40 flex items-end gap-3">
           <div
-            v-for="(v, i) in (data.ventas_7_dias?.valores || [])"
+            v-for="(v, i) in tendVals"
             :key="i"
-            class="flex-1 flex flex-col items-center gap-2 group"
+            class="flex-1 flex flex-col items-center gap-2 group min-w-0"
           >
             <div class="w-full bg-slate-100 dark:bg-slate-800 rounded-t-lg relative overflow-hidden h-full">
               <div
@@ -294,7 +409,7 @@ function buildLoteAlerts() {
                 {{ fc(v) }}
               </div>
             </div>
-            <span class="text-[10px] font-medium text-slate-500 dark:text-slate-400">{{ data.ventas_7_dias?.labels?.[i] }}</span>
+            <span class="text-[10px] font-medium text-slate-500 dark:text-slate-400 truncate w-full text-center">{{ tendLabels[i] }}</span>
           </div>
         </div>
       </BaseCard>
@@ -304,6 +419,7 @@ function buildLoteAlerts() {
           <h3 class="font-bold text-slate-900 dark:text-white text-sm">Picos por Hora (Hoy)</h3>
           <BaseBadge variant="success" size="xs">{{ horasConVenta.length || 0 }} hs</BaseBadge>
         </div>
+        <p class="text-[10px] text-slate-400 dark:text-slate-500 -mt-3 mb-3">Horario local</p>
         <div v-if="loading" class="h-40 flex items-end gap-1">
           <BaseSkeleton v-for="n in 12" :key="n" class="flex-1 rounded-t-sm" :style="{ height: skeletonHeight(n, 50) }" />
         </div>
@@ -352,15 +468,15 @@ function buildLoteAlerts() {
               :class="catPeriodo === p.value
                 ? 'bg-white dark:bg-slate-700 text-brand-600 dark:text-brand-400 shadow-sm'
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'"
-              @click="catPeriodo = p.value; loadCategorias()"
+              @click="setCatPeriodo(p.value)"
             >
               {{ p.label }}
             </button>
           </div>
           <select
-            v-model="catMetrica"
+            :value="catMetrica"
             class="text-[11px] font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-2.5 py-1.5 focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
-            @change="loadCategorias()"
+            @change="setCatMetrica($event.target.value)"
           >
             <option v-for="m in METRICAS" :key="m.value" :value="m.value">{{ m.label }}</option>
           </select>
@@ -377,37 +493,96 @@ function buildLoteAlerts() {
         text="No hay ventas confirmadas en el período seleccionado."
         compact
       />
-      <div v-else class="space-y-3">
+      <div v-else class="space-y-2">
         <div
           v-for="r in catFilas"
           :key="r.clave"
-          class="group"
+          class="rounded-xl border border-transparent hover:border-slate-200 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
         >
-          <div class="flex items-center justify-between gap-3 mb-1">
-            <span class="text-xs font-medium text-slate-700 dark:text-slate-200 truncate flex items-center gap-1.5">
-              {{ r.categoria }}
-              <i
-                v-if="r.items_sin_costo > 0"
-                class="fa-solid fa-circle-exclamation text-amber-500 text-[10px]"
-                :title="`${r.items_sin_costo} producto(s) sin costo cargado: la ganancia de esta categoría no es exacta`"
-              ></i>
-            </span>
-            <span class="text-xs font-mono-data font-semibold text-slate-800 dark:text-slate-100 shrink-0">
-              {{ fmtCat(r) }}
-            </span>
-          </div>
-          <div class="h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-            <div
-              class="h-full rounded-full transition-all duration-500 ease-out-expo"
-              :class="catMetrica === 'ganancia' ? 'bg-gradient-to-r from-emerald-500 to-emerald-300'
-                : catMetrica === 'margen_pct' ? 'bg-gradient-to-r from-amber-500 to-amber-300'
-                : catMetrica === 'cantidad' ? 'bg-gradient-to-r from-sky-500 to-sky-300'
-                : 'bg-gradient-to-r from-brand-600 to-brand-400'"
-              :style="{ width: pctCat(r[catMetrica]) + '%' }"
-            ></div>
+          <button
+            type="button"
+            class="w-full text-left px-3 py-2.5"
+            :class="r.clave === 'otras' ? 'cursor-default' : 'cursor-pointer'"
+            @click="toggleCategoria(r)"
+          >
+            <div class="flex items-center justify-between gap-3 mb-1.5">
+              <span class="text-xs font-medium text-slate-700 dark:text-slate-200 truncate flex items-center gap-1.5">
+                <i
+                  v-if="r.clave !== 'otras'"
+                  class="fa-solid text-[9px] text-slate-400 dark:text-slate-500 transition-transform"
+                  :class="catAbierta(r.clave) ? 'rotate-90' : ''"
+                ></i>
+                <i v-else class="fa-solid fa-ellipsis text-[9px] text-slate-400 dark:text-slate-500"></i>
+                {{ r.categoria }}
+                <i
+                  v-if="r.items_sin_costo > 0"
+                  class="fa-solid fa-circle-exclamation text-amber-500 text-[10px] shrink-0"
+                  :title="`${r.items_sin_costo} producto(s) sin costo cargado: la ganancia de esta categoría no es exacta`"
+                ></i>
+              </span>
+              <span class="text-xs font-mono-data font-semibold text-slate-800 dark:text-slate-100 shrink-0">
+                {{ fmtMetrica(r) }}
+              </span>
+            </div>
+            <div class="h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+              <div
+                class="h-full rounded-full transition-all duration-500 ease-out-expo"
+                :class="catMetrica === 'ganancia' ? 'bg-gradient-to-r from-emerald-500 to-emerald-300'
+                  : catMetrica === 'margen_pct' ? 'bg-gradient-to-r from-amber-500 to-amber-300'
+                  : catMetrica === 'cantidad' ? 'bg-gradient-to-r from-sky-500 to-sky-300'
+                  : 'bg-gradient-to-r from-brand-600 to-brand-400'"
+                :style="{ width: pctCat(r[catMetrica]) + '%' }"
+              ></div>
+            </div>
+          </button>
+
+          <!-- Productos de la categoría: para ver cuáles son los que venden y
+               de qué subcategoría viene cada uno (ojo si no corresponde) -->
+          <div v-if="catAbierta(r.clave)" class="px-3 pb-2.5">
+            <div class="border-t border-slate-100 dark:border-slate-800 pt-2 space-y-0.5">
+              <div v-if="catAbiertas[r.clave] === 'cargando'" class="space-y-2 pt-1">
+                <BaseSkeleton v-for="n in 3" :key="n" class="h-9 rounded-lg" />
+              </div>
+              <template v-else>
+                <p v-if="catAbiertas[r.clave] === 'error'" class="text-[11px] text-red-500 py-2">
+                  No se pudieron cargar los productos.
+                </p>
+                <p v-else-if="!(catProductos[r.clave] || []).length" class="text-[11px] text-slate-400 dark:text-slate-500 py-2">
+                  Sin productos para mostrar.
+                </p>
+                <button
+                  v-for="p in (catProductos[r.clave] || [])"
+                  :key="p.id"
+                  type="button"
+                  class="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors group"
+                  @click="irAProducto(p)"
+                >
+                  <span class="flex-1 min-w-0">
+                    <span class="block text-xs font-medium text-slate-700 dark:text-slate-200 truncate">
+                      {{ p.nombre }}
+                    </span>
+                    <span class="block text-[10px] text-slate-400 dark:text-slate-500 truncate">
+                      {{ p.categoria }}
+                      <i
+                        v-if="p.items_sin_costo > 0"
+                        class="fa-solid fa-circle-exclamation text-amber-500 ml-1"
+                        :title="`${p.items_sin_costo} venta(s) sin costo cargado`"
+                      ></i>
+                    </span>
+                  </span>
+                  <span class="text-[10px] font-mono-data text-slate-500 dark:text-slate-400 shrink-0">
+                    {{ p.cantidad }} u
+                  </span>
+                  <span class="text-xs font-mono-data font-semibold text-slate-800 dark:text-slate-100 shrink-0 w-20 text-right">
+                    {{ fmtMetrica(p) }}
+                  </span>
+                  <i class="fa-solid fa-pen text-[9px] text-slate-300 dark:text-slate-600 group-hover:text-brand-500 transition-colors shrink-0"></i>
+                </button>
+              </template>
+            </div>
           </div>
         </div>
-        <p v-if="catData?.categorias?.some((r) => r.clave === 'otras')" class="text-[10px] text-slate-400 dark:text-slate-500 pt-1">
+        <p v-if="catData?.categorias?.some((r) => r.clave === 'otras')" class="text-[10px] text-slate-400 dark:text-slate-500 pt-1 px-3">
           {{ catData.cantidad_categorias }} categorías con ventas; las últimas están agrupadas en "Otras".
         </p>
       </div>
