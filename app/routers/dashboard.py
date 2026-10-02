@@ -93,6 +93,11 @@ def _add_meses(desde, n):
     return desde.replace(year=desde.year + total // 12, month=total % 12 + 1, day=1)
 
 
+def _etiqueta_fecha(dt):
+    """'28/09' en hora local, para que el front muestre qué cubre cada rango."""
+    return _local(dt).strftime("%d/%m")
+
+
 def _ventana(periodo):
     """Devuelve (desde, hasta) en UTC para el período pedido."""
     if periodo == "hoy":
@@ -449,6 +454,8 @@ def por_categoria(
     return RespuestaData(data={
         "metrica": metrica,
         "periodo": periodo,
+        "desde": _etiqueta_fecha(desde),
+        "hasta": _etiqueta_fecha(hasta - timedelta(days=1)),
         "categorias": top,
         "totales": totales,
         "cantidad_categorias": len(lista),
@@ -482,6 +489,8 @@ def ventas_periodo(
     return RespuestaData(data={
         "periodo": periodo,
         "granularidad": granularidad,
+        "desde": _etiqueta_fecha(desde),
+        "hasta": _etiqueta_fecha(hasta - timedelta(days=1)),
         "labels": labels,
         "valores": valores,
         "total": round(sum(valores), 2),
@@ -517,6 +526,8 @@ def ventas_por_hora(
 
     return RespuestaData(data={
         "periodo": periodo,
+        "desde": _etiqueta_fecha(desde),
+        "hasta": _etiqueta_fecha(hasta - timedelta(days=1)),
         "labels": [f"{h:02d}:00" for h in range(24)],
         "valores": [round(h, 2) for h in horas],
         "total": round(sum(horas), 2),

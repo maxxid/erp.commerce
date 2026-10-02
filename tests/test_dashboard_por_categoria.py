@@ -113,6 +113,11 @@ def _semilla(db, extra=0):
     return user
 
 
+def _producto(db, nombre):
+    """Producto por nombre exacto; la semilla les pone sufijo al nombre."""
+    return db.query(Producto).filter(Producto.nombre.like(f"{nombre}%")).one()
+
+
 def _res(db, user, metrica="importe", periodo="hoy", limite=10):
     return dash.por_categoria(
         db=db, user=user, metrica=metrica, periodo=periodo, limite=limite
@@ -264,6 +269,110 @@ class TestOtras:
         assert res["cantidad_categorias"] == 6
         assert res["totales"]["importe"] == pytest.approx(6600.0, abs=0.02)
         assert sum(r["importe"] for r in res["categorias"]) == pytest.approx(6600.0, abs=0.02)
+
+
+class TestVentanasDePeriodo:
+    """Que cada período cubra la fecha que dice cubrir.
+
+    Lo que se vio: "Semana" daba más total que "Mes", que no puede ser. La causa
+    no era el rango mal calculado sino que al 1º del mes la semana en curso
+    arranca el lunes anterior, o sea incluye días del mes pasado que "Mes" no
+    tiene. El código estaba bien; lo que faltaba era decirlo.
+    """
+
+    def _vender(self, db, user, prod, fecha, total):
+        """Venta con su item: el endpoint suma VentaItem.subtotal, no Venta.total."""
+        venta = Venta(
+            numero=f"VP-{uuid.uuid4().hex[:8]}", usuario_id=user.id, sucursal_id=1,
+            estado="confirmada", subtotal=total, total=total, fecha=fecha,
+        )
+        db.add(venta)
+        db.flush()
+        db.add(VentaItem(
+            venta_id=venta.id, producto_id=prod.id, cantidad=1,
+            precio_unitario=total, subtotal=total, precio_costo=total * 0.6,
+        ))
+        db.commit()
+
+    def test_semana_arranca_el_lunes(self, db):
+        # AHORA = martes 29/09/2026. La semana empieza el lunes 28/09.
+        desde, hasta = dash._ventana("semana")
+        assert desde == datetime(2026, 9, 28, 3, 0, tzinfo=UTC)
+        assert hasta == datetime(2026, 10, 5, 3, 0, tzinfo=UTC)
+
+    def test_mes_arranca_el_primero_a_medianoche_local(self, db):
+        # AHORA = 29/09/2026, así que el mes en curso es septiembre.
+        # 1/09 00:00 UTC-3 = 03:00 UTC.
+        desde, hasta = dash._ventana("mes")
+        assert desde == datetime(2026, 9, 1, 3, 0, tzinfo=UTC)
+        assert hasta == datetime(2026, 10, 1, 3, 0, tzinfo=UTC)
+
+    def test_hoy_es_solo_el_dia_local(self, db):
+        desde, hasta = dash._ventana("hoy")
+        assert desde == datetime(2026, 9, 29, 3, 0, tzinfo=UTC)
+        assert hasta == datetime(2026, 9, 30, 3, 0, tzinfo=UTC)
+
+    def test_ventas_de_ayer_no_entran_en_hoy(self, db):
+        user = _semilla(db)
+        gasesa = _producto(db, "Gaseosa")
+        antes = _res(db, user, periodo="hoy")["totales"]["importe"]
+        assert antes > 0
+        self._vender(db, user, gasesa, datetime(2026, 9, 28, 15, 0, tzinfo=UTC), 999999.0)
+        assert _res(db, user, periodo="hoy")["totales"]["importe"] == pytest.approx(antes)
+        # Pero sí entra en la semana, que arranca el lunes 28/09.
+        assert _res(db, user, periodo="semana")["totales"]["importe"] > antes
+
+    def test_el_mes_incluye_lo_que_hoy_cubre(self, db):
+        user = _semilla(db)
+        hoy = _res(db, user, periodo="hoy")["totales"]["importe"]
+        mes = _res(db, user, periodo="mes")["totales"]["importe"]
+        assert mes >= hoy
+
+    def test_el_mes_incluye_lo_que_la_semana_cubre(self, db):
+        # Al 29/09 la semana (lunes 28) está entera adentro de septiembre, así
+        # que acá el mes tiene que ser >= semana. Es el invariante que se rompió
+        # el 1/10, y por eso vale la pena fijarlo para el resto del mes.
+        user = _semilla(db)
+        semana = _res(db, user, periodo="semana")["totales"]["importe"]
+        mes = _res(db, user, periodo="mes")["totales"]["importe"]
+        assert mes >= semana
+
+    def test_semana_puede_superar_al_mes_al_principio_del_mes(self, db, monkeypatch):
+        """El caso real que reportó el usuario: 1/10, la semana arranca el 28/09.
+
+        No es un bug: la semana incluye 28, 29 y 30/09, que "Mes" no tiene. El
+        test fija el comportamiento para que no se "arregle" por error.
+        """
+        # El fixture ya monkeypatchea HOY; acá se corre al 1/10/2026 (jueves).
+        monkeypatch.setattr(dash, "HOY", lambda: datetime(2026, 10, 1, 15, 0, tzinfo=UTC))
+        user = _semilla(db)
+        gasesa = _producto(db, "Gaseosa")
+        db.query(VentaItem).delete()
+        db.query(Venta).delete()
+        db.commit()
+        self._vender(db, user, gasesa, datetime(2026, 9, 30, 15, 0, tzinfo=UTC), 10000.0)
+        self._vender(db, user, gasesa, datetime(2026, 10, 1, 15, 0, tzinfo=UTC), 500.0)
+
+        semana = _res(db, user, periodo="semana")["totales"]["importe"]
+        mes = _res(db, user, periodo="mes")["totales"]["importe"]
+        assert semana == pytest.approx(10500.0)
+        assert mes == pytest.approx(500.0)
+        assert semana > mes
+
+
+    def test_devuelve_las_fechas_del_rango(self, db):
+        """Para que el front pueda mostrar qué cubre cada rango.
+
+        Al 1º del mes "Semana" arranca el lunes anterior y puede dar más que
+        "Mes"; sin las fechas, el número parece un error de cálculo.
+        """
+        user = _semilla(db)
+        assert _res(db, user, periodo="hoy")["desde"] == "29/09"
+        assert _res(db, user, periodo="hoy")["hasta"] == "29/09"
+        assert _res(db, user, periodo="semana")["desde"] == "28/09"
+        assert _res(db, user, periodo="semana")["hasta"] == "04/10"
+        assert _res(db, user, periodo="mes")["desde"] == "01/09"
+        assert _res(db, user, periodo="mes")["hasta"] == "30/09"
 
 
 class TestValidacion:

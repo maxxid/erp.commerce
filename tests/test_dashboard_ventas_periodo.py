@@ -130,10 +130,21 @@ class TestVentasPorHora:
         assert res["horas_con_venta"] == 0
         assert len(res["valores"]) == 24
 
+    def test_devuelve_las_fechas_del_rango(self, db):
+        res = self._res(db, Sembrador(db).user, "hoy")
+        assert res["desde"] == "29/09"
+        assert res["hasta"] == "29/09"
+
     def test_periodo_invalido_400(self, db):
         with pytest.raises(HTTPException) as ei:
             self._res(db, Sembrador(db).user, "trimestre")
         assert ei.value.status_code == 400
+
+    def test_devuelve_las_fechas_del_rango(self, db):
+        """Para que el front muestre qué cubre cada rango."""
+        res = self._res(db, Sembrador(db).user, "7dias")
+        assert res["desde"] == "23/09"  # martes 29 menos 6 días
+        assert res["hasta"] == "29/09"
 
     def test_hoy_no_es_lo_mismo_que_mes(self, db):
         # Regresión: "hoy" caía en el else de _ventana_ventas y devolvía el mes

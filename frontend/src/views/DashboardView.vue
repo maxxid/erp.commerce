@@ -415,6 +415,12 @@ function buildLoteAlerts() {
             </select>
           </div>
         </div>
+        <!-- Las fechas del rango: al 1º del mes "Semana" arranca el lunes
+             anterior y puede dar más que "Mes". Mostrarlas evita que el número
+             parezca un error de cálculo. -->
+        <p v-if="tendData?.desde" class="text-[10px] text-slate-400 dark:text-slate-500 -mt-3 mb-3">
+          {{ tendData.desde }} &ndash; {{ tendData.hasta }}
+        </p>
         <div v-if="tendLoading" class="h-40 flex items-end gap-3">
           <BaseSkeleton v-for="n in 7" :key="n" class="flex-1 rounded-t-lg" :style="{ height: skeletonHeight(n, 60) }" />
         </div>
@@ -432,13 +438,13 @@ function buildLoteAlerts() {
         :text="`No hay ventas confirmadas para ${rangoActual('venta').label.toLowerCase()}. Probá con un rango más amplio.`"
           compact
         />
-        <div v-else class="h-40 flex items-end gap-3">
+        <div v-else class="h-40 flex items-stretch gap-3">
           <div
             v-for="(v, i) in tendVals"
             :key="i"
-            class="flex-1 flex flex-col items-center gap-2 group min-w-0"
+            class="flex-1 flex flex-col items-center gap-2 group min-w-0 h-full"
           >
-            <div class="w-full bg-slate-100 dark:bg-slate-800 rounded-t-lg relative overflow-hidden h-full">
+            <div class="w-full flex-1 min-h-0 bg-slate-100 dark:bg-slate-800 rounded-t-lg relative overflow-hidden">
               <div
                 class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-brand-600 to-brand-400 rounded-t-lg transition-all duration-500 ease-out-expo group-hover:from-brand-500 group-hover:to-brand-300"
                 :style="{ height: `${(v / maxBar) * 100}%` }"
@@ -458,7 +464,9 @@ function buildLoteAlerts() {
         <BaseBadge variant="success" size="xs">{{ horasConVenta.length || 0 }} hs</BaseBadge>
       </div>
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-        <span class="text-[10px] text-slate-400 dark:text-slate-500">Horario local</span>
+        <span class="text-[10px] text-slate-400 dark:text-slate-500">
+          Horario local<template v-if="horaData?.desde"> &middot; {{ horaData.desde }} &ndash; {{ horaData.hasta }}</template>
+        </span>
         <select
           :value="horaPeriodo"
           class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-medium text-slate-700 dark:text-slate-200 focus:ring-brand-500"
@@ -477,17 +485,17 @@ function buildLoteAlerts() {
         :text="`No hay ventas registradas para ${rangoActual('hora').label.toLowerCase()}. Probá con un rango más amplio.`"
         compact
       />
-        <div v-else class="h-40 flex items-end gap-1">
-          <div
-            v-for="h in horasConVenta"
-            :key="h.label"
-            class="flex-1 flex flex-col items-center gap-1 group min-w-0"
-          >
-            <div class="w-full bg-slate-100 dark:bg-slate-800 rounded-t-sm relative overflow-hidden h-full">
-              <div
-                class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-emerald-500 to-emerald-300 rounded-t-sm transition-all duration-500 ease-out-expo group-hover:from-emerald-400 group-hover:to-emerald-200"
-                :style="{ height: `${(h.valor / maxHour) * 100}%` }"
-              ></div>
+      <div v-else class="h-40 flex items-stretch gap-1">
+        <div
+          v-for="h in horasConVenta"
+          :key="h.label"
+          class="flex-1 flex flex-col items-center gap-1 group min-w-0 h-full"
+        >
+          <div class="w-full flex-1 min-h-0 bg-slate-100 dark:bg-slate-800 rounded-t-sm relative overflow-hidden">
+            <div
+              class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-emerald-500 to-emerald-300 rounded-t-sm transition-all duration-500 ease-out-expo group-hover:from-emerald-400 group-hover:to-emerald-200"
+              :style="{ height: `${(h.valor / maxHour) * 100}%` }"
+            ></div>
               <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-semibold text-slate-700 dark:text-slate-200 whitespace-nowrap bg-white dark:bg-slate-800 px-2 py-1 rounded-md shadow-sm border border-slate-100 dark:border-slate-700 pointer-events-none">
                 {{ fc(h.valor) }}
               </div>
@@ -529,6 +537,9 @@ function buildLoteAlerts() {
           </select>
         </div>
       </div>
+      <p v-if="catData?.desde" class="text-[10px] text-slate-400 dark:text-slate-500 -mt-3 mb-3">
+        {{ catData.desde }} &ndash; {{ catData.hasta }}
+      </p>
 
       <div v-if="catLoading" class="space-y-3">
         <BaseSkeleton v-for="n in 5" :key="n" class="h-8 rounded-lg" />
