@@ -577,6 +577,39 @@ async function cancelarQrInteroperable() {
 const showApertura = ref(false)
 const montoInicial = ref('')
 const abriendoCaja = ref(false)
+const cerrandoCaja = ref(false)
+const tabActivo = ref('cobro') // cobro | control | pc
+const menuOpen = ref(false)
+
+const menuItems = computed(() => [
+  { label: 'Cobro Móvil', icon: 'fa-cash-register', value: 'cobro', active: tabActivo.value === 'cobro' },
+  { label: 'Control Móvil', icon: 'fa-boxes-stacked', value: 'control', active: tabActivo.value === 'control' },
+  { label: 'Versión PC', icon: 'fa-desktop', value: 'pc', active: tabActivo.value === 'pc' },
+])
+
+async function toggleCaja() {
+  if (cajaStore.abierta) {
+    if (!confirm('¿Querés cerrar la caja ahora?')) return
+    await cerrarCajaMovil()
+  } else {
+    if (!confirm('¿Querés abrir la caja?')) return
+    showApertura.value = true
+  }
+}
+
+async function cerrarCajaMovil() {
+  cerrandoCaja.value = true
+  try {
+    await api.post('/api/caja/cierre-total', {})
+    await cajaStore.fetchEstado()
+    toast.success('Caja cerrada correctamente')
+  } catch (e) {
+    const msg = e?.data?.detail || e?.message || 'No se pudo cerrar la caja'
+    toast.error(msg)
+  } finally {
+    cerrandoCaja.value = false
+  }
+}
 
 async function confirmarApertura() {
   abriendoCaja.value = true
@@ -728,22 +761,31 @@ function logout() {
         <button class="p-2 rounded-lg hover:bg-slate-700/50" @click="volverAlPos()" aria-label="Volver al POS">
           <i class="fa-solid fa-arrow-left text-lg"></i>
         </button>
-        <div class="flex-1 min-w-0">
-          <div class="font-semibold leading-tight truncate">Cobro rápido</div>
-          <div class="text-xs text-slate-300 truncate">{{ auth.currentUser?.nombre || auth.currentUser?.username }}</div>
+        <div class="flex-1 min-w-0 flex items-center gap-2">
+          <div class="flex-1 min-w-0">
+            <div class="font-semibold leading-tight truncate">Cobro Móvil</div>
+            <div class="text-xs text-slate-300 truncate">{{ auth.currentUser?.nombre || auth.currentUser?.username }}</div>
+          </div>
+          <BaseDropdown :items="menuItems" placement="bottom-end" trigger-class="p-2 rounded-lg hover:bg-slate-700/50">
+            <template #trigger>
+              <i class="fa-solid fa-arrows-rotate text-base"></i>
+            </template>
+          </BaseDropdown>
         </div>
         <button
           v-if="cajaStore.abierta"
           class="text-xs bg-green-600/80 hover:bg-green-600 px-2 py-1 rounded-lg active:scale-[0.98] transition"
-          @click="confirmarCerrarCaja"
+          @click="toggleCaja"
+          :disabled="cerrandoCaja"
           title="Cerrar caja"
         >
-          Caja abierta · Cerrar
+          <i v-if="cerrandoCaja" class="fa-solid fa-circle-notch animate-spin mr-1"></i>
+          Caja abierta · {{ cerrandoCaja ? 'Cerrando...' : 'Cerrar' }}
         </button>
         <button
           v-else
           class="text-xs bg-amber-500/80 hover:bg-amber-500 px-2 py-1 rounded-lg active:scale-[0.98] transition"
-          @click="showApertura = true"
+          @click="toggleCaja"
           title="Abrir caja"
         >
           Caja cerrada · Abrir
