@@ -733,7 +733,14 @@ function logout() {
           <div class="text-xs text-slate-300 truncate">{{ auth.currentUser?.nombre || auth.currentUser?.username }}</div>
         </div>
         <span v-if="cajaStore.abierta" class="text-xs bg-green-600/80 px-2 py-1 rounded-lg">Caja abierta</span>
-        <span v-else class="text-xs bg-amber-500/80 px-2 py-1 rounded-lg">Caja cerrada</span>
+        <button
+          v-else
+          class="text-xs bg-amber-500/80 hover:bg-amber-500 px-2 py-1 rounded-lg active:scale-[0.98] transition"
+          @click="showApertura = true"
+          title="Abrir caja"
+        >
+          Caja cerrada · Abrir
+        </button>
         <button class="p-2 rounded-lg hover:bg-slate-700/50 text-xs" @click="logout()" aria-label="Salir">
           <i class="fa-solid fa-right-from-bracket text-base"></i>
         </button>
