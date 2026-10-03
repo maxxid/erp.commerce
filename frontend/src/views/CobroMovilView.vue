@@ -766,11 +766,7 @@ function logout() {
             <div class="font-semibold leading-tight truncate">Cobro Móvil</div>
             <div class="text-xs text-slate-300 truncate">{{ auth.currentUser?.nombre || auth.currentUser?.username }}</div>
           </div>
-          <BaseDropdown :items="menuItems" placement="bottom-end" trigger-class="p-2 rounded-lg hover:bg-slate-700/50">
-            <template #trigger>
-              <i class="fa-solid fa-arrows-rotate text-base"></i>
-            </template>
-          </BaseDropdown>
+          <button class="p-2 rounded-lg hover:bg-slate-700/50" @click="menuOpen=!menuOpen" aria-label="Cambiar vista"><i class="fa-solid fa-arrows-rotate text-base"></i></button>
         </div>
         <button
           v-if="cajaStore.abierta"
