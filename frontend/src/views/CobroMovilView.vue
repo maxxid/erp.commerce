@@ -732,7 +732,14 @@ function logout() {
           <div class="font-semibold leading-tight truncate">Cobro rápido</div>
           <div class="text-xs text-slate-300 truncate">{{ auth.currentUser?.nombre || auth.currentUser?.username }}</div>
         </div>
-        <span v-if="cajaStore.abierta" class="text-xs bg-green-600/80 px-2 py-1 rounded-lg">Caja abierta</span>
+        <button
+          v-if="cajaStore.abierta"
+          class="text-xs bg-green-600/80 hover:bg-green-600 px-2 py-1 rounded-lg active:scale-[0.98] transition"
+          @click="confirmarCerrarCaja"
+          title="Cerrar caja"
+        >
+          Caja abierta · Cerrar
+        </button>
         <button
           v-else
           class="text-xs bg-amber-500/80 hover:bg-amber-500 px-2 py-1 rounded-lg active:scale-[0.98] transition"
