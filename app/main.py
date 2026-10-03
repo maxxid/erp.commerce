@@ -299,6 +299,100 @@ def _migrate_new_columns():
             if col not in existentes_mc:
                 conn.execute(sa.text(f"ALTER TABLE movimientos_caja ADD COLUMN {col} {tipo}"))
                 conn.commit()
+        # Cuentas corrientes con proveedor: saldo cacheado en el maestro
+        # (la verdad son las filas de deudas_proveedor y pagos_proveedor).
+        existentes_prov = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(proveedores)"))]
+        if "saldo_cta_corriente" not in existentes_prov:
+            conn.execute(
+                sa.text("ALTER TABLE proveedores ADD COLUMN saldo_cta_corriente FLOAT NOT NULL DEFAULT 0.0")
+            )
+            conn.commit()
+        # Rescate de los datos previos a las tablas de deuda y pago.
+        #
+        # 1) Cada compra no anulada que aún no tiene deuda genera una. Si no, un
+        #    comercio que ya venía usando el sistema vería a todos sus
+        #    proveedores con saldo cero y recién las compras nuevas le
+        #    mostrarían algo.
+        # 2) Cada egreso de caja con referencia_tipo='pago_proveedor' se
+        #    convierte en un pago. Sin este paso el saldo del proveedor saldría
+        #    inflado: las compras generarían deuda pero los pagos ya hechos no se
+        #    contabilizarían. Quedan sin deuda asociada, o sea marcados como "sin
+        #    verificar" para que el dueño los revise con calma.
+        #
+        # Sólo corre una vez: si pagos_proveedor ya tiene filas, la migración ya
+        # se hizo y no se toca nada.
+        if not conn.execute(sa.text("SELECT 1 FROM pagos_proveedor LIMIT 1")).fetchone():
+            compras = conn.execute(
+                sa.text(
+                    "SELECT c.id, c.proveedor_id, c.total, c.numero, c.fecha "
+                    "FROM compras c "
+                    "WHERE c.estado != 'anulada' "
+                    "AND NOT EXISTS (SELECT 1 FROM deudas_proveedor d WHERE d.compra_id = c.id)"
+                )
+            ).fetchall()
+            for c in compras:
+                conn.execute(
+                    sa.text(
+                        "INSERT INTO deudas_proveedor "
+                        "(proveedor_id, origen, compra_id, detalle, monto_original, saldo, "
+                        " fecha_emision, estado, created_at, updated_at) "
+                        "VALUES (:pid, 'compra', :cid, :det, :monto, :monto, :fecha, "
+                        "        'pendiente', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+                    ),
+                    {
+                        "pid": c[1],
+                        "cid": c[0],
+                        "det": f"Compra {c[3]}",
+                        "monto": float(c[2] or 0.0),
+                        "fecha": c[4],
+                    },
+                )
+            pagos = conn.execute(
+                sa.text(
+                    "SELECT m.id, m.referencia_id, m.monto, m.medio_pago, m.created_at, "
+                    "       m.usuario_id, m.sucursal_id, m.sesion_cierre_id, p.nombre "
+                    "FROM movimientos_caja m "
+                    "LEFT JOIN proveedores p ON p.id = m.referencia_id "
+                    "WHERE m.tipo = 'egreso' AND m.referencia_tipo = 'pago_proveedor' "
+                    "AND m.referencia_id IS NOT NULL "
+                    "AND NOT EXISTS (SELECT 1 FROM pagos_proveedor pp WHERE pp.movimiento_caja_id = m.id)"
+                )
+            ).fetchall()
+            for m in pagos:
+                conn.execute(
+                    sa.text(
+                        "INSERT INTO pagos_proveedor "
+                        "(proveedor_id, usuario_id, monto, medio_pago, fecha, proveedor_nombre, "
+                        " comprobante_nro, descripcion, afecta_arqueo, sesion_cierre_id, "
+                        " movimiento_caja_id, anulado, created_at) "
+                        "VALUES (:pid, :uid, :monto, :medio, :fecha, :nombre, NULL, "
+                        "        'Rescatado del registro de caja anterior', 1, :sesion, :mov, 0, "
+                        "        CURRENT_TIMESTAMP)"
+                    ),
+                    {
+                        "pid": m[1],
+                        "uid": m[5],
+                        "monto": float(m[2] or 0.0),
+                        "medio": m[3] or "efectivo",
+                        "fecha": m[4],
+                        "nombre": m[8],
+                        "sesion": m[6],
+                        "mov": m[0],
+                    },
+                )
+            # Saldo final derivado de las filas, nunca calculado a mano: el
+            # mismo criterio que usa proveedor_pago_service.recalcular_saldo.
+            conn.execute(
+                sa.text(
+                    "UPDATE proveedores SET saldo_cta_corriente = ("
+                    "  SELECT COALESCE((SELECT SUM(d.saldo) FROM deudas_proveedor d"
+                    "                   WHERE d.proveedor_id = proveedores.id), 0.0)"
+                    "  - COALESCE((SELECT SUM(pp.monto) FROM pagos_proveedor pp"
+                    "               WHERE pp.proveedor_id = proveedores.id AND pp.anulado = 0), 0.0)"
+                    ")"
+                )
+            )
+            conn.commit()
     finally:
         conn.close()
 

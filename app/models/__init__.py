@@ -9,6 +9,7 @@ from app.models.categoria import Categoria
 from app.models.producto import Producto
 from app.models.cliente import Cliente
 from app.models.proveedor import Proveedor
+from app.models.proveedor_pago import DeudaProveedor, PagoProveedor
 from app.models.usuario import Usuario, Sucursal
 from app.models.venta import Venta, VentaItem, VentaItemLote
 from app.models.compra import Compra, CompraItem
@@ -28,6 +29,8 @@ __all__ = [
     "Producto",
     "Cliente",
     "Proveedor",
+    "DeudaProveedor",
+    "PagoProveedor",
     "Usuario",
     "Sucursal",
     "Venta",

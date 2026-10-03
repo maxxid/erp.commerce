@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.models.compra import Compra, CompraItem
 from app.models.producto import Producto
 from app.services import stock_service, lote_service
+from app.services.proveedor_pago_service import sincronizar_deuda_compra
 
 
 def generar_numero_compra(db: Session) -> str:
@@ -77,6 +78,9 @@ def agregar_item(
     _recalcular_totales(db, compra)
     # Incrementar stock en tránsito
     producto.stock_transito = (producto.stock_transito or 0) + cantidad
+    # La deuda sigue al total: al agregar un ítem, lo que se le debe al
+    # proveedor crece con la compra.
+    sincronizar_deuda_compra(db, compra)
     db.commit()
     db.refresh(item)
     return item
@@ -95,6 +99,7 @@ def quitar_item(db: Session, compra: Compra, item_id: int):
     db.delete(item)
     db.flush()
     _recalcular_totales(db, compra)
+    sincronizar_deuda_compra(db, compra)
     db.commit()
 
 
@@ -184,6 +189,10 @@ def recibir_compra(
     elif algun_recibido:
         compra.estado = "parcial"
     _recalcular_totales(db, compra)
+    # El total se recalcula sobre lo recibido, así que la deuda se ajusta con la
+    # mercadería que efectivamente entró. Si algo se pagó antes, sólo se moves la
+    # diferencia.
+    sincronizar_deuda_compra(db, compra)
     db.commit()
     db.refresh(compra)
     return compra
@@ -193,6 +202,9 @@ def anular_compra(db: Session, compra: Compra) -> Compra:
     """Anula una compra pendiente o parcialmente recibida. Revierte stock en tránsito."""
     if compra.estado not in ("pendiente", "parcial"):
         raise ValueError("Solo se pueden anular compras pendientes o parcialmente recibidas")
+    # Si ya se le pagó al proveedor por esta compra, anularla dejaría el pago sin
+    # causa. Se avisa antes de tocar nada para que no haya que revertir a medias.
+    sincronizar_deuda_compra(db, compra)
     for item in compra.items:
         pendiente = item.pendiente_recibir
         if pendiente > 0:
@@ -200,6 +212,9 @@ def anular_compra(db: Session, compra: Compra) -> Compra:
             if producto:
                 producto.stock_transito = max(0, (producto.stock_transito or 0) - pendiente)
     compra.estado = "anulada"
+    # Cancelar la deuda: una compra anulada no debe nada. sincronizar_deuda_compra
+    # corre acá y se encarga de bajarla a cero.
+    sincronizar_deuda_compra(db, compra)
     db.commit()
     db.refresh(compra)
     return compra
