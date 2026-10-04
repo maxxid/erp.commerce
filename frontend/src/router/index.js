@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+﻿import { createRouter, createWebHistory } from 'vue-router'
 import { ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -61,3 +61,4 @@ router.afterEach(() => {
 })
 
 export default router
+
