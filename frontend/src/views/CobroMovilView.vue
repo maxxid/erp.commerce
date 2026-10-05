@@ -593,7 +593,8 @@ const menuOpen = ref(false)
 
 const menuItems = computed(() => [
   { label: 'Cobro Móvil', icon: 'fa-cash-register', value: 'cobro', active: tabActivo.value === 'cobro', route: null },
-  { label: 'Cargar Mercadería', icon: 'fa-box-open', value: 'control', active: tabActivo.value === 'control', route: '/compras' },
+  { label: 'Cargar Mercadería', icon: 'fa-box-open', value: 'cargar', active: tabActivo.value === 'cargar', route: '/cargar-mercaderia' },
+  { label: 'Control Stock', icon: 'fa-clipboard-list', value: 'control', active: tabActivo.value === 'control', route: '/control-stock' },
   { label: 'POS (PC)', icon: 'fa-desktop', value: 'pc', active: tabActivo.value === 'pc', route: '/pos' },
 ])
 
