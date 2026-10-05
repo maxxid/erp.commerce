@@ -152,6 +152,32 @@ function doLogout() {
 
         <hr class="border-slate-800/70 my-2">
 
+        <div v-if="!collapsed" class="px-2 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+          Vista Móvil
+        </div>
+        <nav v-if="!collapsed" class="px-2 space-y-1">
+          <SidebarLink
+            to="/cobrar"
+            icon="fa-mobile-screen"
+            label="Cobro Móvil"
+            @navigate="emit('navigate')"
+          />
+          <SidebarLink
+            to="/cargar-mercaderia"
+            icon="fa-box-open"
+            label="Cargar Mercadería"
+            @navigate="emit('navigate')"
+          />
+          <SidebarLink
+            to="/control-stock"
+            icon="fa-clipboard-list"
+            label="Control Stock"
+            @navigate="emit('navigate')"
+          />
+        </nav>
+
+        <hr class="border-slate-800/70 my-2">
+
         <button
           type="button"
           class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:bg-slate-800 hover:text-white transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50"
