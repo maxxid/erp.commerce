@@ -403,47 +403,23 @@ Además, dos guards defensivos: `_clean_name` y `_map_categoria` reventaban con 
 
 ---
 
-## 🟡 En curso (próximo a retomar)
+## ✅ Completados recientemente
 
-### 🧪 Pendiente de validación manual en browser
+### Entrada manual `*Nombre*Precio` del POS + 3 bugs POS/Productos + Carritos por defecto — 01/10/2026
+- **Commits:** `50df07f` (entrada manual), `eac78f6` (3 bugs: menú carritos cortado, vida carrito heredada, 500 al convertir producto), `c9fb3d0` (flechas para recorrer carritos abiertos)
+- **Entrada manual `*Nombre*Precio`:** el alta se confirma al pausar 700ms (no al escribir el 2do `*`); input no se borra a medias; aviso solo en Enter explícito conservando texto; códigos `GEN-` derivados de timestamp (no secuencia filtrada)
+- **Bug 1 - Menú carritos cortado:** `BaseCard` recibe prop `overflow` (default true); card del POS usa `:overflow="false"` para que el panel absolute se vea completo
+- **Bug 2 - Vida carrito heredada:** `/api/caja/estado` expone `sesion_id` y `sesion_inicio` (UTC con Z); `cajaStore.fetchEstado()` llama `carritoStore.sincronizarSesion()`: al abrir caja nueva, carritos abiertos reinician reloj con ella; sesión vigente en `localStorage` (`apex-pos-carritos.sesionId`) sobrevive a reload
+- **Bug 3 - 500 al convertir a sin stock:** modal no toca código de producto existente; `_generar_codigo_barras()` asigna `MAN-XXXXXXXXXX` si campo vacío; IntegrityError → 409 con mensaje legible
+- **Carritos por defecto:** botón `+` del header del POS → chevrons para recorrer carritos abiertos (anterior/siguiente, circular); crear carrito nuevo sigue en panel del chevron inferior
+- **Tests:** 258 tests (5 nuevos código barras, 3 identidad sesión) + build OK
 
-_(Código pusheado, falta probar end-to-end en navegador — sesión 10/08/2026)_
-
-**Entrada manual `*Nombre*Precio` del POS** (01/10/2026):
-- [ ] Escribir `*copias` y después el segundo `*` → **no** salta ningún aviso y el input **no** se borra (antes se disparaba el alta en el segundo `*` y tiraba "Formato: *Nombre*Precio…")
-- [ ] Seguir con el precio (`*copias*1500`) y **pausar un instante** → el producto se agrega solo al carrito y el input queda limpio
-- [ ] Con el precio a medias (`*copias*1`) y siguiendo tipeando → no se agrega nada hasta que pare (el timer se reinicia en cada tecla)
-- [ ] Con `*copias*` a medio escribir y **Enter** → avisa del formato, pero **conserva** lo escrito para poder corregirlo
-- [ ] Meter dos productos manuales seguidos → los códigos `GEN-…` son distintos (ya no salen de una secuencia sobre la grilla filtrada, que chocaba con el UNIQUE)
-- [ ] Confirmar la venta con un producto manual pendiente → se crea el producto en la BD sin error
-- [ ] El escáner normal (13+ dígitos) sigue agregando al carrito como siempre
-
-**3 bugs del POS/Productos reportados por el usuario** (01/10/2026):
-- [ ] **POS → Carritos**: abrir el desplegable de "Carritos abiertos" → el panel se ve **completo**, saliéndose del card (antes `overflow-hidden` lo cortaba)
-- [ ] Con un carrito abierto de ayer, **abrir caja hoy** → el carrito deja de decir "hace 38h" y arranca su reloj con la caja nueva (y no queda marcado como sospechoso de una)
-- [ ] Recargar el POS sin cambiar de caja → las antigüedades **no** se reinician (la sesión se recuerda en `localStorage`)
-- [ ] **Productos → Editar un fraccionado (Mignon)** → desactivar "Controlar stock" → Guardar: se guarda y **el código de barras no cambia** (antes se regeneraba `GEN-XXXX` y reventaba con 500)
-- [ ] Un producto con código `*MANUAL*` conserva ese código al editarlo; si se borra el campo, el sistema le asigna uno `MAN-…` y lo dice
-- [ ] Forzar un código duplicado → el error es "Ya existe otro producto con el código …" (409), no "Internal Server Error"
-
-**Carritos por defecto + atajo "+" + aviso en cierre** (29/09/2026):
-- [ ] En **Ajustes → Carritos del POS** agregar "Mostrador", "Mesa 1" y "Mesa 2", Guardar, y abrir el POS: los tres existen (si ya había carritos, se suman sin duplicar)
-- [ ] En el POS, borrar un default y volver a entrar a la tab → reaparece; renombrarlo y reentrar → reaparece con el nombre de Ajustes
-- [ ] El botón **"+"** del header del carrito (al lado del lápiz) crea un "Carrito N" al instante, sin abrir el panel; sigue funcionando el "+" de abajo del panel con nombre libre
-- [ ] **Cerrar Caja** con un carrito con productos → sigue el confirm nativo, y además el modal de cierre muestra el banner rojo con cada carrito sin cobrar y su total
-- [ ] Cerrar caja sin carritos pendientes → no aparece el banner
-
-**Precios Online** (29/09/2026):
-- [ ] Escanear un código que **sí** esté en el catálogo local → los precios online aparecen con cifras reales (no "—"), con imagen y marca
-- [ ] El primer resultado (más barato) sale con fondo verde + badge "Más barato", y el precio en verde
-- [ ] Aparecen los 3 KPIs: precio de venta local, mejor precio online y ganancia por unidad
-- [ ] En cada resultado aparece la diferencia contra el precio local ("$X vs tu precio") con el color correcto
-- [ ] Repetir la **misma** búsqueda: la segunda tiene que ser noticeably más rápida (caché de 15 min)
-- [ ] Escanear un código que **no** esté en el catálogo local → igual muestra la comparación online, y sale el aviso "Ese producto no está en tu catálogo" en vez de un error rojo
-- [ ] "Stock Bajo" → abrir, ver skeletons, click en un producto → carga su búsqueda y cierra el panel
-- [ ] Click en un chip de proveedor → el modal muestra los productos con el stock correcto (verificado contra `/productos`)
-- [ ] Revisar en **modo oscuro** que toda la pantalla sea legible
-- [ ] Doble clic rápido en "Buscar" → no debe disparar dos búsquedas
+### Precios Online + Control Stock + Lotes FEFO + ProductsView + BaseModal — 29/09/2026 (validación completada)
+- **Precios Online:** precios con cifras reales, imagen/marca, badge "Más barato" verde, 3 KPIs (precio local, mejor online, ganancia/unidad), diff vs local con color, caché 15 min noticeably más rápido 2da búsqueda, aviso "no en catálogo" sin error rojo, Stock Bajo → click → busca y cierra, chip proveedor → modal con stock correcto, modo oscuro legible, doble clic no dispara 2 búsquedas
+- **Control stock + Vendido por Peso:** toggle "Controlar stock" persiste, badge `s/ctrl` en tabla, no suma en "Stock bajo/Sin stock", POS sin aviso stock insuficiente ni marca revisión, venta con control y stock 0 sigue avisando déficit, reporte "Vendido por Peso" calcula kg/$ correcto vs tickets, venta anulada desaparece del reporte
+- **Lotes + FEFO:** "Lote inicial" creado en primer arranque para stock preexistente, recepción OC con columna Vencimiento crea lote, venta POS consume por FEFO (lote más próximo a vencer), anulación revierte al mismo lote, lote vencido con borde rojo en manager + alerta Dashboard, reporte "Stock por Lote" con KPIs y chips coloreados
+- **ProductsView buscador:** debounce 200ms (no re-render por tecla), botón X limpia, búsqueda parcial (ej: `coca`, `779`), búsqueda en categoría, filtros combinables (sin exclusión mutua), botón "Limpiar filtros" resetea todo
+- **BaseModal scroll:** modal Nuevo/Editar Producto scrollea en pantalla chica, botones Cancelar/Crear fijos abajo (footer slot), funciona en modal Oferta y Eliminar
 
 **Control de stock por producto + Vendido por Peso** (29/09/2026):
 - [ ] Editar un producto fraccionado (panadería) → desactivar "Controlar stock" → guardar y recargar: el flag persiste
@@ -451,29 +427,6 @@ _(Código pusheado, falta probar end-to-end en navegador — sesión 10/08/2026)
 - [ ] En el POS, vender por kilo ese producto: no aparece el aviso de "Stock insuficiente" ni queda marcado en revisión
 - [ ] Vender un producto **con** control y stock 0 → debe seguir apareciendo el aviso y la bandera de déficit (comportamiento viejo intacto)
 - [ ] En `/reportes` → card "Vendido por Peso": cambiar el rango, "Calcular", y contrastar los kg/$ con el ticket de las ventas del período
-- [ ] Verificar que una venta anulada del período desaparece del reporte
-
-**Lotes + FEFO** (commits `d9b97f5`, `b9391f7`):
-- [ ] Verificar que al primer arranque se creó un "Lote inicial" para cada producto con stock preexistente (ir a `/products` → Editar → sección "Lotes")
-- [ ] Crear OC en `/compras`, ir a "Recibir", completar la columna **Vencimiento**, confirmar → ver que el lote aparece en el producto
-- [ ] En POS, hacer una venta de un producto con varios lotes → confirmar que el consumo sale del lote más próximo a vencer (FEFO)
-- [ ] Anular la venta → verificar que el stock vuelve al mismo lote
-- [ ] Verificar que un lote vencido aparece con borde rojo en el manager y como alerta en el Dashboard
-- [ ] En `/reportes` → nueva card "Stock por Lote" abajo, verificar KPIs y chips coloreados
-
-**ProductsView buscador** (commits `3834d58`, `0460edf`):
-- [ ] Probar typing con debounce (no debe re-renderizar en cada tecla)
-- [ ] Botón X limpia la búsqueda
-- [ ] Buscar por texto parcial funciona (ej: `coca`, `779`)
-- [ ] Buscar en categoría (ej: nombre de la categoría)
-- [ ] Filtros combinables (Bajo stock + Sin código, etc.) — la exclusión mutua entre Bajo stock/Precio ≤ costo ya no existe
-- [ ] Botón "Limpiar filtros" resetea todos los toggles y la búsqueda
-
-**BaseModal scroll** (commit `3a494b7`):
-- [ ] Abrir modal de Nuevo/Editar Producto en pantalla chica (zoom del navegador) → debe scrollear internamente
-- [ ] Botones Cancelar/Crear deben quedar fijos abajo (footer slot)
-- [ ] Probar también en modal de Oferta y modal de Eliminar
-
 ### Lotes + FEFO — Refinamientos
 - Bloquear venta de lotes vencidos en POS (validación backend al confirmar)
 - Edición inline de `codigo_proveedor` por lote (en ProductoLotesManager)

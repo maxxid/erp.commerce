@@ -75,6 +75,8 @@ const filteredProducts = computed(() => {
   return list.slice(0, 48)
 })
 
+const menuRef = ref(null)
+
 onMounted(async () => {
   cajaStore.fetchEstado()
   await Promise.all([
@@ -82,12 +84,20 @@ onMounted(async () => {
     api.get('/api/config/ajustes').then(r => { ajustes.value = r || {} }).catch(() => {})
   ])
   cargando.value = false
+  document.addEventListener('click', handleClickOutside)
 })
 
 onUnmounted(() => {
   closeCamera()
   clearPolling()
+  document.removeEventListener('click', handleClickOutside)
 })
+
+function handleClickOutside(e) {
+  if (menuRef.value && !menuRef.value.contains(e.target)) {
+    menuOpen.value = false
+  }
+}
 
 function sugerenciasRecibido() {
   if (cart.total <= 0) return []
@@ -757,7 +767,7 @@ function logout() {
   <div class="h-[100dvh] flex flex-col bg-slate-100 dark:bg-slate-950 overflow-hidden">
     <div class="max-w-md mx-auto w-full h-full flex flex-col">
 
-      <header class="bg-slate-900 text-white px-4 py-3 flex items-center gap-3">
+      <header class="bg-slate-900 text-white px-4 py-3 flex items-center gap-3 relative">
         <button class="p-2 rounded-lg hover:bg-slate-700/50" @click="volverAlPos()" aria-label="Volver al POS">
           <i class="fa-solid fa-arrow-left text-lg"></i>
         </button>
@@ -766,7 +776,15 @@ function logout() {
             <div class="font-semibold leading-tight truncate">Cobro Móvil</div>
             <div class="text-xs text-slate-300 truncate">{{ auth.currentUser?.nombre || auth.currentUser?.username }}</div>
           </div>
-          <button class="p-2 rounded-lg hover:bg-slate-700/50" @click="menuOpen=!menuOpen" aria-label="Cambiar vista"><i class="fa-solid fa-arrows-rotate text-base"></i></button>
+          <div class="relative" ref="menuRef">
+            <button class="p-2 rounded-lg hover:bg-slate-700/50" @click="menuOpen=!menuOpen" aria-label="Cambiar vista"><i class="fa-solid fa-arrows-rotate text-base"></i></button>
+            <div v-if="menuOpen" class="absolute right-0 top-full mt-1 w-40 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-50 animate-fade-in">
+              <button v-for="m in menuItems" :key="m.value" @click="tabActivo=m.value; menuOpen=false" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700" :class="m.active && 'font-semibold text-brand-600 dark:text-brand-400'">
+                <i :class="['fa-solid', m.icon, 'w-5 text-center']"></i>
+                <span>{{ m.label }}</span>
+              </button>
+            </div>
+          </div>
         </div>
         <button
           v-if="cajaStore.abierta"

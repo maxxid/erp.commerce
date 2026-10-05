@@ -16,6 +16,7 @@ const routes = [
   { path: '/ventas', name: 'ventas', component: () => import('@/views/VentasView.vue') },
   { path: '/calendario', name: 'calendario', component: () => import('@/views/CalendarioView.vue') },
   { path: '/compras', name: 'compras', component: () => import('@/views/ComprasView.vue'), meta: { roles: ['admin', 'encargado', 'repositor'] } },
+  { path: '/cargar-mercaderia', name: 'cargar-mercaderia', component: () => import('@/views/ComprasMovilView.vue'), meta: { roles: ['admin', 'encargado', 'repositor'] } },
   { path: '/precios-online', name: 'precios-online', component: () => import('@/views/PreciosOnlineView.vue'), meta: { roles: ['admin', 'encargado', 'repositor'] } },
   { path: '/proveedores', name: 'proveedores', component: () => import('@/views/ProveedoresView.vue'), meta: { roles: ['admin', 'encargado', 'repositor'] } },
   { path: '/clientes', name: 'clientes', component: () => import('@/views/ClientesView.vue'), meta: { roles: ['admin', 'encargado'] } },

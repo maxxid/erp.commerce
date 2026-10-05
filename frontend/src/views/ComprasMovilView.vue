@@ -1,13 +1,22 @@
 ﻿<template>
   <div class="h-[100dvh] flex flex-col bg-slate-100 dark:bg-slate-950 overflow-hidden">
     <div class="max-w-md mx-auto w-full h-full flex flex-col">
-      <header class="bg-slate-900 text-white px-4 py-3 flex items-center gap-3">
+      <header class="bg-slate-900 text-white px-4 py-3 flex items-center gap-3 relative">
         <button class="p-2 rounded-lg hover:bg-slate-700/50" @click="volver" aria-label="Volver">
           <i class="fa-solid fa-arrow-left text-lg"></i>
         </button>
         <div class="flex-1 min-w-0">
           <div class="font-semibold leading-tight truncate">Cargar Mercaderia</div>
           <div class="text-xs text-slate-300 truncate">{{ auth.currentUser.nombre || auth.currentUser.username }}</div>
+        </div>
+        <div class="relative" ref="menuRef">
+          <button class="p-2 rounded-lg hover:bg-slate-700/50" @click="menuOpen=!menuOpen" aria-label="Cambiar vista"><i class="fa-solid fa-arrows-rotate text-base"></i></button>
+          <div v-if="menuOpen" class="absolute right-0 top-full mt-1 w-40 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-50 animate-fade-in">
+            <button v-for="m in menuItems" :key="m.value" @click="tabActivo=m.value; menuOpen=false" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700" :class="m.active && 'font-semibold text-brand-600 dark:text-brand-400'">
+              <i :class="['fa-solid', m.icon, 'w-5 text-center']"></i>
+              <span>{{ m.label }}</span>
+            </button>
+          </div>
         </div>
         <button class="p-2 rounded-lg hover:bg-slate-700/50" @click="syncData" :disabled="syncing" aria-label="Sincronizar">
           <i :class="syncing ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-arrows-rotate'"></i>
@@ -38,7 +47,7 @@
   </div>
 </template>
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
@@ -60,6 +69,14 @@ const guardando = ref(false)
 const proveedorId = ref(null)
 const scannerInput = ref('')
 const items = ref([])
+const menuOpen = ref(false)
+const menuRef = ref(null)
+const tabActivo = ref('cobro') // cobro | control | pc
+const menuItems = computed(() => [
+  { label: 'Cargar Mercadería', icon: 'fa-box-open', value: 'cobro', active: tabActivo.value === 'cobro' },
+  { label: 'Control Móvil', icon: 'fa-boxes-stacked', value: 'control', active: tabActivo.value === 'control' },
+  { label: 'Versión PC', icon: 'fa-desktop', value: 'pc', active: tabActivo.value === 'pc' },
+])
 function volver() { router.back() }
 async function syncData() {
   syncing.value = true
@@ -76,7 +93,18 @@ async function syncData() {
     syncing.value = false
   }
 }
-onMounted(syncData)
+onMounted(async () => {
+  await syncData()
+  document.addEventListener('click', handleClickOutside)
+})
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside)
+})
+function handleClickOutside(e) {
+  if (menuRef.value && !menuRef.value.contains(e.target)) {
+    menuOpen.value = false
+  }
+}
 function vaciar() { items.value = [] }
 const totalCantidad = computed(() => items.value.reduce((s, x) => s + (Number(x.cantidad) || 0), 0))
 const totalImporte = computed(() => items.value.reduce((s, x) => s + (Number(x.cantidad) || 0) * (Number(x.precio) || 0), 0))
