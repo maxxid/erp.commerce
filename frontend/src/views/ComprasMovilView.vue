@@ -2,20 +2,19 @@
   <div class="h-[100dvh] flex flex-col bg-slate-100 dark:bg-slate-950 overflow-hidden">
     <div class="max-w-md mx-auto w-full h-full flex flex-col">
       <header class="bg-slate-900 text-white px-4 py-3 flex items-center gap-3 relative">
-        <button class="p-2 rounded-lg hover:bg-slate-700/50" @click="volver" aria-label="Volver">
-          <i class="fa-solid fa-arrow-left text-lg"></i>
-        </button>
-        <div class="flex-1 min-w-0">
-          <div class="font-semibold leading-tight truncate">Cargar Mercaderia</div>
-          <div class="text-xs text-slate-300 truncate">{{ auth.currentUser.nombre || auth.currentUser.username }}</div>
-        </div>
-        <div class="relative" ref="menuRef">
-          <button class="p-2 rounded-lg hover:bg-slate-700/50" @click="menuOpen=!menuOpen" aria-label="Cambiar vista"><i class="fa-solid fa-arrows-rotate text-base"></i></button>
-          <div v-if="menuOpen" class="absolute right-0 top-full mt-1 w-40 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-50 animate-fade-in">
-            <button v-for="m in menuItems" :key="m.value" @click="tabActivo=m.value; menuOpen=false" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700" :class="m.active && 'font-semibold text-brand-600 dark:text-brand-400'">
-              <i :class="['fa-solid', m.icon, 'w-5 text-center']"></i>
-              <span>{{ m.label }}</span>
-            </button>
+        <div class="flex-1 min-w-0 flex items-center gap-2 justify-end">
+          <div class="flex-1 min-w-0 text-right">
+            <div class="font-semibold leading-tight truncate">Cargar Mercaderia</div>
+            <div class="text-xs text-slate-300 truncate">{{ auth.currentUser.nombre || auth.currentUser.username }}</div>
+          </div>
+          <div class="relative" ref="menuRef">
+            <button class="p-2 rounded-lg hover:bg-slate-700/50" @click="menuOpen=!menuOpen" aria-label="Menú"><i class="fa-solid fa-bars text-base"></i></button>
+            <div v-if="menuOpen" class="absolute right-0 top-full mt-1 w-44 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-50 animate-fade-in">
+              <button v-for="m in menuItems" :key="m.value" @click="navigateMenu(m)" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700" :class="m.active && 'font-semibold text-brand-600 dark:text-brand-400'">
+                <i :class="['fa-solid', m.icon, 'w-5 text-center']"></i>
+                <span>{{ m.label }}</span>
+              </button>
+            </div>
           </div>
         </div>
         <button class="p-2 rounded-lg hover:bg-slate-700/50" @click="syncData" :disabled="syncing" aria-label="Sincronizar">
@@ -73,9 +72,9 @@ const menuOpen = ref(false)
 const menuRef = ref(null)
 const tabActivo = ref('cobro') // cobro | control | pc
 const menuItems = computed(() => [
-  { label: 'Cargar Mercadería', icon: 'fa-box-open', value: 'cobro', active: tabActivo.value === 'cobro' },
-  { label: 'Control Móvil', icon: 'fa-boxes-stacked', value: 'control', active: tabActivo.value === 'control' },
-  { label: 'Versión PC', icon: 'fa-desktop', value: 'pc', active: tabActivo.value === 'pc' },
+  { label: 'Cargar Mercadería', icon: 'fa-box-open', value: 'cobro', active: tabActivo.value === 'cobro', route: null },
+  { label: 'Control Móvil', icon: 'fa-boxes-stacked', value: 'control', active: tabActivo.value === 'control', route: null },
+  { label: 'Compras (PC)', icon: 'fa-desktop', value: 'pc', active: tabActivo.value === 'pc', route: '/compras' },
 ])
 function volver() { router.back() }
 async function syncData() {
@@ -103,6 +102,14 @@ onUnmounted(() => {
 function handleClickOutside(e) {
   if (menuRef.value && !menuRef.value.contains(e.target)) {
     menuOpen.value = false
+  }
+}
+function navigateMenu(m) {
+  menuOpen.value = false
+  if (m.route) {
+    router.push(m.route)
+  } else {
+    tabActivo.value = m.value
   }
 }
 function vaciar() { items.value = [] }
