@@ -52,15 +52,12 @@ import { useProductosStore } from '@/stores/productos'
 import api from '@/services/api'
 import { formatCurrency as fc } from '@/composables/useUtils'
 import BaseButton from '@/components/ui/BaseButton.vue'
-import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
-import BaseModal from '@/components/ui/BaseModal.vue'
 const router = useRouter()
 const auth = useAuthStore()
 const toast = useToastStore()
 const productosStore = useProductosStore()
 const proveedores = ref([])
-const categorias = computed(() => productosStore.categorias || [])
 const syncing = ref(false)
 const guardando = ref(false)
 const proveedorId = ref(null)
@@ -74,7 +71,6 @@ const menuItems = computed(() => [
   { label: 'Control Móvil', icon: 'fa-boxes-stacked', value: 'control', active: tabActivo.value === 'control', route: null },
   { label: 'Compras (PC)', icon: 'fa-desktop', value: 'pc', active: tabActivo.value === 'pc', route: '/compras' },
 ])
-function volver() { router.back() }
 async function syncData() {
   syncing.value = true
   try {
@@ -109,6 +105,62 @@ function navigateMenu(m) {
   } else {
     tabActivo.value = m.value
   }
+}
+async function procesarCodigo() {
+  const raw = scannerInput.value.trim()
+  if (!raw) return
+  try {
+    const local = productosStore.productos.find(p => p.codigo_barras === raw)
+    if (local) {
+      agregarItem(local)
+      scannerInput.value = ''
+      return
+    }
+    const resp = await api.post('/api/productos/lookup', { barcode: raw }).catch(() => null)
+    if (resp && resp.id) {
+      const newP = {
+        id: resp.id,
+        codigo_barras: resp.codigo_barras,
+        nombre: resp.nombre,
+        marca: resp.marca || '',
+        precio_venta: resp.precio_venta || 0,
+        stock_actual: resp.stock_actual || 0,
+      }
+      agregarItem(newP)
+      productosStore.productos.push(newP)
+      scannerInput.value = ''
+      return
+    }
+    if (resp && resp.nombre) {
+      toast.info(`Producto: ${resp.nombre} - ${fc(resp.precio_referencia || resp.precio_venta || 0)}`)
+    }
+    toast.warning('Producto no encontrado en fuentes externas')
+  } catch {
+    toast.error('Error buscando producto')
+  }
+}
+function agregarItem(product) {
+  const existing = items.value.find(i => i.producto_id === product.id)
+  if (existing) {
+    existing.cantidad += 1
+  } else {
+    items.value.push({
+      producto_id: product.id,
+      nombre: product.nombre,
+      codigo_barras: product.codigo_barras,
+      precio: product.precio_venta,
+      cantidad: 1,
+    })
+  }
+}
+const supportsBarcodeDetector = () => typeof window !== 'undefined' && 'BarcodeDetector' in window
+async function abrirScanner() {
+  if (!supportsBarcodeDetector()) {
+    toast.warning('Tu navegador no soporta escaneo por cámara. Usá el campo manual.')
+    return
+  }
+  // Implementar si se necesita escáner de cámara
+  toast.info('Escáner de cámara no implementado aún. Usá el campo de código de barras.')
 }
 function vaciar() { items.value = [] }
 const totalCantidad = computed(() => items.value.reduce((s, x) => s + (Number(x.cantidad) || 0), 0))
