@@ -111,7 +111,10 @@ async function syncData() {
   try {
     await Promise.all([
       productosStore.fetchAll(),
-      api.get('/api/lotes?page_size=10000').then(r => { lotesMap.value = buildLotesMap(Array.isArray(r) ? r : (r.data || [])) })
+      api.get('/api/lotes?page_size=10000').then(r => { lotesMap.value = buildLotesMap(Array.isArray(r) ? r : (r.data || [])) }),
+      api.post('/api/catalogo/descargar').then(() => {
+        localStorage.setItem('catalogo_last_sync', String(Date.now()))
+      }).catch(() => {})
     ])
     toast.success('ok')
   } catch (e) {

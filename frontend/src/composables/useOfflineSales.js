@@ -40,7 +40,34 @@ export function useOfflineSales() {
 
     for (const sale of toSync) {
       try {
-        await api.post('/api/ventas', sale.data)
+        const venta = await api.post('/api/ventas', {
+          cliente_id: sale.data.cliente_id || null,
+          sucursal_id: sale.data.sucursal_id || 1,
+          notas: sale.data.notas || null,
+        })
+        if (!venta || !venta.id) throw new Error('No se pudo crear la venta')
+
+        const ventaId = venta.id
+
+        for (const item of sale.data.items || []) {
+          await api.post(`/api/ventas/${ventaId}/items`, {
+            producto_id: item.producto_id,
+            cantidad: item.cantidad,
+            precio_unitario: item.precio_unitario,
+            oferta_tipo: item.oferta_tipo || null,
+            oferta_valor: item.oferta_valor || null,
+            oferta_info: item.oferta_info || null,
+            por_kilo: item.por_kilo || false,
+            peso: item.peso || null,
+          })
+        }
+
+        await api.put(`/api/ventas/${ventaId}/confirmar`, {
+          medio_pago: sale.data.medio_pago || 'efectivo',
+          efectivo_pagado: sale.data.efectivo_pagado || 0,
+          descuento: sale.data.descuento || 0,
+        })
+
         sale.synced = true
         synced++
       } catch {
@@ -55,7 +82,7 @@ export function useOfflineSales() {
   }
 
   function removePendingSale(id) {
-    pendingSales.value = pendingPendingSales().filter((s) => s.id !== id)
+    pendingSales.value = pendingSales.value.filter((s) => s.id !== id)
     savePendingSales()
   }
 

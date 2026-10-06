@@ -81,7 +81,10 @@ onMounted(async () => {
   cajaStore.fetchEstado()
   await Promise.all([
     productosStore.fetchAll(),
-    api.get('/api/config/ajustes').then(r => { ajustes.value = r || {} }).catch(() => {})
+    api.get('/api/config/ajustes').then(r => { ajustes.value = r || {} }).catch(() => {}),
+    api.post('/api/catalogo/descargar').then(() => {
+      localStorage.setItem('catalogo_last_sync', String(Date.now()))
+    }).catch(() => {})
   ])
   cargando.value = false
   document.addEventListener('click', handleClickOutside)

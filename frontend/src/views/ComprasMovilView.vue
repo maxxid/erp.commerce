@@ -78,7 +78,10 @@ async function syncData() {
     await Promise.all([
       api.get('/api/proveedores').then(r => { proveedores.value = Array.isArray(r) ? r : (r.data || []) }),
       productosStore.fetchCategorias(),
-      productosStore.fetchAll()
+      productosStore.fetchAll(),
+      api.post('/api/catalogo/descargar').then(() => {
+        localStorage.setItem('catalogo_last_sync', String(Date.now()))
+      }).catch(() => {})
     ])
     toast.success('ok')
   } catch (e) {

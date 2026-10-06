@@ -14,6 +14,9 @@ const CACHEABLE_API_PATTERNS = [
   /\/api\/categorias/,
   /\/api\/catalogo\/estado/,
   /\/api\/caja\/estado/,
+  /\/api\/proveedores/,
+  /\/api\/lotes/,
+  /\/api\/config\/ajustes/,
 ]
 
 self.addEventListener('install', (event) => {
