@@ -79,15 +79,30 @@
       </div>
     </div>
   </div>
+
+  <!-- Modal escáner -->
+  <BaseModal v-model="scannerOpen" title="Escanear código" :persistent="true">
+    <div class="flex flex-col gap-3">
+      <div v-if="!scannerError" class="relative rounded-xl overflow-hidden bg-black aspect-video mx-auto max-w-sm w-full">
+        <video ref="videoEl" class="w-full h-full object-cover" muted playsinline></video>
+      </div>
+      <div v-else class="text-amber-600 text-sm">{{ scannerError }}</div>
+      <div class="flex gap-2">
+        <BaseButton variant="secondary" block @click="closeCamera">Cancelar</BaseButton>
+      </div>
+    </div>
+  </BaseModal>
 </template>
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
 import { useProductosStore } from '@/stores/productos'
 import api from '@/services/api'
 import { formatCurrency as fc } from '@/composables/useUtils'
+import BaseModal from '@/components/ui/BaseModal.vue'
+import BaseButton from '@/components/ui/BaseButton.vue'
 const router = useRouter()
 const auth = useAuthStore()
 const toast = useToastStore()
@@ -99,6 +114,13 @@ const searchText = ref('')
 const menuOpen = ref(false)
 const menuRef = ref(null)
 const tabActivo = ref('control')
+// Escáner de cámara
+const scannerOpen = ref(false)
+const scannerError = ref('')
+const videoEl = ref(null)
+const barcodeDetector = ref(null)
+const scanTimer = ref(null)
+const cameraStream = ref(null)
 const menuItems = computed(() => [
   { label: 'Cobro Móvil', icon: 'fa-cash-register', value: 'cobro', active: tabActivo.value === 'cobro', route: '/cobrar' },
   { label: 'Cargar Mercadería', icon: 'fa-box-open', value: 'cargar', active: tabActivo.value === 'cargar', route: '/cargar-mercaderia' },
@@ -201,6 +223,7 @@ onMounted(async () => {
 })
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
+  closeCamera()
 })
 function handleClickOutside(e) {
   if (menuRef.value && !menuRef.value.contains(e.target)) {
@@ -227,6 +250,52 @@ async function abrirScanner() {
     toast.warning('Tu navegador no soporta escaneo por cámara. Usá el campo manual.')
     return
   }
-  toast.info('Escáner de cámara no implementado aún. Usá el campo de código de barras.')
+  scannerError.value = ''
+  scannerOpen.value = true
+  await nextTick()
+  try {
+    barcodeDetector.value = new BarcodeDetector({
+      formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'codabar']
+    })
+    cameraStream.value = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+    if (videoEl.value) {
+      videoEl.value.srcObject = cameraStream.value
+      await videoEl.value.play().catch(() => {})
+    }
+    scanTimer.value = setInterval(() => detectFromCamera(), 350)
+  } catch {
+    scannerError.value = 'No se pudo acceder a la cámara. Permití el acceso e intentá de nuevo.'
+    closeCamera()
+  }
+}
+
+async function detectFromCamera() {
+  if (!barcodeDetector.value || !videoEl.value || !cameraStream.value) return
+  try {
+    const codes = await barcodeDetector.value.detect(videoEl.value)
+    if (codes && codes.length && codes[0].rawValue) {
+      clearInterval(scanTimer.value)
+      scanTimer.value = null
+      closeCamera()
+      const raw = codes[0].rawValue.trim()
+      scannerInput.value = raw
+      await procesarCodigo()
+    }
+  } catch {
+    // ignorar frames sin detección
+  }
+}
+
+function closeCamera() {
+  if (scanTimer.value) {
+    clearInterval(scanTimer.value)
+    scanTimer.value = null
+  }
+  if (cameraStream.value) {
+    cameraStream.value.getTracks().forEach(t => t.stop())
+    cameraStream.value = null
+  }
+  barcodeDetector.value = null
+  scannerOpen.value = false
 }
 </script>
