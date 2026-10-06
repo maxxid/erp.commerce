@@ -37,11 +37,24 @@
         </div>
         <div v-else class="text-center text-slate-400 text-sm py-8">Escanea o ingresa codigo</div>
       </div>
-      <div class="border-t bg-white dark:bg-slate-900 px-4 pt-3 pb-4">
+<div class="border-t bg-white dark:bg-slate-900 px-4 pt-3 pb-4">
         <BaseButton block variant="primary" @click="guardar">Guardar y recibir</BaseButton>
       </div>
     </div>
   </div>
+
+  <!-- Modal escáner -->
+  <BaseModal v-model="scannerOpen" title="Escanear código" :persistent="true">
+    <div class="flex flex-col gap-3">
+      <div v-if="!scannerError" class="relative rounded-xl overflow-hidden bg-black aspect-video mx-auto max-w-sm w-full">
+        <video ref="videoEl" class="w-full h-full object-cover" muted playsinline></video>
+      </div>
+      <div v-else class="text-amber-600 text-sm">{{ scannerError }}</div>
+      <div class="flex gap-2">
+        <BaseButton variant="secondary" block @click="closeCamera">Cancelar</BaseButton>
+      </div>
+    </div>
+  </BaseModal>
 </template>
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
@@ -53,6 +66,8 @@ import api from '@/services/api'
 import { formatCurrency as fc } from '@/composables/useUtils'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
+import BaseModal from '@/components/ui/BaseModal.vue'
+import { useBarcodeScanner } from '@/composables/useBarcodeScanner'
 const router = useRouter()
 const auth = useAuthStore()
 const toast = useToastStore()
@@ -65,13 +80,29 @@ const scannerInput = ref('')
 const items = ref([])
 const menuOpen = ref(false)
 const menuRef = ref(null)
-const tabActivo = ref('cobro') // cobro | control | pc
+const tabActivo = ref('cobro')
 const menuItems = computed(() => [
   { label: 'Cobro Móvil', icon: 'fa-cash-register', value: 'cobro', active: tabActivo.value === 'cobro', route: '/cobrar' },
   { label: 'Cargar Mercadería', icon: 'fa-box-open', value: 'cargar', active: tabActivo.value === 'cargar', route: '/cargar-mercaderia' },
   { label: 'Control Stock', icon: 'fa-clipboard-list', value: 'control', active: tabActivo.value === 'control', route: '/control-stock' },
   { label: 'Compras (PC)', icon: 'fa-desktop', value: 'pc', active: tabActivo.value === 'pc', route: '/compras' },
 ])
+
+const {
+  scannerOpen,
+  scannerError,
+  videoEl,
+  openScanner,
+  closeCamera,
+} = useBarcodeScanner({
+  continuous: true,
+  cooldownMs: 1500,
+  onDetect: async (raw) => {
+    scannerInput.value = raw
+    await procesarCodigo()
+    toast.success(`Escaneado: ${raw}`)
+  },
+})
 async function syncData() {
   syncing.value = true
   try {
@@ -156,15 +187,6 @@ function agregarItem(product) {
       cantidad: 1,
     })
   }
-}
-const supportsBarcodeDetector = () => typeof window !== 'undefined' && 'BarcodeDetector' in window
-async function abrirScanner() {
-  if (!supportsBarcodeDetector()) {
-    toast.warning('Tu navegador no soporta escaneo por cámara. Usá el campo manual.')
-    return
-  }
-  // Implementar si se necesita escáner de cámara
-  toast.info('Escáner de cámara no implementado aún. Usá el campo de código de barras.')
 }
 function vaciar() { items.value = [] }
 const totalCantidad = computed(() => items.value.reduce((s, x) => s + (Number(x.cantidad) || 0), 0))

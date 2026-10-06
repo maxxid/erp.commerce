@@ -103,6 +103,7 @@ import api from '@/services/api'
 import { formatCurrency as fc } from '@/composables/useUtils'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
+import { useBarcodeScanner } from '@/composables/useBarcodeScanner'
 const router = useRouter()
 const auth = useAuthStore()
 const toast = useToastStore()
@@ -114,21 +115,28 @@ const searchText = ref('')
 const menuOpen = ref(false)
 const menuRef = ref(null)
 const tabActivo = ref('control')
-// Escáner de cámara
-const scannerOpen = ref(false)
-const scannerError = ref('')
-const videoEl = ref(null)
-const barcodeDetector = ref(null)
-const scanTimer = ref(null)
-const cameraStream = ref(null)
-const lastScannedCode = ref('')
-const scanCooldown = ref(false)
 const menuItems = computed(() => [
   { label: 'Cobro Móvil', icon: 'fa-cash-register', value: 'cobro', active: tabActivo.value === 'cobro', route: '/cobrar' },
   { label: 'Cargar Mercadería', icon: 'fa-box-open', value: 'cargar', active: tabActivo.value === 'cargar', route: '/cargar-mercaderia' },
   { label: 'Control Stock', icon: 'fa-clipboard-list', value: 'control', active: tabActivo.value === 'control', route: null },
   { label: 'POS (PC)', icon: 'fa-desktop', value: 'pc', active: tabActivo.value === 'pc', route: '/pos' },
 ])
+
+const {
+  scannerOpen,
+  scannerError,
+  videoEl,
+  openScanner,
+  closeCamera,
+} = useBarcodeScanner({
+  continuous: true,
+  cooldownMs: 1500,
+  onDetect: async (raw) => {
+    scannerInput.value = raw
+    await procesarCodigo()
+    toast.success(`Escaneado: ${raw}`)
+  },
+})
 async function syncData() {
   syncing.value = true
   loading.value = true
@@ -245,66 +253,5 @@ async function procesarCodigo() {
   if (!raw) return
   searchText.value = ''
   await syncData()
-}
-const supportsBarcodeDetector = () => typeof window !== 'undefined' && 'BarcodeDetector' in window
-async function abrirScanner() {
-  if (!supportsBarcodeDetector()) {
-    toast.warning('Tu navegador no soporta escaneo por cámara. Usá el campo manual.')
-    return
-  }
-  scannerError.value = ''
-  scannerOpen.value = true
-  await nextTick()
-  try {
-    barcodeDetector.value = new BarcodeDetector({
-      formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'codabar']
-    })
-    cameraStream.value = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-    if (videoEl.value) {
-      videoEl.value.srcObject = cameraStream.value
-      await videoEl.value.play().catch(() => {})
-    }
-    scanTimer.value = setInterval(() => detectFromCamera(), 350)
-  } catch {
-    scannerError.value = 'No se pudo acceder a la cámara. Permití el acceso e intentá de nuevo.'
-    closeCamera()
-  }
-}
-
-async function detectFromCamera() {
-  if (!barcodeDetector.value || !videoEl.value || !cameraStream.value) return
-  if (scanCooldown.value) return
-  try {
-    const codes = await barcodeDetector.value.detect(videoEl.value)
-    if (codes && codes.length && codes[0].rawValue) {
-      const raw = codes[0].rawValue.trim()
-      if (raw === lastScannedCode.value) return
-      lastScannedCode.value = raw
-      scannerInput.value = raw
-      scanCooldown.value = true
-      await procesarCodigo()
-      toast.success(`Escaneado: ${raw}`)
-      setTimeout(() => {
-        scanCooldown.value = false
-        lastScannedCode.value = ''
-        scannerInput.value = ''
-      }, 1500)
-    }
-  } catch {
-    // ignorar frames sin detección
-  }
-}
-
-function closeCamera() {
-  if (scanTimer.value) {
-    clearInterval(scanTimer.value)
-    scanTimer.value = null
-  }
-  if (cameraStream.value) {
-    cameraStream.value.getTracks().forEach(t => t.stop())
-    cameraStream.value = null
-  }
-  barcodeDetector.value = null
-  scannerOpen.value = false
 }
 </script>
