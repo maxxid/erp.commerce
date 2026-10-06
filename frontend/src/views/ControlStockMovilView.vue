@@ -121,6 +121,8 @@ const videoEl = ref(null)
 const barcodeDetector = ref(null)
 const scanTimer = ref(null)
 const cameraStream = ref(null)
+const lastScannedCode = ref('')
+const scanCooldown = ref(false)
 const menuItems = computed(() => [
   { label: 'Cobro Móvil', icon: 'fa-cash-register', value: 'cobro', active: tabActivo.value === 'cobro', route: '/cobrar' },
   { label: 'Cargar Mercadería', icon: 'fa-box-open', value: 'cargar', active: tabActivo.value === 'cargar', route: '/cargar-mercaderia' },
@@ -271,15 +273,22 @@ async function abrirScanner() {
 
 async function detectFromCamera() {
   if (!barcodeDetector.value || !videoEl.value || !cameraStream.value) return
+  if (scanCooldown.value) return
   try {
     const codes = await barcodeDetector.value.detect(videoEl.value)
     if (codes && codes.length && codes[0].rawValue) {
-      clearInterval(scanTimer.value)
-      scanTimer.value = null
-      closeCamera()
       const raw = codes[0].rawValue.trim()
+      if (raw === lastScannedCode.value) return
+      lastScannedCode.value = raw
       scannerInput.value = raw
+      scanCooldown.value = true
       await procesarCodigo()
+      toast.success(`Escaneado: ${raw}`)
+      setTimeout(() => {
+        scanCooldown.value = false
+        lastScannedCode.value = ''
+        scannerInput.value = ''
+      }, 1500)
     }
   } catch {
     // ignorar frames sin detección
