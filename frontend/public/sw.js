@@ -1,11 +1,14 @@
-const CACHE_VERSION = 'apex-erp-v3'
+const CACHE_VERSION = 'apex-erp-v4'
 const STATIC_CACHE = `${CACHE_VERSION}-static`
 const DATA_CACHE = `${CACHE_VERSION}-data`
 
 const STATIC_ASSETS = [
   '/app/',
   '/app/index.html',
-  '/app/manifest.json'
+  '/app/manifest.json',
+  '/app/icons/icon-180.png',
+  '/app/icons/icon-192.png',
+  '/app/icons/icon-512.png'
 ]
 
 const CACHEABLE_API_PATTERNS = [
@@ -50,20 +53,18 @@ self.addEventListener('fetch', (event) => {
     if (isCacheable) {
       event.respondWith(
         caches.open(DATA_CACHE).then((cache) =>
-          cache.match(event.request).then((cached) => {
-            const fetchPromise = fetch(event.request)
-              .then((response) => {
-                if (response && response.status === 200) {
-                  const clone = response.clone()
-                  cache.put(event.request, clone)
-                }
-                return response
-              })
-              .catch(() => cached)
-            return cached || fetchPromise
-          })
+          fetch(event.request)
+            .then((response) => {
+              if (response && response.status === 200) {
+                const clone = response.clone()
+                cache.put(event.request, clone)
+              }
+              return response
+            })
+            .catch(() => cache.match(event.request))
         )
       )
+      return
     }
     return
   }
@@ -72,14 +73,29 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith(
     caches.match(event.request).then((cached) => {
-      const fetchPromise = fetch(event.request).then((response) => {
+      if (cached) {
+        fetch(event.request)
+          .then((response) => {
+            if (response && response.status === 200) {
+              const clone = response.clone()
+              caches.open(STATIC_CACHE).then((cache) => cache.put(event.request, clone))
+            }
+          })
+          .catch(() => {})
+        return cached
+      }
+
+      return fetch(event.request).then((response) => {
         if (response && response.status === 200) {
           const clone = response.clone()
           caches.open(STATIC_CACHE).then((cache) => cache.put(event.request, clone))
         }
         return response
-      }).catch(() => cached)
-      return cached || fetchPromise
+      }).catch(() => {
+        if (event.request.mode === 'navigate') {
+          return caches.match('/app/index.html')
+        }
+      })
     })
   )
 })
