@@ -63,6 +63,7 @@ class VentaItem(Base):
 
     por_kilo = Column(Boolean, default=False, nullable=True)
     peso = Column(Float, nullable=True)
+    medio_pago_carga = Column(String(30), nullable=True)
 
     # Relaciones
     venta = relationship("Venta", back_populates="items")

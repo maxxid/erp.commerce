@@ -1231,6 +1231,21 @@
       </div>
 
       <div>
+        <label class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block mb-1">Cuenta de salida (egreso en caja)</label>
+        <select
+          v-model="recargaForm.medio_pago_carga"
+          class="w-full px-3 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition"
+        >
+          <option value="">Usar configurada ({{ medioPagoCargaLabel }})</option>
+          <option value="manual">Manual / Ninguna (no genera egreso en caja)</option>
+          <option v-for="m in mediosPagoCargaDisponibles" :key="m.valor" :value="m.valor">{{ m.label }}</option>
+        </select>
+        <p class="text-[10px] text-slate-400 mt-1">
+          Si el dinero sale de otra cuenta o de tu bolsillo, elegí "Manual / Ninguna" para que no se descuente de ninguna cuenta digital.
+        </p>
+      </div>
+
+      <div>
         <label class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block mb-1">Monto a cargar</label>
         <div class="relative">
           <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold">$</span>
@@ -2349,7 +2364,7 @@ const recargaCfg = ref({
   monto_base: 1000, adicional_pct: 10, medio_pago_carga: 'smartpoint',
   producto_id: null, producto: null, medios_pago_disponibles: []
 })
-const recargaForm = reactive({ monto: 1000, error: '' })
+const recargaForm = reactive({ monto: 1000, error: '', medio_pago_carga: '' })
 
 const recargaHabilitada = computed(() => !!recargaCfg.value.producto_id)
 const puedeConfigurarRecargas = computed(() => ['admin', 'encargado'].includes(auth.currentUser?.rol))
@@ -2357,6 +2372,12 @@ const medioPagoCargaLabel = computed(() => {
   const found = mediosPago.find(m => m.value === recargaCfg.value.medio_pago_carga)
   return found ? found.label : recargaCfg.value.medio_pago_carga
 })
+const mediosPagoCargaDisponibles = computed(() => [
+  { valor: 'smartpoint', label: 'SmartPoint' },
+  { valor: 'mercadopago_qr', label: 'MercadoPago QR' },
+  { valor: 'mercadopago_pos', label: 'MercadoPago POS' },
+  { valor: 'qr_interop', label: 'QR Interoperable' },
+])
 const recargaUnidades = computed(() => {
   const base = recargaCfg.value.monto_base || 1000
   const n = (recargaForm.monto || 0) / base
@@ -2418,10 +2439,13 @@ function agregarRecargaAlCarrito() {
     || Math.round((recargaCfg.value.monto_base * (1 + (recargaCfg.value.adicional_pct || 0) / 100)) * 100) / 100
   const nombre = `${recargaCfg.value.producto?.nombre || 'Recarga'} ${fc(recargaCalculo.value.monto_cargado)}`
 
+  const medioPagoCargaSeleccionado = recargaForm.medio_pago_carga || ''
+
   const existing = cart.items.find(i => i.producto_id === recargaCfg.value.producto_id && i._recarga)
   if (existing) {
     existing.cantidad += unidades
     existing.nombre = `${recargaCfg.value.producto?.nombre || 'Recarga'} ${fc(recargaCalculo.value.monto_cargado)}`
+    existing._recarga.medio_pago_carga = medioPagoCargaSeleccionado
   } else {
     cart.items.push({
       producto_id: recargaCfg.value.producto_id,
@@ -2433,10 +2457,11 @@ function agregarRecargaAlCarrito() {
       tipo_venta: 'unidad',
       por_kilo: false,
       peso: null,
+      medio_pago_carga: medioPagoCargaSeleccionado,
       _recarga: {
         monto_cargado: recargaCalculo.value.monto_cargado,
         adicional: recargaCalculo.value.adicional_monto,
-        medio_pago_carga: recargaCfg.value.medio_pago_carga
+        medio_pago_carga: medioPagoCargaSeleccionado
       }
     })
   }
@@ -2471,7 +2496,7 @@ function totalLinea(i) {
     if (i._importe != null && i._importe > 0) return i._importe
     return (i.precio_unitario || 0) * (i.peso || 0)
   }
-  return (i._precio_neto || i.precio_unitario || 0) * (i.cantidad || 0)
+  return (i.precio_unitario || 0) * (i.cantidad || 0)
 }
 
 function recalcCart() {
@@ -2645,6 +2670,7 @@ async function confirmarVenta() {
           por_kilo: item.por_kilo || false,
           peso: item.peso || null,
           importe: item.por_kilo && item._importe ? item._importe : null,
+          medio_pago_carga: item.medio_pago_carga || null,
         })
       }
 

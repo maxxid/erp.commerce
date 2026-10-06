@@ -70,6 +70,7 @@ class VentaItemAdd(BaseModel):
     por_kilo: Optional[bool] = False
     peso: Optional[float] = None
     importe: Optional[float] = Field(None, gt=0, description="Importe a cobrar por peso. Si viene, define el subtotal exacto y el peso se recalcula como importe / precio_unitario.")
+    medio_pago_carga: Optional[str] = Field(None, description="Cuenta de donde sale el dinero para recargas (smartpoint, mercadopago_qr, etc.). Si es 'manual' o null, no genera egreso en caja.")
 
 
 class VentaConfirmar(BaseModel):
@@ -147,7 +148,7 @@ def agregar_item(
         item = venta_service.agregar_item(
             db, venta, data.producto_id, data.cantidad, data.precio_unitario,
             data.oferta_tipo, data.oferta_valor, data.oferta_info,
-            data.por_kilo, data.peso, data.importe
+            data.por_kilo, data.peso, data.importe, data.medio_pago_carga
         )
         db.refresh(venta)
         auditoria_service.registrar(db, user.id, "item_agregado", venta.id, venta.numero, {

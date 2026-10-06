@@ -71,6 +71,7 @@ def agregar_item(
     por_kilo: bool = False,
     peso: Optional[float] = None,
     importe: Optional[float] = None,
+    medio_pago_carga: Optional[str] = None,
 ) -> VentaItem:
     """Agrega un producto a la venta.
 
@@ -115,6 +116,7 @@ def agregar_item(
         oferta_info=oferta_info,
         por_kilo=por_kilo,
         peso=peso if por_kilo else None,
+        medio_pago_carga=medio_pago_carga,
     )
     db.add(item)
 
@@ -285,11 +287,16 @@ def confirmar_venta(
 
     # Recargas de dinero digital: el costo real es lo cargado y sale un EGRESO
     # de caja por la cuenta digital configurada (MercadoPago / SmartPoint / ...).
+    # Si el item tiene medio_pago_carga explícito, usarlo; si es 'manual' o null, no genera egreso.
     cfg_recarga = recarga_service.get_config(db)
     for item in venta.items:
         producto = db.query(Producto).filter(Producto.id == item.producto_id).first()
         if producto is not None and producto.es_recarga:
-            recarga_service.registrar_venta_recarga(db, venta, item, producto, uid, cfg_recarga)
+            medio_carga = item.medio_pago_carga or cfg_recarga.get("medio_pago_carga")
+            if medio_carga and medio_carga.lower() != "manual":
+                # Crear config temporal con el medio_pago_carga elegido
+                cfg_item = {**cfg_recarga, "medio_pago_carga": medio_carga}
+                recarga_service.registrar_venta_recarga(db, venta, item, producto, uid, cfg_item)
 
     db.commit()
     db.refresh(venta)

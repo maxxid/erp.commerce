@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from app.config import settings
 from app.database import engine, Base
 from app.models import *  # noqa: F401, F403 — Registrar todos los modelos
-from app.routers import auth, productos, categorias, dashboard, caja, clientes, ventas, proveedores, compras, calendario, backups, usuarios, auditoria, licencia, catalogo, ofertas, facturacion, configuracion as config_router, pagos, lotes, denominaciones, reportes, recargas
+from app.routers import auth, productos, categorias, dashboard, caja, clientes, ventas, proveedores, compras, calendario, backups, usuarios, auditoria, licencia, catalogo, ofertas, facturacion, configuracion as config_router, pagos, lotes, denominaciones, reportes, recargas, etiquetas
 
 
 def crear_app() -> FastAPI:
@@ -56,6 +56,7 @@ def crear_app() -> FastAPI:
     app.include_router(denominaciones.router)
     app.include_router(reportes.router)
     app.include_router(recargas.router)
+    app.include_router(etiquetas.router)
 
     # Servir el frontend Vue 3 (producción)
     @app.get("/app")
@@ -299,6 +300,11 @@ def _migrate_new_columns():
             if col not in existentes_mc:
                 conn.execute(sa.text(f"ALTER TABLE movimientos_caja ADD COLUMN {col} {tipo}"))
                 conn.commit()
+        # venta_items: medio_pago_carga para recargas (opcional, permite no generar egreso)
+        existentes_vi = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(venta_items)"))]
+        if "medio_pago_carga" not in existentes_vi:
+            conn.execute(sa.text("ALTER TABLE venta_items ADD COLUMN medio_pago_carga VARCHAR(30)"))
+            conn.commit()
         # Cuentas corrientes con proveedor: saldo cacheado en el maestro
         # (la verdad son las filas de deudas_proveedor y pagos_proveedor).
         existentes_prov = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(proveedores)"))]
