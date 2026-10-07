@@ -1436,7 +1436,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted, nextTick } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
@@ -1507,6 +1507,8 @@ const mpQrData = ref(null)
 const mpQrError = ref('')
 const mpPollingInterval = ref(null)
 const mpVentaId = ref(null)
+
+const posSyncInterval = ref(null)
 const mpOrderId = ref(null)
 
 // MercadoPago POS (Smart Point) states
@@ -1873,7 +1875,29 @@ onMounted(async () => {
     loadSaleForEditing(Number(route.query.editVentaId))
     router.replace({ query: {} })
   }
+  startPosPeriodicSync()
 })
+
+onUnmounted(() => {
+  stopPosPeriodicSync()
+  if (mpPollingInterval.value) clearInterval(mpPollingInterval.value)
+})
+
+function startPosPeriodicSync() {
+  if (posSyncInterval.value) return
+  posSyncInterval.value = setInterval(async () => {
+    try {
+      await cajaStore.fetchEstado()
+    } catch { /* ignore */ }
+  }, 60000)
+}
+
+function stopPosPeriodicSync() {
+  if (posSyncInterval.value) {
+    clearInterval(posSyncInterval.value)
+    posSyncInterval.value = null
+  }
+}
 
 async function fetchPOSStats() {
   try {

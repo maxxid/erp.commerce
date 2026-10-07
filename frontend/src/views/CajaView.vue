@@ -903,7 +903,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
 import { useCajaStore } from '@/stores/caja'
@@ -938,6 +938,8 @@ const opening = ref(false)
 const closing = ref(false)
 const saving = ref(false)
 const guardandoRetiroActual = ref(false)
+
+const syncInterval = ref(null)
 
 const showNuevoMovimiento = ref(false)
 const showCierreModal = ref(false)
@@ -1532,7 +1534,28 @@ onMounted(async () => {
   await fetchResumen()
   await cajaStore.fetchUltimoCierre()
   await fetchReportes()
+  startPeriodicSync()
 })
+
+onUnmounted(() => {
+  stopPeriodicSync()
+})
+
+function startPeriodicSync() {
+  if (syncInterval.value) return
+  syncInterval.value = setInterval(async () => {
+    try {
+      await cajaStore.fetchEstado()
+    } catch { /* ignore */ }
+  }, 60000)
+}
+
+function stopPeriodicSync() {
+  if (syncInterval.value) {
+    clearInterval(syncInterval.value)
+    syncInterval.value = null
+  }
+}
 
 async function fetchMovimientos() {
   try {
