@@ -881,8 +881,8 @@ def reportes_caja(
             sesion_actual["total_egresos"] = total_egresos
             sesion_actual["saldo_final"] = sesion_actual["apertura_monto"] + total_ingresos - total_egresos
             
-            # Detectar si fue automático
-            sesion_actual["fue_automatico"] = bool(mov.fue_automatico) or (mov.descripcion and "automático" in mov.descripcion.lower())
+            # Detectar si fue automático (usar campo booleano)
+            sesion_actual["fue_automatico"] = bool(mov.fue_automatico)
             
             sesion_actual = None
         elif mov.tipo == "ingreso" and sesion_actual:
@@ -954,3 +954,35 @@ def reportes_caja(
         "sesiones": sesiones,
         "total_sesiones": len(sesiones)
     })
+
+
+class CajaConfigRequest(BaseModel):
+    caja_cierre_automatico: bool = True
+
+
+@router.get("/config", response_model=RespuestaData)
+def get_caja_config(
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "encargado")),
+):
+    """Obtiene la configuración de caja (auto-cierre, etc.)."""
+    return RespuestaData(data={
+        "caja_cierre_automatico": config_service.get_caja_cierre_automatico(db),
+    })
+
+
+@router.put("/config", response_model=RespuestaData)
+def set_caja_config(
+    data: CajaConfigRequest,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "encargado")),
+):
+    """Actualiza la configuración de caja."""
+    config_service.set_config(
+        db, "caja_cierre_automatico", str(data.caja_cierre_automatico).lower(),
+        "Habilitar cierre automático de caja por cambio de día"
+    )
+    return RespuestaData(
+        data={"caja_cierre_automatico": data.caja_cierre_automatico},
+        message="Configuración de caja actualizada"
+    )

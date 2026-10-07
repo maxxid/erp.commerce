@@ -39,6 +39,35 @@ const MOSTRAR_LABORATORIO_QR = false
 const ventasExpanded = ref(false)
 const denominacionesExpanded = ref(false)
 const recargasExpanded = ref(false)
+const cajaExpanded = ref(false)
+
+// --- Configuración de Caja ---
+const cajaConfig = ref({
+  caja_cierre_automatico: true
+})
+
+async function loadCajaConfig() {
+  try {
+    const data = await api.get('/api/caja/config')
+    if (data) {
+      cajaConfig.value.caja_cierre_automatico = data.caja_cierre_automatico ?? true
+    }
+  } catch { /* la card queda con el default */ }
+}
+
+async function saveCajaConfig() {
+  saving.value = true
+  try {
+    await api.put('/api/caja/config', {
+      caja_cierre_automatico: cajaConfig.value.caja_cierre_automatico
+    })
+    toast.success('Configuración de caja guardada')
+  } catch (e) {
+    toast.error(e?.response?.data?.detail || 'No se pudo guardar la configuración')
+  } finally {
+    saving.value = false
+  }
+}
 
 // --- Servicio de recargas ---
 const savingRecargas = ref(false)
@@ -643,6 +672,7 @@ onMounted(async () => {
   await loadConfig()
   await loadDenominaciones()
   await loadRecargas()
+  await loadCajaConfig()
 })
 </script>
 
@@ -1550,6 +1580,50 @@ onMounted(async () => {
             <i class="fa-solid fa-floppy-disk"></i> Guardar
           </BaseButton>
           <p class="text-[11px] text-slate-400">Las denominaciones deshabilitadas no aparecen en el contador</p>
+        </div>
+      </div>
+    </BaseCard>
+
+    <BaseCard v-if="!loading">
+      <button class="w-full text-left" @click="cajaExpanded = !cajaExpanded">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <i class="fa-solid fa-lock text-emerald-600"></i>
+            Caja
+          </h3>
+          <i :class="['fa-solid fa-chevron-down text-xs transition-transform', cajaExpanded ? 'rotate-180' : '']"></i>
+        </div>
+      </button>
+
+      <div v-if="cajaExpanded" class="mt-4 space-y-4 max-w-lg">
+        <div class="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg p-4">
+          <p class="text-xs text-slate-600 dark:text-slate-400">
+            Controla el comportamiento del <strong>cierre automático de caja por cambio de día</strong>.
+            Cuando está <strong>activado</strong> (por defecto), si la caja queda abierta al finalizar la jornada,
+            el sistema la cierra automáticamente al día siguiente con el monto calculado.
+            El operador debe <strong>conciliar</strong> esa sesión desde el Historial de Caja.
+          </p>
+          <p class="text-xs text-amber-600 dark:text-amber-400 mt-2">
+            <i class="fa-solid fa-triangle-exclamation mr-1"></i>
+            <strong>Desactivar solo si entendés el impacto:</strong> la caja del día anterior quedará abierta
+            y no se podrán abrir nuevas sesiones hasta cerrarla manualmente.
+          </p>
+        </div>
+
+        <div class="space-y-4">
+          <BaseToggle
+            v-model="cajaConfig.caja_cierre_automatico"
+            label="Cierre automático por cambio de día"
+            description="Cierra la caja automáticamente si quedó abierta del día anterior"
+            size="sm"
+          />
+        </div>
+
+        <div class="flex items-center gap-3 pt-2">
+          <BaseButton variant="primary" :loading="saving" @click="saveCajaConfig">
+            <i class="fa-solid fa-floppy-disk"></i> Guardar
+          </BaseButton>
+          <p class="text-[11px] text-slate-400">Los cambios se aplican inmediatamente</p>
         </div>
       </div>
     </BaseCard>

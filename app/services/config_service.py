@@ -63,6 +63,17 @@ def get_factura_auto_por_medio(db: Session, medio_pago: str) -> bool:
     return valor == "true"
 
 
+def get_caja_cierre_automatico(db: Session) -> bool:
+    """Retorna True si el cierre automático por cambio de día está habilitado.
+    
+    Default: True (habilitado). Se puede desactivar desde Ajustes.
+    """
+    valor = get_config(db, "caja_cierre_automatico")
+    if valor is None:
+        return True
+    return valor == "true"
+
+
 def get_afip_config(db: Session) -> dict:
     """Lee toda la configuración de AFIP desde la DB + entorno."""
     return {

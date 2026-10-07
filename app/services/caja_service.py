@@ -15,6 +15,7 @@ from datetime import datetime, timezone, timedelta
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 from app.models.movimiento_caja import MovimientoCaja
+from app.services import config_service
 
 # Zona horaria Argentina (UTC-3)
 TZ_AR = timezone(timedelta(hours=-3))
@@ -126,6 +127,10 @@ def cerrar_sesion_anterior_automaticamente(db: Session, sucursal_id: int = 1) ->
     Mantiene el historial consistente: cada jornada queda cerrada aunque el
     operador se haya olvidado de hacer el cierre manual al salir.
     """
+    # Verificar si el cierre automático está habilitado en configuración
+    if not config_service.get_caja_cierre_automatico(db):
+        return False
+    
     movimientos = (
         db.query(MovimientoCaja)
         .filter(MovimientoCaja.sucursal_id == sucursal_id)
@@ -280,7 +285,7 @@ def obtener_ultimo_cierre(db: Session, sucursal_id: int = 1) -> Optional[dict]:
     """Obtiene información del último cierre de caja.
     
     Returns:
-        dict con: monto, fecha (UTC), fecha_local, descripcion, fue_automatico
+        dict con: monto, fecha (UTC y local), descripcion, fue_automatico
         None si no hay cierres.
     """
     ultimo_cierre = (
@@ -300,8 +305,8 @@ def obtener_ultimo_cierre(db: Session, sucursal_id: int = 1) -> Optional[dict]:
     fecha_utc = ultimo_cierre.created_at
     fecha_local = _a_local(fecha_utc) if fecha_utc else None
 
-    # Detectar si fue automático por la descripción
-    fue_automatico = bool(ultimo_cierre.fue_automatico) or "automático" in (ultimo_cierre.descripcion or "").lower()
+    # Usar directamente el campo booleano fue_automatico (no fallback a descripción)
+    fue_automatico = bool(ultimo_cierre.fue_automatico)
 
     saldo_efectivo = ultimo_cierre.saldo_efectivo
     if saldo_efectivo is None:
