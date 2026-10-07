@@ -1488,33 +1488,33 @@ function formatFecha(fechaStr) {
 
     <!-- Ver Producto Modal -->
     <BaseModal v-model="showViewModal" title="Detalle del Producto" size="lg">
-      <div v-if="viewProduct" class="space-y-4">
+      <div v-if="viewProduct" class="space-y-5">
         <!-- Header con info básica -->
-        <div class="grid grid-cols-3 gap-4">
-          <div class="bg-white dark:bg-slate-900 rounded-xl p-5 text-center border border-slate-200 dark:border-slate-700">
-            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-2">Stock Actual</div>
+        <div class="grid grid-cols-3 gap-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+          <div class="text-center">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Stock Actual</div>
             <div class="font-mono-data font-bold text-2xl text-brand-600">{{ fc(viewProduct.producto.stock_actual) }}</div>
             <div class="text-xs text-slate-400 mt-1">Mín: {{ viewProduct.producto.stock_minimo }}</div>
           </div>
-          <div class="bg-white dark:bg-slate-900 rounded-xl p-5 text-center border border-slate-200 dark:border-slate-700">
-            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-2">Precio Venta</div>
+          <div class="text-center">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Precio Venta</div>
             <div class="font-mono-data font-bold text-2xl text-emerald-600">{{ fc(viewProduct.producto.precio_venta) }}</div>
             <div class="text-xs text-slate-400 mt-1">Costo: {{ fc(viewProduct.producto.precio_costo) }}</div>
           </div>
-          <div class="bg-white dark:bg-slate-900 rounded-xl p-5 text-center border border-slate-200 dark:border-slate-700">
-            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-2">Margen</div>
+          <div class="text-center">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Margen</div>
             <div class="font-mono-data font-bold text-2xl" :class="margen >= 0 ? 'text-emerald-600' : 'text-rose-600'">{{ margen >= 0 ? '+' : '' }}{{ fc(margen) }} ({{ margenPct }}%)</div>
           </div>
         </div>
 
         <div class="grid grid-cols-2 gap-4">
           <!-- Historial de Compras -->
-          <div class="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-700">
-            <h4 class="text-sm font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+          <div class="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
+            <h4 class="text-sm font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
               <i class="fa-solid fa-truck text-indigo-500"></i> Historial de Compras ({{ viewProduct.historial_compras.length }})
             </h4>
-            <div v-if="viewProduct.historial_compras.length" class="max-h-72 overflow-y-auto space-y-3">
-              <div v-for="c in viewProduct.historial_compras" :key="c.fecha + c.numero_orden" class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+            <div v-if="viewProduct.historial_compras.length" class="max-h-64 overflow-y-auto space-y-2">
+              <div v-for="c in viewProduct.historial_compras" :key="c.fecha + c.numero_orden" class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
                 <div class="flex-1 min-w-0">
                   <div class="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">{{ c.proveedor }}</div>
                   <div class="text-sm text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-3 mt-1">
@@ -1530,8 +1530,8 @@ function formatFecha(fechaStr) {
           </div>
 
           <!-- Historial de Ventas -->
-          <div class="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-700">
-            <h4 class="text-sm font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+          <div class="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
+            <h4 class="text-sm font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
               <i class="fa-solid fa-chart-line text-emerald-500"></i> Historial de Ventas
             </h4>
             <div v-if="viewProduct.historial_ventas.total_vendido > 0" class="space-y-3">
@@ -1559,12 +1559,12 @@ function formatFecha(fechaStr) {
         </div>
 
         <!-- Proveedores -->
-        <div v-if="viewProduct.proveedores.length" class="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-700">
-          <h4 class="text-sm font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+        <div v-if="viewProduct.proveedores.length" class="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
+          <h4 class="text-sm font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
             <i class="fa-solid fa-handshake text-brand-500"></i> Proveedores Asociados ({{ viewProduct.proveedores.length }})
           </h4>
           <div class="space-y-3">
-            <div v-for="p in viewProduct.proveedores" :key="p.id" class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+            <div v-for="p in viewProduct.proveedores" :key="p.id" class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2">
                   <span class="text-sm font-medium text-slate-700 dark:text-slate-200">{{ p.nombre }}</span>
