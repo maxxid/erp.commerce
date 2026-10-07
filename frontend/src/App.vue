@@ -11,7 +11,6 @@ import TheHeader from '@/components/layout/TheHeader.vue'
 import TheFooter from '@/components/layout/TheFooter.vue'
 import ToastContainer from '@/components/layout/ToastContainer.vue'
 import CommandPalette from '@/components/layout/CommandPalette.vue'
-import TheBreadcrumbs from '@/components/layout/TheBreadcrumbs.vue'
 import OfflineIndicator from '@/components/layout/OfflineIndicator.vue'
 import KeyboardShortcutsModal from '@/components/layout/KeyboardShortcutsModal.vue'
 
@@ -165,9 +164,6 @@ onUnmounted(() => {
               @open-command-palette="openCommandPalette"
             />
             <div class="flex-1 overflow-y-auto relative scroll-smooth">
-              <div class="px-6 lg:px-8 pt-4 pb-0">
-                <TheBreadcrumbs />
-              </div>
               <div class="p-6 lg:p-8 pt-2">
               <router-view v-slot="{ Component, route }">
                 <Transition
