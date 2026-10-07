@@ -27,17 +27,32 @@ function buildQuery(params) {
   return qs ? `?${qs}` : ''
 }
 
-async function request(method, path, body = null, params = null) {
+async function request(method, path, body = null, params = null, fetchOptions = {}) {
   const headers = { 'Content-Type': 'application/json' }
   const token = getToken()
   if (token) headers['Authorization'] = `Bearer ${token}`
 
-  const options = { method, headers }
-  if (body && method !== 'GET') {
+  const options = { method, headers, ...fetchOptions }
+  if (body && method !== 'GET' && !fetchOptions.responseType) {
     options.body = JSON.stringify(body)
   }
 
   const response = await fetch(`${API_BASE}${path}${buildQuery(params)}`, options)
+
+  if (fetchOptions.responseType === 'blob') {
+    const blob = await response.blob()
+    if (!response.ok) {
+      let text = ''
+      try { text = await blob.text() } catch {}
+      const error = new Error(text || `Error ${response.status}`)
+      error.status = response.status
+      error.data = { detail: text }
+      throw error
+    }
+    touchSync()
+    return blob
+  }
+
   const text = await response.text()
   let data
   try { data = JSON.parse(text) } catch { data = { detail: text } }

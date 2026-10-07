@@ -24,6 +24,7 @@ const mainLinks = [
   { to: '/dashboard', icon: 'fa-chart-pie', label: 'Dashboard' },
   { to: '/pos', icon: 'fa-cash-register', label: 'POS de Ventas' },
   { to: '/products', icon: 'fa-boxes-stacked', label: 'Productos' },
+  { to: '/etiquetas-precios', icon: 'fa-tag', label: 'Etiquetas' },
   { to: '/caja', icon: 'fa-vault', label: 'Arqueos y Caja', roles: ['admin', 'cajero'] },
   { to: '/ventas', icon: 'fa-receipt', label: 'Ventas' },
   { to: '/calendario', icon: 'fa-calendar', label: 'Calendario' },

@@ -12,6 +12,7 @@ const routes = [
   { path: '/pos', name: 'pos', component: () => import('@/views/POSView.vue') },
   { path: '/cobrar', name: 'cobrar', component: () => import('@/views/CobroMovilView.vue'), meta: { bare: true, mobile: true } },
   { path: '/products', name: 'products', component: () => import('@/views/ProductsView.vue') },
+  { path: '/etiquetas-precios', name: 'etiquetas-precios', component: () => import('@/views/EtiquetasPreciosView.vue') },
   { path: '/caja', name: 'caja', component: () => import('@/views/CajaView.vue'), meta: { roles: ['admin', 'cajero'] } },
   { path: '/ventas', name: 'ventas', component: () => import('@/views/VentasView.vue') },
   { path: '/calendario', name: 'calendario', component: () => import('@/views/CalendarioView.vue') },

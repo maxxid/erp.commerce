@@ -13,7 +13,7 @@ class Settings:
     # En producción usar variable DATABASE_URL en systemd
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL",
-        "sqlite:////data/erp/erp_comercio.db",
+        "sqlite:///erp_comercio.db",
     )
 
     # JWT
