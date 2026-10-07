@@ -226,7 +226,7 @@ def info_detallada_producto(
     historial_compras = []
     for ci in compras:
         c = ci.compra
-        p = ci.proveedor
+        p = c.proveedor  # Proveedor is on Compra, not CompraItem
         historial_compras.append({
             "fecha": c.fecha.isoformat() if c.fecha else None,
             "numero_orden": c.numero,
