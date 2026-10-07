@@ -51,8 +51,23 @@ def obtener_productos_para_etiquetar(
     if filtros.solo_con_stock:
         query = query.filter(Producto.stock_actual > 0)
     
+    # Filtro por categoría
+    if filtros.categoria_id:
+        query = query.filter(Producto.categoria_id == filtros.categoria_id)
+    
     query = query.outerjoin(Categoria, Producto.categoria_id == Categoria.id)
-    query = query.order_by(Categoria.nombre.asc().nullslast(), Producto.nombre.asc())
+    
+    # Ordenamiento
+    if filtros.orden == 'fecha_desc':
+        query = query.order_by(Producto.created_at.desc())
+    elif filtros.orden == 'fecha_asc':
+        query = query.order_by(Producto.created_at.asc())
+    elif filtros.orden == 'nombre':
+        query = query.order_by(Producto.nombre.asc())
+    elif filtros.orden == 'categoria':
+        query = query.order_by(Categoria.nombre.asc().nullslast(), Producto.nombre.asc())
+    else:
+        query = query.order_by(Categoria.nombre.asc().nullslast(), Producto.nombre.asc())
     
     return query.all()
 

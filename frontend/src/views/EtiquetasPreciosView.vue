@@ -9,6 +9,7 @@ import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseBadge from '@/components/ui/BaseBadge.vue'
 import BaseTable from '@/components/ui/BaseTable.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
+import BaseSelect from '@/components/ui/BaseSelect.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 
 const toast = useToastStore()
@@ -39,11 +40,21 @@ const filtros = reactive({
   incluir_cambios_precio: true,
   incluir_nuevos: true,
   solo_con_stock: false,
+  categoria_id: null,
+  orden: 'fecha_desc',
 })
+
+const ordenOptions = [
+  { value: 'fecha_desc', label: 'Más recientes primero (por ingreso)' },
+  { value: 'fecha_asc', label: 'Más antiguos primero' },
+  { value: 'nombre', label: 'Por nombre (A-Z)' },
+  { value: 'categoria', label: 'Por categoría' },
+]
 
 const tamano = ref('70x35')
 const borderless = ref(false)
 
+const categorias = ref([])
 const productos = ref([])
 const historial = ref([])
 const loading = ref(false)
@@ -51,8 +62,10 @@ const generando = ref(false)
 const marcando = ref(false)
 
 const descripcionesEditadas = ref({})
+const selectedProductos = ref(new Set())
 
 const tableColumns = [
+  { key: 'select', label: '', width: 'w-12', align: 'center' },
   { key: 'codigo_barras', label: 'Código', width: 'w-36' },
   { key: 'nombre', label: 'Nombre' },
   { key: 'marca', label: 'Marca' },
@@ -71,6 +84,42 @@ const tableRows = computed(() => productos.value.map(p => ({
 const sinStockCount = computed(() => productos.value.filter(p => (p.stock_actual || 0) <= 0).length)
 const totalEtiquetas = computed(() => productos.value.length)
 
+const todosSeleccionados = computed(() => {
+  if (!productos.value.length) return false
+  return productos.value.every(p => selectedProductos.value.has(p.id))
+})
+
+const algunosSeleccionados = computed(() => {
+  if (!productos.value.length) return false
+  return productos.value.some(p => selectedProductos.value.has(p.id)) && !todosSeleccionados.value
+})
+
+function toggleSelectAll() {
+  if (todosSeleccionados.value) {
+    selectedProductos.value.clear()
+  } else {
+    productos.value.forEach(p => selectedProductos.value.add(p.id))
+  }
+}
+
+function toggleProducto(id) {
+  if (selectedProductos.value.has(id)) {
+    selectedProductos.value.delete(id)
+  } else {
+    selectedProductos.value.add(id)
+  }
+}
+
+async function cargarCategorias() {
+  try {
+    const data = await api.get('/api/categorias?page_size=500')
+    categorias.value = data.data || data || []
+  } catch (e) {
+    console.error('Error cargando categorías:', e)
+    categorias.value = []
+  }
+}
+
 async function cargarHistorial() {
   try {
     const data = await api.get('/api/etiquetas/historial')
@@ -83,6 +132,7 @@ async function cargarHistorial() {
 
 async function cargarPreview() {
   loading.value = true
+  selectedProductos.value.clear()
   try {
     const params = new URLSearchParams()
     params.set('desde', filtros.desde)
@@ -90,6 +140,8 @@ async function cargarPreview() {
     params.set('incluir_cambios_precio', String(filtros.incluir_cambios_precio))
     params.set('incluir_nuevos', String(filtros.incluir_nuevos))
     params.set('solo_con_stock', String(filtros.solo_con_stock))
+    if (filtros.categoria_id) params.set('categoria_id', String(filtros.categoria_id))
+    params.set('orden', filtros.orden)
     params.set('page', '1')
     params.set('page_size', '500')
 
@@ -107,7 +159,11 @@ async function cargarPreview() {
 }
 
 async function generarPDF() {
-  if (!productos.value.length) {
+  const idsAImprimir = selectedProductos.value.size > 0
+    ? [...selectedProductos.value]
+    : productos.value.map(p => p.id)
+
+  if (!idsAImprimir.length) {
     toast.error('No hay productos para generar etiquetas')
     return
   }
@@ -119,6 +175,7 @@ async function generarPDF() {
       tamano: tamano.value,
       borderless: borderless.value,
       descripciones_editadas: descripcionesEditadas.value,
+      productos_ids: idsAImprimir,
     }
 
     const response = await api.request('POST', '/api/etiquetas/precios/generar-pdf', payload, null, { responseType: 'blob' })
@@ -157,16 +214,19 @@ async function generarPDF() {
 }
 
 async function marcarImpreso() {
-  if (!productos.value.length) {
+  const idsAMarcar = selectedProductos.value.size > 0
+    ? [...selectedProductos.value]
+    : productos.value.map(p => p.id)
+
+  if (!idsAMarcar.length) {
     toast.error('No hay productos para marcar')
     return
   }
 
-  const ids = productos.value.map(p => p.id)
   marcando.value = true
   try {
     const resp = await api.post('/api/etiquetas/marcar-impreso', {
-      productos_ids: ids,
+      productos_ids: idsAMarcar,
       tamano: tamano.value,
       borderless: borderless.value,
     })
@@ -186,6 +246,7 @@ function actualizarDescripcion(id, valor) {
 }
 
 onMounted(async () => {
+  await cargarCategorias()
   await cargarHistorial()
   await cargarPreview()
 })
@@ -233,9 +294,24 @@ onMounted(async () => {
     <BaseCard class="space-y-4">
       <h3 class="font-semibold text-slate-900 dark:text-white">Filtros</h3>
 
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <BaseInput v-model="filtros.desde" type="date" label="Desde" />
         <BaseInput v-model="filtros.hasta" type="date" label="Hasta" />
+        <BaseSelect
+          v-model="filtros.categoria_id"
+          label="Categoría"
+          :options="[{ value: null, label: 'Todas' }, ...categorias.map(c => ({ value: c.id, label: c.nombre }))]"
+          option-value="value"
+          option-label="label"
+          placeholder="Todas"
+        />
+        <BaseSelect
+          v-model="filtros.orden"
+          label="Ordenar por"
+          :options="ordenOptions"
+          option-value="value"
+          option-label="label"
+        />
       </div>
 
       <div class="flex flex-wrap items-center gap-4">
@@ -277,10 +353,17 @@ onMounted(async () => {
         <BaseButton @click="marcarImpreso" :loading="marcando" variant="success" :disabled="!productos.length">
           <i class="fa-solid fa-check mr-1"></i> Marcar como impreso
         </BaseButton>
+        <BaseButton @click="toggleSelectAll" variant="secondary" size="sm" :disabled="!productos.length">
+          <i :class="todosSeleccionados ? 'fa-solid fa-minus-square' : 'fa-solid fa-check-square'"></i>
+          {{ todosSeleccionados ? 'Deseleccionar todo' : 'Seleccionar todo' }}
+        </BaseButton>
       </div>
 
       <div v-if="productos.length" class="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-200 dark:border-slate-700">
         <span class="font-semibold text-slate-900 dark:text-white">{{ totalEtiquetas }} producto(s)</span>
+        <span v-if="selectedProductos.size > 0" class="px-2 py-0.5 rounded-full bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300 text-xs font-medium">
+          {{ selectedProductos.size }} seleccionado{{ selectedProductos.size !== 1 ? 's' : '' }}
+        </span>
         <span v-if="sinStockCount > 0" class="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 text-xs font-medium">
           {{ sinStockCount }} sin stock
         </span>
@@ -301,6 +384,14 @@ onMounted(async () => {
         empty-text="Ajustá los filtros y dale a Vista previa"
         empty-icon="fa-tag"
       >
+        <template #select="{ row }">
+          <input
+            type="checkbox"
+            class="w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
+            :checked="selectedProductos.has(row.id)"
+            @click="toggleProducto(row.id)"
+          />
+        </template>
         <template #descripcion="{ row }">
           <BaseInput
             :value="descripcionesEditadas[row.id] ?? row.descripcion ?? ''"

@@ -12,6 +12,8 @@ class EtiquetasFiltros(BaseModel):
     incluir_cambios_precio: bool = True
     incluir_nuevos: bool = True
     solo_con_stock: bool = False
+    categoria_id: Optional[int] = None
+    orden: Literal['fecha_desc', 'fecha_asc', 'nombre', 'categoria'] = 'fecha_desc'
 
 
 class EtiquetaProductoOut(BaseModel):

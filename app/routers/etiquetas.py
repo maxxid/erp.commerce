@@ -34,6 +34,8 @@ def listar_para_etiquetar(
     incluir_cambios_precio: bool = Query(True),
     incluir_nuevos: bool = Query(True),
     solo_con_stock: bool = Query(False),
+    categoria_id: Optional[int] = Query(None),
+    orden: str = Query('fecha_desc', pattern='^(fecha_desc|fecha_asc|nombre|categoria)$'),
     page: int = Query(1, ge=1),
     page_size: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
@@ -46,6 +48,8 @@ def listar_para_etiquetar(
         incluir_cambios_precio=incluir_cambios_precio,
         incluir_nuevos=incluir_nuevos,
         solo_con_stock=solo_con_stock,
+        categoria_id=categoria_id,
+        orden=orden,
     )
     
     productos = obtener_productos_para_etiquetar(db, filtros)
@@ -85,7 +89,20 @@ def generar_pdf_etiquetas(
     user: Usuario = Depends(get_current_user),
 ):
     """Genera PDF con etiquetas de precios."""
-    productos = obtener_productos_para_etiquetar(db, data.filtros)
+    from app.schemas.etiquetas import EtiquetasFiltros
+    
+    # Crear filtros con todos los parámetros incluyendo categoria_id y orden
+    filtros = EtiquetasFiltros(
+        desde=data.filtros.desde,
+        hasta=data.filtros.hasta,
+        incluir_cambios_precio=data.filtros.incluir_cambios_precio,
+        incluir_nuevos=data.filtros.incluir_nuevos,
+        solo_con_stock=data.filtros.solo_con_stock,
+        categoria_id=data.filtros.categoria_id,
+        orden=data.filtros.orden,
+    )
+    
+    productos = obtener_productos_para_etiquetar(db, filtros)
     
     if not productos:
         raise HTTPException(status_code=404, detail="No hay productos para etiquetar en ese período")
