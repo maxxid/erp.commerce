@@ -304,7 +304,7 @@ def info_detallada_producto(
                 "primera_venta": primera_venta.isoformat() if primera_venta else None,
                 "ultima_venta": ultima_venta.isoformat() if ultima_venta else None,
                 "promedio_semanal": round(promedio_semanal, 2),
-                "dias_desde_primera_venta": (datetime.now(timezone.utc) - primera_venta).days if primera_venta else None,
+                "dias_desde_primera_venta": (datetime.now(timezone.utc) - primera_venta.replace(tzinfo=timezone.utc)).days if primera_venta else None,
             },
             "ultima_compra": {
                 "fecha": ultima_compra.fecha.isoformat() if ultima_compra else None,
