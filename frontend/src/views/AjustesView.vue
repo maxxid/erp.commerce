@@ -40,6 +40,61 @@ const ventasExpanded = ref(false)
 const denominacionesExpanded = ref(false)
 const recargasExpanded = ref(false)
 const cajaExpanded = ref(false)
+const posExpanded = ref(false)
+
+const MEDIOS_PAGO_POS = [
+  { value: 'efectivo', label: 'Efectivo', icon: 'fa-money-bill-wave' },
+  { value: 'transferencia', label: 'Transferencia', icon: 'fa-mobile-screen-button' },
+  { value: 'mercadopago_qr', label: 'MercadoPago QR', icon: 'fa-brands fa-cc-mastercard' },
+  { value: 'qr_interop', label: 'QR BCRA', icon: 'fa-wallet' },
+  { value: 'mercadopago_pos', label: 'MercadoPago POS', icon: 'fa-solid fa-mobile-button' },
+  { value: 'smartpoint', label: 'SmartPoint', icon: 'fa-solid fa-cash-register' },
+  { value: 'cta_corriente', label: 'Cuenta Corriente', icon: 'fa-file-invoice-dollar' },
+]
+
+const posConfig = ref({
+  showStatsPanel: true,
+  productViewMode: 'grilla',
+  enabledPaymentMethods: MEDIOS_PAGO_POS.map(m => m.value)
+})
+
+async function loadPosConfig() {
+  try {
+    const data = await api.get('/api/config/pos')
+    if (data) {
+      posConfig.value.showStatsPanel = data.showStatsPanel ?? true
+      posConfig.value.productViewMode = data.productViewMode || 'grilla'
+      if (Array.isArray(data.enabledPaymentMethods)) {
+        posConfig.value.enabledPaymentMethods = data.enabledPaymentMethods
+      }
+    }
+  } catch { }
+}
+
+async function savePosConfig() {
+  saving.value = true
+  try {
+    await api.put('/api/config/pos', {
+      showStatsPanel: posConfig.value.showStatsPanel,
+      productViewMode: posConfig.value.productViewMode,
+      enabledPaymentMethods: posConfig.value.enabledPaymentMethods
+    })
+    toast.success('Configuración POS guardada')
+  } catch (e) {
+    toast.error(e?.response?.data?.detail || 'No se pudo guardar la configuración')
+  } finally {
+    saving.value = false
+  }
+}
+
+function togglePosPaymentMethod(method) {
+  const idx = posConfig.value.enabledPaymentMethods.indexOf(method)
+  if (idx >= 0) {
+    posConfig.value.enabledPaymentMethods.splice(idx, 1)
+  } else {
+    posConfig.value.enabledPaymentMethods.push(method)
+  }
+}
 
 // --- Configuración de Caja ---
 const cajaConfig = ref({
@@ -676,6 +731,7 @@ onMounted(async () => {
   await loadDenominaciones()
   await loadRecargas()
   await loadCajaConfig()
+  await loadPosConfig()
 })
 </script>
 
@@ -1638,6 +1694,74 @@ onMounted(async () => {
             <i class="fa-solid fa-floppy-disk"></i> Guardar
           </BaseButton>
           <p class="text-[11px] text-slate-400">Los cambios se aplican inmediatamente</p>
+        </div>
+      </div>
+    </BaseCard>
+
+    <BaseCard v-if="!loading">
+      <button class="w-full text-left" @click="posExpanded = !posExpanded">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <i class="fa-solid fa-cash-register text-brand-600"></i>
+            POS — Preferencias Visuales
+          </h3>
+          <i :class="['fa-solid fa-chevron-down text-xs transition-transform', posExpanded ? 'rotate-180' : '']"></i>
+        </div>
+      </button>
+
+      <div v-if="posExpanded" class="mt-4 space-y-4 max-w-lg">
+        <div class="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg p-4">
+          <p class="text-xs text-slate-600 dark:text-slate-400">
+            Configura el comportamiento por defecto del <strong>POS de Ventas</strong>.
+            Estos valores se usan al abrir el POS, pero el usuario puede cambiarlos en el momento
+            (se guardan en el navegador).
+          </p>
+        </div>
+
+        <div class="space-y-4">
+          <BaseToggle
+            v-model="posConfig.showStatsPanel"
+            label="Panel lateral derecho (mini dashboard)"
+            description="Muestra el panel de estadísticas a la derecha al abrir el POS"
+            size="sm"
+          />
+
+          <BaseSelect
+            v-model="posConfig.productViewMode"
+            label="Vista de productos por defecto"
+            description="Cómo se muestran los productos en el catálogo"
+            :options="[
+              { value: 'grilla', label: 'Grilla (tarjetas)' },
+              { value: 'lista', label: 'Lista (compacta)' }
+            ]"
+            option-value="value"
+            option-label="label"
+            size="sm"
+          />
+        </div>
+
+        <div class="space-y-4">
+          <h4 class="text-sm font-bold text-slate-900 dark:text-white mb-2">Medios de pago habilitados</h4>
+          <p class="text-xs text-slate-500 dark:text-slate-400">Desmarcá los que no querés que aparezcan en el POS</p>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <label v-for="m in MEDIOS_PAGO_POS" :key="m.value" class="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg cursor-pointer hover:border-brand-300 dark:hover:border-brand-600 transition">
+              <input
+                type="checkbox"
+                :checked="posConfig.enabledPaymentMethods.includes(m.value)"
+                @change="togglePosPaymentMethod(m.value)"
+                class="w-4 h-4 text-brand-600 border-slate-300 rounded focus:ring-brand-500"
+              />
+              <i :class="m.icon + ' text-sm text-slate-400'" style="width: 1rem;"></i>
+              <span class="text-sm text-slate-700 dark:text-slate-300">{{ m.label }}</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3 pt-2">
+          <BaseButton variant="primary" :loading="saving" @click="savePosConfig">
+            <i class="fa-solid fa-floppy-disk"></i> Guardar
+          </BaseButton>
+          <p class="text-[11px] text-slate-400">Los cambios se aplican al recargar el POS</p>
         </div>
       </div>
     </BaseCard>

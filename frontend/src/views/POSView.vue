@@ -20,7 +20,7 @@
           type="button"
           class="w-9 h-9 rounded-xl flex items-center justify-center border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           :title="showStatsPanel ? 'Ocultar panel lateral' : 'Mostrar panel lateral'"
-          @click="showStatsPanel = !showStatsPanel"
+          @click="toggleStatsPanel"
         >
           <i :class="showStatsPanel ? 'fa-solid fa-chevron-right' : 'fa-solid fa-chevron-left'" class="text-sm"></i>
         </button>
@@ -342,7 +342,7 @@
             type="button"
             :title="posVistaProductos === 'grilla' ? 'Ver en lista' : 'Ver en grilla'"
             class="px-3 py-1.5 ml-auto rounded-lg text-xs font-semibold transition-all duration-200 border bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-brand-300 dark:hover:border-brand-600 hover:text-brand-600 dark:hover:text-brand-400"
-            @click="posVistaProductos = posVistaProductos === 'grilla' ? 'lista' : 'grilla'"
+            @click="toggleProductViewMode"
           >
             <i :class="posVistaProductos === 'grilla' ? 'fa-solid fa-list' : 'fa-solid fa-table-cells'" class="mr-1"></i>
             {{ posVistaProductos === 'grilla' ? 'Lista' : 'Grilla' }}
@@ -1445,6 +1445,7 @@ import { formatCurrency as fc } from '@/composables/useUtils'
 import api from '@/services/api'
 import { useCajaStore } from '@/stores/caja'
 import { useCarritoStore } from '@/stores/carrito'
+import { usePosPreferencesStore } from '@/stores/posPreferences'
 import TicketModal from '@/components/layout/TicketModal.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
@@ -1473,6 +1474,7 @@ const { addPendingSale, syncPendingSales } = useOfflineSales()
 const router = useRouter()
 const { playSale, playOpenCash } = useSounds()
 const { firstSaleOfDay } = useConfetti()
+const posPrefs = usePosPreferencesStore()
 
 const posLookupCode = ref('')
 const posTextSearch = ref('')
@@ -1710,7 +1712,7 @@ const lookupBadges = ref([])
 
 const pendingLookups = ref([])
 
-const mediosPago = [
+const mediosPagoAll = [
   { value: 'efectivo', label: 'Efectivo', icon: 'fa-money-bill-wave' },
   { value: 'transferencia', label: 'Transf.', icon: 'fa-mobile-screen-button' },
   { value: 'mercadopago_qr', label: 'QR MP', icon: 'fa-brands fa-cc-mastercard' },
@@ -1719,6 +1721,10 @@ const mediosPago = [
   { value: 'smartpoint', label: 'SmartPoint', icon: 'fa-solid fa-cash-register' },
   { value: 'cta_corriente', label: 'Cta. Cte.', icon: 'fa-file-invoice-dollar' }
 ]
+
+const mediosPago = computed(() =>
+  mediosPagoAll.filter(m => posPrefs.isPaymentMethodEnabled(m.value))
+)
 
 // El carrito solia ser un reactive() local de este componente, y por eso se
 // perdia al navegar a otra tab: Vue destruia el componente y el carrito con el.
@@ -1861,6 +1867,9 @@ onMounted(async () => {
       toast.success(`${result.synced} venta(s) sincronizada(s) exitosamente.`)
     }
   })
+  // Cargar preferencias visuales POS
+  showStatsPanel.value = posPrefs.prefs.showStatsPanel
+  posVistaProductos.value = posPrefs.prefs.productViewMode
   // Auto-sync catálogo si pasó >1h desde última descarga
   const lastSync = localStorage.getItem('catalogo_last_sync')
   const hour = 60 * 60 * 1000
@@ -2595,6 +2604,16 @@ function togglePorKilo(idx) {
     item.precio_unitario = item.precio_unidad
   }
   recalcCart()
+}
+
+function toggleStatsPanel() {
+  showStatsPanel.value = !showStatsPanel.value
+  posPrefs.setShowStatsPanel(showStatsPanel.value)
+}
+
+function toggleProductViewMode() {
+  posVistaProductos.value = posVistaProductos.value === 'grilla' ? 'lista' : 'grilla'
+  posPrefs.setProductViewMode(posVistaProductos.value)
 }
 
 function updateCartPeso(idx, value) {
