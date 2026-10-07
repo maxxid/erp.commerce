@@ -45,6 +45,11 @@ const formError = ref('')
 const highlightedIds = ref(new Set())
 const showBarcodeHint = ref(false)
 
+// View modal
+const showViewModal = ref(false)
+const viewProduct = ref(null)
+const loadingView = ref(false)
+
 const filterPendientes = ref(false)
 const showOfertaModal = ref(false)
 const editingOferta = ref(null)
@@ -468,6 +473,43 @@ function closeModal() {
   showBarcodeHint.value = false
 }
 
+function openViewModal(product) {
+  loadingView.value = true
+  viewProduct.value = null
+  showViewModal.value = true
+  api.get(`/api/productos/${product.id}/info-detallada`)
+    .then(resp => {
+      if (resp) {
+        viewProduct.value = resp
+      }
+    })
+    .catch(e => {
+      toast.error('Error al cargar el detalle: ' + (e?.message || ''))
+      showViewModal.value = false
+    })
+    .finally(() => {
+      loadingView.value = false
+    })
+}
+
+function closeViewModal() {
+  showViewModal.value = false
+  viewProduct.value = null
+}
+
+const margen = computed(() => {
+  if (!viewProduct.value) return 0
+  return (viewProduct.value.producto.precio_venta || 0) - (viewProduct.value.producto.precio_costo || 0)
+})
+
+const margenPct = computed(() => {
+  if (!viewProduct.value || !viewProduct.value.producto.precio_venta) return 0
+  const pvp = viewProduct.value.producto.precio_venta
+  const costo = viewProduct.value.producto.precio_costo
+  if (!pvp) return 0
+  return Math.round(((pvp - costo) / pvp) * 100)
+})
+
 // --- Revisión de stock (bandera por déficit) ---
 const revisionTarget = ref(null)
 const revisionStockReal = ref('')
@@ -716,6 +758,12 @@ async function fetchProveedores() {
     toast.error('No se pudieron cargar los proveedores')
     proveedores.value = []
   }
+}
+
+function formatFecha(fechaStr) {
+  if (!fechaStr) return '—'
+  const fecha = new Date(fechaStr)
+  return fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 </script>
 
@@ -998,6 +1046,15 @@ async function fetchProveedores() {
       </template>
       <template #acciones="{ row }">
         <div class="flex items-center justify-end gap-1">
+          <button
+            type="button"
+            aria-label="Ver detalle"
+            class="w-7 h-7 rounded-lg text-blue-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 flex items-center justify-center transition"
+            title="Ver detalle del producto"
+            @click="openViewModal(row)"
+          >
+            <i class="fa-solid fa-eye text-[10px]"></i>
+          </button>
           <button
             v-if="row.flag_revision_stock"
             type="button"
@@ -1426,6 +1483,109 @@ async function fetchProveedores() {
             {{ deletingOferta ? 'Eliminando...' : 'Eliminar' }}
           </BaseButton>
         </div>
+      </div>
+    </BaseModal>
+
+    <!-- Ver Producto Modal -->
+    <BaseModal v-model="showViewModal" title="Detalle del Producto" size="lg">
+      <div v-if="viewProduct" class="space-y-4">
+        <!-- Header con info básica -->
+        <div class="grid grid-cols-3 gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+          <div class="text-center">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Stock Actual</div>
+            <div class="font-mono-data font-bold text-xl text-brand-600">{{ fc(viewProduct.producto.stock_actual) }}</div>
+            <div class="text-[10px] text-slate-400">Mín: {{ viewProduct.producto.stock_minimo }}</div>
+          </div>
+          <div class="text-center">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Precio Venta</div>
+            <div class="font-mono-data font-bold text-xl text-emerald-600">{{ fc(viewProduct.producto.precio_venta) }}</div>
+            <div class="text-[10px] text-slate-400">Costo: {{ fc(viewProduct.producto.precio_costo) }}</div>
+          </div>
+          <div class="text-center">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Margen</div>
+            <div class="font-mono-data font-bold text-xl" :class="margen >= 0 ? 'text-emerald-600' : 'text-rose-600'">{{ margen >= 0 ? '+' : '' }}{{ fc(margen) }} ({{ margenPct }}%)</div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <!-- Historial de Compras -->
+          <div class="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
+            <h4 class="text-sm font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+              <i class="fa-solid fa-truck text-indigo-500"></i> Historial de Compras ({{ viewProduct.historial_compras.length }})
+            </h4>
+            <div v-if="viewProduct.historial_compras.length" class="max-h-64 overflow-y-auto space-y-2">
+              <div v-for="c in viewProduct.historial_compras" :key="c.fecha + c.numero_orden" class="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                <div class="flex-1 min-w-0">
+                  <div class="text-xs font-medium text-slate-700 dark:text-slate-200 truncate">{{ c.proveedor }}</div>
+                  <div class="text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                    <span>{{ formatFecha(c.fecha) }}</span>
+                    <span>·</span>
+                    <span class="font-mono-data">{{ c.cantidad }} u</span>
+                    <span>·</span>
+                    <span class="font-mono-data">{{ fc(c.precio_unitario) }}/u</span>
+                  </div>
+                </div>
+                <span class="font-mono-data font-bold text-slate-900 dark:text-white">{{ fc(c.subtotal) }}</span>
+              </div>
+            </div>
+            <div v-else class="text-center py-4 text-slate-400 text-sm">Sin compras registradas</div>
+          </div>
+
+          <!-- Historial de Ventas -->
+          <div class="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
+            <h4 class="text-sm font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+              <i class="fa-solid fa-chart-line text-emerald-500"></i> Historial de Ventas
+            </h4>
+            <div v-if="viewProduct.historial_ventas.total_vendido > 0" class="space-y-2">
+              <div class="grid grid-cols-2 gap-2 text-xs">
+                <div class="bg-emerald-50 dark:bg-emerald-900/20 p-2 rounded">
+                  <div class="text-emerald-600 font-semibold">Total Vendido</div>
+                  <div class="font-mono-data font-bold">{{ viewProduct.historial_ventas.total_vendido }} u</div>
+                </div>
+                <div class="bg-blue-50 dark:bg-blue-900/20 p-2 rounded">
+                  <div class="text-blue-600 font-semibold">Promedio Semanal</div>
+                  <div class="font-mono-data font-bold">{{ viewProduct.historial_ventas.promedio_semanal }} u/sem</div>
+                </div>
+                <div class="bg-amber-50 dark:bg-amber-900/20 p-2 rounded">
+                  <div class="text-amber-600 font-semibold">Primera Venta</div>
+                  <div class="font-mono-data font-bold">{{ viewProduct.historial_ventas.primera_venta ? formatFecha(viewProduct.historial_ventas.primera_venta) : '—' }}</div>
+                </div>
+                <div class="bg-indigo-50 dark:bg-indigo-900/20 p-2 rounded">
+                  <div class="text-indigo-600 font-semibold">Última Venta</div>
+                  <div class="font-mono-data font-bold">{{ viewProduct.historial_ventas.ultima_venta ? formatFecha(viewProduct.historial_ventas.ultima_venta) : '—' }}</div>
+                </div>
+              </div>
+            </div>
+            <div v-else class="text-center py-4 text-slate-400 text-sm">Sin ventas registradas</div>
+          </div>
+        </div>
+
+        <!-- Proveedores -->
+        <div v-if="viewProduct.proveedores.length" class="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
+          <h4 class="text-sm font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+            <i class="fa-solid fa-handshake text-brand-500"></i> Proveedores Asociados ({{ viewProduct.proveedores.length }})
+          </h4>
+          <div class="space-y-2">
+            <div v-for="p in viewProduct.proveedores" :key="p.id" class="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-medium text-slate-700 dark:text-slate-200">{{ p.nombre }}</span>
+                  <BaseBadge v-if="p.es_principal" variant="warning" size="xs">Principal</BaseBadge>
+                  <BaseBadge v-else-if="!p.activo" variant="default" size="xs">Inactivo</BaseBadge>
+                </div>
+                <div class="text-[10px] text-slate-500 dark:text-slate-400 flex flex-wrap gap-3">
+                  <span v-if="p.codigo_proveedor"><i class="fa-solid fa-hashtag mr-0.5"></i>{{ p.codigo_proveedor }}</span>
+                  <span v-if="p.costo"><i class="fa-solid fa-dollar-sign mr-0.5"></i>{{ fc(p.costo) }}</span>
+                  <span v-if="p.plazo_entrega_dias"><i class="fa-solid fa-truck mr-0.5"></i>{{ p.plazo_entrega_dias }} días</span>
+                </div>
+              </div>
+              <span class="text-xs text-slate-400">CUIT: {{ p.cuit || '—' }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div v-else class="flex items-center justify-center py-12 text-slate-400">
+        <i class="fa-solid fa-circle-notch animate-spin mr-2"></i> Cargando...
       </div>
     </BaseModal>
   </div>

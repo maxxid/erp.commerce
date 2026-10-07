@@ -185,7 +185,12 @@ def info_detallada_producto(
     db: Session = Depends(get_db),
     user: Usuario = Depends(get_current_user),
 ):
-    """Devuelve info detallada del producto con proveedores y última fecha de compra."""
+    """Devuelve info detallada del producto: proveedores, historial de compras, historial de ventas, stats."""
+    from app.models.venta import Venta, VentaItem
+    from app.models.compra import Compra, CompraItem
+    from sqlalchemy import func, desc
+    from datetime import datetime, timedelta, timezone
+    
     producto = producto_service.obtener_producto(db, producto_id)
     if not producto:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
@@ -193,7 +198,6 @@ def info_detallada_producto(
     # Obtener proveedores con datos de relación
     proveedores_data = []
     for prov in producto.proveedores:
-        # Buscar datos de la relación en la tabla puente
         rel_data = db.execute(
             producto_proveedor.select().where(
                 (producto_proveedor.c.producto_id == producto_id) &
@@ -213,11 +217,70 @@ def info_detallada_producto(
             "activo": rel_data.activo if rel_data else 1,
         })
     
-    # Obtener última fecha de compra
+    # Historial de compras (recibidas)
+    compras = db.query(CompraItem).join(Compra).filter(
+        CompraItem.producto_id == producto_id,
+        Compra.estado == "recibida"
+    ).order_by(desc(Compra.fecha)).all()
+    
+    historial_compras = []
+    for ci in compras:
+        c = ci.compra
+        p = ci.proveedor
+        historial_compras.append({
+            "fecha": c.fecha.isoformat() if c.fecha else None,
+            "numero_orden": c.numero,
+            "proveedor": p.nombre if p else "—",
+            "proveedor_id": p.id if p else None,
+            "cantidad": float(ci.cantidad_recibida or ci.cantidad or 0),
+            "precio_unitario": float(ci.precio_unitario or 0),
+            "subtotal": float(ci.subtotal or 0),
+        })
+    
+    # Historial de ventas (confirmadas)
+    ventas_items = db.query(VentaItem).join(Venta).filter(
+        VentaItem.producto_id == producto_id,
+        Venta.estado == "confirmada"
+    ).order_by(desc(Venta.fecha)).all()
+    
+    total_vendido = 0
+    primera_venta = None
+    ultima_venta = None
+    ventas_por_fecha = {}
+    
+    for vi in ventas_items:
+        v = vi.venta
+        cant = float(vi.cantidad or 0)
+        total_vendido += cant
+        if primera_venta is None or (v.fecha and v.fecha < primera_venta):
+            primera_venta = v.fecha
+        if ultima_venta is None or (v.fecha and v.fecha > ultima_venta):
+            ultima_venta = v.fecha
+        # Agrupar por día para calcular ventas semanales
+        if v.fecha:
+            dia = v.fecha.date().isoformat()
+            ventas_por_fecha[dia] = ventas_por_fecha.get(dia, 0) + cant
+    
+    # Calcular promedio semanal desde la primera venta hasta hoy (o última venta si no hay stock)
+    promedio_semanal = 0
+    if primera_venta:
+        fin_periodo = ultima_venta if ultima_venta else datetime.now(timezone.utc)
+        dias = (fin_periodo - primera_venta).days
+        if dias > 0:
+            semanas = max(1, dias / 7)
+            promedio_semanal = total_vendido / semanas
+    
+    # Última compra
     ultima_compra = db.query(Compra).join(CompraItem).filter(
         CompraItem.producto_id == producto_id,
         Compra.estado == "recibida"
     ).order_by(desc(Compra.fecha)).first()
+    
+    # Última venta
+    ultima_venta_item = db.query(VentaItem).join(Venta).filter(
+        VentaItem.producto_id == producto_id,
+        Venta.estado == "confirmada"
+    ).order_by(desc(Venta.fecha)).first()
     
     return RespuestaData(
         data={
@@ -231,13 +294,28 @@ def info_detallada_producto(
                 "stock_actual": producto_service._suma_lotes_activos(db, producto.id),
                 "stock_minimo": producto.stock_minimo,
                 "imagen_url": producto.imagen_url,
+                "tipo_venta": producto.tipo_venta,
+                "controla_stock": producto.controla_stock,
             },
             "proveedores": proveedores_data,
+            "historial_compras": historial_compras,
+            "historial_ventas": {
+                "total_vendido": total_vendido,
+                "primera_venta": primera_venta.isoformat() if primera_venta else None,
+                "ultima_venta": ultima_venta.isoformat() if ultima_venta else None,
+                "promedio_semanal": round(promedio_semanal, 2),
+                "dias_desde_primera_venta": (datetime.now(timezone.utc) - primera_venta).days if primera_venta else None,
+            },
             "ultima_compra": {
                 "fecha": ultima_compra.fecha.isoformat() if ultima_compra else None,
                 "numero": ultima_compra.numero if ultima_compra else None,
                 "proveedor_id": ultima_compra.proveedor_id if ultima_compra else None,
-            } if ultima_compra else None
+            } if ultima_compra else None,
+            "ultima_venta": {
+                "fecha": ultima_venta_item.venta.fecha.isoformat() if ultima_venta_item and ultima_venta_item.venta else None,
+                "numero": ultima_venta_item.venta.numero if ultima_venta_item and ultima_venta_item.venta else None,
+                "cantidad": float(ultima_venta_item.cantidad) if ultima_venta_item else 0,
+            } if ultima_venta_item else None,
         }
     )
 
