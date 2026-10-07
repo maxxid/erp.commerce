@@ -510,6 +510,11 @@ const margenPct = computed(() => {
   return Math.round(((pvp - costo) / pvp) * 100)
 })
 
+function formatNumber(val) {
+  if (val == null) return '—'
+  return Number(val).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+}
+
 // --- Revisión de stock (bandera por déficit) ---
 const revisionTarget = ref(null)
 const revisionStockReal = ref('')
@@ -1487,23 +1492,23 @@ function formatFecha(fechaStr) {
     </BaseModal>
 
     <!-- Ver Producto Modal -->
-    <BaseModal v-model="showViewModal" title="Detalle del Producto" size="lg">
+    <BaseModal v-model="showViewModal" title="Detalle del Producto" size="xl">
       <div v-if="viewProduct" class="space-y-5">
         <!-- Header con info básica -->
-        <div class="grid grid-cols-3 gap-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
           <div class="text-center">
             <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Stock Actual</div>
-            <div class="font-mono-data font-bold text-2xl text-brand-600">{{ fc(viewProduct.producto.stock_actual) }}</div>
-            <div class="text-xs text-slate-400 mt-1">Mín: {{ viewProduct.producto.stock_minimo }}</div>
+            <div class="font-mono-data font-bold text-3xl text-brand-600">{{ formatNumber(viewProduct.producto.stock_actual) }}</div>
+            <div class="text-sm text-slate-400 mt-1">Mín: {{ formatNumber(viewProduct.producto.stock_minimo) }}</div>
           </div>
-          <div class="text-center">
+          <div class="text-center min-w-0">
             <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Precio Venta</div>
-            <div class="font-mono-data font-bold text-2xl text-emerald-600">{{ fc(viewProduct.producto.precio_venta) }}</div>
-            <div class="text-xs text-slate-400 mt-1">Costo: {{ fc(viewProduct.producto.precio_costo) }}</div>
+            <div class="font-mono-data font-bold text-3xl text-emerald-600 truncate">{{ fc(viewProduct.producto.precio_venta) }}</div>
+            <div class="text-sm text-slate-400 mt-1">Costo: {{ fc(viewProduct.producto.precio_costo) }}</div>
           </div>
           <div class="text-center">
             <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Margen</div>
-            <div class="font-mono-data font-bold text-2xl" :class="margen >= 0 ? 'text-emerald-600' : 'text-rose-600'">{{ margen >= 0 ? '+' : '' }}{{ fc(margen) }} ({{ margenPct }}%)</div>
+            <div class="font-mono-data font-bold text-3xl" :class="margen >= 0 ? 'text-emerald-600' : 'text-rose-600'">{{ margen >= 0 ? '+' : '' }}{{ fc(margen) }} ({{ margenPct }}%)</div>
           </div>
         </div>
 
@@ -1535,22 +1540,22 @@ function formatFecha(fechaStr) {
               <i class="fa-solid fa-chart-line text-emerald-500"></i> Historial de Ventas
             </h4>
             <div v-if="viewProduct.historial_ventas.total_vendido > 0" class="space-y-3">
-              <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-                <div class="bg-emerald-50 dark:bg-emerald-900/20 p-3 rounded-lg">
-                  <div class="text-emerald-600 font-semibold mb-1">Total Vendido</div>
-                  <div class="font-mono-data font-bold text-lg">{{ viewProduct.historial_ventas.total_vendido }} u</div>
+              <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <div class="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-xl min-w-[160px]">
+                  <div class="text-emerald-600 font-semibold mb-1 text-sm">Total Vendido</div>
+                  <div class="font-mono-data font-bold text-2xl">{{ formatNumber(viewProduct.historial_ventas.total_vendido) }} u</div>
                 </div>
-                <div class="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg">
-                  <div class="text-blue-600 font-semibold mb-1">Promedio Semanal</div>
-                  <div class="font-mono-data font-bold text-lg">{{ viewProduct.historial_ventas.promedio_semanal }} u/sem</div>
+                <div class="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl min-w-[160px]">
+                  <div class="text-blue-600 font-semibold mb-1 text-sm">Promedio Semanal</div>
+                  <div class="font-mono-data font-bold text-xl">{{ formatNumber(viewProduct.historial_ventas.promedio_semanal) }} u/sem</div>
                 </div>
-                <div class="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg">
-                  <div class="text-amber-600 font-semibold mb-1">Primera Venta</div>
-                  <div class="font-mono-data font-bold">{{ viewProduct.historial_ventas.primera_venta ? formatFecha(viewProduct.historial_ventas.primera_venta) : '—' }}</div>
+                <div class="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-xl min-w-[160px]">
+                  <div class="text-amber-600 font-semibold mb-1 text-sm">Primera Venta</div>
+                  <div class="font-mono-data font-bold text-base">{{ viewProduct.historial_ventas.primera_venta ? formatFecha(viewProduct.historial_ventas.primera_venta) : '—' }}</div>
                 </div>
-                <div class="bg-indigo-50 dark:bg-indigo-900/20 p-3 rounded-lg">
-                  <div class="text-indigo-600 font-semibold mb-1">Última Venta</div>
-                  <div class="font-mono-data font-bold">{{ viewProduct.historial_ventas.ultima_venta ? formatFecha(viewProduct.historial_ventas.ultima_venta) : '—' }}</div>
+                <div class="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-xl min-w-[160px]">
+                  <div class="text-indigo-600 font-semibold mb-1 text-sm">Última Venta</div>
+                  <div class="font-mono-data font-bold text-base">{{ viewProduct.historial_ventas.ultima_venta ? formatFecha(viewProduct.historial_ventas.ultima_venta) : '—' }}</div>
                 </div>
               </div>
             </div>
