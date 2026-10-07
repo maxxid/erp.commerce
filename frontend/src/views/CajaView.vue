@@ -241,8 +241,15 @@
               </td>
               <td class="px-4 py-3 text-center">
                 <div class="flex items-center justify-center gap-1">
-                  <BaseButton variant="ghost" size="xs" @click="verDetalleSesion(sesion)">
+                  <BaseButton
+                    variant="ghost"
+                    size="xs"
+                    @click="verDetalleSesion(sesion)"
+                    :title="'Ver detalle completo de la sesión'"
+                    class="relative"
+                  >
                     <i class="fa-solid fa-eye"></i>
+                    <span class="sr-only">Ver detalle</span>
                   </BaseButton>
                   <BaseButton
                     v-if="esCierreConfirmable(sesion)"
@@ -264,87 +271,148 @@
     </BaseCard>
 
     <!-- Modal Detalle de Sesión -->
-    <BaseModal v-model="showDetalleSesion" title="Detalle de Sesión de Caja" size="lg">
+    <BaseModal v-model="showDetalleSesion" title="Detalle de Sesión de Caja" size="xl">
       <div v-if="sesionSeleccionada" class="space-y-4">
-        <!-- Info general -->
-        <div class="grid grid-cols-2 gap-4">
-          <div class="bg-slate-50 rounded-xl p-3">
-            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Apertura</div>
-            <div class="text-sm font-medium text-slate-900">{{ formatFechaHora(sesionSeleccionada.apertura_fecha) }}</div>
-            <div class="text-xs text-slate-600">{{ sesionSeleccionada.apertura_usuario }}</div>
-            <div class="font-mono-data font-bold text-brand-600 mt-1">{{ fc(sesionSeleccionada.apertura_monto) }}</div>
-        <div v-if="sesionSeleccionada.apertura_cuentas" class="font-mono-data font-bold text-sm text-indigo-600 mt-0.5">
-          + {{ fc(sesionSeleccionada.apertura_cuentas) }} en cuentas digitales
-        </div>
-            <div v-if="sesionSeleccionada.apertura_descripcion" class="text-[10px] text-slate-500 mt-1">{{ sesionSeleccionada.apertura_descripcion }}</div>
-          </div>
-          <div class="bg-slate-50 rounded-xl p-3">
-            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Cierre</div>
-            <div v-if="sesionSeleccionada.cierre_fecha" class="text-sm font-medium text-slate-900">{{ formatFechaHora(sesionSeleccionada.cierre_fecha) }}</div>
-            <div v-else class="text-sm text-slate-400 italic">Sin cerrar</div>
-            <div v-if="sesionSeleccionada.cierre_usuario" class="text-xs text-slate-600">{{ sesionSeleccionada.cierre_usuario }}</div>
-            <div v-if="sesionSeleccionada.cierre_monto" class="font-mono-data font-bold text-brand-600 mt-1">{{ fc(sesionSeleccionada.cierre_monto) }}</div>
-            <div v-if="sesionSeleccionada.cierre_descripcion" class="text-[10px] text-slate-500 mt-1">{{ sesionSeleccionada.cierre_descripcion }}</div>
-            <BaseBadge v-if="sesionSeleccionada.fue_automatico" variant="info" size="xs" class="mt-1">Cierre automático</BaseBadge>
-            <div v-if="sesionSeleccionada.cierre_monto_confirmado != null" class="mt-2 bg-emerald-50 rounded-xl p-2">
-              <div class="text-[10px] uppercase tracking-wider text-emerald-600 font-semibold">Conciliado</div>
-              <div class="font-mono-data font-bold text-sm text-emerald-700">{{ fc(sesionSeleccionada.cierre_monto_confirmado) }}</div>
-              <div class="text-[10px] text-emerald-600">por {{ sesionSeleccionada.cierre_confirmado_por || '—' }} · {{ formatFechaHora(sesionSeleccionada.cierre_confirmado_at) }}</div>
+        <!-- Header con estado -->
+        <div class="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+          <div>
+            <div class="text-sm font-bold text-slate-900 dark:text-white">
+              Sesión {{ sesionSeleccionada.apertura_id ? '#' + sesionSeleccionada.apertura_id : '' }}
             </div>
-            <div v-else-if="sesionSeleccionada.fue_automatico" class="mt-2">
-              <BaseButton variant="primary" size="xs" @click="abrirCierreSesion(sesionSeleccionada.cierre_id)">
-                <i class="fa-solid fa-check mr-1"></i>Conciliar sesión
-              </BaseButton>
+            <div class="text-xs text-slate-500 dark:text-slate-400">
+              {{ formatFechaDia(sesionSeleccionada.apertura_fecha?.split('T')[0] || '') }}
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <BaseBadge v-if="sesionSeleccionada.fue_automatico" variant="info" size="sm">
+              <i class="fa-solid fa-robot mr-1"></i>Automático
+            </BaseBadge>
+            <BaseBadge v-else variant="default" size="sm">Manual</BaseBadge>
+            <BaseBadge v-if="sesionSeleccionada.cierre_monto_confirmado != null" variant="success" size="sm">
+              <i class="fa-solid fa-circle-check mr-1"></i>Conciliado
+            </BaseBadge>
+            <BaseBadge v-else-if="sesionSeleccionada.fue_automatico" variant="warning" size="sm">Pendiente</BaseBadge>
+          </div>
+        </div>
+
+        <!-- Info Apertura / Cierre -->
+        <div class="grid grid-cols-2 gap-4">
+          <div class="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-2">Apertura</div>
+            <div class="space-y-1">
+              <div class="flex justify-between">
+                <span class="text-xs text-slate-500">Fecha</span>
+                <span class="text-sm font-medium font-mono-data">{{ formatFechaHora(sesionSeleccionada.apertura_fecha) }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-xs text-slate-500">Usuario</span>
+                <span class="text-sm">{{ sesionSeleccionada.apertura_usuario || '—' }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-xs text-slate-500">Monto inicial (cajón)</span>
+                <span class="text-sm font-bold font-mono-data text-brand-600">{{ fc(sesionSeleccionada.apertura_monto) }}</span>
+              </div>
+              <div v-if="sesionSeleccionada.apertura_cuentas" class="flex justify-between">
+                <span class="text-xs text-slate-500">Cuentas digitales</span>
+                <span class="text-sm font-bold font-mono-data text-indigo-600">+ {{ fc(sesionSeleccionada.apertura_cuentas) }}</span>
+              </div>
+              <div v-if="sesionSeleccionada.apertura_descripcion" class="flex justify-between">
+                <span class="text-xs text-slate-500">Descripción</span>
+                <span class="text-sm text-slate-600">{{ sesionSeleccionada.apertura_descripcion }}</span>
+              </div>
+            </div>
+          </div>
+          <div class="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-2">Cierre</div>
+            <div class="space-y-1">
+              <div class="flex justify-between">
+                <span class="text-xs text-slate-500">Fecha</span>
+                <span class="text-sm font-medium font-mono-data">{{ formatFechaHora(sesionSeleccionada.cierre_fecha) }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-xs text-slate-500">Usuario</span>
+                <span class="text-sm">{{ sesionSeleccionada.cierre_usuario || '—' }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-xs text-slate-500">Monto del sistema</span>
+                <span class="text-sm font-bold font-mono-data text-brand-600">{{ fc(sesionSeleccionada.cierre_monto) }}</span>
+              </div>
+              <div v-if="sesionSeleccionada.cierre_monto_confirmado != null" class="flex justify-between border-t pt-2 mt-2">
+                <span class="text-xs text-emerald-600 font-semibold">Conciliado</span>
+                <span class="text-sm font-bold font-mono-data text-emerald-700">{{ fc(sesionSeleccionada.cierre_monto_confirmado) }}</span>
+              </div>
+              <div v-if="sesionSeleccionada.cierre_monto_confirmado != null" class="flex justify-between">
+                <span class="text-xs text-slate-500">Confirmado por</span>
+                <span class="text-sm">{{ sesionSeleccionada.cierre_confirmado_por || '—' }}</span>
+              </div>
+              <div v-if="sesionSeleccionada.cierre_monto_confirmado != null" class="flex justify-between">
+                <span class="text-xs text-slate-500">Confirmado el</span>
+                <span class="text-sm">{{ formatFechaHora(sesionSeleccionada.cierre_confirmado_at) }}</span>
+              </div>
+              <div v-if="sesionSeleccionada.cierre_comentario" class="flex justify-between">
+                <span class="text-xs text-slate-500">Comentario</span>
+                <span class="text-sm text-slate-600">{{ sesionSeleccionada.cierre_comentario }}</span>
+              </div>
+              <div v-else-if="sesionSeleccionada.fue_automatico" class="mt-3 pt-2 border-t">
+                <BaseButton variant="primary" size="sm" class="w-full" @click="abrirCierreSesion(sesionSeleccionada.cierre_id)">
+                  <i class="fa-solid fa-check mr-1"></i>Conciliar esta sesión
+                </BaseButton>
+              </div>
             </div>
           </div>
         </div>
 
-        <!-- Resumen -->
-        <div class="grid grid-cols-3 gap-3">
-          <div class="bg-emerald-50 rounded-xl p-3 text-center">
+        <!-- Resumen financiero -->
+        <div class="grid grid-cols-4 gap-3">
+          <div class="bg-emerald-50 dark:bg-emerald-900/20 rounded-xl p-3 text-center">
             <div class="text-[10px] uppercase tracking-wider text-emerald-600 font-semibold">Ingresos</div>
-            <div class="font-mono-data font-bold text-lg text-emerald-700">{{ fc(sesionSeleccionada.total_ingresos) }}</div>
+            <div class="font-mono-data font-bold text-lg text-emerald-700">{{ fc(sesionSeleccionada.total_ingresos || sesionSeleccionada.ingresos) }}</div>
           </div>
-          <div class="bg-rose-50 rounded-xl p-3 text-center">
+          <div class="bg-rose-50 dark:bg-rose-900/20 rounded-xl p-3 text-center">
             <div class="text-[10px] uppercase tracking-wider text-rose-600 font-semibold">Egresos</div>
-            <div class="font-mono-data font-bold text-lg text-rose-700">{{ fc(sesionSeleccionada.total_egresos) }}</div>
+            <div class="font-mono-data font-bold text-lg text-rose-700">{{ fc(sesionSeleccionada.total_egresos || sesionSeleccionada.egresos) }}</div>
           </div>
-          <div class="bg-brand-50 rounded-xl p-3 text-center">
+          <div class="bg-indigo-50 dark:bg-indigo-900/20 rounded-xl p-3 text-center">
+            <div class="text-[10px] uppercase tracking-wider text-indigo-600 font-semibold">Cuentas digitales</div>
+            <div class="font-mono-data font-bold text-lg text-indigo-700">{{ fc(sesionSeleccionada.apertura_cuentas || 0) }}</div>
+          </div>
+          <div class="bg-brand-50 dark:bg-brand-900/20 rounded-xl p-3 text-center">
             <div class="text-[10px] uppercase tracking-wider text-brand-600 font-semibold">Saldo Final</div>
             <div class="font-mono-data font-bold text-lg text-brand-700">{{ fc(sesionSeleccionada.saldo_final) }}</div>
           </div>
         </div>
 
-        <div v-if="sesionSeleccionada.apertura_cuentas" class="flex items-center justify-between bg-indigo-50 rounded-xl p-3">
-          <span class="text-[10px] uppercase tracking-wider text-indigo-500 font-semibold">Saldos iniciales de cuentas digitales</span>
-          <span class="font-mono-data font-bold text-indigo-700">{{ fc(sesionSeleccionada.apertura_cuentas) }}</span>
-        </div>
-
-        <!-- Cierres por método -->
-        <div v-if="sesionSeleccionada.cierres_metodo && sesionSeleccionada.cierres_metodo.length">
-          <h4 class="text-sm font-bold text-slate-900 mb-2">Cierres por Método</h4>
+        <!-- Cierres por método (arqueo) -->
+        <div v-if="sesionSeleccionada.cierres_metodo && sesionSeleccionada.cierres_metodo.length" class="space-y-2">
+          <h4 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <i class="fa-solid fa-calculator text-brand-600"></i>Arqueo por Método
+          </h4>
           <div class="space-y-2">
-            <div v-for="cierre in sesionSeleccionada.cierres_metodo" :key="cierre.medio_pago" class="bg-slate-50 rounded-xl p-3">
+            <div v-for="cierre in sesionSeleccionada.cierres_metodo" :key="cierre.medio_pago" class="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3">
               <div class="flex items-center justify-between mb-2">
-                <span class="text-sm font-semibold text-slate-700 capitalize">{{ cierre.medio_pago }}</span>
-                <BaseBadge :variant="Math.abs(cierre.diferencia) > 0.01 ? 'danger' : 'success'" size="xs">
+                <span class="text-sm font-semibold text-slate-700 dark:text-slate-200 capitalize">{{ cierre.medio_pago }}</span>
+                <BaseBadge :variant="Math.abs(cierre.diferencia) > 0.01 ? 'danger' : 'success'" size="sm">
                   {{ Math.abs(cierre.diferencia) > 0.01 ? 'Discrepancia' : 'OK' }}
                 </BaseBadge>
               </div>
-              <div class="grid grid-cols-3 gap-2 text-xs">
-                <div>
+              <div class="grid grid-cols-4 gap-2 text-xs">
+                <div class="bg-white dark:bg-slate-900 p-2 rounded">
                   <span class="text-slate-500">Esperado:</span>
                   <span class="font-mono-data font-semibold ml-1">{{ fc(cierre.esperado) }}</span>
                 </div>
-                <div>
+                <div class="bg-white dark:bg-slate-900 p-2 rounded">
                   <span class="text-slate-500">Real:</span>
                   <span class="font-mono-data font-semibold ml-1">{{ fc(cierre.monto_real) }}</span>
                 </div>
-                <div>
+                <div class="bg-white dark:bg-slate-900 p-2 rounded">
                   <span class="text-slate-500">Diferencia:</span>
                   <span class="font-mono-data font-semibold ml-1" :class="cierre.diferencia >= 0 ? 'text-emerald-600' : 'text-rose-600'">
                     {{ cierre.diferencia >= 0 ? '+' : '' }}{{ fc(cierre.diferencia) }}
                   </span>
+                </div>
+                <div class="bg-white dark:bg-slate-900 p-2 rounded">
+                  <span class="text-slate-500">Usuario:</span>
+                  <span class="font-mono-data font-semibold ml-1">{{ cierre.usuario || '—' }}</span>
                 </div>
               </div>
               <div v-if="cierre.descripcion" class="text-[10px] text-slate-500 mt-2 italic">{{ cierre.descripcion }}</div>
@@ -352,26 +420,84 @@
           </div>
         </div>
 
-        <!-- Movimientos -->
-        <div v-if="sesionSeleccionada.ingresos.length || sesionSeleccionada.egresos.length">
-          <h4 class="text-sm font-bold text-slate-900 mb-2">Movimientos</h4>
-          <div class="max-h-48 overflow-y-auto space-y-1">
-            <div v-for="ing in sesionSeleccionada.ingresos" :key="'ing-'+ing.id" class="flex items-center justify-between bg-emerald-50 rounded-lg px-3 py-2">
-              <div class="flex-1">
-                <div class="text-xs font-medium text-slate-700">{{ ing.descripcion || 'Ingreso' }}</div>
+        <!-- Retiros / Extracciones de cierre -->
+        <div v-if="sesionSeleccionada.retiros && sesionSeleccionada.retiros.length" class="space-y-2">
+          <h4 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <i class="fa-solid fa-money-bill-wave text-rose-600"></i>Extracciones de cierre
+          </h4>
+          <div class="space-y-1">
+            <div v-for="r in sesionSeleccionada.retiros" :key="r.id" class="bg-rose-50 dark:bg-rose-900/20 rounded-lg p-2">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <BaseBadge :variant="r.tipo === 'pago_proveedor' ? 'warning' : 'danger'" size="xs">
+                    {{ r.tipo === 'pago_proveedor' ? 'Pago proveedor' : 'Extracción' }}
+                  </BaseBadge>
+                  <span class="text-xs text-slate-600">{{ formatHora(r.fecha) }}</span>
+                  <span class="text-xs text-slate-400">{{ r.proveedor_id ? 'Proveedor #' + r.proveedor_id : r.descripcion }}</span>
+                </div>
+                <span class="font-mono-data font-bold text-rose-600">-{{ fc(r.monto) }}</span>
+              </div>
+            </div>
+            <div class="flex justify-end text-xs">
+              <span class="text-rose-600">Total: {{ fc(sesionSeleccionada.retiros.reduce((s, r) => s + (r.monto || 0), 0)) }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Movimientos (ingresos/egresos) -->
+        <div v-if="(sesionSeleccionada.ingresos && sesionSeleccionada.ingresos.length) || (sesionSeleccionada.egresos && sesionSeleccionada.egresos.length)" class="space-y-2">
+          <h4 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <i class="fa-solid fa-list text-brand-600"></i>Movimientos
+          </h4>
+          <div class="max-h-60 overflow-y-auto space-y-1">
+            <div v-for="ing in (sesionSeleccionada.ingresos || [])" :key="'ing-'+ing.id" class="flex items-center justify-between bg-emerald-50 dark:bg-emerald-900/20 rounded-lg px-3 py-2">
+              <div class="flex-1 min-w-0">
+                <div class="text-xs font-medium text-slate-700 dark:text-slate-200 truncate">{{ ing.descripcion || 'Ingreso' }}</div>
                 <div class="text-[10px] text-slate-500">{{ formatHora(ing.fecha) }} · {{ ing.medio_pago }}</div>
               </div>
               <span class="font-mono-data font-bold text-xs text-emerald-600">+{{ fc(ing.monto) }}</span>
             </div>
-            <div v-for="egr in sesionSeleccionada.egresos" :key="'egr-'+egr.id" class="flex items-center justify-between bg-rose-50 rounded-lg px-3 py-2">
-              <div class="flex-1">
-                <div class="text-xs font-medium text-slate-700">{{ egr.descripcion || 'Egreso' }}</div>
+            <div v-for="egr in (sesionSeleccionada.egresos || [])" :key="'egr-'+egr.id" class="flex items-center justify-between bg-rose-50 dark:bg-rose-900/20 rounded-lg px-3 py-2">
+              <div class="flex-1 min-w-0">
+                <div class="text-xs font-medium text-slate-700 dark:text-slate-200 truncate">{{ egr.descripcion || 'Egreso' }}</div>
                 <div class="text-[10px] text-slate-500">{{ formatHora(egr.fecha) }}</div>
               </div>
               <span class="font-mono-data font-bold text-xs text-rose-600">-{{ fc(egr.monto) }}</span>
             </div>
           </div>
         </div>
+
+        <!-- Ventas / Tickets de la sesión -->
+        <div v-if="sesionSeleccionada.tickets && sesionSeleccionada.tickets.length" class="space-y-2">
+          <h4 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <i class="fa-solid fa-receipt text-brand-600"></i>Ventas ({{ sesionSeleccionada.tickets.length }})
+          </h4>
+          <div class="max-h-60 overflow-y-auto space-y-1">
+            <button
+              v-for="t in sesionSeleccionada.tickets"
+              :key="t.id"
+              @click="verTicketDetalle(t.id)"
+              class="w-full flex items-center justify-between bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 hover:border-brand-400 transition text-left"
+            >
+              <div class="flex-1 min-w-0">
+                <div class="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">{{ t.numero }} <span class="text-slate-400 font-normal">· {{ t.cliente || 'Cliente ocasional' }}</span></div>
+                <div class="text-[10px] text-slate-500">{{ formatFechaHora(t.fecha) }} · {{ t.medio_pago }} · {{ t.vendedor }}</div>
+              </div>
+              <span class="font-mono-data font-bold text-xs text-slate-900 dark:text-white ml-2">${{ fc(t.total) }}</span>
+              <i class="fa-solid fa-chevron-right text-[10px] text-slate-400 ml-2"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Estado vacío si no hay datos extendidos -->
+        <div v-else class="text-center py-8 text-slate-400">
+          <i class="fa-solid fa-info-circle text-xl mb-2"></i>
+          <p class="text-sm">No hay datos extendidos para esta sesión.</p>
+          <p class="text-[10px] mt-1">Usa el Historial → Calendario → Día para ver el desglose completo.</p>
+        </div>
+      </div>
+      <div v-else class="flex items-center justify-center py-12 text-slate-400">
+        <i class="fa-solid fa-circle-notch animate-spin mr-2"></i> Cargando...
       </div>
     </BaseModal>
 
@@ -1500,8 +1626,24 @@ async function fetchReportes() {
   }
 }
 
-function verDetalleSesion(sesion) {
-  sesionSeleccionada.value = sesion
+async function verDetalleSesion(sesion) {
+  // Obtener la fecha de la apertura para usar el endpoint /dia que tiene datos completos
+  if (!sesion.apertura_fecha) {
+    sesionSeleccionada.value = sesion
+    showDetalleSesion.value = true
+    return
+  }
+  const fecha = sesion.apertura_fecha.split('T')[0]
+  try {
+    const resp = await api.get(`/api/caja/dia?fecha=${fecha}`)
+    // Buscar la sesión específica en el día (puede haber varias)
+    const sesionCompleta = resp.cierres?.find(c => c.id === sesion.cierre_id) 
+      || { ...sesion, ...resp }
+    sesionSeleccionada.value = { ...sesion, ...resp, cierres: resp.cierres, tickets: resp.tickets, movimientos: resp.movimientos }
+  } catch (e) {
+    // Fallback a datos básicos
+    sesionSeleccionada.value = sesion
+  }
   showDetalleSesion.value = true
 }
 
