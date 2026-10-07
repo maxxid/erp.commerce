@@ -2,8 +2,7 @@
   <div class="space-y-6">
     <div class="flex items-center justify-between">
       <div>
-        <h2 class="text-2xl font-bold text-slate-950 dark:text-white font-display">Calendario</h2>
-        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Resumen diario de actividad del comercio</p>
+        <p class="text-sm text-slate-500 dark:text-slate-400">Calendario de sesiones de caja</p>
       </div>
       <div class="flex items-center gap-2">
         <BaseButton

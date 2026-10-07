@@ -17,6 +17,29 @@ const emit = defineEmits(['toggleApiMode', 'openCommandPalette'])
 
 const route = useRoute()
 const showSettings = ref(false)
+
+const routeNames = {
+  dashboard: 'Dashboard',
+  pos: 'POS de Ventas',
+  products: 'Productos',
+  caja: 'Caja y Arqueos',
+  ventas: 'Ventas',
+  calendario: 'Calendario',
+  compras: 'Compras',
+  proveedores: 'Proveedores',
+  clientes: 'Clientes',
+  reportes: 'Reportes',
+  usuarios: 'Usuarios',
+  licencias: 'Licencias',
+  auditoria: 'Auditoría',
+  backups: 'Backups',
+  facturacion: 'Facturación Electrónica',
+  ajustes: 'Ajustes',
+  'etiquetas-precios': 'Etiquetas de Precios',
+  cobrar: 'Cobrar',
+  'cargar-mercaderia': 'Cargar Mercadería',
+  'control-stock': 'Control de Stock'
+}
 const justSaved = ref(false)
 const soundsEnabled = ref(false)
 const { toggleEnabled } = useSounds()
@@ -72,7 +95,7 @@ function saveSettings() {
         <i class="fa-solid fa-chevron-right text-[10px] text-slate-300 dark:text-slate-600"></i>
       </nav>
       <h1 class="text-slate-900 dark:text-white font-semibold text-sm uppercase tracking-wider font-display truncate">
-        {{ route.name || 'Panel' }}
+        {{ routeNames[route.name] || route.name || 'Panel' }}
       </h1>
     </div>
 

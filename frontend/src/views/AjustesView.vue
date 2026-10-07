@@ -738,8 +738,7 @@ onMounted(async () => {
 <template>
   <div class="space-y-5">
     <div>
-      <h2 class="text-2xl font-bold text-slate-950 dark:text-white font-display">Ajustes</h2>
-      <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Configuración del sistema y AFIP</p>
+      <p class="text-sm text-slate-500 dark:text-slate-400">Configuración del sistema y AFIP</p>
     </div>
 
     <BaseCard v-if="!loading">

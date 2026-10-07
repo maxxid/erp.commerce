@@ -195,7 +195,6 @@ onMounted(async () => {
   <div class="p-6 space-y-6">
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Etiquetas de Precios</h1>
         <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
           Genera etiquetas para productos con cambios de precio o nuevos en un período
         </p>

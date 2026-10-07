@@ -2,8 +2,7 @@
   <div class="space-y-6">
     <div class="flex items-center justify-between">
       <div>
-        <h2 class="text-2xl font-bold text-slate-950 font-display">Arqueos y Caja</h2>
-        <p class="text-sm text-slate-500 mt-1">Gestión de caja registradora</p>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Gestión de caja registradora</p>
       </div>
       <div class="flex items-center gap-2">
         <BaseButton :loading="syncing" :disabled="syncing" variant="secondary" size="sm" @click="syncData">

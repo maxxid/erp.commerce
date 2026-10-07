@@ -1,9 +1,8 @@
 <template>
-  <div class="p-6 space-y-6">
+  <div class="space-y-6">
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-slate-900">Proveedores</h1>
-        <p class="text-sm text-slate-500 mt-1">Gestión de proveedores de mercadería</p>
+        <p class="text-sm text-slate-500 dark:text-slate-400">Gestión de proveedores</p>
       </div>
       <div class="flex items-center gap-2">
         <BaseButton

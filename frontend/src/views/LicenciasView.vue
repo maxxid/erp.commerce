@@ -2,8 +2,7 @@
   <div class="space-y-6">
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Licencias</h1>
-        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Gestión de licencias del sistema</p>
+        <p class="text-sm text-slate-500 dark:text-slate-400">Gestión de licencias del sistema</p>
       </div>
       <BaseButton variant="primary" @click="openGenerateModal">
         <i class="fa-solid fa-key text-sm"></i>

@@ -295,7 +295,7 @@ const sinProveedores = computed(() => proveedoresOrdenados.value.length === 0)
   <div class="space-y-6">
     <div class="flex items-center justify-between">
       <div>
-        <h2 class="text-2xl font-bold text-slate-950 dark:text-white font-display">Precios Online</h2>
+        <p class="text-sm text-slate-500 dark:text-slate-400">Comparador de precios online</p>
         <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Compará precios en supermercados online</p>
       </div>
     </div>

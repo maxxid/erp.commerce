@@ -390,7 +390,6 @@ function buildLoteAlerts() {
   <div class="space-y-6">
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
-        <h2 class="text-2xl font-bold text-slate-950 dark:text-white font-display">Resumen del Comercio</h2>
         <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">KPIs en tiempo real</p>
       </div>
       <div class="flex items-center gap-3">

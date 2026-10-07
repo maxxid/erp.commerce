@@ -2,8 +2,7 @@
   <div class="space-y-6">
     <div class="flex items-center justify-between">
       <div>
-        <h2 class="text-2xl font-bold text-slate-950 font-display">Compras / Stock</h2>
-        <p class="text-sm text-slate-500 mt-1">Órdenes de compra y recepción de mercadería</p>
+        <p class="text-sm text-slate-500 dark:text-slate-400">Órdenes de compra y stock</p>
       </div>
       <div class="flex items-center gap-2">
         <BaseButton variant="secondary" size="sm" :disabled="syncing" @click="syncData">

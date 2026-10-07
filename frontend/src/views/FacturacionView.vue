@@ -80,8 +80,7 @@ onMounted(fetchFacturas)
   <div class="space-y-6">
     <div class="flex items-center justify-between">
       <div>
-        <h2 class="text-2xl font-bold text-slate-950 dark:text-white font-display">Facturación Electrónica</h2>
-        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Gestión de facturas AFIP</p>
+        <p class="text-sm text-slate-500 dark:text-slate-400">Emisión y gestión de facturas electrónicas</p>
       </div>
       <BaseButton variant="secondary" :loading="loading" @click="fetchFacturas">
         <i class="fa-solid fa-refresh mr-2"></i>Actualizar

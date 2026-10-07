@@ -2,8 +2,7 @@
   <div class="space-y-6">
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Backups</h1>
-        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Gestión de respaldos locales y en la nube (R2)</p>
+        <p class="text-sm text-slate-500 dark:text-slate-400">Respaldos y restauración de datos</p>
       </div>
       <div class="flex items-center gap-2">
         <BaseButton variant="secondary" @click="openR2Config">

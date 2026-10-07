@@ -311,11 +311,10 @@ async function executeConfirm() {
 </script>
 
 <template>
-  <div class="space-y-5">
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+  <div class="space-y-6">
+    <div class="flex items-center justify-between">
       <div>
-        <h2 class="text-2xl font-bold text-slate-950 dark:text-white font-display">Ventas</h2>
-        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Historial de tickets de venta</p>
+        <p class="text-sm text-slate-500 dark:text-slate-400">Historial de ventas</p>
       </div>
       <div class="flex items-center gap-2">
         <BaseButton variant="secondary" size="sm" :loading="syncing" @click="syncData">
