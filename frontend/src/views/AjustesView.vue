@@ -43,7 +43,8 @@ const cajaExpanded = ref(false)
 
 // --- Configuración de Caja ---
 const cajaConfig = ref({
-  caja_cierre_automatico: true
+  caja_cierre_automatico: true,
+  caja_cierre_automatico_hora: 6
 })
 
 async function loadCajaConfig() {
@@ -51,6 +52,7 @@ async function loadCajaConfig() {
     const data = await api.get('/api/caja/config')
     if (data) {
       cajaConfig.value.caja_cierre_automatico = data.caja_cierre_automatico ?? true
+      cajaConfig.value.caja_cierre_automatico_hora = data.caja_cierre_automatico_hora ?? 6
     }
   } catch { /* la card queda con el default */ }
 }
@@ -59,7 +61,8 @@ async function saveCajaConfig() {
   saving.value = true
   try {
     await api.put('/api/caja/config', {
-      caja_cierre_automatico: cajaConfig.value.caja_cierre_automatico
+      caja_cierre_automatico: cajaConfig.value.caja_cierre_automatico,
+      caja_cierre_automatico_hora: cajaConfig.value.caja_cierre_automatico_hora
     })
     toast.success('Configuración de caja guardada')
   } catch (e) {
@@ -1616,6 +1619,17 @@ onMounted(async () => {
             label="Cierre automático por cambio de día"
             description="Cierra la caja automáticamente si quedó abierta del día anterior"
             size="sm"
+          />
+
+          <BaseSelect
+            v-model="cajaConfig.caja_cierre_automatico_hora"
+            label="Hora de cambio de día (zona Argentina)"
+            description="El día comercial va desde esta hora hasta la misma hora del día siguiente. Default 06:00 para respetar horarios nocturnos."
+            :options="Array.from({length: 24}, (_, i) => ({ value: i, label: String(i).padStart(2, '0') + ':00' }))"
+            option-value="value"
+            option-label="label"
+            size="sm"
+            :disabled="!cajaConfig.caja_cierre_automatico"
           />
         </div>
 

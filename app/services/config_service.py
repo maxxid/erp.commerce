@@ -74,6 +74,14 @@ def get_caja_cierre_automatico(db: Session) -> bool:
     return valor == "true"
 
 
+def get_caja_cierre_automatico_hora(db: Session) -> int:
+    """Retorna la hora (0-23) en zona Argentina a la que se considera el cambio de día para el cierre automático.
+    
+    Default: 6 (06:00 AM). Significa que el día comercial va de 06:00 a 06:00 del día siguiente.
+    """
+    return get_config_int(db, "caja_cierre_automatico_hora", 6)
+
+
 def get_afip_config(db: Session) -> dict:
     """Lee toda la configuración de AFIP desde la DB + entorno."""
     return {

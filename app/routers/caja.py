@@ -958,6 +958,7 @@ def reportes_caja(
 
 class CajaConfigRequest(BaseModel):
     caja_cierre_automatico: bool = True
+    caja_cierre_automatico_hora: int = Field(6, ge=0, le=23, description="Hora (0-23) en zona Argentina para el cambio de día")
 
 
 @router.get("/config", response_model=RespuestaData)
@@ -968,6 +969,7 @@ def get_caja_config(
     """Obtiene la configuración de caja (auto-cierre, etc.)."""
     return RespuestaData(data={
         "caja_cierre_automatico": config_service.get_caja_cierre_automatico(db),
+        "caja_cierre_automatico_hora": config_service.get_caja_cierre_automatico_hora(db),
     })
 
 
@@ -982,7 +984,14 @@ def set_caja_config(
         db, "caja_cierre_automatico", str(data.caja_cierre_automatico).lower(),
         "Habilitar cierre automático de caja por cambio de día"
     )
+    config_service.set_config(
+        db, "caja_cierre_automatico_hora", str(data.caja_cierre_automatico_hora),
+        "Hora (0-23) en zona Argentina para el cambio de día del cierre automático (default 6 = 06:00 AM)"
+    )
     return RespuestaData(
-        data={"caja_cierre_automatico": data.caja_cierre_automatico},
+        data={
+            "caja_cierre_automatico": data.caja_cierre_automatico,
+            "caja_cierre_automatico_hora": data.caja_cierre_automatico_hora,
+        },
         message="Configuración de caja actualizada"
     )

@@ -87,11 +87,38 @@ def _a_local(dt: datetime) -> datetime:
     return dt.astimezone(TZ_AR)
 
 
-def _es_apertura_del_dia_actual(fecha_utc: Optional[datetime]) -> bool:
-    """True si la fecha (UTC) corresponde al día actual en zona Argentina."""
+def _get_cambio_dia_hora(db: Session) -> int:
+    """Obtiene la hora configurada para el cambio de día (default 6 AM)."""
+    try:
+        return config_service.get_caja_cierre_automatico_hora(db)
+    except Exception:
+        return 6
+
+
+def _es_apertura_del_dia_actual(db: Session, fecha_utc: Optional[datetime]) -> bool:
+    """True si la fecha (UTC) corresponde al día actual en zona Argentina.
+    
+    El día comercial va desde la hora configurada (default 06:00) hasta la misma hora del día siguiente.
+    """
     if fecha_utc is None:
         return False
-    return _a_local(fecha_utc).date() == _ahora_local().date()
+    ahora_local = _ahora_local()
+    cambio_hora = _get_cambio_dia_hora(db)
+    
+    # Calcular el "día comercial" actual: si son las 05:00, todavía es el día anterior
+    if ahora_local.hour < cambio_hora:
+        dia_comercial = (ahora_local - timedelta(days=1)).date()
+    else:
+        dia_comercial = ahora_local.date()
+    
+    fecha_local = _a_local(fecha_utc)
+    # Mismo ajuste para la fecha de la apertura
+    if fecha_local.hour < cambio_hora:
+        fecha_dia_comercial = (fecha_local - timedelta(days=1)).date()
+    else:
+        fecha_dia_comercial = fecha_local.date()
+    
+    return fecha_dia_comercial == dia_comercial
 
 
 def caja_abierta(db: Session, sucursal_id: int = 1) -> bool:
@@ -115,7 +142,7 @@ def caja_abierta(db: Session, sucursal_id: int = 1) -> bool:
             return False
         # Apertura: caja abierta solo si corresponde al día actual
         if _es_apertura_de_caja(m):
-            return _es_apertura_del_dia_actual(m.created_at)
+            return _es_apertura_del_dia_actual(db, m.created_at)
     # Sin aperturas ni cierres registrados: caja cerrada
     return False
 
@@ -147,7 +174,7 @@ def cerrar_sesion_anterior_automaticamente(db: Session, sucursal_id: int = 1) ->
             break
     if apertura is None:
         return False
-    if _es_apertura_del_dia_actual(apertura.created_at):
+    if _es_apertura_del_dia_actual(db, apertura.created_at):
         return False
 
     desglose = obtener_resumen_por_medio_pago(db, sucursal_id)
