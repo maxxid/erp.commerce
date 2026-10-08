@@ -1116,9 +1116,11 @@ def _metodos_ya_cerrados(db: Session, sucursal_id: int = 1) -> list:
     )
     cerrados = set()
     for m in movimientos:
-        if m.tipo == "cierre" and not m.medio_pago:
-            break
+        # Primero: si es la apertura de la sesión actual, paramos (llegamos al inicio de la sesión)
         if _es_apertura_de_caja(m):
+            break
+        # Segundo: si hay un cierre total posterior, ya no es esta sesión
+        if m.tipo == "cierre" and not m.medio_pago:
             break
         if m.tipo == "cierre_parcial" and m.medio_pago:
             cerrados.add(m.medio_pago)
