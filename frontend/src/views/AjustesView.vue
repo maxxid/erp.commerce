@@ -1447,7 +1447,11 @@ onMounted(async () => {
     </BaseCard>
 
     <BaseCard v-if="!loading">
-      <button class="w-full text-left" @click="recargasExpanded = !recargasExpanded">
+      <button 
+        type="button" 
+        class="w-full text-left" 
+        @click.prevent.stop="recargasExpanded = !recargasExpanded"
+      >
         <div class="flex items-center justify-between">
           <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <i class="fa-solid fa-mobile-screen-button text-brand-600"></i>
