@@ -55,7 +55,9 @@ const MEDIOS_PAGO_POS = [
 const posConfig = ref({
   showStatsPanel: true,
   productViewMode: 'grilla',
-  enabledPaymentMethods: MEDIOS_PAGO_POS.map(m => m.value)
+  enabledPaymentMethods: MEDIOS_PAGO_POS.map(m => m.value),
+  calculadoraAlcance: 'pos-productos', // 'global' | 'pos-productos'
+  calculadoraHistorial: 5 // 5 | 10
 })
 
 async function loadPosConfig() {
@@ -67,6 +69,8 @@ async function loadPosConfig() {
       if (Array.isArray(data.enabledPaymentMethods)) {
         posConfig.value.enabledPaymentMethods = data.enabledPaymentMethods
       }
+      posConfig.value.calculadoraAlcance = data.calculadoraAlcance || 'pos-productos'
+      posConfig.value.calculadoraHistorial = data.calculadoraHistorial ?? 5
     }
   } catch { }
 }
@@ -77,7 +81,9 @@ async function savePosConfig() {
     await api.put('/api/config/pos', {
       showStatsPanel: posConfig.value.showStatsPanel,
       productViewMode: posConfig.value.productViewMode,
-      enabledPaymentMethods: posConfig.value.enabledPaymentMethods
+      enabledPaymentMethods: posConfig.value.enabledPaymentMethods,
+      calculadoraAlcance: posConfig.value.calculadoraAlcance,
+      calculadoraHistorial: posConfig.value.calculadoraHistorial
     })
     // Recargar para confirmar que se guardó en el servidor
     await loadPosConfig()
@@ -1760,6 +1766,37 @@ onMounted(async () => {
               <span class="text-sm text-slate-700 dark:text-slate-300">{{ m.label }}</span>
             </label>
           </div>
+        </div>
+
+        <div class="space-y-4">
+          <h4 class="text-sm font-bold text-slate-900 dark:text-white mb-2">Calculadora Flotante</h4>
+          <p class="text-xs text-slate-500 dark:text-slate-400">Configurá dónde aparece y cuánto historial guarda</p>
+
+          <BaseSelect
+            v-model="posConfig.calculadoraAlcance"
+            label="Dónde se muestra la calculadora"
+            description="Global = en todas las vistas; POS y Productos = solo en esas pestañas"
+            :options="[
+              { value: 'global', label: 'Global (todas las vistas)' },
+              { value: 'pos-productos', label: 'Solo POS y Productos' }
+            ]"
+            option-value="value"
+            option-label="label"
+            size="sm"
+          />
+
+          <BaseSelect
+            v-model="posConfig.calculadoraHistorial"
+            label="Historial de operaciones"
+            description="Cuántas operaciones recordar en el historial"
+            :options="[
+              { value: 5, label: '5 operaciones' },
+              { value: 10, label: '10 operaciones' }
+            ]"
+            option-value="value"
+            option-label="label"
+            size="sm"
+          />
         </div>
 
         <div class="flex items-center gap-3 pt-2">

@@ -1,8 +1,9 @@
 <script setup>
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
 import { useCajaStore } from '@/stores/caja'
+import { useCalculadoraStore } from '@/stores/calculadora'
 import { pageLoading } from '@/router'
 import router from '@/router'
 import api from '@/services/api'
@@ -13,6 +14,7 @@ import ToastContainer from '@/components/layout/ToastContainer.vue'
 import CommandPalette from '@/components/layout/CommandPalette.vue'
 import OfflineIndicator from '@/components/layout/OfflineIndicator.vue'
 import KeyboardShortcutsModal from '@/components/layout/KeyboardShortcutsModal.vue'
+import CalculadoraFlotante from '@/components/caja/CalculadoraFlotante.vue'
 
 const auth = useAuthStore()
 const toast = useToastStore()
@@ -34,6 +36,16 @@ const globalShortcuts = [
   { key: '?', description: 'Ver atajos de teclado' },
   { key: 'Esc', description: 'Cerrar modales / búsqueda' }
 ]
+
+const calculadoraStore = useCalculadoraStore()
+
+const mostrarCalculadora = computed(() => {
+  const alcance = calculadoraStore.alcance
+  const ruta = router.currentRoute.value.name
+  if (alcance === 'global') return true
+  if (alcance === 'pos-productos') return ['pos', 'products'].includes(ruta)
+  return false
+})
 
 function toggleApiMode(mode) {
   apiMode.value = mode
@@ -205,6 +217,9 @@ onUnmounted(() => {
             <TheFooter :api-mode="apiMode" :api-base-url="apiBaseUrl" :logs="apiLogs" />
           </main>
         </div>
+
+        <!-- Calculadora Flotante - Condicional según settings -->
+        <CalculadoraFlotante v-if="mostrarCalculadora" />
       </template>
     </Transition>
   </div>
