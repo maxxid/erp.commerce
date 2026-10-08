@@ -1548,22 +1548,22 @@ function formatFecha(fechaStr) {
               <span>Historial de Ventas</span>
             </h4>
             <div v-if="viewProduct.historial_ventas.total_vendido > 0" class="space-y-4">
-              <div class="grid grid-cols-2 gap-5 sm:grid-cols-4">
-                <div class="bg-emerald-50 dark:bg-emerald-900/30 p-5 rounded-2xl min-w-[180px] border border-emerald-200 dark:border-emerald-800">
+              <div class="grid grid-cols-2 gap-4 sm:grid-cols-4 gap-5">
+                <div class="bg-emerald-50 dark:bg-emerald-900/30 p-4 rounded-xl min-w-0 flex-1 border border-emerald-200 dark:border-emerald-800">
                   <div class="text-emerald-700 font-semibold mb-2 text-sm uppercase tracking-wide">Total Vendido</div>
-                  <div class="font-mono-data font-bold text-3xl text-emerald-700 dark:text-emerald-300">{{ formatNumber(viewProduct.historial_ventas.total_vendido) }} u</div>
+                  <div class="font-mono-data font-bold text-2xl text-emerald-700 dark:text-emerald-300 truncate">{{ formatNumber(viewProduct.historial_ventas.total_vendido) }} u</div>
                 </div>
-                <div class="bg-blue-50 dark:bg-blue-900/30 p-5 rounded-2xl min-w-[180px] border border-blue-200 dark:border-blue-800">
+                <div class="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-xl border border-blue-200 dark:border-blue-800">
                   <div class="text-blue-700 font-semibold mb-2 text-sm uppercase tracking-wide">Promedio Semanal</div>
-                  <div class="font-mono-data font-bold text-2xl text-blue-700 dark:text-blue-300">{{ formatNumber(viewProduct.historial_ventas.promedio_semanal) }} u/sem</div>
+                  <div class="font-mono-data font-bold text-xl text-blue-700 dark:text-blue-300 truncate">{{ formatNumber(viewProduct.historial_ventas.promedio_semanal) }} u/sem</div>
                 </div>
-                <div class="bg-amber-50 dark:bg-amber-900/30 p-5 rounded-2xl min-w-[180px] border border-amber-200 dark:border-amber-800">
+                <div class="bg-amber-50 dark:bg-amber-900/30 p-4 rounded-xl border border-amber-200 dark:border-amber-800">
                   <div class="text-amber-700 font-semibold mb-2 text-sm uppercase tracking-wide">Primera Venta</div>
-                  <div class="font-mono-data font-bold text-lg">{{ viewProduct.historial_ventas.primera_venta ? formatFecha(viewProduct.historial_ventas.primera_venta) : '—' }}</div>
+                  <div class="font-mono-data font-bold text-base truncate">{{ viewProduct.historial_ventas.primera_venta ? formatFecha(viewProduct.historial_ventas.primera_venta) : '—' }}</div>
                 </div>
-                <div class="bg-indigo-50 dark:bg-indigo-900/30 p-5 rounded-2xl min-w-[180px] border border-indigo-200 dark:border-indigo-800">
+                <div class="bg-indigo-50 dark:bg-indigo-900/30 p-4 rounded-xl border border-indigo-200 dark:border-indigo-800">
                   <div class="text-indigo-700 font-semibold mb-2 text-sm uppercase tracking-wide">Última Venta</div>
-                  <div class="font-mono-data font-bold text-lg">{{ viewProduct.historial_ventas.ultima_venta ? formatFecha(viewProduct.historial_ventas.ultima_venta) : '—' }}</div>
+                  <div class="font-mono-data font-bold text-base truncate">{{ viewProduct.historial_ventas.ultima_venta ? formatFecha(viewProduct.historial_ventas.ultima_venta) : '—' }}</div>
                 </div>
               </div>
             </div>
