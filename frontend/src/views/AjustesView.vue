@@ -79,6 +79,8 @@ async function savePosConfig() {
       productViewMode: posConfig.value.productViewMode,
       enabledPaymentMethods: posConfig.value.enabledPaymentMethods
     })
+    // Recargar para confirmar que se guardó en el servidor
+    await loadPosConfig()
     toast.success('Configuración POS guardada')
   } catch (e) {
     toast.error(e?.response?.data?.detail || 'No se pudo guardar la configuración')
