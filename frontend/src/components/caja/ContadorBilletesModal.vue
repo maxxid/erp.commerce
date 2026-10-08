@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch, nextTick } from 'vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import api from '@/services/api'
@@ -106,10 +106,31 @@ function aplicar() {
   cerrar()
 }
 
-function onKeydown(e) {
-  if (e.key !== 'Escape' || !props.modelValue) return
-  e.stopImmediatePropagation()
-  cerrar()
+function onInputKeydown(e, denominacion) {
+  if (e.key !== 'Enter') return
+  e.preventDefault()
+  e.stopPropagation()
+  
+  const denom = DENOMINACIONES.value
+  const idx = denom.indexOf(denominacion)
+  if (idx === -1) return
+  
+  // Buscar la siguiente denominación que tenga input visible
+  const nextIdx = denom.findIndex((d, i) => i > idx && conteo.value[d] !== undefined)
+  if (nextIdx !== -1) {
+    // Focus el siguiente input en el próximo tick
+    nextTick(() => {
+      const nextInput = document.querySelector(`input[data-denom="${denom[nextIdx]}"]`)
+      if (nextInput) nextInput.focus()
+    })
+  } else {
+    // Si es el último, enfocar el botón Aplicar
+    nextTick(() => {
+      const applyBtn = document.querySelector('button[aria-label="Aplicar"]') || 
+                       document.querySelector('button:has(i.fa-check)')
+      if (applyBtn) applyBtn.focus()
+    })
+  }
 }
 
 onMounted(() => document.addEventListener('keydown', onKeydown, true))
@@ -147,23 +168,25 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown, true))
       <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div v-if="billetes.length" class="space-y-2">
           <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Billetes</div>
-          <div v-for="d in billetes" :key="'b' + d" class="flex items-center gap-2">
-            <div class="w-[86px] shrink-0 text-xs font-semibold text-slate-600 dark:text-slate-300 font-mono-data">
-              {{ formatDenominacion(d) }}
+<div v-for="d in billetes" :key="'b' + d" class="flex items-center gap-2">
+              <div class="w-[86px] shrink-0 text-xs font-semibold text-slate-600 dark:text-slate-300 font-mono-data">
+                {{ formatDenominacion(d) }}
+              </div>
+              <input
+                :data-denom="d"
+                v-model.number="conteo[d]"
+                type="number"
+                min="0"
+                step="1"
+                inputmode="numeric"
+                placeholder="0"
+                class="w-[70px] shrink-0 px-2 py-1.5 text-sm text-center font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition"
+                @keydown="onInputKeydown($event, d)"
+              />
+              <div class="flex-1 text-right text-xs font-mono-data" :class="subtotal(d) > 0 ? 'text-slate-700 dark:text-slate-200 font-semibold' : 'text-slate-300 dark:text-slate-600'">
+                {{ subtotal(d) > 0 ? fc(subtotal(d)) : '—' }}
+              </div>
             </div>
-            <input
-              v-model.number="conteo[d]"
-              type="number"
-              min="0"
-              step="1"
-              inputmode="numeric"
-              placeholder="0"
-              class="w-[70px] shrink-0 px-2 py-1.5 text-sm text-center font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition"
-            />
-            <div class="flex-1 text-right text-xs font-mono-data" :class="subtotal(d) > 0 ? 'text-slate-700 dark:text-slate-200 font-semibold' : 'text-slate-300 dark:text-slate-600'">
-              {{ subtotal(d) > 0 ? fc(subtotal(d)) : '—' }}
-            </div>
-          </div>
         </div>
 
         <div v-if="monedas.length" class="space-y-2">
@@ -173,6 +196,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown, true))
               {{ formatDenominacion(d) }}
             </div>
             <input
+              :data-denom="d"
               v-model.number="conteo[d]"
               type="number"
               min="0"
@@ -180,6 +204,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown, true))
               inputmode="numeric"
               placeholder="0"
               class="w-[70px] shrink-0 px-2 py-1.5 text-sm text-center font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition"
+              @keydown="onInputKeydown($event, d)"
             />
             <div class="flex-1 text-right text-xs font-mono-data" :class="subtotal(d) > 0 ? 'text-slate-700 dark:text-slate-200 font-semibold' : 'text-slate-300 dark:text-slate-600'">
               {{ subtotal(d) > 0 ? fc(subtotal(d)) : '—' }}
