@@ -243,6 +243,13 @@ const tableColumns = [
   { key: 'acciones', label: '', align: 'right', width: 'w-24' }
 ]
 
+// Helper to normalize string: lowercase + remove accents (tildes)
+const normalizeStr = v => {
+  if (v == null) return ''
+  const s = String(v).toLowerCase()
+  return s === 'null' || s === 'undefined' ? '' : s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+}
+
 const filteredProducts = computed(() => {
   try {
     let list = Array.isArray(products.value) ? products.value : []
@@ -302,15 +309,15 @@ const filteredProducts = computed(() => {
       list = list.filter(p => p && p.flag_revision_stock)
     }
     if (hasSearch.value) {
-      const q = safeStr(searchQuery.value).trim()
+      const q = normalizeStr(searchQuery.value).trim()
       if (q) {
         list = list.filter(p => {
           if (!p) return false
-          return safeStr(p.nombre).includes(q)
-              || safeStr(p.marca).includes(q)
-              || safeStr(p.codigo_barras).includes(q)
-              || safeStr(p.categoria_nombre).includes(q)
-              || safeStr(p.observaciones).includes(q)
+          return normalizeStr(p.nombre).includes(q)
+              || normalizeStr(p.marca).includes(q)
+              || normalizeStr(p.codigo_barras).includes(q)
+              || normalizeStr(p.categoria_nombre).includes(q)
+              || normalizeStr(p.observaciones).includes(q)
         })
       }
     }

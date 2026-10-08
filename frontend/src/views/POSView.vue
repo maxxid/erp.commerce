@@ -1807,6 +1807,13 @@ const bankConfig = reactive({ banco_nombre: '', banco_titular: '', banco_alias: 
 const mpConfig = reactive({ qr_fijo_url: '', qr_fijo_modo: 'dinamico' })
 const showFixedQr = ref(false)
 
+// Helper to normalize string: lowercase + remove accents (tildes)
+const normalizeStr = v => {
+  if (v == null) return ''
+  const s = String(v).toLowerCase()
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+}
+
 const filteredPOSProducts = computed(() => {
   let list = products.value
   if (selectedPOSCategory.value) {
@@ -1816,14 +1823,16 @@ const filteredPOSProducts = computed(() => {
     list = list.filter(p => p.tipo_venta === 'kilo')
   }
   if (posTextSearch.value.trim()) {
-    const q = posTextSearch.value.toLowerCase()
-    list = list.filter(p => {
-      if (!p) return false
-      const nombre = (p.nombre || '').toLowerCase()
-      const marca = (p.marca || '').toLowerCase()
-      const codigo = (p.codigo_barras || '').toLowerCase()
-      return nombre.includes(q) || marca.includes(q) || codigo.includes(q)
-    })
+    const q = normalizeStr(posTextSearch.value).trim()
+    if (q) {
+      list = list.filter(p => {
+        if (!p) return false
+        const nombre = normalizeStr(p.nombre || '')
+        const marca = normalizeStr(p.marca || '')
+        const codigo = normalizeStr(p.codigo_barras || '')
+        return nombre.includes(q) || marca.includes(q) || codigo.includes(q)
+      })
+    }
   }
   return list
 })
