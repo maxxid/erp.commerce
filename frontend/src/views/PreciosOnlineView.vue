@@ -15,6 +15,7 @@ import KpiCard from '@/components/ui/KpiCard.vue'
 const toast = useToastStore()
 
 const barcodeInput = ref('')
+const textSearch = ref('')
 const loading = ref(false)
 const loadingInfo = ref(false)
 const resultados = ref([])
@@ -232,10 +233,21 @@ const gananciaPorUnidad = computed(() => {
 })
 
 const renderedResultados = computed(() =>
-  resultados.value.map(r => ({ ...r, esMasBajo: precioMasBajo.value?.fuente === r.fuente && r.precio === precioMasBajo.value?.precio }))
+  filteredResultados.value.map(r => ({ ...r, esMasBajo: precioMasBajo.value?.fuente === r.fuente && r.precio === precioMasBajo.value?.precio }))
 )
 
-const hayBusqueda = computed(() => loading.value || !!productoInfo.value || resultados.value.length > 0 || noEstaEnLocal.value)
+const hayBusqueda = computed(() => loading.value || !!productoInfo.value || filteredResultados.value.length > 0 || noEstaEnLocal.value)
+
+// Filtrado por texto en resultados
+const filteredResultados = computed(() => {
+  const q = textSearch.value.trim().toLowerCase()
+  if (!q) return resultados.value
+  return resultados.value.filter(r => 
+    (r.nombre || '').toLowerCase().includes(q) ||
+    (r.marca || '').toLowerCase().includes(q) ||
+    (r.fuente || '').toLowerCase().includes(q)
+  )
+})
 
 const analisis = ref(null)
 const loadingAnalisis = ref(false)
@@ -301,7 +313,7 @@ const sinProveedores = computed(() => proveedoresOrdenados.value.length === 0)
     </div>
 
     <BaseCard padding="lg">
-      <div class="flex gap-3">
+      <div class="flex flex-col sm:flex-row gap-3">
         <div class="flex-1">
           <BaseInput
             v-model="barcodeInput"
@@ -313,6 +325,20 @@ const sinProveedores = computed(() => proveedoresOrdenados.value.length === 0)
           >
             <template #prefix>
               <i class="fa-solid fa-barcode text-slate-400"></i>
+            </template>
+          </BaseInput>
+        </div>
+        <div class="flex-1 min-w-[200px]">
+          <BaseInput
+            v-model="textSearch"
+            label="Buscar en resultados"
+            placeholder="Filtrar por nombre, marca, fuente..."
+            size="lg"
+            :loading="loading"
+            @input="() => {}"
+          >
+            <template #prefix>
+              <i class="fa-solid fa-filter text-slate-400"></i>
             </template>
           </BaseInput>
         </div>
