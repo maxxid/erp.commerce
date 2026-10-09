@@ -49,7 +49,13 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 
 ### Escáner de cámara en el POS de Ventas — 09/10/2026
 - **Botón de cámara** en el suffix del campo Código de Barras (ícono `fa-camera`; al activarse pasa a `fa-camera-rotate` con estado resaltado). Usa el mismo composable `useBarcodeScanner` (BarcodeDetector) que las vistas mobile de piso, en **modo continuo con cooldown de 600ms**: el operador escanea varios códigos seguidos sin reabrir nada y cada lectura dispara el mismo `triggerPOSLookup` del input (alta local, búsqueda externa o alta rápida `*Nombre*Precio`)
-- **Vista inline, no modal:** una tira de video bajo el input (no tapa el carrito mientras se escanea) con botón "Detener"; si el navegador no soporta BarcodeDetector o niega el permiso, el composable avisa con toast y muestra el error bajo el input
+- **Vista inline, no modal:** el preview ocupa todo el ancho bajo el input (no tapa el carrito mientras se escanea); se corta con el toggle de cámara del suffix. Si el navegador no soporta BarcodeDetector o niega el permiso, el composable avisa con toast y muestra el error bajo el input
+
+### UX del escáner POS: preview grande, flash verde y sin teclado — 09/10/2026
+- **Preview a todo el ancho** (`aspect-[4/3]` en mobile, `aspect-video` en desktop): se quitó el texto explicativo y el botón "Detener" de al lado; se corta con el mismo botón de cámara (toggle) del suffix del input
+- **Flash verde al leer:** el composable expone `detectedFlash` (350ms) y el POS lo muestra como overlay emerald sobre el video — feedback claro de que el código se procesó
+- **Sin teclado virtual después de cada lectura:** `refocusBarcode()` no enfoca el input si la cámara está abierta, y al detectar se blurrea el `document.activeElement` por si el input ya tenía foco (el foco reenfocado post-lectura era lo que abría el teclado en mobile)
+- **Foco/imagen:** constraints de cámara ahora piden 1280×720 ideales + `focusMode: 'continuous'` (mejor nitidez para ZXing y enfoque continuo donde el navegador lo soporta; se ignoran si no)
 
 ### Fallback ZXing para escáner de cámara en desktop e iOS — 09/10/2026
 - **Problema:** `BarcodeDetector` (Shape Detection API) solo existe en Chrome Android/ChromeOS. Chrome desktop (cualquier versión) y Safari/iOS **nunca** lo implementaron, así que el escáner fallaba con "navegado no soportado" en PC e iPhone

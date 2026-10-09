@@ -156,12 +156,9 @@
           </BaseInput>
 
           <!-- Escáner de cámara inline: se ve el carrito mientras escaneás -->
-          <div v-if="scannerOpen" class="mt-3 flex items-center gap-3 rounded-xl overflow-hidden bg-black">
-            <video ref="videoEl" class="w-40 h-24 object-cover shrink-0" muted playsinline></video>
-            <div class="flex-1 min-w-0 text-xs text-slate-300 px-1">
-              Apuntá al código de barras: se agrega solo al carrito.
-            </div>
-            <BaseButton size="sm" variant="secondary" class="mr-2" @click="closeCamera">Detener</BaseButton>
+          <div v-if="scannerOpen" class="relative mt-3 rounded-xl overflow-hidden bg-black aspect-[4/3] sm:aspect-video">
+            <video ref="videoEl" class="w-full h-full object-cover" autoplay muted playsinline></video>
+            <div v-if="detectedFlash" class="absolute inset-0 bg-emerald-400/30 ring-4 ring-inset ring-emerald-400 pointer-events-none"></div>
           </div>
           <div v-else-if="scannerError" class="mt-3 text-amber-600 text-xs">{{ scannerError }}</div>
 
@@ -1580,11 +1577,15 @@ const {
   videoEl,
   openScanner,
   closeCamera,
+  detectedFlash,
 } = useBarcodeScanner({
   continuous: true,
   cooldownMs: 600,
   onDetect: async (raw) => {
     posLookupCode.value = raw
+    // Cerrar el teclado virtual si estaba abierto: el foco del input después
+    // de agregar al carrito lo volvería a abrir y taparía la vista.
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
     await triggerPOSLookup()
   },
 })
@@ -2103,6 +2104,13 @@ function selectProductForLookup(product) {
   })
 }
 
+// Reenfocar el input solo con la cámara cerrada: en mobile el foco abre el
+// teclado virtual y taparía el carrito/escáner después de cada lectura.
+function refocusBarcode() {
+  if (scannerOpen.value) return
+  nextTick(() => barcodeInput.value?.focus())
+}
+
 async function triggerPOSLookup({ automatico = false } = {}) {
   const raw = posLookupCode.value.trim()
   if (!raw) return
@@ -2130,7 +2138,7 @@ async function triggerPOSLookup({ automatico = false } = {}) {
     products.value.push(tempProd)
     addToCart(tempProd, 1, precio)
     toast.info(`${nombre} → ${cleanCode}. Se creará al confirmar la venta.`)
-    nextTick(() => barcodeInput.value?.focus())
+    refocusBarcode()
     return
   }
 
@@ -2143,7 +2151,7 @@ async function triggerPOSLookup({ automatico = false } = {}) {
       lookupBadges.value.unshift(raw)
       if (lookupBadges.value.length > 10) lookupBadges.value.pop()
     }
-    nextTick(() => barcodeInput.value?.focus())
+    refocusBarcode()
     return
   }
 
@@ -2181,7 +2189,7 @@ async function triggerPOSLookup({ automatico = false } = {}) {
         lookupBadges.value.unshift(raw)
         if (lookupBadges.value.length > 10) lookupBadges.value.pop()
       }
-      nextTick(() => barcodeInput.value?.focus())
+      refocusBarcode()
       return
     }
     if (resp && resp.nombre) {
@@ -2241,7 +2249,7 @@ async function triggerPOSLookup({ automatico = false } = {}) {
     lookupProduct._barcode = raw
   }
 
-  nextTick(() => barcodeInput.value?.focus())
+  refocusBarcode()
 }
 
 function addPendingLookupToCart(lookupId) {

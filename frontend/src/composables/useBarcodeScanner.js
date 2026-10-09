@@ -21,6 +21,7 @@ export function useBarcodeScanner(options = {}) {
   const cameraStream = ref(null)
   const lastScannedCode = ref('')
   const scanCooldown = ref(false)
+  const detectedFlash = ref(false)
   let zxingControls = null
   let zxingReader = null
 
@@ -33,6 +34,8 @@ export function useBarcodeScanner(options = {}) {
     if (!raw || scanCooldown.value || raw === lastScannedCode.value) return
     lastScannedCode.value = raw
     scanCooldown.value = true
+    detectedFlash.value = true
+    setTimeout(() => { detectedFlash.value = false }, 350)
     if (onDetect) await onDetect(raw)
     if (!continuous) {
       closeCamera()
@@ -49,7 +52,14 @@ export function useBarcodeScanner(options = {}) {
     scannerOpen.value = true
     await nextTick()
     try {
-      cameraStream.value = await navigator.mediaDevices.getUserMedia({ video: { facingMode } })
+      cameraStream.value = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: facingMode },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          focusMode: 'continuous',
+        },
+      })
       if (videoEl.value) {
         videoEl.value.srcObject = cameraStream.value
         await videoEl.value.play().catch(() => {})
@@ -129,6 +139,7 @@ export function useBarcodeScanner(options = {}) {
     videoEl,
     openScanner,
     closeCamera,
+    detectedFlash,
     supportsBarcodeDetector: supportsBarcodeDetector(),
   }
 }
