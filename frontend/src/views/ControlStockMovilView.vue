@@ -25,7 +25,7 @@
             <input v-model="scannerInput" type="text" inputmode="numeric" placeholder="Código de barras..." class="w-full rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 px-4 py-3 text-base" @keyup.enter="procesarCodigo" />
             <i class="fa-solid fa-barcode absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
           </div>
-          <button class="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-brand-600 text-white active:bg-brand-700" @click="abrirScanner">
+          <button class="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-brand-600 text-white active:bg-brand-700" @click="openScanner">
             <i class="fa-solid fa-camera"></i><span class="text-sm font-medium">Escanear</span>
           </button>
         </div>
@@ -39,7 +39,7 @@
         <div v-else-if="filteredProducts.length === 0" class="text-center text-slate-400 text-sm py-8">
           {{ searchText || scannerInput ? 'Sin coincidencias' : 'Escanea o busca un producto' }}
         </div>
-        <div v-else class="flex-1 overflow-y-auto">
+        <div v-else>
           <div v-for="p in filteredProducts" :key="p.id" class="rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3 mb-3 flex flex-col gap-2">
             <div class="flex items-start justify-between gap-2">
               <div class="flex-1 min-w-0">
@@ -94,7 +94,7 @@
   </BaseModal>
 </template>
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
@@ -143,14 +143,11 @@ async function syncData() {
   try {
     await Promise.all([
       productosStore.fetchAll(),
-      api.get('/api/lotes?page_size=10000').then(r => { lotesMap.value = buildLotesMap(Array.isArray(r) ? r : (r.data || [])) }),
-      api.post('/api/catalogo/descargar').then(() => {
-        localStorage.setItem('catalogo_last_sync', String(Date.now()))
-      }).catch(() => {})
+      api.get('/api/lotes?page_size=10000').then(r => { lotesMap.value = buildLotesMap(Array.isArray(r) ? r : []) }),
     ])
-    toast.success('ok')
+    toast.success('Datos actualizados')
   } catch (e) {
-    toast.warning('err')
+    toast.error('No se pudieron actualizar los datos')
   } finally {
     syncing.value = false
     loading.value = false
@@ -252,6 +249,12 @@ async function procesarCodigo() {
   const raw = scannerInput.value.trim()
   if (!raw) return
   searchText.value = ''
-  await syncData()
+  const local = products.value.some(p => p.codigo_barras === raw)
+  if (!local) {
+    await Promise.all([
+      productosStore.refreshProductos(),
+      api.get('/api/lotes?page_size=10000').then(r => { lotesMap.value = buildLotesMap(Array.isArray(r) ? r : []) }).catch(() => {}),
+    ])
+  }
 }
 </script>

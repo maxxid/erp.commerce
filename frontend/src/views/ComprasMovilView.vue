@@ -13,7 +13,7 @@
         </div>
         <div class="flex-1 min-w-0">
           <div class="font-semibold leading-tight truncate">Cargar Mercaderia</div>
-          <div class="text-xs text-slate-300 truncate">{{ auth.currentUser.nombre || auth.currentUser.username }}</div>
+          <div class="text-xs text-slate-300 truncate">{{ auth.currentUser?.nombre || auth.currentUser?.username }}</div>
         </div>
         <button class="p-2 rounded-lg hover:bg-slate-700/50" @click="syncData" :disabled="syncing" aria-label="Sincronizar">
           <i :class="syncing ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-arrows-rotate'"></i>
@@ -25,7 +25,7 @@
             <input v-model="scannerInput" type="text" inputmode="numeric" placeholder="Codigo de barras" class="w-full rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 px-4 py-3 text-base" @keyup.enter="procesarCodigo" />
             <i class="fa-solid fa-barcode absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
           </div>
-          <button class="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-brand-600 text-white active:bg-brand-700" @click="abrirScanner">
+          <button class="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-brand-600 text-white active:bg-brand-700" @click="openScanner">
             <i class="fa-solid fa-camera"></i><span class="text-sm font-medium">Escanear</span>
           </button>
         </div>
@@ -33,12 +33,38 @@
           <BaseSelect v-model="proveedorId" :options="proveedores" option-value="id" option-label="nombre" placeholder="Proveedor" class="flex-1"></BaseSelect>
         </div>
         <div v-if="items.length > 0" class="rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 flex flex-col gap-3">
-          <div class="text-sm font-semibold flex justify-between"><span>Items ({{ items.length }})</span><button class="text-xs text-red-500" @click="vaciar">Vaciar</button></div>
+          <div class="text-sm font-semibold flex justify-between items-center">
+            <span>Items ({{ items.length }})</span>
+            <button class="text-xs text-red-500" @click="vaciar">Vaciar</button>
+          </div>
+          <div v-for="(item, idx) in items" :key="item.producto_id" class="flex items-center gap-2 border-b border-slate-200 dark:border-slate-700 last:border-0 pb-2 last:pb-0">
+            <button class="text-red-500 p-1" @click="quitarItem(idx)" aria-label="Quitar"><i class="fa-solid fa-xmark"></i></button>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm truncate">{{ item.nombre }}</div>
+              <div class="text-xs text-slate-500">{{ fc(item.precio) }} c/u</div>
+            </div>
+            <div class="flex items-center gap-1">
+              <button class="w-8 h-8 rounded-lg bg-slate-200 dark:bg-slate-700" @click="cambiarCantidad(idx, -1)">−</button>
+              <span class="w-7 text-center text-sm font-semibold">{{ item.cantidad }}</span>
+              <button class="w-8 h-8 rounded-lg bg-slate-200 dark:bg-slate-700" @click="cambiarCantidad(idx, 1)">+</button>
+            </div>
+            <input
+              v-model="item.precio"
+              type="text"
+              inputmode="decimal"
+              title="Precio de compra"
+              class="w-16 text-center text-sm rounded-md bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600"
+            />
+          </div>
+          <div class="flex justify-between text-xs text-slate-500 border-t border-slate-200 dark:border-slate-700 pt-2">
+            <span>{{ totalCantidad }} und.</span>
+            <span class="font-semibold text-slate-700 dark:text-slate-200">Total {{ fc(totalImporte) }}</span>
+          </div>
         </div>
-        <div v-else class="text-center text-slate-400 text-sm py-8">Escanea o ingresa codigo</div>
+        <div v-else class="text-center text-slate-400 text-sm py-8">Escaneá o ingresá un código</div>
       </div>
 <div class="border-t bg-white dark:bg-slate-900 px-4 pt-3 pb-4">
-        <BaseButton block variant="primary" @click="guardar">Guardar y recibir</BaseButton>
+        <BaseButton block variant="primary" :loading="guardando" @click="guardar">Guardar y recibir</BaseButton>
       </div>
     </div>
   </div>
@@ -57,7 +83,7 @@
   </BaseModal>
 </template>
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
@@ -80,7 +106,7 @@ const scannerInput = ref('')
 const items = ref([])
 const menuOpen = ref(false)
 const menuRef = ref(null)
-const tabActivo = ref('cobro')
+const tabActivo = ref('cargar')
 const menuItems = computed(() => [
   { label: 'Cobro Móvil', icon: 'fa-cash-register', value: 'cobro', active: tabActivo.value === 'cobro', route: '/cobrar' },
   { label: 'Cargar Mercadería', icon: 'fa-box-open', value: 'cargar', active: tabActivo.value === 'cargar', route: '/cargar-mercaderia' },
@@ -107,16 +133,12 @@ async function syncData() {
   syncing.value = true
   try {
     await Promise.all([
-      api.get('/api/proveedores').then(r => { proveedores.value = Array.isArray(r) ? r : (r.data || []) }),
-      productosStore.fetchCategorias(),
+      api.get('/api/proveedores').then(r => { proveedores.value = Array.isArray(r) ? r : [] }),
       productosStore.fetchAll(),
-      api.post('/api/catalogo/descargar').then(() => {
-        localStorage.setItem('catalogo_last_sync', String(Date.now()))
-      }).catch(() => {})
     ])
-    toast.success('ok')
+    toast.success('Datos actualizados')
   } catch (e) {
-    toast.warning('err')
+    toast.error('No se pudieron actualizar los datos')
   } finally {
     syncing.value = false
   }
@@ -168,6 +190,7 @@ async function procesarCodigo() {
     }
     if (resp && resp.nombre) {
       toast.info(`Producto: ${resp.nombre} - ${fc(resp.precio_referencia || resp.precio_venta || 0)}`)
+      return
     }
     toast.warning('Producto no encontrado en fuentes externas')
   } catch {
@@ -183,13 +206,58 @@ function agregarItem(product) {
       producto_id: product.id,
       nombre: product.nombre,
       codigo_barras: product.codigo_barras,
-      precio: product.precio_venta,
+      precio: product.precio_costo || product.precio_venta || 0,
+      precio_venta: product.precio_venta || 0,
+      categoria_id: product.categoria_id || null,
       cantidad: 1,
     })
   }
 }
+function quitarItem(idx) { items.value.splice(idx, 1) }
+function cambiarCantidad(idx, delta) {
+  const it = items.value[idx]
+  const nueva = (Number(it.cantidad) || 0) + delta
+  if (nueva <= 0) {
+    quitarItem(idx)
+    return
+  }
+  it.cantidad = nueva
+}
 function vaciar() { items.value = [] }
 const totalCantidad = computed(() => items.value.reduce((s, x) => s + (Number(x.cantidad) || 0), 0))
 const totalImporte = computed(() => items.value.reduce((s, x) => s + (Number(x.cantidad) || 0) * (Number(x.precio) || 0), 0))
-function guardar() {}
+async function guardar() {
+  if (!proveedorId.value) {
+    toast.warning('Seleccioná un proveedor')
+    return
+  }
+  if (!items.value.length) {
+    toast.warning('Escaneá al menos un producto')
+    return
+  }
+  guardando.value = true
+  try {
+    const payload = {
+      proveedor_id: proveedorId.value,
+      recibir_directo: true,
+      items: items.value.map(i => ({
+        producto: i.nombre,
+        codigo_barras: i.codigo_barras || '',
+        cantidad: Number(i.cantidad) || 1,
+        precio: Number(i.precio) || 0,
+        precio_venta: i.precio_venta || null,
+        categoria_id: i.categoria_id || null,
+      })),
+    }
+    const resp = await api.post('/api/compras', payload)
+    toast.success(resp?.message || 'Mercadería cargada y recibida')
+    items.value = []
+    scannerInput.value = ''
+    await productosStore.refreshProductos()
+  } catch (e) {
+    toast.error(e.data?.detail || e.message || 'No se pudo guardar la compra')
+  } finally {
+    guardando.value = false
+  }
+}
 </script>

@@ -393,6 +393,10 @@ let mpVentaId = null
 
 async function iniciarQr() {
   if (!cart.total) return
+  if (!cajaStore.abierta) {
+    showApertura.value = true
+    return
+  }
   mpLoading.value = true
   mpError.value = ''
   mpModalOpen.value = true
@@ -505,6 +509,10 @@ async function iniciarQrPreferido() {
 }
 
 async function iniciarQrInteroperable() {
+  if (!cajaStore.abierta) {
+    showApertura.value = true
+    return
+  }
   qiLoading.value = true
   qiError.value = ''
   qiModalOpen.value = true
@@ -991,7 +999,7 @@ function logout() {
           <div class="text-sm font-semibold mb-2">Medio de pago</div>
           <div class="grid grid-cols-3 gap-2">
             <button
-              v-for="m in mediosPago.filter(x => x.value !== 'mercadopago_pos')"
+              v-for="m in mediosPago"
               :key="m.value"
               class="flex flex-col items-center gap-1 py-2 rounded-xl border text-xs transition"
               :class="cart.medio_pago === m.value ? 'border-brand-600 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300' : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'"
