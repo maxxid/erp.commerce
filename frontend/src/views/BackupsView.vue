@@ -153,7 +153,7 @@
           </BaseButton>
         </div>
         <p v-if="catalogoStatus.ultima_descarga" class="text-xs text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
-          <i class="fa-solid fa-cloud-check text-emerald-500"></i>
+          <i class="fa-solid fa-circle-check text-emerald-500"></i>
           Última sincronización: {{ formatDate(catalogoStatus.ultima_descarga) }}
         </p>
       </div>

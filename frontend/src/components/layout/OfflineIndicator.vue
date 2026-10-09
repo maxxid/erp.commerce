@@ -63,7 +63,7 @@ const indicatorClass = computed(() => isOffline.value ? 'bg-red-600' : 'bg-amber
   >
     <div v-if="showIndicator" class="fixed top-0 left-0 right-0 z-[200] text-white text-xs text-center py-1.5 px-4 font-medium" :class="indicatorClass">
       <template v-if="isOffline">
-        <i class="fa-solid fa-wifi-slash mr-1.5"></i>
+        <i class="fa-solid fa-circle-exclamation mr-1.5"></i>
         Sin conexión. Ventas guardadas localmente.
       </template>
       <template v-else-if="pendingSalesCount > 0">

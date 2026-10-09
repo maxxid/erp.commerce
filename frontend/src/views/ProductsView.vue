@@ -1010,7 +1010,7 @@ function formatFecha(fechaStr) {
             size="xs"
             title="No controla stock: venderlo no descuenta lotes ni genera alertas"
           >
-            <i class="fa-solid fa-circle-slash mr-0.5 text-[8px]"></i> s/ctrl
+            <i class="fa-solid fa-ban mr-0.5 text-[8px]"></i> s/ctrl
           </BaseBadge>
           <BaseBadge
             v-else

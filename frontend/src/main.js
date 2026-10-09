@@ -16,9 +16,10 @@ import '@fontsource/plus-jakarta-sans/latin-700.css'
 import '@fontsource/plus-jakarta-sans/latin-800.css'
 import '@fontsource/jetbrains-mono/latin-400.css'
 import '@fontsource/jetbrains-mono/latin-500.css'
-import '@fortawesome/fontawesome-free/css/solid.min.css'
-import '@fortawesome/fontawesome-free/css/regular.min.css'
-import '@fortawesome/fontawesome-free/css/brands.min.css'
+// FA7: all.min.css trae el catálogo de glifos + hooks de estilo + webfonts.
+// solid.min.css/regular.min.css/brands.min.css por separado ya NO traen los
+// iconos (solo los selectores de peso), quedaban huecos.
+import '@fortawesome/fontawesome-free/css/all.min.css'
 import './assets/main.css'
 
 const app = createApp(App)
