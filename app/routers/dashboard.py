@@ -340,10 +340,12 @@ def stock_por_velocidad(
 
     El "stock crítico" del dashboard compara contra un mínimo estático que alguien
     cargó a mano, y ese mínimo no sabe si un producto sale 2 o 50 por día. Acá se
-    cruza el     stock real con cuánto se vendió en los últimos días y se calcula cuántos
+    cruza el stock real con cuánto se vendió en los últimos días y se calcula cuántos
     días quedan: "quedan 3 y vendés 8 por día → se agota en 4 horas".
 
     Es la alerta que decide qué comprar hoy. El mínimo estático no dice eso.
+    Solo considera productos con controla_stock=True (los que no controlan stock
+    no tienen proyección real).
     """
     if dias < 7 or dias > 180:
         raise HTTPException(status_code=400, detail="dias debe estar entre 7 y 180")
@@ -359,7 +361,10 @@ def stock_por_velocidad(
         .all()
     )
 
-    prods = db.query(Producto).filter(Producto.activo == True).all()
+    prods = db.query(Producto).filter(
+        Producto.activo == True,
+        Producto.controla_stock == True,
+    ).all()
     filas = []
     for p in prods:
         stock = float(p.stock_actual or 0)
@@ -371,9 +376,13 @@ def stock_por_velocidad(
             # Sin ventas en la ventana no hay proyección: se deja None para no
             # inventar un "dura 999 días" que engaña.
             dias_stock = None
-        # Para qué comprar antes: se llega al mínimo manual en menos de 7 días.
+        # Urgente: ya está en el mínimo, o llega al mínimo en menos de 7 días.
         minimo = float(p.stock_minimo or 0)
-        urgente = por_dia > 0 and stock <= minimo
+        if por_dia > 0:
+            dias_hasta_minimo = max(0, (stock - minimo)) / por_dia
+            urgente = stock <= minimo or dias_hasta_minimo <= 7
+        else:
+            urgente = False
         soon = dias_stock is not None and dias_stock <= 7
 
         if solo_criticos and not (urgente or soon):
