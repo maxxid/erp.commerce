@@ -4,6 +4,47 @@
 
 ---
 
+## 📍 Roadmap: convergencia híbrida mobile
+
+Estrategia: **responsive en las vistas existentes + pantallas dedicadas solo para flujos lineales del piso** (la convención ya existe: `/cobrar`, `/cargar-mercaderia`, `/control-stock` con `meta.bare`). Breakpoint único `md` (768px), CSS para layout y JS solo para features (cámara, sonidos).
+
+### Fase 0 — Hecha ✅
+- Shell responsive: sidebar → drawer + bottom-nav (`e2d8c54`)
+- Pantallas dedicadas arregladas: escáner, cargar mercadería con `guardar()` real, control stock (`45e8107`)
+- PWA base: manifest con shortcuts a Cobrar/Stock, viewport, theme-color
+
+### Fase 1 — Componentes base (mayor ROI: beneficia 12 vistas de una)
+- [ ] **`BaseTable` con modo cards en <md**: lista de tarjetas (`sm:hidden`) + tabla (`hidden sm:table`); respetar slots por columna; convenión `col.mobile: false` para columnas secundarias. Lo usan: Products, Ventas, Clientes, Proveedores, Compras, Caja, Calendario, Usuarios, Auditoría, Licencias, Backups, EtiquetasPrecios
+- [ ] **`BaseModal` mobile**: clamp `max-w-[calc(100vw-2rem)]`, contenido con scroll y footer sticky (hoy `max-w-3xl` desborda en un phone)
+- [ ] **Inputs**: `font-size: 16px` en <md (evita el zoom automático de iOS), targets táctiles ≥44px en BaseButton/BaseSelect
+
+### Fase 2 — Piso de venta (uso diario del personal)
+- [ ] ProductsView — consulta de precios/stock (ya tiene 12 `sm:`, pass corto)
+- [ ] POSView — verificar en touch: cantidades, cobro, medios de pago
+- [ ] CajaView — apertura/arqueo del cajero en el celular
+- [ ] VentasView — historial + detalle de ticket
+- [ ] ClientesView
+
+### Fase 3 — Gestión (admin/encargado, uso ocasional)
+- [ ] Prioridad real: ReportesView, ComprasView, ProveedoresView, FacturacionView (el dueño las usa fuera del escritorio)
+- [ ] Después: DashboardView (ya casi), CalendarioView, PreciosOnlineView, EtiquetasPreciosView, AjustesView, UsuariosView, AuditoriaView, LicenciasView, BackupsView — mínimo: que no se rompan
+
+### Fase 4 — PWA / offline
+- [ ] Registrar el service worker (`dist/sw.js` existe pero `main.js` no lo registra) y cachear el app shell
+- [ ] Extender el patrón de ventas pendientes del POS (`addPendingSale`) a CobroMovil
+- [ ] Prompt suave de "Agregar a pantalla de inicio"
+
+### Fase 5 — Polish de dispositivo real
+- [ ] safe-area en header, `overscroll-behavior`, quirks de teclado virtual
+- [ ] Test en mano: iOS Safari + Android Chrome (escáner con BarcodeDetector, `100dvh`, impressión de tickets)
+
+### Definición de done por vista
+Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full-screen, tablas en cards, y la suite backend en verde si hay contract tests que la parseen.
+
+**Siguiente acción:** Fase 1 arrancando por `BaseTable` (el mayor ROI del plan).
+
+---
+
 ## ✅ Completados recientemente
 
 ### Pantallas mobile exclusivas arregladas (cargar, control stock, cobro) — 09/10/2026
