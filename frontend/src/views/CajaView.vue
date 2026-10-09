@@ -935,6 +935,26 @@
           @pago-proveedor="registrarPagoProveedor($event)"
         />
 
+        <!-- Advertencia métodos pendientes -->
+        <div v-if="hayPendientes" class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3">
+          <div class="flex items-center gap-2 mb-2">
+            <i class="fa-solid fa-triangle-exclamation text-amber-500"></i>
+            <span class="font-semibold text-amber-700 dark:text-amber-300 text-sm">Faltan montos para cerrar</span>
+          </div>
+          <p class="text-xs text-amber-600 dark:text-amber-400 mb-2">
+            Ingresá el monto real en cada método para poder cerrar:
+          </p>
+          <div class="flex flex-wrap gap-1">
+            <span 
+              v-for="m in metodosPendientes" 
+              :key="m.valor" 
+              class="px-2 py-1 text-xs font-medium bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 rounded text-amber-700 dark:text-amber-300"
+            >
+              {{ m.label }} (esperado: {{ fc(m.esperado) }})
+            </span>
+          </div>
+        </div>
+
         <!-- Egresos de la sesión: ya están descontados del esperado de cada medio -->
         <div v-if="egresosPorMedio.length" class="bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-xl p-4">
           <div class="flex items-center gap-2 mb-2">
@@ -1283,6 +1303,16 @@ const movementColumns = [
   { key: 'metodo', label: 'Método' },
   { key: 'comentario', label: 'Comentario' },
 ]
+
+// Métodos pendientes de montoReal para poder cerrar
+const metodosPendientes = computed(() => metodosArqueo.filter(m => 
+  !m.cerrado && m.esperado > 0 && (!m.montoReal || m.montoReal <= 0)
+))
+const metodosCompletados = computed(() => metodosArqueo.filter(m => 
+  !m.cerrado && m.montoReal && m.montoReal > 0
+))
+const metodosCerrados = computed(() => metodosArqueo.filter(m => m.cerrado))
+const hayPendientes = computed(() => metodosPendientes.value.length > 0)
 
 // Historial de sesiones de caja
 const filtroHistorial = ref('semana')
@@ -1984,21 +2014,41 @@ async function confirmarCierreCaja() {
     if (!confirmar) return
   }
 
+  // Mostrar qué métodos se van a cerrar
+  const metodosACerrar = metodosArqueo.filter(m => !m.cerrado && m.montoReal && m.montoReal > 0)
+  console.log('Métodos a cerrar:', metodosACerrar.map(m => ({ valor: m.valor, montoReal: m.montoReal, esperado: m.esperado })))
+
   closing.value = true
   try {
     for (const metodo of metodosArqueo) {
-      if (metodo.cerrado) continue
-      if (!metodo.montoReal || metodo.montoReal <= 0) continue
+      if (metodo.cerrado) {
+        console.log(`Saltando ${metodo.valor}: ya cerrado`)
+        continue
+      }
+      if (!metodo.montoReal || metodo.montoReal <= 0) {
+        console.log(`Saltando ${metodo.valor}: sin montoReal`)
+        continue
+      }
 
       const comentarioFinal = metodo.comentario || cierreComentario.value || ''
-      await api.post('/api/caja/cierre-metodo', {
-        medio_pago: metodo.valor,
-        monto_real: metodo.montoReal,
-        comentario: comentarioFinal,
-      })
+      console.log(`Cerrando ${metodo.valor}: montoReal=${metodo.montoReal}, esperado=${metodo.esperado}`)
+      try {
+        await api.post('/api/caja/cierre-metodo', {
+          medio_pago: metodo.valor,
+          monto_real: metodo.montoReal,
+          comentario: comentarioFinal,
+        })
+        console.log(`✓ ${metodo.valor} cerrado OK`)
+      } catch (err) {
+        console.error(`✗ Error cerrando ${metodo.valor}:`, err)
+        throw err
+      }
     }
 
+    console.log('Ejecutando cierre-total...')
     await api.post('/api/caja/cierre-total', { comentario: cierreComentario.value || '' })
+    console.log('✓ cierre-total OK')
+    
     await cajaStore.fetchEstado()
     showCierreModal.value = false
     toast.success('Jornada finalizada. Hasta luego.')
@@ -2006,7 +2056,9 @@ async function confirmarCierreCaja() {
     auth.logout()
     router.push('/login')
   } catch (e) {
-    toast.error('Error al cerrar caja: ' + (e?.data?.detail || e?.message || ''))
+    const msg = e?.response?.data?.detail || e?.message || String(e)
+    console.error('Error cerrando caja:', e)
+    toast.error('Error al cerrar caja: ' + msg)
     await cajaStore.fetchEstado()
   } finally {
     closing.value = false

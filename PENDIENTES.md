@@ -48,6 +48,18 @@
 - **Al cerrar la caja** ahora se listan los carritos con productos sin cobrar, con nombre, items y total, en vez de un conteo generico de "tickets apartados"
 - **Se conserva la migracion de los tickets apartados** de la version anterior: se importan una sola vez como "Apartado 1", "Apartado 2", etc. Quien los use no pierde nada
 - **Se conserva la auditoria** en la misma clave, con los eventos `HOLD`, `RENAME`, `CLOSE`, `DELETE_HELD`, `RECALL` y ahora `ORPHAN`
+
+### Acceso de emergencia sin Oracle Cloud Console: Serial Console (Console Connection) — 08/10/2026
+- **Problema:** El servidor se "clava" (freeze), SSH no responde, Oracle Cloud Console inaccesible (credenciales perdidas/soporte no responde). El operador queda ciego sin poder reiniciar ni ver logs.
+- **Solución:** **Console Connection (Serial Console)** — acceso directo al kernel via puerto serial (ttyS0), independiente de SSH, systemd, networkd, firewall, Oracle Cloud Console web.
+- **Configuración (5 min, una sola vez):**
+  1. `ssh-keygen -t ed25519 -f ~/.ssh/oracle-emergency -N ""`
+  2. Oracle Console → Instance → Console Connections → Create → SSH Key → pega `~/.ssh/oracle-emergency.pub`
+  3. Guarda el comando SSH que te den en `~/emergency-ssh.sh`
+- **Uso:** `~/emergency-ssh.sh` → acceso directo al kernel (ttyS0) aunque SSH caiga, kernel panic, etc. Funciona sin password, sin Oracle Console, sin SSH daemon.
+- **Fix preventivo:** Watchdog automático (`/etc/watchdog.conf` + health endpoint `/health`) + monitoreo externo (UptimeRobot gratis) + script `~/emergencia.sh` con todas las opciones de recuperación.
+
+(Showing lines 1-63 of 480. Use offset=64 to continue.)
 - **Store defensivo:** normaliza lo que lee de localStorage. Un `items` que no es array, un `total` no numerico o un `activoId` colgado se corrigen en vez de romper el POS
 - **`useHeldTickets.js` eliminado.** Sus dos consumidores (POSView y CajaView) ahora usan el store, asi que hay una sola fuente de verdad
 - **45 verificaciones** del store en Node (credenciales para no perder carritos, persistencia, migracion, datos corruptos, sospechosos, auditoria). No se commitearon porque el frontend no tiene arnes de tests
