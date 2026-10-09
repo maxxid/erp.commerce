@@ -47,6 +47,12 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 
 ## ✅ Completados recientemente
 
+### Historial de compras vinculado en detalle de producto + modal detalle de compra — 09/10/2026
+- **`info-detallada` enriquecido:** el historial de compras ahora incluye `compra_id` y `estado` de cada orden (antes solo traía fecha/proveedor/cant/precio pero no había forma de linkear a la compra)
+- **Modal detalle de producto (`ProductsView`):** el "Historial de Compras" ahora muestra el **número de orden** (`C-00000001`) como badge al lado del proveedor (el dato ya llegaba del backend pero nunca se renderizaba — solo se usaba como `:key`). Cada fila es **clickeable** (hover indigo + chevron): navega a `/compras?detalle=<id>` y abre el modal de detalle de la compra
+- **Modal "Detalle de Compra" (`ComprasView`):** nuevo modal accesible desde el **botón ojo** en la columna acciones de cada compra (y por deep-link `?detalle=`). Muestra header (proveedor, fecha, estado, total), **tabla completa de items** (producto, cant. pedida, recibida con color según completitud, precio unitario, subtotal), **totales** (subtotal/IVA/total) y notas. Usa `GET /api/compras/{id}` (endpoint ya existente pero que nadie llamaba). Antes la única forma de ver items era el modal "Recibir Mercadería" (sin precios)
+- **Deep-link:** al llegar a `/compras?detalle=<id>` abre el modal de esa compra y limpia la query (compartible/bookmarkeable)
+
 ### Modo offline end-to-end (web + celular) — 09/10/2026
 - **Fuentes e iconos self-hosted:** el CDN de Google Fonts y Font Awesome es cross-origin y el SW no lo cachea (respuesta opaca) → offline la app quedaba sin un solo icono y con tipografía fallback. Ahora `@fontsource/*` + `@fortawesome/fontawesome-free` se empaquetan en el build (14 woff2 con hash, cacheados por el SW); links CDN borrados de index.html
 - **`useOfflineSales` blindado:** flag anti-concurrencia (dos syncs en paralelo = ventas duplicadas), listener `'online'` a nivel de módulo (una sola vez, y sincroniza aunque no abran el POS), id con `crypto.randomUUID()`, y **reanudación**: se persiste `ventaId` + `itemsEnviados` entre pasos — si el sync se corta a mitad de los items, el reintento continúa desde ahí sin crear una venta duplicada

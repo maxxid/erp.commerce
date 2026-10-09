@@ -228,8 +228,10 @@ def info_detallada_producto(
         c = ci.compra
         p = c.proveedor  # Proveedor is on Compra, not CompraItem
         historial_compras.append({
+            "compra_id": c.id,
             "fecha": c.fecha.isoformat() if c.fecha else None,
             "numero_orden": c.numero,
+            "estado": c.estado,
             "proveedor": p.nombre if p else "—",
             "proveedor_id": p.id if p else None,
             "cantidad": float(ci.cantidad_recibida or ci.cantidad or 0),

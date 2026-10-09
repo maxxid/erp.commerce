@@ -68,6 +68,13 @@
         </template>
         <template #acciones="{ row }">
           <div class="flex items-center justify-center gap-1">
+            <button
+              class="w-7 h-7 rounded-lg text-blue-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors flex items-center justify-center"
+              title="Ver detalle de la compra"
+              @click="openDetailModal(row)"
+            >
+              <i class="fa-solid fa-eye text-[10px]"></i>
+            </button>
             <a
               v-if="row.proveedor_telefono"
               :href="`https://wa.me/${row.proveedor_telefono.replace(/\D/g,'')}`"
@@ -396,11 +403,97 @@
         </div>
       </div>
     </BaseModal>
+
+    <!-- Modal Detalle de Compra -->
+    <BaseModal v-model="showDetailModal" :title="`Detalle — ${detailCompra?.numero || ''}`" size="3xl">
+      <div v-if="loadingDetail" class="flex items-center justify-center py-16">
+        <i class="fa-solid fa-circle-notch animate-spin text-2xl text-brand-500"></i>
+      </div>
+      <div v-else-if="detailCompra" class="space-y-5">
+        <!-- Header info -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div class="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Proveedor</div>
+            <div class="text-sm font-medium text-slate-900 dark:text-white truncate">{{ detailCompra.proveedor_nombre || '—' }}</div>
+          </div>
+          <div class="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Fecha</div>
+            <div class="text-sm font-mono-data text-slate-700 dark:text-slate-300">{{ formatFecha(detailCompra.fecha) }}</div>
+          </div>
+          <div class="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Estado</div>
+            <BaseBadge :variant="estadoBadgeVariant(detailCompra.estado)" size="sm">{{ detailCompra.estado }}</BaseBadge>
+          </div>
+          <div class="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Total</div>
+            <div class="text-sm font-mono-data font-bold text-brand-600">{{ fc(detailCompra.total) }}</div>
+          </div>
+        </div>
+
+        <!-- Items -->
+        <div>
+          <h4 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">
+            Productos ({{ detailCompra.items?.length || 0 }})
+          </h4>
+          <div class="overflow-x-auto -mx-5 px-5">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="text-left text-xs border-b border-slate-200 dark:border-slate-700 text-slate-400">
+                  <th class="py-2 pr-3 font-medium">Producto</th>
+                  <th class="py-2 px-3 font-medium text-center">Ped.</th>
+                  <th class="py-2 px-3 font-medium text-center">Rec.</th>
+                  <th class="py-2 px-3 font-medium text-right">$ Unit.</th>
+                  <th class="py-2 pl-3 font-medium text-right">Subtotal</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in detailCompra.items" :key="item.id"
+                    class="border-b border-slate-100 dark:border-slate-800 last:border-0">
+                  <td class="py-2 pr-3 text-slate-900 dark:text-white">{{ item.producto_nombre }}</td>
+                  <td class="py-2 px-3 text-center font-mono-data text-slate-600 dark:text-slate-400">{{ item.cantidad }}</td>
+                  <td class="py-2 px-3 text-center font-mono-data font-semibold"
+                      :class="(item.cantidad_recibida || 0) >= item.cantidad ? 'text-emerald-600' : 'text-amber-600'">
+                    {{ item.cantidad_recibida || 0 }}
+                  </td>
+                  <td class="py-2 px-3 text-right font-mono-data text-slate-600 dark:text-slate-400">{{ fc(item.precio_unitario) }}</td>
+                  <td class="py-2 pl-3 text-right font-mono-data font-semibold text-slate-900 dark:text-white">{{ fc(item.subtotal) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Totales -->
+        <div class="flex justify-end">
+          <div class="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800 space-y-1.5 min-w-[220px]">
+            <div class="flex justify-between text-sm text-slate-500 dark:text-slate-400">
+              <span>Subtotal</span>
+              <span class="font-mono-data">{{ fc(detailCompra.subtotal) }}</span>
+            </div>
+            <div class="flex justify-between text-sm text-slate-500 dark:text-slate-400">
+              <span>IVA</span>
+              <span class="font-mono-data">{{ fc(detailCompra.iva) }}</span>
+            </div>
+            <div class="flex justify-between text-sm font-bold text-slate-900 dark:text-white pt-1.5 border-t border-slate-200 dark:border-slate-700">
+              <span>Total</span>
+              <span class="font-mono-data text-brand-600">{{ fc(detailCompra.total) }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Notas -->
+        <div v-if="detailCompra.notas" class="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 rounded-xl p-3">
+          <div class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400 font-semibold mb-1">Notas</div>
+          <div class="text-xs text-amber-800 dark:text-amber-300 whitespace-pre-wrap">{{ detailCompra.notas }}</div>
+        </div>
+      </div>
+    </BaseModal>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted, nextTick } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
 import api from '@/services/api'
@@ -415,6 +508,8 @@ import BaseBadge from '@/components/ui/BaseBadge.vue'
 
 const auth = useAuthStore()
 const toast = useToastStore()
+const route = useRoute()
+const router = useRouter()
 
 const proveedores = ref([])
 const productosCatalogo = ref([])
@@ -436,6 +531,10 @@ const showVerComentario = ref(false)
 const verComentarioTarget = ref(null)
 const comentarioTexto = ref('')
 const savingComentario = ref(false)
+
+const showDetailModal = ref(false)
+const detailCompra = ref(null)
+const loadingDetail = ref(false)
 
 const nuevaCompra = reactive({
   proveedor_id: null,
@@ -478,6 +577,12 @@ const totalCompra = computed(() =>
 
 onMounted(async () => {
   await Promise.all([fetchCompras(), fetchProveedores(), fetchProductosCatalogo(), fetchCategorias()])
+  const detalleId = route.query.detalle
+  if (detalleId) {
+    const compra = compras.value.find(c => c.id === Number(detalleId))
+    if (compra) openDetailModal(compra)
+    router.replace({ query: {} })
+  }
 })
 
 async function fetchCompras() {
@@ -565,6 +670,27 @@ function estadoBadgeVariant(estado) {
     'anulada': 'danger',
   }
   return map[estado] || 'default'
+}
+
+function formatFecha(fechaStr) {
+  if (!fechaStr) return '—'
+  const d = new Date(fechaStr)
+  return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+async function openDetailModal(compra) {
+  loadingDetail.value = true
+  detailCompra.value = null
+  showDetailModal.value = true
+  try {
+    const data = await api.get(`/api/compras/${compra.id}`)
+    if (data) detailCompra.value = data
+  } catch (e) {
+    toast.error('Error al cargar el detalle: ' + (e?.message || ''))
+    showDetailModal.value = false
+  } finally {
+    loadingDetail.value = false
+  }
 }
 
 function abrirModalNuevaCompra() {

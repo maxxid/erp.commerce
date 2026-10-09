@@ -1,6 +1,6 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
 import { useProductosStore } from '@/stores/productos'
@@ -21,6 +21,7 @@ import ProductoLotesManager from '@/components/products/ProductoLotesManager.vue
 const auth = useAuthStore()
 const toast = useToastStore()
 const route = useRoute()
+const router = useRouter()
 const productosStore = useProductosStore()
 
 const products = computed(() => productosStore.productos)
@@ -502,6 +503,12 @@ function openViewModal(product) {
 function closeViewModal() {
   showViewModal.value = false
   viewProduct.value = null
+}
+
+function verCompra(compraId) {
+  if (!compraId) return
+  closeViewModal()
+  router.push({ path: '/compras', query: { detalle: compraId } })
 }
 
 const margen = computed(() => {
@@ -1529,17 +1536,26 @@ function formatFecha(fechaStr) {
               <span>Historial de Compras ({{ viewProduct.historial_compras.length }})</span>
             </h4>
             <div v-if="viewProduct.historial_compras.length" class="max-h-80 overflow-y-auto space-y-3">
-              <div v-for="c in viewProduct.historial_compras" :key="c.fecha + c.numero_orden" class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800">
+              <div
+                v-for="c in viewProduct.historial_compras"
+                :key="c.compra_id || (c.fecha + c.numero_orden)"
+                class="group flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800 transition-colors cursor-pointer hover:bg-indigo-50/70 dark:hover:bg-indigo-950/30 hover:border-indigo-200 dark:hover:border-indigo-800"
+                @click="verCompra(c.compra_id)"
+              >
                 <div class="flex-1 min-w-0">
-                  <div class="text-base font-medium text-slate-900 dark:text-white truncate">{{ c.proveedor }}</div>
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="text-base font-medium text-slate-900 dark:text-white truncate">{{ c.proveedor }}</span>
+                    <span v-if="c.numero_orden" class="font-mono-data text-[11px] font-semibold px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 whitespace-nowrap">{{ c.numero_orden }}</span>
+                  </div>
                   <div class="text-sm text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-4 mt-2">
                     <span class="font-mono-data">{{ formatFecha(c.fecha) }}</span>
                     <span class="font-mono-data text-slate-700 dark:text-slate-300">{{ c.cantidad }} u</span>
                     <span class="font-mono-data text-emerald-600 dark:text-emerald-400">{{ fc(c.precio_unitario) }}/u</span>
                   </div>
                 </div>
-                <div class="flex items-center justify-end">
+                <div class="flex items-center justify-end gap-3">
                   <span class="font-mono-data font-bold text-xl text-slate-900 dark:text-white whitespace-nowrap">{{ fc(c.subtotal) }}</span>
+                  <i class="fa-solid fa-chevron-right text-[10px] text-slate-300 dark:text-slate-600 transition-transform group-hover:text-indigo-500 group-hover:translate-x-0.5"></i>
                 </div>
               </div>
             </div>
