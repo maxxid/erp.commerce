@@ -142,7 +142,28 @@
             <template #prefix>
               <i class="fa-solid fa-barcode text-slate-400"></i>
             </template>
+            <template #suffix>
+              <button
+                type="button"
+                :aria-label="scannerOpen ? 'Detener escáner' : 'Escanear con cámara'"
+                class="w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
+                :class="scannerOpen ? 'text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/30' : 'text-slate-400 hover:text-brand-500'"
+                @click="scannerOpen ? closeCamera() : openScanner()"
+              >
+                <i :class="scannerOpen ? 'fa-solid fa-camera-rotate' : 'fa-solid fa-camera'"></i>
+              </button>
+            </template>
           </BaseInput>
+
+          <!-- Escáner de cámara inline: se ve el carrito mientras escaneás -->
+          <div v-if="scannerOpen" class="mt-3 flex items-center gap-3 rounded-xl overflow-hidden bg-black">
+            <video ref="videoEl" class="w-40 h-24 object-cover shrink-0" muted playsinline></video>
+            <div class="flex-1 min-w-0 text-xs text-slate-300 px-1">
+              Apuntá al código de barras: se agrega solo al carrito.
+            </div>
+            <BaseButton size="sm" variant="secondary" class="mr-2" @click="closeCamera">Detener</BaseButton>
+          </div>
+          <div v-else-if="scannerError" class="mt-3 text-amber-600 text-xs">{{ scannerError }}</div>
 
           <!-- Lookup result -->
           <Transition
@@ -1458,6 +1479,7 @@ import QuickCreateModal from '@/components/pos/QuickCreateModal.vue'
 import { useSounds } from '@/composables/useSounds'
 import { useConfetti } from '@/composables/useConfetti'
 import { useOfflineSales } from '@/composables/useOfflineSales'
+import { useBarcodeScanner } from '@/composables/useBarcodeScanner'
 
 const auth = useAuthStore()
 const toast = useToastStore()
@@ -1549,6 +1571,23 @@ const barcodeInput = ref(null)
 const barcodeHelpBtn = ref(null)
 const showBarcodeHelp = ref(false)
 const barcodeHelpPos = reactive({ top: null, left: null })
+
+// Escáner de cámara (BarcodeDetector), el mismo composable de las vistas mobile
+// de piso. Continuo: varios códigos seguidos sin reabrir la cámara.
+const {
+  scannerOpen,
+  scannerError,
+  videoEl,
+  openScanner,
+  closeCamera,
+} = useBarcodeScanner({
+  continuous: true,
+  cooldownMs: 600,
+  onDetect: async (raw) => {
+    posLookupCode.value = raw
+    await triggerPOSLookup()
+  },
+})
 
 function openBarcodeHelp() {
   const el = barcodeHelpBtn.value

@@ -47,6 +47,10 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 
 ## ✅ Completados recientemente
 
+### Escáner de cámara en el POS de Ventas — 09/10/2026
+- **Botón de cámara** en el suffix del campo Código de Barras (ícono `fa-camera`; al activarse pasa a `fa-camera-rotate` con estado resaltado). Usa el mismo composable `useBarcodeScanner` (BarcodeDetector) que las vistas mobile de piso, en **modo continuo con cooldown de 600ms**: el operador escanea varios códigos seguidos sin reabrir nada y cada lectura dispara el mismo `triggerPOSLookup` del input (alta local, búsqueda externa o alta rápida `*Nombre*Precio`)
+- **Vista inline, no modal:** una tira de video bajo el input (no tapa el carrito mientras se escanea) con botón "Detener"; si el navegador no soporta BarcodeDetector o niega el permiso, el composable avisa con toast y muestra el error bajo el input
+
 ### Fase 1 del roadmap mobile: componentes base responsive — 09/10/2026
 - **`BaseTable` con modo cards en <640px:** el mismo componente renderiza, según breakpoint, una lista de tarjetas (título = primera columna + `dt/dd` con label/valor por columna) o la tabla de siempre. Sin tocar ninguna de las 12 vistas que lo usan: Products, Ventas, Clientes, Proveedores, Compras, Caja, Calendario, Usuarios, Auditoría, Licencias, Backups y EtiquetasPrecios quedaron con vista mobile de una. Respeta slots por columna, `row-click`, fila `detail` expandible, skeletons y empty state. Columnas secundarias se ocultan con `mobile: false`; título alternativo con `primary: true`
 - **`BaseModal`:** `max-h` calculado con `100dvh` (con `100vh` el URL bar de iOS tapaba el footer y los botones quedaban fuera de pantalla), paddings `p-4 sm:p-6` y header/footer compactos en chico
