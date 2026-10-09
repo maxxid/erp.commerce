@@ -10,6 +10,7 @@ import api from '@/services/api'
 import TheSidebar from '@/components/layout/TheSidebar.vue'
 import TheHeader from '@/components/layout/TheHeader.vue'
 import TheFooter from '@/components/layout/TheFooter.vue'
+import TheBottomNav from '@/components/layout/TheBottomNav.vue'
 import ToastContainer from '@/components/layout/ToastContainer.vue'
 import CommandPalette from '@/components/layout/CommandPalette.vue'
 import OfflineIndicator from '@/components/layout/OfflineIndicator.vue'
@@ -27,6 +28,7 @@ const currentTime = ref('')
 const commandPaletteOpen = ref(false)
 const networkActive = ref(false)
 const shortcutsModalOpen = ref(false)
+const menuAbierto = ref(false)
 let clockInterval = null
 let networkTimeout = null
 
@@ -87,6 +89,8 @@ function syncCatalogoSilently() {
     localStorage.setItem('catalogo_last_sync', String(Date.now()))
   }).catch(() => {})
 }
+
+watch(() => router.currentRoute.value.fullPath, () => { menuAbierto.value = false })
 
 watch(() => auth.authenticated, (val) => {
   if (val) {
@@ -166,7 +170,11 @@ onUnmounted(() => {
       <template v-else key="app">
         <router-view v-if="$route.meta.bare" />
         <div v-else class="flex-1 flex w-full min-h-screen">
-          <TheSidebar @navigate="handleNavigate" />
+          <TheSidebar
+            :mobile-open="menuAbierto"
+            @navigate="handleNavigate"
+            @close-mobile="menuAbierto = false"
+          />
           <main class="flex-1 flex flex-col min-w-0 overflow-hidden">
             <TheHeader
               :api-mode="apiMode"
@@ -174,9 +182,10 @@ onUnmounted(() => {
               :network-active="networkActive"
               @toggle-api-mode="toggleApiMode"
               @open-command-palette="openCommandPalette"
+              @toggle-menu="menuAbierto = !menuAbierto"
             />
             <div class="flex-1 overflow-y-auto relative scroll-smooth">
-              <div class="p-6 lg:p-8 pt-2">
+              <div class="p-4 md:p-6 lg:p-8 pt-2 pb-24 md:pb-8">
               <router-view v-slot="{ Component, route }">
                 <Transition
                   name="page"
@@ -214,9 +223,13 @@ onUnmounted(() => {
               </Transition>
               </div>
             </div>
-            <TheFooter :api-mode="apiMode" :api-base-url="apiBaseUrl" :logs="apiLogs" />
+            <div class="hidden md:block">
+              <TheFooter :api-mode="apiMode" :api-base-url="apiBaseUrl" :logs="apiLogs" />
+            </div>
           </main>
         </div>
+
+        <TheBottomNav v-if="!$route.meta.bare" />
 
         <!-- Calculadora Flotante - Condicional según settings -->
         <CalculadoraFlotante v-if="mostrarCalculadora" />

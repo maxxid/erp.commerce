@@ -13,7 +13,7 @@ const props = defineProps({
   networkActive: { type: Boolean, default: false }
 })
 
-const emit = defineEmits(['toggleApiMode', 'openCommandPalette'])
+const emit = defineEmits(['toggleApiMode', 'openCommandPalette', 'toggle-menu'])
 
 const route = useRoute()
 const showSettings = ref(false)
@@ -88,9 +88,17 @@ function saveSettings() {
 </script>
 
 <template>
-  <header class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 h-16 shrink-0 flex items-center justify-between px-6 lg:px-8 z-10 sticky top-0">
-    <div class="flex items-center gap-3 min-w-0">
-      <nav class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+  <header class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 h-16 shrink-0 flex items-center justify-between px-4 md:px-6 lg:px-8 z-10 sticky top-0">
+    <div class="flex items-center gap-2 md:gap-3 min-w-0">
+      <button
+        type="button"
+        aria-label="Abrir menú"
+        class="md:hidden w-9 h-9 -ml-1 rounded-lg flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
+        @click="emit('toggle-menu')"
+      >
+        <i class="fa-solid fa-bars text-lg"></i>
+      </button>
+      <nav class="hidden sm:flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
         <span class="font-medium">ApexERP</span>
         <i class="fa-solid fa-chevron-right text-[10px] text-slate-300 dark:text-slate-600"></i>
       </nav>
@@ -110,7 +118,7 @@ function saveSettings() {
         <kbd class="ml-1 px-1.5 py-0.5 rounded bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-[10px] font-medium">Ctrl K</kbd>
       </button>
 
-      <div class="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5 border border-slate-200 dark:border-slate-700">
+      <div class="hidden sm:flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5 border border-slate-200 dark:border-slate-700">
         <button
           type="button"
           :class="apiMode === 'mock'
@@ -134,7 +142,7 @@ function saveSettings() {
       </div>
 
       <div
-        class="w-2 h-2 rounded-full transition-all duration-200"
+        class="hidden sm:block w-2 h-2 rounded-full transition-all duration-200"
         :class="networkActive ? 'bg-brand-500 animate-ping' : 'bg-emerald-500'"
         :title="networkActive ? 'Red activa' : 'Conectado'"
       ></div>

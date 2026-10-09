@@ -6,6 +6,13 @@
 
 ## ✅ Completados recientemente
 
+### Shell responsive: sidebar-drawer + bottom-nav en mobile — 09/10/2026
+- **El problema:** el `aside` del sidebar era fijo (`w-64`, sin hamburguesa) y en un celular comía la pantalla entera — ninguna vista se podía usar en el teléfono aunque sus clases fueran responsive. Arranque del plan "toda la app en mobile" (híbrida: responsive + pantallas dedicadas para flujos de piso como ya son `/cobrar`, `/cargar-mercaderia`, `/control-stock`)
+- **`TheSidebar.vue` en mobile (<768px):** se vuelve drawer off-canvas (`fixed`, `-translate-x-full` ↔ `translate-x-0`) con overlay oscuro atrás; se cierra con tap en el overlay, botón ✕, `Escape` o al navegar. En desktop el comportamiento colapsable es idéntico al anterior (`showCollapsed` ignora el colapso en mobile)
+- **`TheBottomNav.vue` (nuevo):** barra fija inferior `md:hidden` con las 5 acciones del piso (POS, Cobrar, Cargar, Stock, Caja) filtradas por rol, `pb-[env(safe-area-inset-bottom)]` para el home-indicator de iOS. No aparece en las rutas `bare` (las pantallas mobile dedicadas se quedan full-screen)
+- **`TheHeader.vue`:** hamburguesa `md:hidden` a la izquierda (`toggle-menu`), breadcrumb/API-toggle/dot de red ocultos en mobile, padding compacto. **`App.vue`:** estado `menuAbierto`, se cierra al cambiar de ruta, contenido con `pb-24 md:pb-8` para no quedar debajo de la bottom-nav, footer oculto en mobile
+- **Verificación:** build OK, 451 tests en verde. Probar en el celular: las vistas desktop quedaron usables (tablas aún apretadas — el paso 2 es el modo cards de `BaseTable`)
+
 ### Detalle de un medio en el arqueo + limpieza del commit `6c58510` — 09/10/2026
 - **El problema que motivó el revisar:** el cierre mostraba "Efectivo esperado: $30.000" pero no había forma de ver **de qué se componía** ese número. El commit `6c58510` agregó el badge ámbar de métodos pendientes, pero su PENDIENTES.md se commiteó corrupto y el WIP del detalle quedó a medio hacer (el `ArqueoMedios.vue` no compilaba: `function bloqueado()` sin cuerpo, segundo bloque `<template>` raíz y la firma del service mal pasada)
 - **Endpoint nuevo `GET /api/caja/medio/{medio_pago}/detalle?cierre_id=`:** devuelve apertura, ingresos, egresos, esperado y cada movimiento de la sesión. **Sale del mismo rango de movimientos con el que se calcula el arqueo** (`_movimientos_de_sesion` / `_movimientos_sesion_abierta`), así que la suma del detalle coincide con el esperado de la fila. Sin `cierre_id` describe la sesión abierta; con él, la de ese cierre — antes el WIP ignoraba el `cierre_id` y en una sesión vieja devolvía las ventas de hoy
