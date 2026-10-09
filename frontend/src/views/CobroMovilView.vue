@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
@@ -11,6 +11,7 @@ import QRCode from 'qrcode'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
+import { useBarcodeScanner } from '@/composables/useBarcodeScanner'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -29,8 +30,6 @@ const confirmando = ref(false)
 const showPago = ref(false)
 const showCobro = ref(false)
 const showTicket = ref(false)
-const scannerOpen = ref(false)
-const scannerError = ref('')
 const lastTicket = ref(null)
 const ajustes = ref({})
 
@@ -91,7 +90,6 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  closeCamera()
   clearPolling()
   document.removeEventListener('click', handleClickOutside)
 })
@@ -318,69 +316,22 @@ async function guardarManual() {
   }
 }
 
-// Escáner de cámara
+// Escáner de cámara: composable compartido (BarcodeDetector en Android,
+// ZXing bajo demanda en desktop/iOS Safari). Single-shot: tras cada lectura
+// se cierra y procesa, como hasta ahora.
 const scannerInput = ref('')
-const videoEl = ref(null)
-const barcodeDetector = ref(null)
-const scanTimer = ref(null)
-const cameraStream = ref(null)
-
-function supportsBarcodeDetector() {
-  return typeof window !== 'undefined' && 'BarcodeDetector' in window
-}
-
-async function abrirScanner() {
-  if (!supportsBarcodeDetector()) {
-    toast.warning('Tu navegador no soporta escaneo por cámara. Usá el campo manual.')
-    return
-  }
-  scannerError.value = ''
-  scannerOpen.value = true
-  await nextTick()
-  try {
-    barcodeDetector.value = new BarcodeDetector({
-      formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'codabar']
-    })
-    cameraStream.value = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-    if (videoEl.value) {
-      videoEl.value.srcObject = cameraStream.value
-      await videoEl.value.play().catch(() => {})
-    }
-    scanTimer.value = setInterval(() => detectFromCamera(), 350)
-  } catch {
-    scannerError.value = 'No se pudo acceder a la cámara. Permití el acceso e intentá de nuevo.'
-    closeCamera()
-  }
-}
-
-async function detectFromCamera() {
-  if (!barcodeDetector.value || !videoEl.value || !cameraStream.value) return
-  try {
-    const codes = await barcodeDetector.value.detect(videoEl.value)
-    if (codes && codes.length && codes[0].rawValue) {
-      clearInterval(scanTimer.value)
-      scanTimer.value = null
-      closeCamera()
-      const raw = codes[0].rawValue.trim()
-      await lookupAndAdd(raw)
-    }
-  } catch {
-    // ignorar frames sin detección
-  }
-}
-
-function closeCamera() {
-  if (scanTimer.value) {
-    clearInterval(scanTimer.value)
-    scanTimer.value = null
-  }
-  if (cameraStream.value) {
-    cameraStream.value.getTracks().forEach(t => t.stop())
-    cameraStream.value = null
-  }
-  barcodeDetector.value = null
-  scannerOpen.value = false
-}
+const {
+  scannerOpen,
+  scannerError,
+  videoEl,
+  openScanner,
+  closeCamera,
+} = useBarcodeScanner({
+  continuous: false,
+  onDetect: async (raw) => {
+    await lookupAndAdd(raw)
+  },
+})
 
 // MercadoPago QR dinámico (con importe). El QR fijo ya no se usa: no trae monto
 // y solo lo paga la app de MercadoPago cuando el vendedor carga el importe.
@@ -840,7 +791,7 @@ function logout() {
             />
             <i class="fa-solid fa-barcode absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
           </div>
-          <button class="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-brand-600 text-white active:bg-brand-700" @click="abrirScanner">
+          <button class="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-brand-600 text-white active:bg-brand-700" @click="openScanner">
             <i class="fa-solid fa-camera"></i>
             <span class="text-sm font-medium">Escanear</span>
           </button>

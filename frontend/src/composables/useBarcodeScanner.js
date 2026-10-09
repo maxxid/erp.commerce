@@ -21,25 +21,57 @@ export function useBarcodeScanner(options = {}) {
   const cameraStream = ref(null)
   const lastScannedCode = ref('')
   const scanCooldown = ref(false)
+  let zxingControls = null
+  let zxingReader = null
 
+  // BarcodeDetector (Shape Detection API) solo está en Chrome Android/ChromeOS.
+  // En desktop y en iOS Safari no existe nunca: ahí se usa ZXing (JS puro,
+  // importado bajo demanda para no pesar el bundle inicial).
   const supportsBarcodeDetector = () => typeof window !== 'undefined' && 'BarcodeDetector' in window
 
-  async function openScanner() {
-    if (!supportsBarcodeDetector()) {
-      toast.warning('Tu navegador no soporta escaneo por cámara (requiere iOS 15.4+ / Chrome 88+). Usá el campo manual.')
-      return false
+  async function handleDetected(raw) {
+    if (!raw || scanCooldown.value || raw === lastScannedCode.value) return
+    lastScannedCode.value = raw
+    scanCooldown.value = true
+    if (onDetect) await onDetect(raw)
+    if (!continuous) {
+      closeCamera()
+    } else {
+      setTimeout(() => {
+        scanCooldown.value = false
+        lastScannedCode.value = ''
+      }, cooldownMs)
     }
+  }
+
+  async function openScanner() {
     scannerError.value = ''
     scannerOpen.value = true
     await nextTick()
     try {
-      barcodeDetector.value = new BarcodeDetector({ formats })
       cameraStream.value = await navigator.mediaDevices.getUserMedia({ video: { facingMode } })
       if (videoEl.value) {
         videoEl.value.srcObject = cameraStream.value
         await videoEl.value.play().catch(() => {})
       }
-      scanTimer.value = setInterval(detectFromCamera, scanInterval)
+      if (supportsBarcodeDetector()) {
+        barcodeDetector.value = new BarcodeDetector({ formats })
+        scanTimer.value = setInterval(detectFromCamera, scanInterval)
+      } else {
+        const [{ BrowserMultiFormatReader }, { DecodeHintType, BarcodeFormat }] = await Promise.all([
+          import('@zxing/browser'),
+          import('@zxing/library'),
+        ])
+        const hints = new Map()
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+          BarcodeFormat.EAN_13, BarcodeFormat.EAN_8, BarcodeFormat.CODE_128,
+          BarcodeFormat.CODE_39, BarcodeFormat.UPC_A, BarcodeFormat.UPC_E, BarcodeFormat.CODABAR,
+        ])
+        zxingReader = new BrowserMultiFormatReader(hints, { delayBetweenScanAttempts: scanInterval })
+        zxingControls = zxingReader.decodeFromStream(cameraStream.value, videoEl.value, (result) => {
+          if (result) handleDetected(result.getText().trim())
+        })
+      }
       return true
     } catch (err) {
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
@@ -60,19 +92,7 @@ export function useBarcodeScanner(options = {}) {
     try {
       const codes = await barcodeDetector.value.detect(videoEl.value)
       if (codes && codes.length && codes[0].rawValue) {
-        const raw = codes[0].rawValue.trim()
-        if (raw === lastScannedCode.value) return
-        lastScannedCode.value = raw
-        scanCooldown.value = true
-        if (onDetect) await onDetect(raw)
-        if (!continuous) {
-          closeCamera()
-        } else {
-          setTimeout(() => {
-            scanCooldown.value = false
-            lastScannedCode.value = ''
-          }, cooldownMs)
-        }
+        await handleDetected(codes[0].rawValue.trim())
       }
     } catch {
       // ignorar frames sin detección
@@ -84,6 +104,11 @@ export function useBarcodeScanner(options = {}) {
       clearInterval(scanTimer.value)
       scanTimer.value = null
     }
+    if (zxingControls) {
+      try { zxingControls.stop() } catch { /* ya detenido */ }
+      zxingControls = null
+    }
+    zxingReader = null
     if (cameraStream.value) {
       cameraStream.value.getTracks().forEach(t => t.stop())
       cameraStream.value = null
