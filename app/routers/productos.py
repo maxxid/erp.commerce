@@ -217,16 +217,16 @@ def info_detallada_producto(
             "activo": rel_data.activo if rel_data else 1,
         })
     
-    # Historial de compras (recibidas)
+    # Historial de compras (recibidas y parciales, últimas 50)
     compras = db.query(CompraItem).join(Compra).filter(
         CompraItem.producto_id == producto_id,
-        Compra.estado == "recibida"
-    ).order_by(desc(Compra.fecha)).all()
-    
+        Compra.estado.in_(["recibida", "parcial"])
+    ).order_by(desc(Compra.fecha)).limit(50).all()
+
     historial_compras = []
     for ci in compras:
         c = ci.compra
-        p = c.proveedor  # Proveedor is on Compra, not CompraItem
+        p = c.proveedor
         historial_compras.append({
             "compra_id": c.id,
             "fecha": c.fecha.isoformat() if c.fecha else None,
@@ -238,19 +238,20 @@ def info_detallada_producto(
             "precio_unitario": float(ci.precio_unitario or 0),
             "subtotal": float(ci.subtotal or 0),
         })
-    
+
     # Historial de ventas (confirmadas)
     ventas_items = db.query(VentaItem).join(Venta).filter(
         VentaItem.producto_id == producto_id,
         Venta.estado == "confirmada"
     ).order_by(desc(Venta.fecha)).all()
-    
+
     total_vendido = 0
     primera_venta = None
     ultima_venta = None
     ventas_por_fecha = {}
-    
-    for vi in ventas_items:
+    ventas_detalle = []
+
+    for idx, vi in enumerate(ventas_items):
         v = vi.venta
         cant = float(vi.cantidad or 0)
         total_vendido += cant
@@ -262,6 +263,17 @@ def info_detallada_producto(
         if v.fecha:
             dia = v.fecha.date().isoformat()
             ventas_por_fecha[dia] = ventas_por_fecha.get(dia, 0) + cant
+        # Filas de detalle (últimas 50)
+        if idx < 50:
+            ventas_detalle.append({
+                "venta_id": v.id,
+                "numero": v.numero,
+                "fecha": v.fecha.isoformat() if v.fecha else None,
+                "cantidad": cant,
+                "precio_unitario": float(vi.precio_unitario or 0),
+                "subtotal": float(vi.subtotal or 0),
+                "medio_pago": v.medio_pago,
+            })
     
     # Calcular promedio semanal desde la primera venta hasta hoy (o última venta si no hay stock)
     promedio_semanal = 0
@@ -307,6 +319,7 @@ def info_detallada_producto(
                 "ultima_venta": ultima_venta.isoformat() if ultima_venta else None,
                 "promedio_semanal": round(promedio_semanal, 2),
                 "dias_desde_primera_venta": (datetime.now(timezone.utc) - primera_venta.replace(tzinfo=timezone.utc)).days if primera_venta else None,
+                "detalle": ventas_detalle,
             },
             "ultima_compra": {
                 "fecha": ultima_compra.fecha.isoformat() if ultima_compra else None,

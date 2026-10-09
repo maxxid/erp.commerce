@@ -4,7 +4,7 @@ import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
   title: { type: String, default: '' },
-  size: { type: String, default: 'md' }, // sm, md, lg, xl, 2xl, full
+  size: { type: String, default: 'md' }, // sm, md, lg, xl, 2xl, 3xl, 4xl, full
   showClose: { type: Boolean, default: true },
   closeOnOverlay: { type: Boolean, default: true },
   closeOnEsc: { type: Boolean, default: true },
@@ -25,6 +25,7 @@ const sizeClasses = {
   xl: 'max-w-xl',
   '2xl': 'max-w-2xl',
   '3xl': 'max-w-3xl',
+  '4xl': 'max-w-4xl',
   full: 'max-w-full mx-4'
 }[props.size]
 
