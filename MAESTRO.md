@@ -594,6 +594,7 @@ Cada apertura de cuenta digital se persiste como movimiento `tipo="apertura"` co
 | **Ingresos** | Ingresos del medio |
 | **Egresos** | Egresos del medio |
 | **Esperado** | `apertura + ingresos - egresos` |
+| **Botón detalle** | Ícono de lista junto al Esperado: abre el detalle del medio con apertura, ingresos, egresos y cada movimiento de la sesión (ventas con número y cliente, egresos, apertura). `GET /api/caja/medio/{medio}/detalle?cierre_id=` — sin `cierre_id` es la sesión abierta; con él, la de ese cierre |
 | **Monto Real** | Input por medio; en efectivo abre "Contar billetes" |
 
 ### Extracción de Efectivo al Cerrar
@@ -737,6 +738,7 @@ Cada medio se concilia por separado: se registra un `cierre_parcial` con `medio_
 - `POST /api/caja/retiro-cierre` — registrar extracción de efectivo (`monto`, `motivo`, `cierre_id` opcional)
 - `DELETE /api/caja/retiro-cierre/{id}` — dar de baja una extracción mal cargada
 - `GET /api/caja/cierre/{cierre_id}/arqueo` — arqueo de una sesión (admin/encargado)
+- `GET /api/caja/medio/{medio_pago}/detalle` — movimientos que componen el esperado de un medio (`cierre_id` opcional: sesión abierta sin él)
 - `POST /api/caja/cierre/{cierre_id}/metodo` — arquear un medio de una sesión ya cerrada (admin/cajero)
 - `PUT /api/caja/cierre/{cierre_id}/confirmar` — conciliar la sesión con el monto real total
 - `POST /api/caja/ingreso` — ingreso manual

@@ -1346,3 +1346,137 @@ def _obtener_monto_apertura(db: Session, sucursal_id: int = 1) -> float:
         if not cierres_posteriores:
             return apertura.monto or 0.0
     return 0.0
+
+
+def _iso_utc(dt: Optional[datetime]) -> Optional[str]:
+    """ISO8601 en UTC con Z: la DB guarda datetimes naive en UTC y el front
+    necesita saberlo para mostrar la hora argentina correcta."""
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        return dt.isoformat() + "Z"
+    return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _movimientos_sesion_abierta(db: Session, sucursal_id: int = 1) -> List[MovimientoCaja]:
+    """Movimientos de la sesión abierta, del más nuevo al más viejo, con su apertura.
+
+    Recorre hacia atrás desde el último movimiento: el primer cierre total que
+    encuentra cierra la ventana (no hay sesión abierta) y la apertura del cajón
+    la cierra con ella, igual que recorre `obtener_saldo_por_medio`.
+    """
+    movimientos = (
+        db.query(MovimientoCaja)
+        .filter(MovimientoCaja.sucursal_id == sucursal_id)
+        .order_by(MovimientoCaja.id.desc())
+        .all()
+    )
+    ventana: List[MovimientoCaja] = []
+    for m in movimientos:
+        if m.tipo == "cierre" and not m.medio_pago:
+            return []
+        ventana.append(m)
+        if _es_apertura_de_caja(m):
+            return ventana
+    return []
+
+
+def obtener_detalle_medio_sesion(
+    db: Session,
+    medio_pago: str,
+    cierre_id: Optional[int] = None,
+    sucursal_id: int = 1,
+) -> dict:
+    """Movimientos que componen el esperado de un medio de pago en una sesión.
+
+    Sin `cierre_id` describe la sesión abierta; con él, la de ese cierre. El
+    detalle sale del mismo rango de movimientos con el que se calcula el arqueo,
+    así que la suma de los renglones coincide con el esperado de la fila.
+    """
+    from app.models.venta import Venta
+
+    if cierre_id is not None:
+        cierre, apertura = obtener_sesion_por_cierre(db, cierre_id, sucursal_id)
+        movimientos = _movimientos_de_sesion(db, apertura, cierre.id, sucursal_id)
+        saldos = _saldos_de_sesion(db, apertura, cierre.id, sucursal_id)
+    else:
+        movimientos = _movimientos_sesion_abierta(db, sucursal_id)
+        if not movimientos:
+            raise ValueError("No hay una sesión de caja abierta.")
+        apertura = movimientos[-1]
+        saldos = obtener_saldo_por_medio(db, sucursal_id)
+
+    seleccion: List[tuple] = []
+    for m in movimientos:
+        if (m.medio_pago or "efectivo") != medio_pago:
+            continue
+        if m.tipo == "apertura":
+            # La apertura del cajón se agrega aparte (es de la sesión, no un
+            # movimiento dentro de ella); la de una cuenta digital sí cuenta.
+            if not m.medio_pago:
+                continue
+            tipo = "apertura"
+        elif m.tipo == "ingreso":
+            tipo = "ingreso"
+        elif m.tipo == "egreso":
+            # En la sesión abierta se aplican las mismas exclusiones que
+            # obtener_saldo_por_medio: un egreso que pertenece a otra sesión no
+            # baja el esperado de esta.
+            if cierre_id is None:
+                if m.referencia_tipo == "retiro_cierre" and m.referencia_id is not None:
+                    continue
+                if m.referencia_tipo == "pago_proveedor" and m.sesion_cierre_id is not None:
+                    continue
+            tipo = "egreso"
+        else:
+            # cierre_parcial y cierre total son informativos, no mueven saldo
+            continue
+        seleccion.append((m, tipo))
+
+    venta_ids = {
+        m.referencia_id
+        for m, _ in seleccion
+        if m.referencia_tipo == "venta" and m.referencia_id
+    }
+    ventas = {}
+    if venta_ids:
+        for v in db.query(Venta).filter(Venta.id.in_(venta_ids)).all():
+            ventas[v.id] = v
+
+    filas: List[dict] = []
+    for m, tipo in seleccion:
+        venta = ventas.get(m.referencia_id) if m.referencia_tipo == "venta" else None
+        filas.append({
+            "id": m.id,
+            "fecha": _iso_utc(m.created_at),
+            "tipo": tipo,
+            "monto": round(m.monto or 0.0, 2),
+            "descripcion": m.descripcion or "",
+            "venta_id": venta.id if venta else None,
+            "numero": venta.numero if venta else None,
+            "cliente": venta.cliente.nombre if venta and venta.cliente else None,
+        })
+
+    # La apertura del cajón es solo del efectivo: las cuentas digitales tienen
+    # la suya propia, que sí viene como movimiento dentro de la sesión.
+    if medio_pago == "efectivo":
+        filas.append({
+            "id": apertura.id,
+            "fecha": _iso_utc(apertura.created_at),
+            "tipo": "apertura",
+            "monto": round(apertura.monto or 0.0, 2),
+            "descripcion": "Apertura de caja",
+            "venta_id": None,
+            "numero": None,
+            "cliente": None,
+        })
+
+    fila = saldos.get(medio_pago) or _fila_saldo()
+    return {
+        "medio_pago": medio_pago,
+        "apertura": round(fila["apertura"], 2),
+        "ingresos": round(fila["ingresos"], 2),
+        "egresos": round(fila["egresos"], 2),
+        "esperado": round(fila["esperado"], 2),
+        "movimientos": filas,
+    }

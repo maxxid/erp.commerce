@@ -140,6 +140,27 @@ def arqueo_cierre(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.get("/medio/{medio_pago}/detalle", response_model=RespuestaData)
+def detalle_medio_sesion(
+    medio_pago: str,
+    cierre_id: Optional[int] = Query(
+        None,
+        description="Sesión a la que pertenece el detalle. Sin esto, la sesión abierta.",
+    ),
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """Movimientos que componen el esperado de un medio de pago en una sesión."""
+    if cierre_id is not None and user.rol not in ("admin", "encargado"):
+        raise HTTPException(status_code=403, detail="Se requiere rol: admin, encargado")
+    try:
+        return RespuestaData(
+            data=caja_service.obtener_detalle_medio_sesion(db, medio_pago, cierre_id=cierre_id)
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.post("/cierre/{cierre_id}/metodo", response_model=RespuestaData)
 def cierre_metodo_sesion(
     cierre_id: int,

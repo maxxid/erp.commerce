@@ -15,9 +15,20 @@
           <span v-if="metodo.es_cuenta_digital" class="text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 font-bold">CUENTA DIGITAL</span>
           <span v-if="metodo.cerrado" class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 font-bold">CERRADO</span>
         </div>
-        <div class="text-right">
-          <p class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Esperado</p>
-          <p class="font-mono-data font-bold text-slate-900 dark:text-white">{{ fc(metodo.esperado) }}</p>
+        <div class="flex items-center gap-2">
+          <div class="text-right">
+            <p class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Esperado</p>
+            <p class="font-mono-data font-bold text-slate-900 dark:text-white">{{ fc(metodo.esperado) }}</p>
+          </div>
+          <button
+            v-if="!metodo.cerrado"
+            @click="abrirDetalle(metodo)"
+            class="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            :title="'Ver detalle de ' + metodo.label"
+            :disabled="bloqueado(metodo)"
+          >
+            <i class="fa-solid fa-list-ol text-sm"></i>
+          </button>
         </div>
       </div>
 
@@ -331,13 +342,87 @@
         </BaseButton>
       </div>
     </div>
+
+    <!-- Detalle del medio: de qué movimientos de la sesión se compone el esperado -->
+    <BaseModal
+      :model-value="detalleVisible"
+      @update:model-value="cerrarDetalle"
+      :title="'Detalle de ' + (detalleMedio ? detalleMedio.label : 'medio')"
+      size="lg"
+    >
+      <div v-if="detalleCargando" class="flex items-center justify-center py-10 text-slate-400 text-sm">
+        <i class="fa-solid fa-circle-notch animate-spin mr-2"></i> Cargando detalle...
+      </div>
+      <div v-else-if="detalleError" class="text-center py-8">
+        <i class="fa-solid fa-triangle-exclamation text-2xl text-amber-500 mb-2"></i>
+        <p class="text-sm text-slate-500 dark:text-slate-400">{{ detalleError }}</p>
+      </div>
+      <div v-else class="space-y-4">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div class="rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 px-3 py-2">
+            <p class="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Apertura</p>
+            <p class="font-mono-data font-bold text-sm text-slate-900 dark:text-white">{{ fc(detalleResumen?.apertura) }}</p>
+          </div>
+          <div class="rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 px-3 py-2">
+            <p class="text-[9px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-bold">Ingresos</p>
+            <p class="font-mono-data font-bold text-sm text-emerald-700 dark:text-emerald-300">{{ fc(detalleResumen?.ingresos) }}</p>
+          </div>
+          <div class="rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 px-3 py-2">
+            <p class="text-[9px] uppercase tracking-wider text-rose-500 dark:text-rose-400 font-bold">Egresos</p>
+            <p class="font-mono-data font-bold text-sm text-rose-700 dark:text-rose-300">{{ fc(detalleResumen?.egresos) }}</p>
+          </div>
+          <div class="rounded-lg bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800 px-3 py-2">
+            <p class="text-[9px] uppercase tracking-wider text-brand-600 dark:text-brand-400 font-bold">Esperado</p>
+            <p class="font-mono-data font-bold text-sm text-brand-700 dark:text-brand-300">{{ fc(detalleResumen?.esperado) }}</p>
+          </div>
+        </div>
+
+        <div v-if="detalleMovimientos.length" class="max-h-80 overflow-y-auto space-y-1.5">
+          <div
+            v-for="m in detalleMovimientos"
+            :key="m.id"
+            class="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700"
+          >
+            <div class="min-w-0">
+              <div class="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">
+                <template v-if="m.numero">
+                  {{ m.numero }}<span v-if="m.cliente" class="font-normal text-slate-400 dark:text-slate-500"> · {{ m.cliente }}</span>
+                </template>
+                <template v-else>{{ m.descripcion || etiquetaTipo(m.tipo) }}</template>
+              </div>
+              <div class="text-[11px] text-slate-400 dark:text-slate-500">{{ formatDateTime(m.fecha) }}</div>
+            </div>
+            <span
+              class="font-mono-data font-bold text-sm shrink-0"
+              :class="m.tipo === 'egreso'
+                ? 'text-rose-600 dark:text-rose-400'
+                : m.tipo === 'ingreso'
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : 'text-slate-600 dark:text-slate-300'"
+            >
+              {{ m.tipo === 'egreso' ? '−' : '+' }}{{ fc(m.monto) }}
+            </span>
+          </div>
+        </div>
+        <div v-else class="text-center py-6 text-slate-400 text-sm">
+          <i class="fa-solid fa-receipt text-2xl mb-2 opacity-50"></i>
+          <p>Sin movimientos de este medio en la sesión</p>
+        </div>
+      </div>
+
+      <template #footer>
+        <BaseButton variant="secondary" @click="cerrarDetalle">Cerrar</BaseButton>
+      </template>
+    </BaseModal>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import { formatCurrency as fc } from '@/composables/useUtils'
+import { formatCurrency as fc, formatDateTime } from '@/composables/useUtils'
 import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseModal from '@/components/ui/BaseModal.vue'
+import api from '@/services/api'
 
 const props = defineProps({
   filas: { type: Array, default: () => [] },
@@ -347,6 +432,7 @@ const props = defineProps({
   bloquearCerrados: { type: Boolean, default: true },
   proveedores: { type: Array, default: () => [] },
   guardandoPago: { type: Boolean, default: false },
+  cierreId: { type: Number, default: null },
 })
 
 const emit = defineEmits(['contar', 'contar-medio', 'agregar-retiro', 'borrar-retiro', 'pago-proveedor'])
@@ -424,6 +510,52 @@ watch(esperadoEfectivo, (nuevo) => {
 })
 function diferencia(metodo) {
   return (Number(metodo.montoReal) || 0) - (Number(metodo.esperado) || 0)
+}
+
+// --- Detalle de medio ---
+// El esperado de cada fila es "apertura + ingresos - egresos"; el detalle
+// muestra con qué movimientos de la sesión se llega a ese número.
+const detalleVisible = ref(false)
+const detalleMedio = ref(null)
+const detalleCargando = ref(false)
+const detalleResumen = ref(null)
+const detalleMovimientos = ref([])
+const detalleError = ref('')
+
+async function abrirDetalle(medio) {
+  if (!medio || medio.cerrado) return
+  detalleMedio.value = medio
+  detalleResumen.value = null
+  detalleMovimientos.value = []
+  detalleError.value = ''
+  detalleCargando.value = true
+  detalleVisible.value = true
+  try {
+    const data = await api.get(`/api/caja/medio/${medio.valor}/detalle`, { cierre_id: props.cierreId })
+    if (!data || !Array.isArray(data.movimientos)) {
+      throw new Error('Respuesta inválida del servidor')
+    }
+    detalleResumen.value = data
+    detalleMovimientos.value = data.movimientos
+  } catch (e) {
+    detalleError.value = e?.message || 'No se pudo cargar el detalle'
+  } finally {
+    detalleCargando.value = false
+  }
+}
+
+function cerrarDetalle() {
+  detalleVisible.value = false
+  detalleMedio.value = null
+  detalleResumen.value = null
+  detalleMovimientos.value = []
+  detalleError.value = ''
+}
+
+function etiquetaTipo(tipo) {
+  if (tipo === 'apertura') return 'Apertura'
+  if (tipo === 'egreso') return 'Egreso'
+  return 'Ingreso'
 }
 
 function bloqueado(metodo) {
@@ -512,3 +644,4 @@ watch(() => props.retiros.length, (nuevo, previo) => {
   }
 })
 </script>
+

@@ -543,6 +543,37 @@ Response: Lista de movimientos (apertura, apertura de cuenta, cierre,
 ingresos, egresos).
 
 
+5.9 GET /api/caja/medio/{medio_pago}/detalle
+──────────────────────────────────────────────
+Movimientos que componen el esperado de un medio de pago en una sesión.
+Query: cierre_id (opcional) — sesión a la que pertenece el detalle; sin él,
+la sesión abierta. Con cierre_id requiere rol admin/encargado; sin él,
+cualquier usuario autenticado (lo usa el cajero al cerrar).
+
+Response (200):
+  {
+    "ok": true,
+    "data": {
+      "medio_pago": "efectivo",
+      "apertura": 20000.0,
+      "ingresos": 10000.0,
+      "egresos": 1000.0,
+      "esperado": 29000.0,
+      "movimientos": [
+        { "id": 12, "fecha": "2026-10-08T21:10:00Z", "tipo": "egreso",
+          "monto": 1000.0, "descripcion": "Compra de insumos",
+          "venta_id": null, "numero": null, "cliente": null },
+        { "id": 9, "fecha": "2026-10-08T20:01:00Z", "tipo": "ingreso",
+          "monto": 10000.0, "descripcion": "Venta V-00123",
+          "venta_id": 45, "numero": "V-00123", "cliente": "Juan Pérez" },
+        { "id": 3, "fecha": "2026-10-08T14:00:00Z", "tipo": "apertura",
+          "monto": 20000.0, "descripcion": "Apertura de caja",
+          "venta_id": null, "numero": null, "cliente": null }
+      ]
+    }
+  }
+
+
 ═══════════════════════════════════════════════════════════════
 6. VENTAS
 ═══════════════════════════════════════════════════════════════

@@ -6,6 +6,15 @@
 
 ## ✅ Completados recientemente
 
+### Detalle de un medio en el arqueo + limpieza del commit `6c58510` — 09/10/2026
+- **El problema que motivó el revisar:** el cierre mostraba "Efectivo esperado: $30.000" pero no había forma de ver **de qué se componía** ese número. El commit `6c58510` agregó el badge ámbar de métodos pendientes, pero su PENDIENTES.md se commiteó corrupto y el WIP del detalle quedó a medio hacer (el `ArqueoMedios.vue` no compilaba: `function bloqueado()` sin cuerpo, segundo bloque `<template>` raíz y la firma del service mal pasada)
+- **Endpoint nuevo `GET /api/caja/medio/{medio_pago}/detalle?cierre_id=`:** devuelve apertura, ingresos, egresos, esperado y cada movimiento de la sesión. **Sale del mismo rango de movimientos con el que se calcula el arqueo** (`_movimientos_de_sesion` / `_movimientos_sesion_abierta`), así que la suma del detalle coincide con el esperado de la fila. Sin `cierre_id` describe la sesión abierta; con él, la de ese cierre — antes el WIP ignoraba el `cierre_id` y en una sesión vieja devolvía las ventas de hoy
+- **Permisos:** sin `cierre_id` cualquier autenticado (el cajero lo usa al cerrar); con `cierre_id`, admin/encargado, igual que `GET /cierre/{id}/arqueo`
+- **UI en `ArqueoMedios.vue`:** botón de lista junto al Esperado abre un modal (dentro del template raíz, con `BaseModal` y su footer slot) con las 4 mini-cards de resumen y la lista de movimientos: número de ticket + cliente para los ingresos de venta, descripción para el resto, hora argentina (`fecha` se serializa con `Z`: la DB guarda UTC naive) e importe con signo según tipo
+- **Sesión correcta por dónde se abre el componente:** la conciliación de una sesión cerrada pasa `:cierre-id="cierreSesionId"`, el cierre de la caja abierta no lo pasa (detalle = sesión actual)
+- **Limpieza del commit `6c58510`:** artefacto de lectura `(Showing lines 1-63 of 480...)` que se había commiteado dentro de `PENDIENTES.md` (partía la entrada de carritos en dos) y la sección "Acceso de emergencia" insertada en el medio de esa entrada; eliminados `metodosCompletados`/`metodosCerrados` (sin uso) y los ~10 `console.log` de debug de `confirmarCierreCaja`; el manejo de error volvió a `e?.data?.detail` (`api.js` es fetch puro, no axios — `e.response` no existe)
+- **13 tests nuevos** (`tests/test_caja_detalle_medio.py`, 451 en total): totales idénticos a los del arqueo (abierto y cerrado), que el efectivo no se filtre al detalle de otro medio, cuentas digitales con su propia apertura, egresos de otra sesión fuera, cierres parciales ignorados y sesión inexistente como error
+
 ### El cierre automático de caja no se podía completar: faltaba arqueo, extracción y conciliación — 01/10/2026
 - **El síntoma:** al cambiar el día, `caja_service.caja_abierta()` registra el cierre de la jornada anterior con el monto que calculó el sistema, pero desde el Historial de Caja solo se podía "confirmar" un número suelto. No había forma de contar el cajón, cargar el saldo real de las cuentas digitales ni registrar la plata que se lleva. El operador se quedaba con un cierre sin conciliar y la diferencia de siempre
 - **Las tres trabas, todas en el mismo lugar:** `cerrar_metodo()` exigía la caja abierta (imposible para una sesión ya cerrada), `registrar_egreso()` también, y el arqueo se armaba con `obtener_saldo_por_medio()`, que calcula "desde la última apertura" — o sea, de la sesión de hoy, no de la de ayer
@@ -49,6 +58,11 @@
 - **Se conserva la migracion de los tickets apartados** de la version anterior: se importan una sola vez como "Apartado 1", "Apartado 2", etc. Quien los use no pierde nada
 - **Se conserva la auditoria** en la misma clave, con los eventos `HOLD`, `RENAME`, `CLOSE`, `DELETE_HELD`, `RECALL` y ahora `ORPHAN`
 
+- **Store defensivo:** normaliza lo que lee de localStorage. Un `items` que no es array, un `total` no numerico o un `activoId` colgado se corrigen en vez de romper el POS
+- **`useHeldTickets.js` eliminado.** Sus dos consumidores (POSView y CajaView) ahora usan el store, asi que hay una sola fuente de verdad
+- **45 verificaciones** del store en Node (credenciales para no perder carritos, persistencia, migracion, datos corruptos, sospechosos, auditoria). No se commitearon porque el frontend no tiene arnes de tests
+- **Limite conocido:** los carritos viven en localStorage, no en el servidor. No sobreviven cambiar de terminal. Si alguna vez hace falta que dos terminales compartan carritos, hay que backend + tabla
+
 ### Acceso de emergencia sin Oracle Cloud Console: Serial Console (Console Connection) — 08/10/2026
 - **Problema:** El servidor se "clava" (freeze), SSH no responde, Oracle Cloud Console inaccesible (credenciales perdidas/soporte no responde). El operador queda ciego sin poder reiniciar ni ver logs.
 - **Solución:** **Console Connection (Serial Console)** — acceso directo al kernel via puerto serial (ttyS0), independiente de SSH, systemd, networkd, firewall, Oracle Cloud Console web.
@@ -58,12 +72,6 @@
   3. Guarda el comando SSH que te den en `~/emergency-ssh.sh`
 - **Uso:** `~/emergency-ssh.sh` → acceso directo al kernel (ttyS0) aunque SSH caiga, kernel panic, etc. Funciona sin password, sin Oracle Console, sin SSH daemon.
 - **Fix preventivo:** Watchdog automático (`/etc/watchdog.conf` + health endpoint `/health`) + monitoreo externo (UptimeRobot gratis) + script `~/emergencia.sh` con todas las opciones de recuperación.
-
-(Showing lines 1-63 of 480. Use offset=64 to continue.)
-- **Store defensivo:** normaliza lo que lee de localStorage. Un `items` que no es array, un `total` no numerico o un `activoId` colgado se corrigen en vez de romper el POS
-- **`useHeldTickets.js` eliminado.** Sus dos consumidores (POSView y CajaView) ahora usan el store, asi que hay una sola fuente de verdad
-- **45 verificaciones** del store en Node (credenciales para no perder carritos, persistencia, migracion, datos corruptos, sospechosos, auditoria). No se commitearon porque el frontend no tiene arnes de tests
-- **Limite conocido:** los carritos viven en localStorage, no en el servidor. No sobreviven cambiar de terminal. Si alguna vez hace falta que dos terminales compartan carritos, hay que backend + tabla
 
 ### Carrefour Maxi (comerciante.carrefour.com.ar): el sitio es B2B con login, no sirve como fuente — 29/09/2026
 - **Se investigo** el portal de compras por volumen de Carrefour, que tiene precios distintos y a veces mejores que el de consumo
