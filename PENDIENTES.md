@@ -47,6 +47,12 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 
 ## ✅ Completados recientemente
 
+### Etiquetas de Precios: 3 bugs + UX — 09/10/2026
+- **Nunca mostraba productos (bug principal):** `api.js` desenvuelve `{data: [...]}` y devuelve el array, pero la vista hacía `data.data || []` sobre ese array → siempre vacío. Ahora con unwrap robusto (`Array.isArray`)
+- **Día "hasta" excluido (backend):** el servicio comparaba `updated_at`/`created_at` (DateTime con hora) con `between(desde, hasta)` donde `hasta` es medianoche — en SQLite la comparación string dejaba fuera todo lo del día hasta (casi siempre "hoy"). Bound superior ahora es `hasta + 1 día` (exclusivo); 6 tests nuevos en `test_etiquetas_fechas.py`
+- **409 STOCK_CERO roto:** el frontend chequeaba `e.data.codigo` pero el detalle venía anidado (y como string crudo en el path blob); además "Generar igual" re-lanzaba el mismo 409 en loop porque el backend no tenía forma de forzar. Nuevo flag `forzar` en `GenerarPDFRequest` + `parsearDetalle409()` que parsea ambos formatos
+- **UX:** título con icono (antes no tenía), modal propio para stock cero (antes `confirm()` nativo), EmptyState con acción "Ver todo el catálogo" (desactiva los dos checkboxes de filtro y recarga), carga inicial sin toast, toast de "marcar impreso" con el conteo real, sin `console.error`
+
 ### Escáner de cámara en el POS de Ventas — 09/10/2026
 - **Botón de cámara** en el suffix del campo Código de Barras (ícono `fa-camera`; al activarse pasa a `fa-camera-rotate` con estado resaltado). Usa el mismo composable `useBarcodeScanner` (BarcodeDetector) que las vistas mobile de piso, en **modo continuo con cooldown de 600ms**: el operador escanea varios códigos seguidos sin reabrir nada y cada lectura dispara el mismo `triggerPOSLookup` del input (alta local, búsqueda externa o alta rápida `*Nombre*Precio`)
 - **Vista inline, no modal:** el preview ocupa todo el ancho bajo el input (no tapa el carrito mientras se escanea); se corta con el toggle de cámara del suffix. Si el navegador no soporta BarcodeDetector o niega el permiso, el composable avisa con toast y muestra el error bajo el input

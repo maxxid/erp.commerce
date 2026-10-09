@@ -113,9 +113,8 @@ function toggleProducto(id) {
 async function cargarCategorias() {
   try {
     const data = await api.get('/api/categorias?page_size=500')
-    categorias.value = data.data || data || []
-  } catch (e) {
-    console.error('Error cargando categorías:', e)
+    categorias.value = Array.isArray(data) ? data : (data?.data || [])
+  } catch {
     categorias.value = []
   }
 }
@@ -123,14 +122,13 @@ async function cargarCategorias() {
 async function cargarHistorial() {
   try {
     const data = await api.get('/api/etiquetas/historial')
-    historial.value = data || []
-  } catch (e) {
-    console.error('Error cargando historial:', e)
+    historial.value = Array.isArray(data) ? data : (data?.data || [])
+  } catch {
     historial.value = []
   }
 }
 
-async function cargarPreview() {
+async function cargarPreview(silent = false) {
   loading.value = true
   selectedProductos.value.clear()
   try {
@@ -145,12 +143,19 @@ async function cargarPreview() {
     params.set('page', '1')
     params.set('page_size', '500')
 
+    // api.js desenvuelve el body: el endpoint responde {data: [...]} y acá ya
+    // llega el array directo.
     const data = await api.get(`/api/etiquetas/precios?${params}`)
-    productos.value = data.data || []
+    productos.value = Array.isArray(data) ? data : (data?.data || [])
     descripcionesEditadas.value = {}
-    toast.success(`${productos.value.length} producto(s) encontrado(s)`)
+    if (!silent) {
+      if (productos.value.length) {
+        toast.success(`${productos.value.length} producto(s) para etiquetar`)
+      } else {
+        toast.info('Sin productos para esos filtros. Ampliá el período o desactivá los checkboxes de cambios/nuevos.')
+      }
+    }
   } catch (e) {
-    console.error('Error cargando preview:', e)
     toast.error(e?.data?.detail || 'Error al cargar productos')
     productos.value = []
   } finally {
@@ -158,7 +163,28 @@ async function cargarPreview() {
   }
 }
 
-async function generarPDF() {
+function verTodoCatalogo() {
+  filtros.incluir_cambios_precio = false
+  filtros.incluir_nuevos = false
+  cargarPreview()
+}
+
+const stockCeroModal = ref(false)
+const stockCeroData = ref(null)
+
+// El backend responde 409 con {detail: {...}}; con responseType blob el helper
+// de api deja el cuerpo crudo como string en error.data.detail.
+function parsearDetalle409(e) {
+  let crudo = e?.data?.detail
+  if (typeof crudo === 'string') {
+    try { crudo = JSON.parse(crudo) } catch { return null }
+  }
+  if (crudo?.codigo) return crudo
+  if (crudo?.detail && typeof crudo.detail === 'object') return crudo.detail
+  return null
+}
+
+async function generarPDF(forzar = false) {
   const idsAImprimir = selectedProductos.value.size > 0
     ? [...selectedProductos.value]
     : productos.value.map(p => p.id)
@@ -176,6 +202,7 @@ async function generarPDF() {
       borderless: borderless.value,
       descripciones_editadas: descripcionesEditadas.value,
       productos_ids: idsAImprimir,
+      forzar,
     }
 
     const response = await api.request('POST', '/api/etiquetas/precios/generar-pdf', payload, null, { responseType: 'blob' })
@@ -194,23 +221,21 @@ async function generarPDF() {
       throw new Error('Respuesta inesperada del servidor')
     }
   } catch (e) {
-    if (e?.status === 409 && e?.data?.codigo === 'STOCK_CERO') {
-      const confirmado = confirm(
-        `${e.data.mensaje}.\n\n` +
-        `Productos: ${e.data.productos.map(p => `${p.nombre} (stock: ${p.stock})`).join(', ')}\n\n` +
-        `¿Deseas continuar y generar las etiquetas igualmente?`
-      )
-      if (confirmado) {
-        filtros.solo_con_stock = false
-        return generarPDF()
-      }
+    const detalle = parsearDetalle409(e)
+    if (e?.status === 409 && detalle?.codigo === 'STOCK_CERO') {
+      stockCeroData.value = detalle
+      stockCeroModal.value = true
     } else {
-      console.error('Error generando PDF:', e)
-      toast.error(e?.data?.detail || e?.data?.mensaje || 'Error al generar PDF')
+      toast.error(typeof e?.data?.detail === 'string' ? e.data.detail : (detalle?.mensaje || 'Error al generar PDF'))
     }
   } finally {
     generando.value = false
   }
+}
+
+function confirmarGenerarConStockCero() {
+  stockCeroModal.value = false
+  generarPDF(true)
 }
 
 async function marcarImpreso() {
@@ -230,11 +255,11 @@ async function marcarImpreso() {
       tamano: tamano.value,
       borderless: borderless.value,
     })
-    toast.success(resp.message)
+    const marcados = resp?.marcados ?? idsAMarcar.length
+    toast.success(`${marcados} producto(s) marcados como etiquetados`)
     await cargarHistorial()
-    await cargarPreview()
+    await cargarPreview(true)
   } catch (e) {
-    console.error('Error marcando como impreso:', e)
     toast.error(e?.data?.detail || 'Error al marcar como impreso')
   } finally {
     marcando.value = false
@@ -248,7 +273,7 @@ function actualizarDescripcion(id, valor) {
 onMounted(async () => {
   await cargarCategorias()
   await cargarHistorial()
-  await cargarPreview()
+  await cargarPreview(true)
 })
 </script>
 
@@ -256,8 +281,12 @@ onMounted(async () => {
   <div class="p-6 space-y-6">
     <div class="flex items-center justify-between">
       <div>
+        <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
+          <i class="fa-solid fa-tag text-brand-500"></i>
+          Etiquetas de Precios
+        </h1>
         <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          Genera etiquetas para productos con cambios de precio o nuevos en un período
+          Genera etiquetas para productos con cambios de precio o ingresados en un período
         </p>
       </div>
     </div>
@@ -421,6 +450,39 @@ onMounted(async () => {
       </BaseTable>
     </BaseCard>
 
-    <EmptyState v-else-if="!loading" icon="fa-tag" title="Sin productos para etiquetar" text="Ajustá los filtros de fecha y dale a Vista previa" compact />
+    <EmptyState
+      v-else-if="!loading"
+      icon="fa-tag"
+      title="Sin productos para etiquetar"
+      text="No hubo cambios de precio ni altas en ese período. Ampliá las fechas, o mirá todo el catálogo."
+      action-text="Ver todo el catálogo"
+      compact
+      @action="verTodoCatalogo"
+    />
+
+    <!-- Modal: stock cero al generar PDF -->
+    <BaseModal v-model="stockCeroModal" title="Productos con stock cero" size="md">
+      <div class="space-y-3">
+        <p class="text-sm text-slate-600 dark:text-slate-300">
+          {{ stockCeroData?.mensaje }}. Se generarán las etiquetas igualmente.
+        </p>
+        <ul v-if="stockCeroData?.productos?.length" class="max-h-48 overflow-y-auto space-y-1">
+          <li
+            v-for="p in stockCeroData.productos"
+            :key="p.id"
+            class="flex items-center justify-between gap-3 px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800/40 text-sm"
+          >
+            <span class="text-slate-700 dark:text-slate-300 truncate">{{ p.nombre }}</span>
+            <BaseBadge variant="danger" size="xs" class="shrink-0">stock {{ p.stock }}</BaseBadge>
+          </li>
+        </ul>
+      </div>
+      <template #footer>
+        <div class="flex justify-end gap-2">
+          <BaseButton variant="secondary" @click="stockCeroModal = false">Cancelar</BaseButton>
+          <BaseButton variant="primary" @click="confirmarGenerarConStockCero">Generar igual</BaseButton>
+        </div>
+      </template>
+    </BaseModal>
   </div>
 </template>

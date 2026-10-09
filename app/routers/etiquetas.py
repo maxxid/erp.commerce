@@ -108,7 +108,7 @@ def generar_pdf_etiquetas(
         raise HTTPException(status_code=404, detail="No hay productos para etiquetar en ese período")
     
     sin_stock = verificar_stock_cero(productos)
-    if sin_stock and not data.filtros.solo_con_stock:
+    if sin_stock and not data.filtros.solo_con_stock and not data.forzar:
         raise HTTPException(
             status_code=409,
             detail={

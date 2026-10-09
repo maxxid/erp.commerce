@@ -40,6 +40,7 @@ class GenerarPDFRequest(BaseModel):
     tamano: Literal["70x35", "60x40"]
     borderless: bool = False
     descripciones_editadas: dict[int, str] = {}
+    forzar: bool = False   # Generar igual con productos de stock cero (omite el 409)
 
 
 class HistorialImpresionOut(BaseModel):

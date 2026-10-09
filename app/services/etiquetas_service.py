@@ -1,6 +1,6 @@
 """Servicio para etiquetas de precios."""
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
@@ -29,6 +29,11 @@ def obtener_productos_para_etiquetar(
     
     condiciones = []
     
+    # desde/hasta llegan como dates (medianoche). Un producto tocado el día
+    # "hasta" (casi siempre "hoy") tiene updated_at con hora y quedaba fuera de
+    # between(): se usa el día siguiente como bound superior exclusivo.
+    hasta_excl = filtros.hasta + timedelta(days=1)
+    
     if filtros.incluir_cambios_precio:
         condiciones.append(
             and_(
@@ -36,13 +41,17 @@ def obtener_productos_para_etiquetar(
                     Producto.precio_etiqueta.is_(None),
                     Producto.precio_etiqueta != Producto.precio_venta
                 ),
-                Producto.updated_at.between(filtros.desde, filtros.hasta)
+                Producto.updated_at >= filtros.desde,
+                Producto.updated_at < hasta_excl
             )
         )
     
     if filtros.incluir_nuevos:
         condiciones.append(
-            Producto.created_at.between(filtros.desde, filtros.hasta)
+            and_(
+                Producto.created_at >= filtros.desde,
+                Producto.created_at < hasta_excl
+            )
         )
     
     if condiciones:
