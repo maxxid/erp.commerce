@@ -47,6 +47,16 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 
 ## ✅ Completados recientemente
 
+### Rediseño de Etiquetas de Precios — 09/10/2026
+- **Layout de dos paneles** (desktop): controles a la izquierda (340px), tabla de preview a la derecha; en mobile se apilan
+- **Presets de fecha** (Hoy / 7 días / 30 días / 90 días) como pills clickeables; al cambiar las fechas a mano se marca "Personalizado"
+- **Preview visual de la etiqueta**: réplica CSS de cómo se ve la etiqueta real (marca, línea, descripción, código de barras simulado, precio grande, fecha, código) — cambia con el tamaño seleccionado (70×35 o 60×40) y muestra el primer producto seleccionado
+- **Badges de motivo** en la tabla: cada producto muestra si es "Nuevo", "Precio" (cambió), o "Nuevo + Precio" — el backend ahora devuelve campo `motivo` en `EtiquetaProductoOut`
+- **Historial colapsable**: se movió de card principal a un botón en el header que abre un modal con las últimas 5 impresiones
+- **Action bar prominente**: botón "Generar PDF" a todo el ancho con el conteo de selección integrado (`Generar N etiqueta(s)`), Marcar impreso + Seleccionar todo como grid de 2
+- **Selectores de formato como cards** con aspect ratio visual, no un dropdown plano
+- **Tabla mejorada**: nombre + categoría/código debajo, badge de motivo, descripción inline, stock con color semántico
+
 ### Historial de compras vinculado en detalle de producto + modal detalle de compra — 09/10/2026
 - **`info-detallada` enriquecido:** el historial de compras ahora incluye `compra_id` y `estado` de cada orden; ahora incluye compras **parciales** (antes solo recibidas); historial de ventas ahora trae `detalle` (últimas 50 filas: venta_id, numero, fecha, cantidad, precio_unitario, subtotal, medio_pago)
 - **Modal "Detalle del Producto" rediseñado:** tipografía compacta (text-lg en KPIs, no text-4xl), header con identidad del producto (imagen, marca, código de barras, badges de estado), 4 KPIs compactos (stock/precio/margen/total vendido), historiales de compras y ventas como **tablas lado a lado** (fecha, proveedor/venta, N°, cantidad, $/u, subtotal), proveedores como lista compacta. Compras clickeables → navegan a `/compras?detalle=<id>` con el modal de detalle de compra abierto

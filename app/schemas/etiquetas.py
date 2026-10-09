@@ -30,6 +30,7 @@ class EtiquetaProductoOut(BaseModel):
     categoria_id: Optional[int] = None
     categoria_nombre: Optional[str] = None
     stock_actual: float
+    motivo: Literal['nuevo', 'cambio_precio', 'ambos'] = 'cambio_precio'
 
     model_config = {"from_attributes": True}
 

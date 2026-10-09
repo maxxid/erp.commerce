@@ -61,6 +61,18 @@ def listar_para_etiquetar(
     
     data = []
     for p in productos_paginados:
+        es_nuevo = p.created_at and filtros.desde <= p.created_at.date() <= filtros.hasta
+        es_cambio = (
+            (p.precio_etiqueta is None or p.precio_etiqueta != p.precio_venta)
+            and p.updated_at and filtros.desde <= p.updated_at.date() <= filtros.hasta
+        )
+        if es_nuevo and es_cambio:
+            motivo = 'ambos'
+        elif es_nuevo:
+            motivo = 'nuevo'
+        else:
+            motivo = 'cambio_precio'
+
         data.append(EtiquetaProductoOut(
             id=p.id,
             codigo_barras=p.codigo_barras,
@@ -74,6 +86,7 @@ def listar_para_etiquetar(
             categoria_id=p.categoria_id,
             categoria_nombre=p.categoria.nombre if p.categoria else None,
             stock_actual=float(p.stock_actual or 0),
+            motivo=motivo,
         ))
     
     return RespuestaLista(
