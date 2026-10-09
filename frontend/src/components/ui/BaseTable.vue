@@ -1,9 +1,10 @@
 <script setup>
+import { computed } from 'vue'
 import BaseSkeleton from './BaseSkeleton.vue'
 import EmptyState from './EmptyState.vue'
 
 const props = defineProps({
-  columns: { type: Array, required: true }, // { key, label, align?, width?, sortable? }
+  columns: { type: Array, required: true }, // { key, label, align?, width?, sortable?, primary?, mobile? }
   rows: { type: Array, default: () => [] },
   loading: { type: Boolean, default: false },
   skeletonRows: { type: Number, default: 5 },
@@ -25,12 +26,64 @@ function isExpanded(row) {
   const key = row[props.rowKey]
   return props.expandedRows.includes(key)
 }
+
+const primaryCol = computed(() => props.columns.find(c => c.primary) || props.columns[0])
+const mobileCols = computed(() =>
+  props.columns.filter(c => c.key !== primaryCol.value?.key && c.mobile !== false)
+)
 </script>
 
 <template>
   <div class="w-full">
+    <!-- Mobile (<sm): lista de tarjetas -->
+    <div class="sm:hidden rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-900 shadow-sm divide-y divide-slate-100 dark:divide-slate-800">
+      <template v-if="loading">
+        <div v-for="n in skeletonRows" :key="n" class="p-4 space-y-2">
+          <BaseSkeleton class="h-4 w-3/4" />
+          <BaseSkeleton class="h-3 w-1/2" />
+        </div>
+      </template>
+      <template v-else-if="rows.length">
+        <div
+          v-for="(row, rIdx) in rows"
+          :key="row.id || rIdx"
+          class="p-4 transition-colors active:bg-slate-50 dark:active:bg-slate-800/60"
+          :class="rowClass ? rowClass(row) : ''"
+          @click="emit('row-click', row)"
+        >
+          <div class="flex items-baseline justify-between gap-3">
+            <div class="min-w-0 font-medium text-sm text-slate-900 dark:text-white">
+              <slot :name="primaryCol.key" :row="row" :value="row[primaryCol.key]">
+                {{ row[primaryCol.key] }}
+              </slot>
+            </div>
+          </div>
+          <dl v-if="mobileCols.length" class="mt-2 space-y-1">
+            <div v-for="col in mobileCols" :key="col.key" class="flex items-baseline justify-between gap-3 text-xs">
+              <dt class="text-slate-500 dark:text-slate-400 shrink-0">{{ col.label }}</dt>
+              <dd class="text-slate-700 dark:text-slate-300 text-right min-w-0">
+                <slot :name="col.key" :row="row" :value="row[col.key]">
+                  {{ row[col.key] }}
+                </slot>
+              </dd>
+            </div>
+          </dl>
+          <div
+            v-if="$slots.detail && isExpanded(row)"
+            class="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800"
+          >
+            <slot name="detail" :row="row" />
+          </div>
+        </div>
+      </template>
+      <div v-else class="py-12">
+        <EmptyState :icon="emptyIcon" :title="emptyTitle" :text="emptyText" compact />
+      </div>
+    </div>
+
+    <!-- Desktop (>=sm): tabla -->
     <div
-      class="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-900 shadow-sm"
+      class="hidden sm:block rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-900 shadow-sm"
       :class="{ 'overflow-y-auto': maxHeight }"
       :style="maxHeight ? { maxHeight } : {}"
     >

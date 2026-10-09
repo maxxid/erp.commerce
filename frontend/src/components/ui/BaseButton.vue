@@ -19,15 +19,16 @@ const sizeClasses = computed(() => {
     return {
       xs: 'w-7 h-7 text-xs',
       sm: 'w-8 h-8 text-sm',
-      md: 'w-9 h-9 text-base',
-      lg: 'w-10 h-10 text-lg'
+      md: 'w-11 h-11 md:w-9 md:h-9 text-base',
+      lg: 'w-11 h-11 md:w-10 md:h-10 text-lg'
     }[props.size]
   }
+  // min-h-[44px] en mobile: target táctil cómodo (≥44px según HIG/ Material)
   return {
     xs: 'px-2.5 py-1 text-xs',
     sm: 'px-3 py-1.5 text-xs',
-    md: 'px-4 py-2 text-sm',
-    lg: 'px-5 py-2.5 text-sm'
+    md: 'px-4 py-2 text-sm min-h-[44px] md:min-h-0',
+    lg: 'px-5 py-2.5 text-sm min-h-[44px] md:min-h-0'
   }[props.size]
 })
 

@@ -29,7 +29,8 @@ function focus() {
 defineExpose({ focus })
 
 const sizeClass = computed(() => {
-  return { sm: 'px-3 py-1.5 text-xs', md: 'px-3.5 py-2.5 text-sm', lg: 'px-4 py-3 text-base' }[props.size]
+  // text-[16px] en mobile evita el zoom automático de iOS al enfocar inputs <16px
+  return { sm: 'px-3 py-1.5 text-[16px] md:text-xs', md: 'px-3.5 py-2.5 text-[16px] md:text-sm', lg: 'px-4 py-3 text-base' }[props.size]
 })
 
 function onInput(e) {

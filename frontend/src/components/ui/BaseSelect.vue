@@ -21,7 +21,7 @@ const emit = defineEmits(['update:modelValue', 'change'])
 
 const inputId = computed(() => props.id || `select-${Math.random().toString(36).slice(2, 9)}`)
 const sizeClass = computed(() => {
-  return { sm: 'px-3 py-1.5 text-xs', md: 'px-3.5 py-2.5 text-sm', lg: 'px-4 py-3 text-base' }[props.size]
+  return { sm: 'px-3 py-1.5 text-[16px] md:text-xs', md: 'px-3.5 py-2.5 text-[16px] md:text-sm', lg: 'px-4 py-3 text-base' }[props.size]
 })
 
 function onChange(e) {

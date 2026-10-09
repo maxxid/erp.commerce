@@ -13,10 +13,10 @@ Estrategia: **responsive en las vistas existentes + pantallas dedicadas solo par
 - Pantallas dedicadas arregladas: escáner, cargar mercadería con `guardar()` real, control stock (`45e8107`)
 - PWA base: manifest con shortcuts a Cobrar/Stock, viewport, theme-color
 
-### Fase 1 — Componentes base (mayor ROI: beneficia 12 vistas de una)
-- [ ] **`BaseTable` con modo cards en <md**: lista de tarjetas (`sm:hidden`) + tabla (`hidden sm:table`); respetar slots por columna; convenión `col.mobile: false` para columnas secundarias. Lo usan: Products, Ventas, Clientes, Proveedores, Compras, Caja, Calendario, Usuarios, Auditoría, Licencias, Backups, EtiquetasPrecios
-- [ ] **`BaseModal` mobile**: clamp `max-w-[calc(100vw-2rem)]`, contenido con scroll y footer sticky (hoy `max-w-3xl` desborda en un phone)
-- [ ] **Inputs**: `font-size: 16px` en <md (evita el zoom automático de iOS), targets táctiles ≥44px en BaseButton/BaseSelect
+### Fase 1 — Componentes base (mayor ROI: beneficia 12 vistas de una) ✅
+- [x] **`BaseTable` con modo cards en <sm**: lista de tarjetas (`sm:hidden`) + tabla (`hidden sm:block`); respeta los slots por columna, `row-click`, `detail`, skeletons y empty state; convenión: primera columna = título de la tarjeta (`primary: true` para elegir otra), `mobile: false` oculta columnas secundarias en la card. Lo usan: Products, Ventas, Clientes, Proveedores, Compras, Caja, Calendario, Usuarios, Auditoría, Licencias, Backups, EtiquetasPrecios
+- [x] **`BaseModal` mobile**: `max-h` con `100dvh` (no `100vh` — el URL bar de iOS se comía el footer), paddings compactos `p-4 sm:p-6`
+- [x] **Inputs**: `text-[16px] md:text-sm` en BaseInput/BaseSelect (evita el zoom automático de iOS al enfocar), targets ≥44px en BaseButton md/lg e iconOnly md/lg
 
 ### Fase 2 — Piso de venta (uso diario del personal)
 - [ ] ProductsView — consulta de precios/stock (ya tiene 12 `sm:`, pass corto)
@@ -46,6 +46,13 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 ---
 
 ## ✅ Completados recientemente
+
+### Fase 1 del roadmap mobile: componentes base responsive — 09/10/2026
+- **`BaseTable` con modo cards en <640px:** el mismo componente renderiza, según breakpoint, una lista de tarjetas (título = primera columna + `dt/dd` con label/valor por columna) o la tabla de siempre. Sin tocar ninguna de las 12 vistas que lo usan: Products, Ventas, Clientes, Proveedores, Compras, Caja, Calendario, Usuarios, Auditoría, Licencias, Backups y EtiquetasPrecios quedaron con vista mobile de una. Respeta slots por columna, `row-click`, fila `detail` expandible, skeletons y empty state. Columnas secundarias se ocultan con `mobile: false`; título alternativo con `primary: true`
+- **`BaseModal`:** `max-h` calculado con `100dvh` (con `100vh` el URL bar de iOS tapaba el footer y los botones quedaban fuera de pantalla), paddings `p-4 sm:p-6` y header/footer compactos en chico
+- **`BaseInput` / `BaseSelect`:** `text-[16px] md:text-sm` en los tamaños sm/md — iOS hace zoom automático cuando el input tiene <16px, y el zoom rompía el layout de todos los modales
+- **`BaseButton`:** targets táctiles ≥44px en md/lg e iconOnly md/lg (`min-h-[44px] md:min-h-0`)
+- Verificado: build OK, 451 tests en verde. Pendiente de la Fase 2: pass por vista (Products, POS, Caja, Ventas, Clientes) para ajustar qué columnas van en la card
 
 ### Pantallas mobile exclusivas arregladas (cargar, control stock, cobro) — 09/10/2026
 - **El problema:** `/cargar-mercaderia` y `/control-stock` "no andaban como si no estuvieran terminadas" — y literalmente no lo estaban. En ambas el botón **Escanear** tiraba `ReferenceError` (llamaban `abrirScanner`, el composable `useBarcodeScanner` expone `openScanner`). `/cargar-mercadería` montaba con error (`productosStore.fetchCategorias` no existe — `fetchAll` ya trae las categorías), **`guardar()` era una función vacía** ("Guardar y recibir" no hacía nada), la lista de items escaneados **nunca se renderizaba** (solo el header "Items (N)" y los computeds de totales estaban sin usar), y usaba el precio de venta como precio de compra
