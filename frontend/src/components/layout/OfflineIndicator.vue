@@ -1,11 +1,29 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { useOfflineSales } from '@/composables/useOfflineSales'
 
 const isOffline = ref(!navigator.onLine)
 const pendingSalesCount = ref(0)
+const sincronizando = ref(false)
 
-function onOnline() { isOffline.value = false }
+const { syncPendingSales } = useOfflineSales()
+
+function onOnline() {
+  isOffline.value = false
+  // Al reconectar, sincronizar sin esperar a que abran el POS
+  syncPendingSales()
+}
 function onOffline() { isOffline.value = true }
+
+async function sincronizarAhora() {
+  if (sincronizando.value) return
+  sincronizando.value = true
+  try {
+    await syncPendingSales()
+  } finally {
+    sincronizando.value = false
+  }
+}
 
 function loadPendingCount() {
   try {
@@ -51,7 +69,14 @@ const indicatorClass = computed(() => isOffline.value ? 'bg-red-600' : 'bg-amber
       <template v-else-if="pendingSalesCount > 0">
         <i class="fa-solid fa-clock-rotate-left mr-1.5"></i>
         {{ pendingSalesCount }} venta(s) pendiente(s) de sincronizar.
-        <span class="opacity-75">(Se sincronizarán al reconectar)</span>
+        <button
+          type="button"
+          class="ml-1.5 underline underline-offset-2 font-semibold hover:opacity-80 disabled:opacity-50"
+          :disabled="sincronizando"
+          @click="sincronizarAhora"
+        >
+          {{ sincronizando ? 'Sincronizando…' : 'Sincronizar ahora' }}
+        </button>
       </template>
     </div>
   </Transition>

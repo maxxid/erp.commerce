@@ -47,6 +47,14 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 
 ## ✅ Completados recientemente
 
+### Modo offline end-to-end (web + celular) — 09/10/2026
+- **Fuentes e iconos self-hosted:** el CDN de Google Fonts y Font Awesome es cross-origin y el SW no lo cachea (respuesta opaca) → offline la app quedaba sin un solo icono y con tipografía fallback. Ahora `@fontsource/*` + `@fortawesome/fontawesome-free` se empaquetan en el build (14 woff2 con hash, cacheados por el SW); links CDN borrados de index.html
+- **`useOfflineSales` blindado:** flag anti-concurrencia (dos syncs en paralelo = ventas duplicadas), listener `'online'` a nivel de módulo (una sola vez, y sincroniza aunque no abran el POS), id con `crypto.randomUUID()`, y **reanudación**: se persiste `ventaId` + `itemsEnviados` entre pasos — si el sync se corta a mitad de los items, el reintento continúa desde ahí sin crear una venta duplicada
+- **Cola completa:** el payload encolado ahora replica el flujo online (oferta_info, importe, medio_pago_carga, efectivo_pagado, comprador_cuit) — antes se perdían kilos, ofertas y pago mixto al sincronizar
+- **Cobro Móvil encola offline:** `crearVenta()` diferencia error HTTP (toast) de corte de red (cola + vacía carrito); solo se encolan cortes de red, no rechazos del servidor
+- **OfflineIndicator útil:** botón "Sincronizar ahora" + auto-sync al evento `'online'` desde cualquier vista (antes solo al abrir el POS)
+- `sw.js` a `apex-erp-v5` (limpia caches viejas al deployear)
+
 ### Etiquetas de Precios: 3 bugs + UX — 09/10/2026
 - **Nunca mostraba productos (bug principal):** `api.js` desenvuelve `{data: [...]}` y devuelve el array, pero la vista hacía `data.data || []` sobre ese array → siempre vacío. Ahora con unwrap robusto (`Array.isArray`)
 - **Día "hasta" excluido (backend):** el servicio comparaba `updated_at`/`created_at` (DateTime con hora) con `between(desde, hasta)` donde `hasta` es medianoche — en SQLite la comparación string dejaba fuera todo lo del día hasta (casi siempre "hoy"). Bound superior ahora es `hasta + 1 día` (exclusivo); 6 tests nuevos en `test_etiquetas_fechas.py`

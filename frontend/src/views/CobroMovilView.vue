@@ -12,6 +12,7 @@ import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import { useBarcodeScanner } from '@/composables/useBarcodeScanner'
+import { useOfflineSales } from '@/composables/useOfflineSales'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -333,6 +334,8 @@ const {
   },
 })
 
+const { addPendingSale } = useOfflineSales()
+
 // MercadoPago QR dinámico (con importe). El QR fijo ya no se usa: no trae monto
 // y solo lo paga la app de MercadoPago cuando el vendedor carga el importe.
 const mpModalOpen = ref(false)
@@ -644,7 +647,30 @@ async function crearVenta() {
     }
     return venta.id
   } catch (e) {
-    toast.error(e.message || 'Error creando la venta')
+    if (e?.status) {
+      toast.error(e.data?.detail || e.message || 'Error creando la venta')
+      return null
+    }
+    // Sin conexión (fetch falló sin status HTTP): se encola para sincronizar
+    // cuando vuelva la red, igual que el POS.
+    addPendingSale({
+      cliente_id: cart.cliente_id || undefined,
+      items: cart.items.map(item => ({
+        producto_id: item.producto_id,
+        cantidad: item.cantidad,
+        precio_unitario: item._precio_neto || item.precio_unitario,
+        oferta_tipo: item.oferta?.tipo || null,
+        oferta_valor: item.oferta?.valor || null,
+        oferta_info: item.oferta ? `${item.oferta.tipo === 'porcentaje' ? item.oferta.valor + '% OFF' : item.oferta.tipo === 'monto_fijo' ? '$' + item.oferta.valor + ' OFF' : '2x1'}` : null,
+        por_kilo: item.por_kilo || false,
+        peso: item.peso || null,
+      })),
+      medio_pago: cart.medio_pago,
+      efectivo_pagado: 0,
+      descuento: cart.descuento || 0,
+    })
+    toast.warning('Sin conexión. Venta guardada para sincronizar después.')
+    vaciarCarrito()
     return null
   }
 }

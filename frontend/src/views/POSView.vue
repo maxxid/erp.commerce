@@ -2819,28 +2819,35 @@ async function confirmarVenta() {
     }
   } catch (e) {
     if (!ventaResp) {
-      const saleData = {
-        cliente_id: cart.cliente_id || undefined,
-        items: cart.items.map(item => ({
-          producto_id: item.producto_id,
-          cantidad: item.cantidad,
-          precio_unitario: item.por_kilo ? item.precio_unitario : (item._precio_neto || item.precio_unitario),
-          oferta_tipo: item.oferta?.tipo || null,
-          oferta_valor: item.oferta?.valor || null,
-          por_kilo: item.por_kilo || false,
-          peso: item.peso || null,
-          importe: item.por_kilo && item._importe ? item._importe : null,
-        })),
-        medio_pago: cart.medio_pago,
-        descuento: cart.descuento || 0,
-      }
-      addPendingSale(saleData)
-      window.dispatchEvent(new Event('apex-pending-sales-updated'))
-      toast.warning('Sin conexión. Venta guardada para sincronizar después.')
-      for (const item of cart.items) {
-        const prod = products.value.find(p => p.id === item.producto_id)
-        if (prod && !prod._pending) {
-          prod.stock_actual = Math.max(0, prod.stock_actual - item.cantidad)
+      if (e?.status) {
+        toast.error(e.data?.detail || e.message || 'Error creando la venta')
+      } else {
+        const saleData = {
+          cliente_id: cart.cliente_id || undefined,
+          comprador_cuit: cart.comprador_cuit || undefined,
+          items: cart.items.map(item => ({
+            producto_id: item.producto_id,
+            cantidad: item.cantidad,
+            precio_unitario: item.por_kilo ? item.precio_unitario : (item._precio_neto || item.precio_unitario),
+            oferta_tipo: item.oferta?.tipo || null,
+            oferta_valor: item.oferta?.valor || null,
+            oferta_info: item.oferta ? `${item.oferta.tipo === 'porcentaje' ? item.oferta.valor + '% OFF' : item.oferta.tipo === 'monto_fijo' ? '$' + item.oferta.valor + ' OFF' : '2x1'}` : null,
+            por_kilo: item.por_kilo || false,
+            peso: item.peso || null,
+            importe: item.por_kilo && item._importe ? item._importe : null,
+            medio_pago_carga: item.medio_pago_carga || null,
+          })),
+          medio_pago: cart.medio_pago,
+          efectivo_pagado: mostrarPagoMixto.value ? efectivoPagadoNum.value : 0,
+          descuento: cart.descuento || 0,
+        }
+        addPendingSale(saleData)
+        toast.warning('Sin conexión. Venta guardada para sincronizar después.')
+        for (const item of cart.items) {
+          const prod = products.value.find(p => p.id === item.producto_id)
+          if (prod && !prod._pending) {
+            prod.stock_actual = Math.max(0, prod.stock_actual - item.cantidad)
+          }
         }
       }
     } else {
