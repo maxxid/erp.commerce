@@ -50,7 +50,6 @@ LAYOUTS = {
 }
 
 BARCODE_HEIGHT_RATIO = 0.35
-BARCODE_PADDING_V = 2
 
 
 def _es_ean13_valido(codigo: str) -> bool:
@@ -68,49 +67,17 @@ def _dibujar_codigo_barras(c, x: float, y: float, w: float, h: float, codigo: st
 
     if _es_ean13_valido(codigo):
         barcode = eanbc.Ean13BarcodeWidget(codigo)
-        barcode.barHeight = h * BARCODE_HEIGHT_RATIO
+        barcode.barHeight = h
         barcode.barWidth = 0.33 * mm
         bounds = barcode.getBounds()
         bw = bounds[2] - bounds[0]
         bh = bounds[3] - bounds[1]
-        scale_x = w / bw
-        scale_y = (h * BARCODE_HEIGHT_RATIO) / bh
-        d = Drawing(w, h * BARCODE_HEIGHT_RATIO + BARCODE_PADDING_V * 2)
+        d = Drawing(w, h)
         d.add(barcode)
-        renderPDF.draw(d, c, x, y + BARCODE_PADDING_V)
+        renderPDF.draw(d, c, x, y)
     else:
         c.setFont("Courier", 8)
         c.drawCentredString(x + w/2, y + h * 0.15, codigo[:20])
-
-
-def _wrap_text(c, text: str, x: float, y: float, w: float, max_lines: int, font_size: int) -> float:
-    """Dibuja texto con wrap, retorna nueva posición Y."""
-    if not text:
-        return y
-    
-    c.setFont("Helvetica", font_size)
-    words = text.split()
-    lines = []
-    current = ""
-    
-    for word in words:
-        test = current + (" " if current else "") + word
-        if c.stringWidth(test, "Helvetica", font_size) <= w:
-            current = test
-        else:
-            if current:
-                lines.append(current)
-            current = word
-            if len(lines) >= max_lines:
-                break
-    if current and len(lines) < max_lines:
-        lines.append(current)
-    
-    line_h = font_size * 1.2
-    for i, line in enumerate(lines[:max_lines]):
-        c.drawString(x, y - i * line_h, line)
-    
-    return y - len(lines) * line_h
 
 
 def _formatear_precio(valor: float) -> str:
@@ -189,48 +156,105 @@ def _dibujar_etiqueta(
     prod: "Producto",
     descripcion_editada: str | None
 ):
-    """Dibuja una sola etiqueta."""
+    """Dibuja una sola etiqueta.
+
+    Layout (de arriba a abajo):
+      [ Marca .................. Precio ]
+      ──────────────────────────────────
+      Descripción (máx 2 líneas)
+      [     código de barras            ]
+                   código numérico
+    """
+    from datetime import date
     padding = 2 * mm
     inner_w = w - 2 * padding
     inner_x = x + padding
-    curr_y = y + h - padding
-    
-    from datetime import date
+    right_x = x + w - padding
+    top_y = y + h - padding
     fecha_hoy = date.today().strftime("%d/%m/%Y")
-    codigo_num = prod.codigo_barras if prod.codigo_barras else ""
-    
-    if prod.marca:
-        c.setFont("Helvetica-Bold", 7)
-        c.drawString(inner_x, curr_y, prod.marca[:35])
-        curr_y -= 9
-    
-    c.setStrokeColor(HexColor("#999999"))
-    c.setLineWidth(0.3)
-    c.line(inner_x, curr_y, inner_x + inner_w, curr_y)
-    curr_y -= 4
-    
-    desc = descripcion_editada if descripcion_editada is not None else (prod.descripcion or "")
-    curr_y = _wrap_text(c, desc, inner_x, curr_y, inner_w, max_lines=3, font_size=7)
-    curr_y -= 2
-    
-    barcode_h = h * BARCODE_HEIGHT_RATIO
-    barcode_y = curr_y - barcode_h - BARCODE_PADDING_V
-    _dibujar_codigo_barras(c, inner_x, barcode_y, inner_w, barcode_h, codigo_num)
-    curr_y = barcode_y - 2
-    
+    codigo_num = prod.codigo_barras or ""
+
+    # ── Fila superior: marca (izq) + precio (der) en la misma línea ──
+    baseline = top_y
+
     if prod.tipo_venta == "kilo" and prod.precio_por_kilo:
-        c.setFont("Helvetica-Bold", 11)
         precio_str = _formatear_precio(prod.precio_por_kilo) + " /kg"
     else:
-        c.setFont("Helvetica-Bold", 11)
         precio_str = _formatear_precio(prod.precio_venta)
-    
-    c.drawString(inner_x, curr_y, precio_str)
-    
+
+    # Precio primero (para medir su ancho)
+    c.setFont("Helvetica-Bold", 11)
+    precio_w = c.stringWidth(precio_str, "Helvetica-Bold", 11)
+    c.drawString(right_x - precio_w, baseline, precio_str)
+
+    # Marca alineada a la izquierda, sin pisar el precio
+    if prod.marca:
+        c.setFont("Helvetica-Bold", 7)
+        marca_text = prod.marca[:35]
+        marca_w = c.stringWidth(marca_text, "Helvetica-Bold", 7)
+        max_marca_w = inner_w - precio_w - 3 * mm
+        if marca_w > max_marca_w:
+            # Truncar con ellipsis si no entra
+            while marca_text and c.stringWidth(marca_text + "...", "Helvetica-Bold", 7) > max_marca_w:
+                marca_text = marca_text[:-1]
+            marca_text += "..."
+        c.drawString(inner_x, baseline, marca_text)
+
+    # Fecha debajo del precio, alineada a la derecha
     c.setFont("Helvetica", 6)
-    c.drawRightString(x + w - padding, curr_y + 2, fecha_hoy)
-    
-    curr_y -= 10
-    if curr_y > y + padding:
+    fecha_w = c.stringWidth(fecha_hoy, "Helvetica", 6)
+    c.drawString(right_x - fecha_w, baseline - 8, fecha_hoy)
+
+    # ── Línea separadora ──
+    sep_y = baseline - 10
+    c.setStrokeColor(HexColor("#999999"))
+    c.setLineWidth(0.3)
+    c.line(inner_x, sep_y, inner_x + inner_w, sep_y)
+
+    # ── Descripción (máx 2 líneas) ──
+    desc_y = sep_y - 5
+    desc = descripcion_editada if descripcion_editada is not None else (prod.descripcion or prod.nombre or "")
+    if desc:
+        c.setFont("Helvetica", 7)
+        # Wrap manual: partir en líneas que quepan
+        words = desc.split()
+        lines = []
+        current = ""
+        for word in words:
+            test = (current + " " + word).strip()
+            if c.stringWidth(test, "Helvetica", 7) <= inner_w:
+                current = test
+            else:
+                if current:
+                    lines.append(current)
+                current = word
+                if len(lines) >= 2:
+                    break
+        if current and len(lines) < 2:
+            lines.append(current)
+        # Si sobra texto, poner puntos suspensivos en la última línea
+        if len(words) > 1 and len(lines) == 2:
+            last = lines[1]
+            while last and c.stringWidth(last + "...", "Helvetica", 7) > inner_w:
+                last = last[:-1]
+            if len(" ".join(words).split()) > len(" ".join(lines).split()):
+                lines[1] = last + "..."
+        for i, line in enumerate(lines):
+            c.drawString(inner_x, desc_y - i * 8, line)
+        desc_bottom = desc_y - (len(lines) - 1) * 8
+    else:
+        desc_bottom = desc_y
+
+    # ── Código de barras ──
+    barcode_h = 8 * mm  # altura fija razonable para 35mm de etiqueta
+    barcode_y = desc_bottom - 3 * mm - barcode_h
+    # No dejar que se salga del borde inferior de la etiqueta
+    min_barcode_y = y + padding + 3 * mm
+    if barcode_y < min_barcode_y:
+        barcode_y = min_barcode_y
+    _dibujar_codigo_barras(c, inner_x, barcode_y, inner_w, barcode_h, codigo_num)
+
+    # ── Código numérico centrado debajo del barcode ──
+    if codigo_num:
         c.setFont("Courier", 6)
-        c.drawCentredString(x + w/2, curr_y, codigo_num)
+        c.drawCentredString(x + w / 2, barcode_y - 4, codigo_num[:20])
