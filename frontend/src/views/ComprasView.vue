@@ -326,6 +326,15 @@
                   </div>
 
                   <template v-if="esNuevoProducto(item)">
+                    <div class="w-full flex items-center gap-1.5">
+                      <label class="text-[9px] uppercase font-bold text-amber-500 shrink-0">Nombre</label>
+                      <input
+                        v-model="item.producto"
+                        type="text"
+                        placeholder="Nombre del producto nuevo"
+                        class="flex-1 min-w-0 px-2 py-1 text-[11px] bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-lg outline-none focus:border-amber-500 transition"
+                      >
+                    </div>
                     <div class="flex items-center gap-1.5">
                       <label class="text-[9px] uppercase font-bold text-amber-500">Marca</label>
                       <input
