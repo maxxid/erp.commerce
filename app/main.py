@@ -305,6 +305,11 @@ def _migrate_new_columns():
         if "medio_pago_carga" not in existentes_vi:
             conn.execute(sa.text("ALTER TABLE venta_items ADD COLUMN medio_pago_carga VARCHAR(30)"))
             conn.commit()
+        # recargas: genera_egreso (si la recarga generó egreso real en caja)
+        existentes_rc = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(recargas)"))]
+        if "genera_egreso" not in existentes_rc:
+            conn.execute(sa.text("ALTER TABLE recargas ADD COLUMN genera_egreso BOOLEAN NOT NULL DEFAULT 1"))
+            conn.commit()
         # Cuentas corrientes con proveedor: saldo cacheado en el maestro
         # (la verdad son las filas de deudas_proveedor y pagos_proveedor).
         existentes_prov = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(proveedores)"))]

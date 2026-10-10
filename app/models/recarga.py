@@ -14,7 +14,7 @@ adicional, y el egreso real de la cuenta digital quedaría fuera de la caja.
 """
 
 from sqlalchemy import (
-    Column, Integer, Float, DateTime, ForeignKey, String, Boolean,
+    Column, Integer, Float, DateTime, ForeignKey, String, Boolean, true,
 )
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
@@ -38,6 +38,10 @@ class Recarga(Base):
 
     medio_pago_cobro = Column(String(30), nullable=True)   # efectivo | transferencia | ...
     medio_pago_carga = Column(String(30), nullable=True)   # de dónde salió el dinero cargado
+
+    # True = la recarga generó un egreso real en caja. Se guarda por recarga para
+    # que la anulación sepa si debe revertir el egreso o no.
+    genera_egreso = Column(Boolean, nullable=False, default=True, server_default=true())
 
     estado = Column(String(20), nullable=False, default="confirmada")  # confirmada | anulada
     usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=True)

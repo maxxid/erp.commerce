@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useToastStore } from '@/stores/toasts'
 import api from '@/services/api'
+import { formatCurrency as fc } from '@/composables/useUtils'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
@@ -137,7 +138,7 @@ async function saveCajaConfig() {
 
 // --- Servicio de recargas ---
 const savingRecargas = ref(false)
-const recargas = ref({ monto_base: 1000, adicional_pct: 10, medio_pago_carga: 'smartpoint', producto_id: null })
+const recargas = ref({ monto_base: 1000, adicional_pct: 10, medio_pago_carga: 'smartpoint', producto_id: null, genera_egreso: true })
 const productosRecarga = ref([])
 
 const MEDIOS_CARGA = [
@@ -170,6 +171,7 @@ async function loadRecargas() {
         adicional_pct: cfg.adicional_pct ?? 10,
         medio_pago_carga: cfg.medio_pago_carga || 'smartpoint',
         producto_id: cfg.producto_id ?? null,
+        genera_egreso: cfg.genera_egreso ?? true,
       }
     }
     const lista = prods?.data || prods || []
@@ -189,6 +191,7 @@ async function saveRecargas() {
       adicional_pct: recargas.value.adicional_pct,
       medio_pago_carga: recargas.value.medio_pago_carga,
       producto_id: recargas.value.producto_id,
+      genera_egreso: recargas.value.genera_egreso,
     })
     if (data) {
       recargas.value = { ...recargas.value, ...data }
@@ -1523,13 +1526,23 @@ onMounted(async () => {
           </label>
           <select
             v-model="recargas.medio_pago_carga"
-            class="w-full px-3 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
+            :disabled="!recargas.genera_egreso"
+            class="w-full px-3 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <option v-for="m in mediosCarga" :key="m.value" :value="m.value">{{ m.label }}</option>
           </select>
           <p class="text-[10px] text-slate-400 mt-1">
-            Se registra un egreso de caja por el monto cargado con este medio de pago.
+            {{ recargas.genera_egreso ? 'Se registra un egreso de caja por el monto cargado con este medio de pago.' : 'Sin egreso en caja: la cuenta de salida no se usa.' }}
           </p>
+        </div>
+
+        <div class="max-w-lg">
+          <BaseToggle
+            v-model="recargas.genera_egreso"
+            label="Genera egreso en cierre de caja"
+            description="Al confirmar la venta de una recarga, se registra un egreso real por el monto cargado. Desactivá esto si la recarga no debe afectar el cierre de caja."
+            size="sm"
+          />
         </div>
 
         <div class="max-w-lg">

@@ -24,6 +24,7 @@ class RecargaConfigUpdate(BaseModel):
     adicional_pct: Optional[float] = Field(None, ge=0, le=100)
     medio_pago_carga: Optional[str] = None
     producto_id: Optional[int] = None
+    genera_egreso: Optional[bool] = None
 
 
 @router.get("/config", response_model=RespuestaData)
@@ -58,13 +59,14 @@ def actualizar_configuracion(
             adicional_pct=data.adicional_pct,
             medio_pago_carga=data.medio_pago_carga,
             producto_id=data.producto_id,
+            genera_egreso=data.genera_egreso,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
     cambios = {
         k: {"anterior": anterior.get(k), "nuevo": nueva.get(k)}
-        for k in ("monto_base", "adicional_pct", "medio_pago_carga", "producto_id")
+        for k in ("monto_base", "adicional_pct", "medio_pago_carga", "producto_id", "genera_egreso")
         if anterior.get(k) != nueva.get(k)
     }
     if cambios:

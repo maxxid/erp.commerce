@@ -25,10 +25,12 @@ CLAVE_MONTO_BASE = "recarga_monto_base"
 CLAVE_ADICIONAL_PCT = "recarga_adicional_pct"
 CLAVE_MEDIO_PAGO_CARGA = "recarga_medio_pago_carga"
 CLAVE_PRODUCTO_ID = "recarga_producto_id"
+CLAVE_GENERA_EGRESO = "recarga_genera_egreso"
 
 DEFAULT_MONTO_BASE = 1000.0
 DEFAULT_ADICIONAL_PCT = 10.0
 DEFAULT_MEDIO_PAGO_CARGA = "smartpoint"
+DEFAULT_GENERA_EGRESO = True
 
 MEDIOS_PAGO_CARGA = [
     "smartpoint",
@@ -64,11 +66,15 @@ def get_config(db: Session) -> dict:
         config_service.get_config(db, CLAVE_MEDIO_PAGO_CARGA) or DEFAULT_MEDIO_PAGO_CARGA
     )
 
+    genera_egreso_raw = config_service.get_config(db, CLAVE_GENERA_EGRESO)
+    genera_egreso = genera_egreso_raw is None or str(genera_egreso_raw).lower() in ("1", "true")
+
     return {
         "monto_base": monto_base,
         "adicional_pct": adicional_pct,
         "medio_pago_carga": medio_pago_carga,
         "producto_id": producto_id,
+        "genera_egreso": genera_egreso,
         "precio_venta_unidad": precio_unidad(monto_base, adicional_pct),
         "adicional_unidad": round(monto_base * adicional_pct / 100, 2),
     }
@@ -80,6 +86,7 @@ def set_config(
     adicional_pct: Optional[float] = None,
     medio_pago_carga: Optional[str] = None,
     producto_id: Optional[int] = None,
+    genera_egreso: Optional[bool] = None,
 ) -> dict:
     """Guarda la configuración. Solo cambia lo que viene informado."""
     if monto_base is not None:
@@ -106,6 +113,9 @@ def set_config(
         db.commit()
         config_service.set_config(db, CLAVE_PRODUCTO_ID, str(producto_id),
                                   "Producto que representa la recarga en el POS")
+    if genera_egreso is not None:
+        config_service.set_config(db, CLAVE_GENERA_EGRESO, "1" if genera_egreso else "0",
+                                  "Si la recarga genera egreso real en cierre de caja")
     return get_config(db)
 
 
@@ -156,6 +166,7 @@ def registrar_venta_recarga(
     - Genera el EGRESO de caja por el dinero que sale de la cuenta digital.
     """
     cfg = cfg or get_config(db)
+    genera_egreso = cfg.get("genera_egreso", True)
     unidades = float(item.cantidad or 0)
     if unidades <= 0:
         return None
@@ -178,6 +189,7 @@ def registrar_venta_recarga(
         total_cobrado=item.subtotal,
         medio_pago_cobro=venta.medio_pago,
         medio_pago_carga=cfg["medio_pago_carga"],
+        genera_egreso=genera_egreso,
         estado="confirmada",
         usuario_id=usuario_id,
         sucursal_id=venta.sucursal_id,
@@ -186,16 +198,17 @@ def registrar_venta_recarga(
     db.add(recarga)
     db.flush()
 
-    caja_service.registrar_egreso(
-        db,
-        monto=monto_cargado,
-        descripcion=f"Recarga {producto.nombre} (venta {venta.numero})",
-        usuario_id=usuario_id,
-        referencia_tipo="recarga",
-        referencia_id=recarga.id,
-        sucursal_id=venta.sucursal_id,
-        medio_pago=cfg["medio_pago_carga"],
-    )
+    if genera_egreso:
+        caja_service.registrar_egreso(
+            db,
+            monto=monto_cargado,
+            descripcion=f"Recarga {producto.nombre} (venta {venta.numero})",
+            usuario_id=usuario_id,
+            referencia_tipo="recarga",
+            referencia_id=recarga.id,
+            sucursal_id=venta.sucursal_id,
+            medio_pago=cfg["medio_pago_carga"],
+        )
 
     db.commit()
     db.refresh(recarga)
@@ -211,16 +224,17 @@ def anular_recargas(db: Session, venta: Venta, usuario_id: int) -> int:
     )
     for r in recargas:
         r.estado = "anulada"
-        caja_service.registrar_ingreso(
-            db,
-            monto=r.monto_cargado,
-            descripcion=f"Anulación recarga (venta {venta.numero})",
-            usuario_id=usuario_id,
-            referencia_tipo="recarga_anulada",
-            referencia_id=r.id,
-            sucursal_id=venta.sucursal_id,
-            medio_pago=r.medio_pago_carga or "efectivo",
-        )
+        if r.genera_egreso:
+            caja_service.registrar_ingreso(
+                db,
+                monto=r.monto_cargado,
+                descripcion=f"Anulación recarga (venta {venta.numero})",
+                usuario_id=usuario_id,
+                referencia_tipo="recarga_anulada",
+                referencia_id=r.id,
+                sucursal_id=venta.sucursal_id,
+                medio_pago=r.medio_pago_carga or "efectivo",
+            )
     if recargas:
         db.commit()
     return len(recargas)
