@@ -466,7 +466,7 @@ onMounted(async () => {
           </div>
 
           <BaseButton
-            @click="generarPDF"
+            @click="generarPDF()"
             :loading="generando"
             variant="primary"
             class="w-full"
