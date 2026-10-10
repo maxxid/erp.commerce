@@ -180,7 +180,10 @@
                 {{ r.codigo_barras }}<span v-if="r.marca"> · {{ r.marca }}</span>
               </p>
             </div>
-            <span class="text-xs font-mono-data text-slate-500 shrink-0">{{ fc(r.precio_venta || 0) }}</span>
+            <div class="text-right shrink-0">
+              <p class="text-xs font-mono-data font-bold text-slate-700 dark:text-slate-300">{{ fc(r.precio_venta || 0) }}</p>
+              <p v-if="r.precio_costo" class="text-[10px] font-mono-data text-slate-400">Costo {{ fc(r.precio_costo) }}</p>
+            </div>
           </button>
         </div>
 
@@ -272,6 +275,16 @@
                   {{ fc(item.cantidad * item.precio || 0) }}
                 </span>
 
+                <!-- Expandir / colapsar detalle -->
+                <button
+                  type="button"
+                  :aria-label="item._expanded ? 'Colapsar detalle' : 'Expandir detalle'"
+                  class="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center transition shrink-0"
+                  @click="toggleExpandir(idx)"
+                >
+                  <i :class="['fa-solid fa-chevron-down text-[10px] transition-transform', item._expanded ? 'rotate-180' : '']"></i>
+                </button>
+
                 <!-- Delete -->
                 <button
                   type="button"
@@ -283,54 +296,74 @@
                 </button>
               </div>
 
-              <!-- Fila 2: vencimiento + campos de producto nuevo -->
+              <!-- Fila 2: detalle expandible (vencimiento, precio venta, datos de producto nuevo) -->
               <div
-                v-if="item.vencimiento || esNuevoProducto(item)"
-                class="px-3 pb-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/50 flex flex-wrap items-center gap-3"
+                v-if="item._expanded || esNuevoProducto(item)"
+                class="px-3 pb-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/50"
               >
-                <div class="flex items-center gap-1.5">
-                  <label class="text-[9px] uppercase font-bold text-slate-400">Venc.</label>
-                  <input
-                    v-model="item.vencimiento"
-                    type="date"
-                    class="px-2 py-1 text-[11px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-brand-500 transition"
-                  >
-                </div>
-
-                <template v-if="esNuevoProducto(item)">
+                <!-- Fila 2: vencimiento + precio venta (todos) + hint última compra (existentes) + campos nuevos -->
+                <div class="flex flex-wrap items-center gap-3">
                   <div class="flex items-center gap-1.5">
-                    <label class="text-[9px] uppercase font-bold text-amber-500">Marca</label>
+                    <label class="text-[9px] uppercase font-bold text-slate-400">Venc.</label>
                     <input
-                      v-model="item.marca"
-                      type="text"
-                      placeholder="Opcional"
-                      class="w-24 px-2 py-1 text-[11px] bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-lg outline-none focus:border-amber-500 transition"
+                      v-model="item.vencimiento"
+                      type="date"
+                      class="px-2 py-1 text-[11px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-brand-500 transition"
                     >
                   </div>
+
                   <div class="flex items-center gap-1.5">
-                    <label class="text-[9px] uppercase font-bold text-amber-500">P. Venta</label>
+                    <label class="text-[9px] uppercase font-bold" :class="esNuevoProducto(item) ? 'text-amber-500' : 'text-slate-400'">P. Venta</label>
                     <input
                       v-model.number="item.precio_venta"
                       type="number"
                       min="0"
                       step="0.01"
                       placeholder="0.00"
-                      class="w-20 px-2 py-1 text-[11px] font-mono-data bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-lg outline-none focus:border-amber-500 transition"
+                      class="w-20 px-2 py-1 text-[11px] font-mono-data bg-white dark:bg-slate-900 border rounded-lg outline-none focus:border-brand-500 transition"
+                      :class="esNuevoProducto(item) ? 'border-amber-300 dark:border-amber-700 focus:border-amber-500' : 'border-slate-200 dark:border-slate-700'"
                     >
                   </div>
-                  <div class="flex items-center gap-1.5">
-                    <label class="text-[9px] uppercase font-bold text-amber-500">Cat.</label>
-                    <select
-                      v-model="item.categoria_id"
-                      class="px-2 py-1 text-[11px] bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-lg outline-none focus:border-amber-500 transition"
-                    >
-                      <option :value="null">General</option>
-                      <option v-for="cat in categorias" :key="cat.id" :value="cat.id">{{ cat.nombre }}</option>
-                    </select>
-                    <BaseBadge variant="warning" size="xs">Nuevo</BaseBadge>
-                  </div>
-                </template>
-                <span v-else class="text-[9px] text-slate-400">Existente — se actualizará su costo</span>
+
+                  <template v-if="esNuevoProducto(item)">
+                    <div class="flex items-center gap-1.5">
+                      <label class="text-[9px] uppercase font-bold text-amber-500">Marca</label>
+                      <input
+                        v-model="item.marca"
+                        type="text"
+                        placeholder="Opcional"
+                        class="w-24 px-2 py-1 text-[11px] bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-lg outline-none focus:border-amber-500 transition"
+                      >
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                      <label class="text-[9px] uppercase font-bold text-amber-500">Cat.</label>
+                      <select
+                        v-model="item.categoria_id"
+                        class="px-2 py-1 text-[11px] bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-lg outline-none focus:border-amber-500 transition"
+                      >
+                        <option :value="null">General</option>
+                        <option v-for="cat in categorias" :key="cat.id" :value="cat.id">{{ cat.nombre }}</option>
+                      </select>
+                      <BaseBadge variant="warning" size="xs">Nuevo</BaseBadge>
+                    </div>
+                  </template>
+                </div>
+
+                <!-- Hint: última compra (solo productos existentes, bajo demanda) -->
+                <div
+                  v-if="!esNuevoProducto(item) && item._productoId"
+                  class="mt-1.5 text-[10px] text-slate-400"
+                >
+                  <template v-if="ultimoCompraCache[item._productoId] !== undefined">
+                    <template v-if="ultimoCompraCache[item._productoId]">
+                      <i class="fa-solid fa-truck-field mr-1"></i>
+                      Últ. compra: <span class="font-mono-data font-semibold">{{ fc(ultimoCompraCache[item._productoId].precio_unitario) }}</span>
+                      <span v-if="ultimoCompraCache[item._productoId].proveedor"> · {{ ultimoCompraCache[item._productoId].proveedor }}</span>
+                    </template>
+                    <span v-else class="text-slate-400/60">Sin compras registradas</span>
+                  </template>
+                  <span v-else><i class="fa-solid fa-circle-notch fa-spin mr-1"></i>Buscando última compra...</span>
+                </div>
               </div>
             </div>
           </TransitionGroup>
@@ -641,6 +674,8 @@ function _nuevoItem(producto = '', codigo_barras = '', cantidad = 1, precio = 0)
   _itemCounter++
   return {
     _key: `item-${_itemCounter}-${Date.now()}`,
+    _productoId: null,
+    _expanded: false,
     producto,
     codigo_barras,
     cantidad,
@@ -878,6 +913,7 @@ function crearProductoNuevoDesdeBusqueda() {
   if (!texto) return
   const esCodigo = /^\d{8,14}$/.test(texto)
   const item = _nuevoItem(esCodigo ? texto : texto, esCodigo ? texto : '')
+  item._expanded = true
   nuevaCompra.items.push(item)
   busqueda.value = ''
   resultados.value = []
@@ -893,6 +929,7 @@ function agregarItemDesdeProducto(prod) {
     return
   }
   const item = _nuevoItem(prod.nombre, prod.codigo_barras || '')
+  item._productoId = prod.id || null
   item.precio = prod.precio_costo || prod.precio_referencia || 0
   item.precio_venta = prod.precio_venta || 0
   item.marca = prod.marca || ''
@@ -903,6 +940,30 @@ function cambiarCantidad(idx, delta) {
   const item = nuevaCompra.items[idx]
   if (!item) return
   item.cantidad = Math.max(1, (Number(item.cantidad) || 0) + delta)
+}
+
+// --- Última compra (bajo demanda al expandir fila) ---
+const ultimoCompraCache = reactive({})
+
+async function fetchUltimoCompra(item) {
+  if (!item._productoId || ultimoCompraCache[item._productoId] !== undefined) return
+  ultimoCompraCache[item._productoId] = null
+  try {
+    const data = await api.get(`/api/productos/${item._productoId}/info-detallada`)
+    if (data) {
+      const ult = data.historial_compras?.[0] || null
+      ultimoCompraCache[item._productoId] = ult
+        ? { precio_unitario: ult.precio_unitario, proveedor: ult.proveedor, fecha: ult.fecha }
+        : null
+    }
+  } catch { /* se queda en null */ }
+}
+
+function toggleExpandir(idx) {
+  const item = nuevaCompra.items[idx]
+  if (!item) return
+  item._expanded = !item._expanded
+  if (item._expanded && item._productoId) fetchUltimoCompra(item)
 }
 
 function onCantidadEnter(idx) {
