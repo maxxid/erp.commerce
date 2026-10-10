@@ -33,7 +33,7 @@ async function request(method, path, body = null, params = null, fetchOptions = 
   if (token) headers['Authorization'] = `Bearer ${token}`
 
   const options = { method, headers, ...fetchOptions }
-  if (body && method !== 'GET' && !fetchOptions.responseType) {
+  if (body && method !== 'GET') {
     options.body = JSON.stringify(body)
   }
 
