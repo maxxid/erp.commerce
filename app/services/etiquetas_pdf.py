@@ -163,10 +163,9 @@ def _dibujar_etiqueta(
       ──────────────────────────────────
       Descripción (máx 2 líneas)
       [     código de barras            ]
-                   código numérico
     """
     from datetime import date
-    padding = 2 * mm
+    padding = 3 * mm
     inner_w = w - 2 * padding
     inner_x = x + padding
     right_x = x + w - padding
@@ -183,19 +182,18 @@ def _dibujar_etiqueta(
         precio_str = _formatear_precio(prod.precio_venta)
 
     # Precio primero (para medir su ancho)
-    c.setFont("Helvetica-Bold", 11)
-    precio_w = c.stringWidth(precio_str, "Helvetica-Bold", 11)
+    c.setFont("Helvetica-Bold", 13)
+    precio_w = c.stringWidth(precio_str, "Helvetica-Bold", 13)
     c.drawString(right_x - precio_w, baseline, precio_str)
 
-    # Marca alineada a la izquierda, sin pisar el precio
+    # Marca alineada a la izquierda, misma altura que el precio
     if prod.marca:
-        c.setFont("Helvetica-Bold", 7)
+        c.setFont("Helvetica-Bold", 13)
         marca_text = prod.marca[:35]
-        marca_w = c.stringWidth(marca_text, "Helvetica-Bold", 7)
+        marca_w = c.stringWidth(marca_text, "Helvetica-Bold", 13)
         max_marca_w = inner_w - precio_w - 3 * mm
         if marca_w > max_marca_w:
-            # Truncar con ellipsis si no entra
-            while marca_text and c.stringWidth(marca_text + "...", "Helvetica-Bold", 7) > max_marca_w:
+            while marca_text and c.stringWidth(marca_text + "...", "Helvetica-Bold", 13) > max_marca_w:
                 marca_text = marca_text[:-1]
             marca_text += "..."
         c.drawString(inner_x, baseline, marca_text)
@@ -203,26 +201,25 @@ def _dibujar_etiqueta(
     # Fecha debajo del precio, alineada a la derecha
     c.setFont("Helvetica", 6)
     fecha_w = c.stringWidth(fecha_hoy, "Helvetica", 6)
-    c.drawString(right_x - fecha_w, baseline - 8, fecha_hoy)
+    c.drawString(right_x - fecha_w, baseline - 10, fecha_hoy)
 
     # ── Línea separadora ──
-    sep_y = baseline - 10
+    sep_y = baseline - 12
     c.setStrokeColor(HexColor("#999999"))
     c.setLineWidth(0.3)
     c.line(inner_x, sep_y, inner_x + inner_w, sep_y)
 
     # ── Descripción (máx 2 líneas) ──
-    desc_y = sep_y - 5
+    desc_y = sep_y - 6
     desc = descripcion_editada if descripcion_editada is not None else (prod.descripcion or prod.nombre or "")
     if desc:
-        c.setFont("Helvetica", 7)
-        # Wrap manual: partir en líneas que quepan
+        c.setFont("Helvetica", 9)
         words = desc.split()
         lines = []
         current = ""
         for word in words:
             test = (current + " " + word).strip()
-            if c.stringWidth(test, "Helvetica", 7) <= inner_w:
+            if c.stringWidth(test, "Helvetica", 9) <= inner_w:
                 current = test
             else:
                 if current:
@@ -232,29 +229,22 @@ def _dibujar_etiqueta(
                     break
         if current and len(lines) < 2:
             lines.append(current)
-        # Si sobra texto, poner puntos suspensivos en la última línea
-        if len(words) > 1 and len(lines) == 2:
+        # Ellipsis en la última línea si se cortó
+        if len(lines) == 2:
             last = lines[1]
-            while last and c.stringWidth(last + "...", "Helvetica", 7) > inner_w:
+            while last and c.stringWidth(last + "...", "Helvetica", 9) > inner_w:
                 last = last[:-1]
-            if len(" ".join(words).split()) > len(" ".join(lines).split()):
-                lines[1] = last + "..."
+            lines[1] = last + "..."
         for i, line in enumerate(lines):
-            c.drawString(inner_x, desc_y - i * 8, line)
-        desc_bottom = desc_y - (len(lines) - 1) * 8
+            c.drawString(inner_x, desc_y - i * 10, line)
+        desc_bottom = desc_y - (len(lines) - 1) * 10
     else:
         desc_bottom = desc_y
 
     # ── Código de barras ──
-    barcode_h = 8 * mm  # altura fija razonable para 35mm de etiqueta
+    barcode_h = 8 * mm
     barcode_y = desc_bottom - 3 * mm - barcode_h
-    # No dejar que se salga del borde inferior de la etiqueta
-    min_barcode_y = y + padding + 3 * mm
+    min_barcode_y = y + padding + 2 * mm
     if barcode_y < min_barcode_y:
         barcode_y = min_barcode_y
     _dibujar_codigo_barras(c, inner_x, barcode_y, inner_w, barcode_h, codigo_num)
-
-    # ── Código numérico centrado debajo del barcode ──
-    if codigo_num:
-        c.setFont("Courier", 6)
-        c.drawCentredString(x + w / 2, barcode_y - 4, codigo_num[:20])
