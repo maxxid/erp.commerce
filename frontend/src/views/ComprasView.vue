@@ -10,7 +10,7 @@
           {{ syncing ? 'Sincronizando...' : 'Sincronizar' }}
         </BaseButton>
         <BaseButton variant="primary" size="sm" @click="abrirModalNuevaCompra">
-          <i class="fa-solid fa-plus"></i> Nueva Compra
+          <i class="fa-solid fa-plus"></i> Cargar Mercadería
         </BaseButton>
       </div>
     </div>
@@ -108,209 +108,275 @@
       </BaseTable>
     </BaseCard>
 
-    <BaseModal v-model="showModalCompra" title="Cargar Mercadería" size="2xl">
-      <div class="space-y-5">
-        <div class="p-3 bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800/40 rounded-xl text-xs text-brand-700 dark:text-brand-300 flex items-start gap-2">
-          <i class="fa-solid fa-circle-info mt-0.5"></i>
-          <span>Un solo paso: escaneás o escribís los productos, y al dar <strong>Guardar</strong> la mercadería entra directo al stock como <strong>lote</strong> (con vencimiento si lo cargás). Los productos nuevos se crean automáticamente con la categoría que elijas.</span>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <BaseSelect
-            label="Proveedor"
-            :model-value="nuevaCompra.proveedor_id"
-            :options="proveedores"
-            option-value="id"
-            option-label="nombre"
-            placeholder="Seleccionar proveedor"
-            @update:modelValue="nuevaCompra.proveedor_id = Number($event)"
-          />
+    <BaseModal
+      v-model="showModalCompra"
+      title="Cargar Mercadería"
+      size="3xl"
+      :closeOnOverlay="false"
+      :closeOnEsc="false"
+    >
+      <!-- Proveedor + Notas -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <BaseSelect
+          label="Proveedor"
+          required
+          :error="errorProveedor"
+          :model-value="nuevaCompra.proveedor_id"
+          :options="proveedores"
+          option-value="id"
+          option-label="nombre"
+          placeholder="Seleccionar proveedor"
+          @update:modelValue="onProveedorChange"
+        />
+        <div class="md:col-span-2">
           <BaseInput
             v-model="nuevaCompra.notas"
             label="Notas"
-            placeholder="Notas u observaciones"
+            placeholder="Notas u observaciones (opcional)"
           />
         </div>
+      </div>
 
-        <div class="space-y-3">
-          <div class="flex items-center justify-between">
-            <p class="text-[10px] font-bold text-slate-400 uppercase">Ítems</p>
-            <span class="text-[10px] text-slate-400">{{ nuevaCompra.items.length }} producto(s)</span>
-          </div>
-
-          <div class="bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-            <div class="grid grid-cols-12 gap-2 px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wide border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-              <span class="col-span-4">Producto</span>
-              <span class="col-span-3">Código de Barras</span>
-              <span class="col-span-2 text-center">Cantidad</span>
-              <span class="col-span-2 text-right">Precio</span>
-              <span class="col-span-1"></span>
-            </div>
-            <div class="max-h-[400px] overflow-y-auto overscroll-contain">
-
-            <TransitionGroup
-              name="item-row"
-              tag="div"
-              enter-active-class="transition duration-200 ease-out-expo"
-              enter-from-class="opacity-0 -translate-y-1"
-              enter-to-class="opacity-100 translate-y-0"
-              leave-active-class="transition duration-150 ease-in"
-              leave-from-class="opacity-100"
-              leave-to-class="opacity-0"
-              move-class="transition duration-200 ease-out-expo"
+      <!-- Barra de búsqueda + escáner -->
+      <div class="relative mt-4">
+        <div class="flex gap-2">
+          <div class="relative flex-1">
+            <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+            <input
+              ref="busquedaInputRef"
+              v-model="busqueda"
+              type="text"
+              placeholder="Escaneá un código o buscá por nombre..."
+              class="w-full pl-9 pr-3 py-2.5 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition"
+              @input="onBusquedaInput"
+              @keydown="onBusquedaKeydown"
+              @focus="onBusquedaFocus"
+              @blur="onBusquedaBlur"
             >
-              <div v-for="(item, idx) in nuevaCompra.items" :key="item._key" class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50 hover:bg-white dark:hover:bg-slate-800/70 transition-colors">
-          <div class="grid grid-cols-12 gap-2 items-center">
-                <!-- Producto combobox -->
-                <div class="col-span-4">
-                  <input
-                    :ref="el => { if (el) itemRefs[idx] = el }"
-                    v-model="item.producto"
-                    type="text"
-                    list="productos-datalist"
-                    placeholder="Elegir o escribir..."
-                    class="w-full px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition"
-                    :class="idx === nuevaCompra.items.length - 1 ? 'ring-1 ring-brand-300 dark:ring-brand-700' : ''"
-                    @focus="onItemFocus(idx)"
-                    @input="onProductoInput(idx, $event)"
-                    @keydown.enter.prevent="onItemEnter(idx, $event)"
-                    @keydown.tab="onItemTab(idx, $event)"
-                  />
+          </div>
+          <BaseButton variant="secondary" @click="openScanner">
+            <i class="fa-solid fa-camera"></i>
+            <span class="hidden sm:inline ml-1">Escanear</span>
+          </BaseButton>
+        </div>
+
+        <!-- Dropdown de resultados -->
+        <div
+          v-if="dropdownAbierto && resultados.length"
+          class="absolute z-20 mt-1 w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden"
+        >
+          <button
+            v-for="(r, i) in resultados"
+            :key="r.id"
+            type="button"
+            class="w-full px-4 py-2.5 text-left flex items-center justify-between gap-3 transition-colors"
+            :class="i === indiceResaltado ? 'bg-brand-50 dark:bg-brand-900/30' : 'hover:bg-slate-50 dark:hover:bg-slate-800'"
+            @mousedown.prevent="seleccionarResultado(r)"
+            @mouseenter="indiceResaltado = i"
+          >
+            <div class="min-w-0">
+              <p class="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{{ r.nombre }}</p>
+              <p class="text-[11px] text-slate-400 font-mono-data truncate">
+                {{ r.codigo_barras }}<span v-if="r.marca"> · {{ r.marca }}</span>
+              </p>
+            </div>
+            <span class="text-xs font-mono-data text-slate-500 shrink-0">{{ fc(r.precio_venta || 0) }}</span>
+          </button>
+        </div>
+
+        <!-- Sin resultados -->
+        <div
+          v-else-if="dropdownAbierto && busqueda.trim().length >= 2 && !resultados.length"
+          class="absolute z-20 mt-1 w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl p-4 text-center"
+        >
+          <p class="text-xs text-slate-400">Sin resultados para "<strong>{{ busqueda }}</strong>"</p>
+          <p class="text-[11px] text-slate-400 mt-1">
+            Presioná <kbd class="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded text-[10px] font-mono border border-slate-200 dark:border-slate-700">Enter</kbd>
+            para crearlo como producto nuevo
+          </p>
+        </div>
+      </div>
+
+      <!-- Lista de ítems -->
+      <div class="mt-4">
+        <div class="flex items-center justify-between mb-2">
+          <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+            Ítems <span v-if="nuevaCompra.items.length">({{ nuevaCompra.items.length }})</span>
+          </p>
+          <span v-if="nuevaCompra.items.length" class="text-sm font-mono-data font-bold text-slate-800 dark:text-slate-200">
+            Total: {{ fc(totalCompra) }}
+          </span>
+        </div>
+
+        <div v-if="nuevaCompra.items.length" class="space-y-2 max-h-[340px] overflow-y-auto overscroll-contain pr-1">
+          <TransitionGroup
+            name="item-row"
+            tag="div"
+            enter-active-class="transition duration-200 ease-out-expo"
+            enter-from-class="opacity-0 -translate-y-1"
+            enter-to-class="opacity-100 translate-y-0"
+            leave-active-class="transition duration-150 ease-in"
+            leave-from-class="opacity-100"
+            leave-to-class="opacity-0"
+            move-class="transition duration-200 ease-out-expo"
+          >
+            <div
+              v-for="(item, idx) in nuevaCompra.items"
+              :key="item._key"
+              class="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden"
+            >
+              <!-- Fila principal: nombre + stepper + precio + subtotal + delete -->
+              <div class="flex items-center gap-2 px-3 py-2">
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{{ item.producto }}</p>
+                  <p class="text-[10px] text-slate-400 font-mono-data truncate">{{ item.codigo_barras || '—' }}</p>
                 </div>
 
-                <!-- Código de barras -->
-                <div class="col-span-3">
-                  <input
-                    v-model="item.codigo_barras"
-                    type="text"
-                    placeholder="Escanear..."
-                    class="w-full px-2 py-1.5 text-xs font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none transition"
-                    @keydown.enter.prevent="onBarcodeEnter(idx)"
-                    @input="item._barcodeEdited = true"
-                  />
-                  <span v-if="item._scanning" class="text-[9px] text-amber-500 font-bold mt-0.5 block">
-                    <i class="fa-solid fa-circle-notch fa-spin mr-1"></i>Buscando...
-                  </span>
-                </div>
-
-                <!-- Cantidad -->
-                <div class="col-span-2">
+                <!-- Stepper cantidad -->
+                <div class="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    class="w-7 h-7 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
+                    @click="cambiarCantidad(idx, -1)"
+                  >−</button>
                   <input
                     v-model.number="item.cantidad"
                     type="number"
                     min="1"
-                    placeholder="1"
-                    class="w-full px-2 py-1.5 text-xs text-center font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition"
-                    @focus="item._cantidadFocused = true"
+                    class="w-14 text-center text-sm font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg py-1 outline-none focus:border-brand-500 transition"
                     @keydown.enter.prevent="onCantidadEnter(idx)"
-                  />
+                  >
+                  <button
+                    type="button"
+                    class="w-7 h-7 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
+                    @click="cambiarCantidad(idx, 1)"
+                  >+</button>
                 </div>
 
                 <!-- Precio -->
-                <div class="col-span-2">
+                <div class="w-24 shrink-0">
                   <input
                     v-model.number="item.precio"
                     type="number"
                     min="0"
                     step="0.01"
                     placeholder="0.00"
-                    class="w-full px-2 py-1.5 text-xs text-right font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition"
-                  />
-                </div>
-
-                <!-- Acciones -->
-                <div class="col-span-1 flex justify-center">
-                  <button
-                    type="button"
-                    aria-label="Quitar ítem"
-                    class="w-7 h-7 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 flex items-center justify-center transition"
-                    @click="quitarItem(idx)"
+                    class="w-full text-right text-sm font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 outline-none focus:border-brand-500 transition"
+                    :data-precio-idx="idx"
+                    @keydown.enter.prevent="onPrecioEnter(idx)"
                   >
-                    <i class="fa-solid fa-trash text-[10px]"></i>
-                  </button>
                 </div>
-          </div>
 
-          <!-- Segunda fila: vencimiento + categoría + datos del producto nuevo -->
-          <div class="flex flex-wrap items-center gap-3 mt-2 ml-0.5">
-            <div class="flex items-center gap-2">
-              <label class="text-[9px] uppercase tracking-wide font-bold text-slate-400">Vencimiento</label>
-              <input
-                v-model="item.vencimiento"
-                type="date"
-                class="px-2 py-1 text-[11px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition"
-              />
-            </div>
+                <!-- Subtotal -->
+                <span class="w-20 text-right text-sm font-mono-data font-bold text-slate-700 dark:text-slate-300 shrink-0">
+                  {{ fc(item.cantidad * item.precio || 0) }}
+                </span>
 
-            <template v-if="esNuevoProducto(item)">
-              <div class="flex items-center gap-2">
-                <label class="text-[9px] uppercase tracking-wide font-bold text-amber-500">Marca</label>
-                <input
-                  v-model="item.marca"
-                  type="text"
-                  placeholder="Opcional"
-                  class="w-28 px-2 py-1 text-[11px] bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none transition"
-                />
-              </div>
-              <div class="flex items-center gap-2">
-                <label class="text-[9px] uppercase tracking-wide font-bold text-amber-500">P. Venta</label>
-                <input
-                  v-model.number="item.precio_venta"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="0.00"
-                  class="w-24 px-2 py-1 text-[11px] bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none transition"
-                />
-              </div>
-              <div class="flex items-center gap-2">
-                <label class="text-[9px] uppercase tracking-wide font-bold text-amber-500">Categoría</label>
-                <select
-                  v-model="item.categoria_id"
-                  class="px-2 py-1 text-[11px] bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none transition"
+                <!-- Delete -->
+                <button
+                  type="button"
+                  aria-label="Quitar ítem"
+                  class="w-7 h-7 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 flex items-center justify-center transition shrink-0"
+                  @click="quitarItem(idx)"
                 >
-                  <option :value="null">Seleccionar...</option>
-                  <option v-for="cat in categorias" :key="cat.id" :value="cat.id">{{ cat.nombre }}</option>
-                </select>
-                <BaseBadge variant="warning" size="xs">Nuevo</BaseBadge>
+                  <i class="fa-solid fa-trash text-[10px]"></i>
+                </button>
               </div>
-            </template>
-            <span v-else class="text-[9px] text-slate-400">Producto existente — se actualizará su costo</span>
-          </div>
-        </div>
-            </TransitionGroup>
 
-            <datalist id="productos-datalist">
-              <option v-for="p in productosCatalogo" :key="p.id" :value="p.nombre">
-                {{ p.codigo_barras }} · {{ p.marca || '' }}
-              </option>
-            </datalist>
+              <!-- Fila 2: vencimiento + campos de producto nuevo -->
+              <div
+                v-if="item.vencimiento || esNuevoProducto(item)"
+                class="px-3 pb-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/50 flex flex-wrap items-center gap-3"
+              >
+                <div class="flex items-center gap-1.5">
+                  <label class="text-[9px] uppercase font-bold text-slate-400">Venc.</label>
+                  <input
+                    v-model="item.vencimiento"
+                    type="date"
+                    class="px-2 py-1 text-[11px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-brand-500 transition"
+                  >
+                </div>
 
-            <div v-if="!nuevaCompra.items.length" class="p-6 text-center">
-              <p class="text-xs text-slate-400 dark:text-slate-500">
-                Escribí un nombre, elegí de la lista, o escaneá un código de barras para empezar
-              </p>
+                <template v-if="esNuevoProducto(item)">
+                  <div class="flex items-center gap-1.5">
+                    <label class="text-[9px] uppercase font-bold text-amber-500">Marca</label>
+                    <input
+                      v-model="item.marca"
+                      type="text"
+                      placeholder="Opcional"
+                      class="w-24 px-2 py-1 text-[11px] bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-lg outline-none focus:border-amber-500 transition"
+                    >
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <label class="text-[9px] uppercase font-bold text-amber-500">P. Venta</label>
+                    <input
+                      v-model.number="item.precio_venta"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      class="w-20 px-2 py-1 text-[11px] font-mono-data bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-lg outline-none focus:border-amber-500 transition"
+                    >
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <label class="text-[9px] uppercase font-bold text-amber-500">Cat.</label>
+                    <select
+                      v-model="item.categoria_id"
+                      class="px-2 py-1 text-[11px] bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-lg outline-none focus:border-amber-500 transition"
+                    >
+                      <option :value="null">General</option>
+                      <option v-for="cat in categorias" :key="cat.id" :value="cat.id">{{ cat.nombre }}</option>
+                    </select>
+                    <BaseBadge variant="warning" size="xs">Nuevo</BaseBadge>
+                  </div>
+                </template>
+                <span v-else class="text-[9px] text-slate-400">Existente — se actualizará su costo</span>
+              </div>
             </div>
-            </div>
-          </div>
-
-          <div v-if="nuevaCompra.items.length" class="flex justify-end">
-            <span class="text-sm font-mono-data font-bold text-slate-800">
-              Total: {{ fc(totalCompra) }}
-            </span>
-          </div>
+          </TransitionGroup>
         </div>
 
-        <div class="flex gap-2 pt-2">
+        <!-- Empty state -->
+        <div v-else class="p-8 text-center border border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
+          <i class="fa-solid fa-box-open text-2xl text-slate-300 dark:text-slate-600 mb-2"></i>
+          <p class="text-xs text-slate-400">Escaneá un código o buscá un producto para empezar</p>
+        </div>
+      </div>
+
+      <!-- Escáner de cámara -->
+      <BaseModal v-model="scannerOpen" title="Escáner de código de barras" size="md" :closeOnOverlay="false">
+        <div class="space-y-3">
+          <video
+            ref="videoEl"
+            class="w-full rounded-xl bg-black aspect-video"
+            autoplay
+            playsinline
+            muted
+          ></video>
+          <p v-if="scannerError" class="text-xs text-red-500 flex items-center gap-1.5">
+            <i class="fa-solid fa-circle-exclamation"></i>{{ scannerError }}
+          </p>
+          <p v-else class="text-xs text-slate-400 text-center">Apuntá al código de barras</p>
+          <BaseButton variant="secondary" block @click="closeCamera">Cancelar</BaseButton>
+        </div>
+      </BaseModal>
+
+      <template #footer>
+        <div class="flex gap-2">
           <BaseButton variant="secondary" class="flex-1" @click="showModalCompra = false">
             Cancelar
           </BaseButton>
-          <BaseButton variant="primary" class="flex-1" :disabled="saving" @click="guardarCompra">
+          <BaseButton
+            variant="primary"
+            class="flex-1"
+            :disabled="saving || !nuevaCompra.items.length"
+            @click="guardarCompra"
+          >
             <i :class="saving ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-boxes-packing'"></i>
             {{ saving ? 'Guardando...' : 'Guardar y Recibir' }}
           </BaseButton>
         </div>
-      </div>
+      </template>
     </BaseModal>
 
     <BaseModal v-model="showReceiveModal" :title="'Recibir Mercadería — ' + receiveTarget?.numero_orden" size="2xl">
@@ -492,12 +558,13 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick, watch, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
 import api from '@/services/api'
 import { formatCurrency as fc } from '@/composables/useUtils'
+import { useBarcodeScanner } from '@/composables/useBarcodeScanner'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
@@ -514,7 +581,6 @@ const router = useRouter()
 const proveedores = ref([])
 const productosCatalogo = ref([])
 const categorias = ref([])
-const itemRefs = reactive({})
 let _itemCounter = 0
 
 const compras = ref([])
@@ -541,6 +607,35 @@ const nuevaCompra = reactive({
   notas: '',
   items: [],
 })
+const errorProveedor = ref('')
+
+// --- Búsqueda de productos ---
+const busqueda = ref('')
+const resultados = ref([])
+const dropdownAbierto = ref(false)
+const indiceResaltado = ref(0)
+const busquedaInputRef = ref(null)
+let _debounceTimer = null
+
+// --- Escáner de cámara ---
+const { scannerOpen, scannerError, videoEl, openScanner, closeCamera } = useBarcodeScanner({
+  continuous: false,
+  onDetect: async (raw) => {
+    const local = productosCatalogo.value.find(p => p.codigo_barras === raw)
+    if (local) {
+      agregarItemDesdeProducto(local)
+      toast.success(`Agregado: ${local.nombre}`)
+    } else {
+      busqueda.value = raw
+      buscarProductos(raw)
+      if (!resultados.value.length) {
+        crearProductoNuevoDesdeBusqueda()
+        toast.warning('Código no encontrado. Completá los datos del producto nuevo.')
+      }
+    }
+    nextTick(() => busquedaInputRef.value?.focus())
+  },
+})
 
 function _nuevoItem(producto = '', codigo_barras = '', cantidad = 1, precio = 0) {
   _itemCounter++
@@ -554,9 +649,6 @@ function _nuevoItem(producto = '', codigo_barras = '', cantidad = 1, precio = 0)
     precio_venta: 0,
     vencimiento: '',
     categoria_id: null,
-    _scanning: false,
-    _barcodeEdited: false,
-    _cantidadFocused: false,
   }
 }
 
@@ -572,7 +664,7 @@ function esNuevoProducto(item) {
 }
 
 const totalCompra = computed(() =>
-  nuevaCompra.items.reduce((sum, i) => sum + (i.cantidad * i.precio || 0), 0)
+  nuevaCompra.items.reduce((sum, i) => sum + ((Number(i.cantidad) || 0) * (Number(i.precio) || 0)), 0)
 )
 
 onMounted(async () => {
@@ -583,6 +675,11 @@ onMounted(async () => {
     if (compra) openDetailModal(compra)
     router.replace({ query: {} })
   }
+})
+
+onUnmounted(() => {
+  clearTimeout(_debounceTimer)
+  closeCamera()
 })
 
 async function fetchCompras() {
@@ -621,7 +718,7 @@ async function fetchCompras() {
 
 async function fetchProveedores() {
   try {
-    const data = await api.get('/api/proveedores')
+    const data = await api.get('/api/proveedores?page_size=200')
     if (data && data.length) proveedores.value = data
   } catch { /* fallback to mock */ }
 }
@@ -696,160 +793,149 @@ async function openDetailModal(compra) {
 function abrirModalNuevaCompra() {
   nuevaCompra.proveedor_id = null
   nuevaCompra.notas = ''
-  nuevaCompra.items = [_nuevoItem()]
-  _itemCounter = 0
+  nuevaCompra.items = []
+  errorProveedor.value = ''
+  busqueda.value = ''
+  resultados.value = []
+  dropdownAbierto.value = false
   showModalCompra.value = true
-  nextTick(() => focusUltimaFila())
+  nextTick(() => busquedaInputRef.value?.focus())
 }
 
-function asegurarFilaVacia() {
-  const ultima = nuevaCompra.items[nuevaCompra.items.length - 1]
-  if (!ultima || ultima.producto.trim() || ultima.codigo_barras.trim()) {
-    nuevaCompra.items.push(_nuevoItem())
+function onProveedorChange(val) {
+  nuevaCompra.proveedor_id = Number(val)
+  if (nuevaCompra.proveedor_id) errorProveedor.value = ''
+}
+
+// --- Búsqueda de productos ---
+function onBusquedaInput() {
+  clearTimeout(_debounceTimer)
+  if (busqueda.value.trim().length < 2) {
+    resultados.value = []
+    dropdownAbierto.value = false
+    return
   }
+  _debounceTimer = setTimeout(() => buscarProductos(busqueda.value), 150)
 }
 
-function focusUltimaFila() {
-  const idx = nuevaCompra.items.length - 1
-  if (idx < 0) return
-  nextTick(() => {
-    const el = itemRefs[idx]
-    if (el && el.focus) {
-      el.focus()
-      el.scrollIntoView({ block: 'nearest' })
+function buscarProductos(q) {
+  const query = q.trim().toLowerCase()
+  if (!query) { resultados.value = []; dropdownAbierto.value = false; return }
+  const scored = []
+  for (const p of productosCatalogo.value) {
+    const nombre = (p.nombre || '').toLowerCase()
+    const barcode = (p.codigo_barras || '').toLowerCase()
+    let score = -1
+    if (barcode === query) score = 0
+    else if (nombre === query) score = 1
+    else if (nombre.startsWith(query)) score = 2
+    else if (nombre.includes(query) || barcode.includes(query)) score = 3
+    if (score >= 0) scored.push({ p, score })
+  }
+  scored.sort((a, b) => a.score - b.score || a.p.nombre.localeCompare(b.p.nombre))
+  resultados.value = scored.slice(0, 8).map(s => s.p)
+  indiceResaltado.value = 0
+  dropdownAbierto.value = true
+}
+
+function onBusquedaFocus() {
+  if (busqueda.value.trim().length >= 2) buscarProductos(busqueda.value)
+}
+
+function onBusquedaBlur() {
+  setTimeout(() => { dropdownAbierto.value = false }, 150)
+}
+
+function onBusquedaKeydown(e) {
+  if (e.key === 'ArrowDown') {
+    e.preventDefault()
+    indiceResaltado.value = Math.min(indiceResaltado.value + 1, resultados.value.length - 1)
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    indiceResaltado.value = Math.max(indiceResaltado.value - 1, 0)
+  } else if (e.key === 'Enter') {
+    e.preventDefault()
+    if (dropdownAbierto.value && resultados.value.length) {
+      seleccionarResultado(resultados.value[indiceResaltado.value])
+    } else if (busqueda.value.trim()) {
+      crearProductoNuevoDesdeBusqueda()
     }
-  })
-}
-
-function onItemFocus(idx) {
-  if (idx === nuevaCompra.items.length - 1) return
-}
-
-function onProductoInput(idx, event) {
-  const val = (event.target.value || '').trim()
-  const prodEncontrado = productosCatalogo.value.find(
-    p => p.nombre.toLowerCase() === val.toLowerCase()
-  )
-  if (prodEncontrado) {
-    rellenarDesdeCatalogo(idx, prodEncontrado)
-  }
-  if (idx === nuevaCompra.items.length - 1 && val) {
-    asegurarFilaVacia()
+  } else if (e.key === 'Escape') {
+    dropdownAbierto.value = false
   }
 }
 
-function onItemEnter(idx, event) {
+function seleccionarResultado(prod) {
+  agregarItemDesdeProducto(prod)
+  busqueda.value = ''
+  resultados.value = []
+  dropdownAbierto.value = false
+  nextTick(() => busquedaInputRef.value?.focus())
+}
+
+function crearProductoNuevoDesdeBusqueda() {
+  const texto = busqueda.value.trim()
+  if (!texto) return
+  const esCodigo = /^\d{8,14}$/.test(texto)
+  const item = _nuevoItem(esCodigo ? texto : texto, esCodigo ? texto : '')
+  nuevaCompra.items.push(item)
+  busqueda.value = ''
+  resultados.value = []
+  dropdownAbierto.value = false
+  nextTick(() => busquedaInputRef.value?.focus())
+}
+
+// --- Items ---
+function agregarItemDesdeProducto(prod) {
+  const existente = nuevaCompra.items.find(i => i.codigo_barras && i.codigo_barras === prod.codigo_barras)
+  if (existente) {
+    existente.cantidad = (Number(existente.cantidad) || 0) + 1
+    return
+  }
+  const item = _nuevoItem(prod.nombre, prod.codigo_barras || '')
+  item.precio = prod.precio_costo || prod.precio_referencia || 0
+  item.precio_venta = prod.precio_venta || 0
+  item.marca = prod.marca || ''
+  nuevaCompra.items.push(item)
+}
+
+function cambiarCantidad(idx, delta) {
   const item = nuevaCompra.items[idx]
   if (!item) return
-
-  // Si es la última fila y está vacía, no hacer nada
-  if (idx === nuevaCompra.items.length - 1 && !item.producto.trim()) return
-
-  // Rellenar datos si seleccionó de la lista
-  const val = item.producto.trim()
-  const prodEncontrado = productosCatalogo.value.find(
-    p => p.nombre.toLowerCase() === val.toLowerCase()
-  )
-  if (prodEncontrado) {
-    rellenarDesdeCatalogo(idx, prodEncontrado)
-  }
-
-  asegurarFilaVacia()
-  focusUltimaFila()
-}
-
-function onItemTab(idx, event) {
-  const item = nuevaCompra.items[idx]
-  if (!item || !item.producto.trim()) return
-
-  const val = item.producto.trim()
-  const prodEncontrado = productosCatalogo.value.find(
-    p => p.nombre.toLowerCase() === val.toLowerCase()
-  )
-  if (prodEncontrado) {
-    rellenarDesdeCatalogo(idx, prodEncontrado)
-  }
+  item.cantidad = Math.max(1, (Number(item.cantidad) || 0) + delta)
 }
 
 function onCantidadEnter(idx) {
-  const item = nuevaCompra.items[idx]
-  if (!item || !item.producto.trim()) return
-
-  asegurarFilaVacia()
-  focusUltimaFila()
+  nextTick(() => {
+    const el = document.querySelector(`[data-precio-idx="${idx}"]`)
+    el?.focus()
+  })
 }
 
-async function onBarcodeEnter(idx) {
-  const item = nuevaCompra.items[idx]
-  if (!item) return
-  const code = item.codigo_barras.trim()
-  if (!code) return
-
-  // Buscar en catálogo local primero
-  const local = productosCatalogo.value.find(p => p.codigo_barras === code)
-  if (local) {
-    rellenarDesdeCatalogo(idx, local)
-    item._scanning = false
-    asegurarFilaVacia()
-    focusUltimaFila()
-    return
-  }
-
-  // Buscar en fuentes externas
-  item._scanning = true
-  try {
-    const resp = await api.post('/api/productos/lookup', { barcode: code }).catch(() => null)
-    if (resp && resp.nombre) {
-      item.producto = resp.nombre
-      item.codigo_barras = code
-      item.precio = resp.precio_referencia || 0
-      toast.info(`Encontrado: ${resp.nombre}`)
-    } else {
-      item.producto = code
-      toast.warning('Código no encontrado. Ingresá el nombre manualmente.')
-    }
-  } catch {
-    item.producto = code
-    toast.warning('Error al buscar. Ingresá el nombre manualmente.')
-  }
-  item._scanning = false
-  asegurarFilaVacia()
-  focusUltimaFila()
-}
-
-function rellenarDesdeCatalogo(idx, prod) {
-  const item = nuevaCompra.items[idx]
-  if (!item) return
-  item.producto = prod.nombre
-  item.codigo_barras = prod.codigo_barras
-  if (!item.precio || item.precio === 0) {
-    item.precio = prod.precio_costo || prod.precio_referencia || 0
-  }
+function onPrecioEnter() {
+  busqueda.value = ''
+  resultados.value = []
+  dropdownAbierto.value = false
+  nextTick(() => busquedaInputRef.value?.focus())
 }
 
 function quitarItem(idx) {
   nuevaCompra.items.splice(idx, 1)
-  if (!nuevaCompra.items.length) {
-    nuevaCompra.items.push(_nuevoItem())
-    focusUltimaFila()
-  }
 }
 
 async function guardarCompra() {
+  errorProveedor.value = ''
   if (!nuevaCompra.proveedor_id) {
-    toast.warning('Seleccioná un proveedor')
+    errorProveedor.value = 'Seleccioná un proveedor'
     return
   }
-  const itemsValidos = nuevaCompra.items.filter(i => (i.producto || '').trim() || (i.codigo_barras || '').trim())
-  if (!itemsValidos.length) {
+  if (!nuevaCompra.items.length) {
     toast.warning('Agregá al menos un ítem')
     return
   }
-  // Validar categoría para productos nuevos
-  const sinCategoria = itemsValidos.filter(i => esNuevoProducto(i) && !i.categoria_id)
-  if (sinCategoria.length) {
-    toast.warning(`Elegí la categoría para: ${sinCategoria.map(i => i.producto || i.codigo_barras).join(', ')}`)
-    return
+  const sinPrecio = nuevaCompra.items.filter(i => !i.precio)
+  if (sinPrecio.length) {
+    toast.warning(`Ítems sin precio: ${sinPrecio.map(i => i.producto).join(', ')}`)
   }
   saving.value = true
   try {
@@ -857,7 +943,7 @@ async function guardarCompra() {
       proveedor_id: nuevaCompra.proveedor_id,
       notas: nuevaCompra.notas,
       recibir_directo: true,
-      items: itemsValidos.map(i => ({
+      items: nuevaCompra.items.map(i => ({
         producto: i.producto,
         codigo_barras: i.codigo_barras || '',
         cantidad: i.cantidad || 1,
