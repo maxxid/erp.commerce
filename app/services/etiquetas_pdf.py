@@ -1,26 +1,23 @@
 """Generación de PDF para etiquetas de precios.
 
 Dos tamaños:
-- 70x35mm: 3 columnas x 10 filas = 30 etiquetas/hoja A4
-- 60x40mm: 3 columnas x 8 filas = 24 etiquetas/hoja A4
+- 70x35mm
+- 60x40mm
 
-Opción borderless: usa toda la hoja A4 (210x297mm) sin márgenes.
+Hoja A4 en horizontal (297x210mm). Columnas y filas se calculan dinámicamente
+según el tamaño de etiqueta y los márgenes, para que nunca se desborden ni se
+corten en el salto de página.
 """
 
 from io import BytesIO
 from typing import List, Dict
 import logging
 
-# reportlab es una dependencia solo de este modulo. Se importa de forma perezosa
-# para que la app arranque igual sin ella y el PDF falle solo cuando se pide.
 try:
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
-    from reportlab.lib.colors import black, white, HexColor
+    from reportlab.lib.colors import HexColor
     from reportlab.pdfgen import canvas
-    from reportlab.graphics.barcode import eanbc
-    from reportlab.graphics.shapes import Drawing
-    from reportlab.graphics import renderPDF
     REPORTLAB_DISPONIBLE = True
 except ImportError:  # pragma: no cover - depende del entorno
     REPORTLAB_DISPONIBLE = False
@@ -35,21 +32,9 @@ class ReportlabNoDisponible(RuntimeError):
 
 
 LAYOUTS = {
-    "70x35": {
-        "cols": 3, "rows": 10,
-        "label_w": 70, "label_h": 35,
-        "margin_x": 0, "margin_y": 0,
-        "gap_x": 0, "gap_y": 0,
-    },
-    "60x40": {
-        "cols": 3, "rows": 8,
-        "label_w": 60, "label_h": 40,
-        "margin_x": 0, "margin_y": 0,
-        "gap_x": 0, "gap_y": 0,
-    },
+    "70x35": {"label_w": 70, "label_h": 35},
+    "60x40": {"label_w": 60, "label_h": 40},
 }
-
-BARCODE_HEIGHT_RATIO = 0.35
 
 
 def _es_ean13_valido(codigo: str) -> bool:
@@ -93,7 +78,7 @@ def generar_etiquetas_pdf(
     borderless: bool,
     descripciones_editadas: Dict[int, str]
 ) -> bytes:
-    """Genera PDF con etiquetas de precios."""
+    """Genera PDF con etiquetas de precios en A4 horizontal."""
     if not REPORTLAB_DISPONIBLE:
         raise ReportlabNoDisponible(
             "reportlab no esta instalado. Instala con: pip install 'reportlab>=4.0'"
@@ -104,50 +89,48 @@ def generar_etiquetas_pdf(
     from reportlab.lib.colors import HexColor
     from reportlab.pdfgen import canvas
 
-    A4_W, A4_H = A4
+    A4_W, A4_H = A4  # retrato
+    page_w, page_h = A4_H, A4_W  # horizontal: 297 x 210 mm
 
     layout = LAYOUTS[tamano]
     label_w = layout["label_w"] * mm
     label_h = layout["label_h"] * mm
-    cols = layout["cols"]
-    rows = layout["rows"]
-    margin_x = layout["margin_x"] * mm
-    margin_y = layout["margin_y"] * mm
-    gap_x = layout["gap_x"] * mm
-    gap_y = layout["gap_y"] * mm
-    
+
     if borderless:
-        page_w, page_h = A4_W, A4_H
+        margin_x = margin_y = 0
     else:
-        margin_x = 5 * mm
-        margin_y = 5 * mm
-        page_w, page_h = A4_W, A4_H
-    
+        margin_x = margin_y = 5 * mm
+
+    available_w = page_w - 2 * margin_x
+    available_h = page_h - 2 * margin_y
+
+    cols = max(1, int(available_w // label_w))
+    rows = max(1, int(available_h // label_h))
+
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=(page_w, page_h))
-    
+
     etiquetas_por_hoja = cols * rows
     total = len(productos)
-    
+
     for idx, prod in enumerate(productos):
-        hoja = idx // etiquetas_por_hoja
         pos_en_hoja = idx % etiquetas_por_hoja
-        col = pos_en_hoja % cols
-        row = pos_en_hoja // cols
-        
+
         if pos_en_hoja == 0 and idx > 0:
             c.showPage()
-        
-        x = margin_x + col * (label_w + gap_x)
-        y = page_h - margin_y - (row + 1) * (label_h + gap_y)
-        
+
+        col = pos_en_hoja % cols
+        row = pos_en_hoja // cols
+        x = margin_x + col * label_w
+        y = page_h - margin_y - (row + 1) * label_h
+
         if not borderless:
             c.setStrokeColor(HexColor("#CCCCCC"))
             c.setLineWidth(0.3)
             c.rect(x, y, label_w, label_h)
-        
+
         _dibujar_etiqueta(c, x, y, label_w, label_h, prod, descripciones_editadas.get(prod.id))
-    
+
     c.save()
     return buffer.getvalue()
 
