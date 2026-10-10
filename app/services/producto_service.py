@@ -6,6 +6,7 @@ from sqlalchemy import or_, func
 from app.models.producto import Producto
 from app.models.categoria import Categoria
 from app.models.lote import Lote
+from app.services.texto_service import normalizar_producto_campos
 
 
 def _suma_lotes_activos(db: Session, producto_id: int) -> float:
@@ -107,6 +108,8 @@ def crear_producto(db: Session, data: dict) -> Producto:
     if not data.get("codigo_barras"):
         data["codigo_barras"] = _generar_codigo_barras(db)
 
+    normalizar_producto_campos(data)
+
     producto = Producto(**data)
     producto.stock_actual = cantidad_inicial
     db.add(producto)
@@ -130,6 +133,8 @@ def actualizar_producto(db: Session, producto: Producto, data: dict) -> Producto
     El stock NO se edita aquí: es siempre la suma de los lotes activos.
     Se ignora cualquier `stock_actual` enviado y se recalcula desde lotes.
     """
+    normalizar_producto_campos(data)
+
     updatable = [
         "nombre", "marca", "descripcion", "codigo_barras", "precio_referencia", "precio_costo",
         "precio_venta", "precio_etiqueta", "imagen_url", "sku", "propiedades", "fuente",
@@ -166,6 +171,7 @@ def guardar_desde_lookup(db: Session, data: dict) -> Producto:
     from app.services import lote_service
 
     cantidad = float(data.get("cantidad") or 0)
+    normalizar_producto_campos(data)
 
     existente = obtener_por_barcode(db, data["codigo_barras"])
     if existente:
