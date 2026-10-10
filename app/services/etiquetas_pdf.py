@@ -58,7 +58,7 @@ def _es_ean13_valido(codigo: str) -> bool:
 
 
 def _dibujar_codigo_barras(c, x: float, y: float, w: float, h: float, codigo: str):
-    """Dibuja código de barras EAN13 o Code128 fallback."""
+    """Dibuja código de barras EAN13 o Code128 fallback, centrado en el ancho dado."""
     if not REPORTLAB_DISPONIBLE:
         return
     from reportlab.graphics.barcode import eanbc
@@ -72,9 +72,11 @@ def _dibujar_codigo_barras(c, x: float, y: float, w: float, h: float, codigo: st
         bounds = barcode.getBounds()
         bw = bounds[2] - bounds[0]
         bh = bounds[3] - bounds[1]
-        d = Drawing(w, h)
+        d = Drawing(bw, h)
         d.add(barcode)
-        renderPDF.draw(d, c, x, y)
+        # Centrar el barcode dentro del ancho disponible
+        offset_x = x + (w - bw) / 2
+        renderPDF.draw(d, c, offset_x, y)
     else:
         c.setFont("Courier", 8)
         c.drawCentredString(x + w/2, y + h * 0.15, codigo[:20])
@@ -169,7 +171,7 @@ def _dibujar_etiqueta(
     inner_w = w - 2 * padding
     inner_x = x + padding
     right_x = x + w - padding
-    top_y = y + h - padding
+    top_y = y + h - padding - 2 * mm  # aire extra arriba para que no se escape
     fecha_hoy = date.today().strftime("%d/%m/%Y")
     codigo_num = prod.codigo_barras or ""
 
@@ -210,7 +212,7 @@ def _dibujar_etiqueta(
     c.line(inner_x, sep_y, inner_x + inner_w, sep_y)
 
     # ── Descripción (máx 2 líneas) ──
-    desc_y = sep_y - 6
+    desc_y = sep_y - 8
     desc = descripcion_editada if descripcion_editada is not None else (prod.descripcion or prod.nombre or "")
     if desc:
         c.setFont("Helvetica", 9)
