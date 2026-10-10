@@ -275,16 +275,6 @@
                   {{ fc(item.cantidad * item.precio || 0) }}
                 </span>
 
-                <!-- Expandir / colapsar detalle -->
-                <button
-                  type="button"
-                  :aria-label="item._expanded ? 'Colapsar detalle' : 'Expandir detalle'"
-                  class="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center transition shrink-0"
-                  @click="toggleExpandir(idx)"
-                >
-                  <i :class="['fa-solid fa-chevron-down text-[10px] transition-transform', item._expanded ? 'rotate-180' : '']"></i>
-                </button>
-
                 <!-- Delete -->
                 <button
                   type="button"
@@ -296,22 +286,33 @@
                 </button>
               </div>
 
-              <!-- Fila 2: detalle expandible (vencimiento, precio venta, datos de producto nuevo) -->
-              <div
-                v-if="item._expanded || esNuevoProducto(item)"
-                class="px-3 pb-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/50"
-              >
-                <!-- Fila 2: vencimiento + precio venta (todos) + hint última compra (existentes) + campos nuevos -->
-                <div class="flex flex-wrap items-center gap-3">
+              <!-- Fila 2: datos del producto (siempre visible, campos click-only) -->
+              <div class="px-3 pb-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/50">
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                  <!-- Producto nuevo: nombre editable -->
+                  <div v-if="esNuevoProducto(item)" class="w-full flex items-center gap-1.5">
+                    <label class="text-[9px] uppercase font-bold text-amber-500 shrink-0">Nombre</label>
+                    <input
+                      v-model="item.producto"
+                      type="text"
+                      tabindex="-1"
+                      placeholder="Nombre del producto nuevo"
+                      class="flex-1 min-w-0 px-2 py-1 text-[11px] bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-lg outline-none focus:border-amber-500 transition"
+                    >
+                  </div>
+
+                  <!-- Vencimiento (todos) -->
                   <div class="flex items-center gap-1.5">
                     <label class="text-[9px] uppercase font-bold text-slate-400">Venc.</label>
                     <input
                       v-model="item.vencimiento"
                       type="date"
+                      tabindex="-1"
                       class="px-2 py-1 text-[11px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-brand-500 transition"
                     >
                   </div>
 
+                  <!-- P. Venta editable (todos) -->
                   <div class="flex items-center gap-1.5">
                     <label class="text-[9px] uppercase font-bold" :class="esNuevoProducto(item) ? 'text-amber-500' : 'text-slate-400'">P. Venta</label>
                     <input
@@ -320,26 +321,20 @@
                       min="0"
                       step="0.01"
                       placeholder="0.00"
+                      tabindex="-1"
                       class="w-20 px-2 py-1 text-[11px] font-mono-data bg-white dark:bg-slate-900 border rounded-lg outline-none focus:border-brand-500 transition"
                       :class="esNuevoProducto(item) ? 'border-amber-300 dark:border-amber-700 focus:border-amber-500' : 'border-slate-200 dark:border-slate-700'"
                     >
                   </div>
 
+                  <!-- Producto nuevo: marca + categoría -->
                   <template v-if="esNuevoProducto(item)">
-                    <div class="w-full flex items-center gap-1.5">
-                      <label class="text-[9px] uppercase font-bold text-amber-500 shrink-0">Nombre</label>
-                      <input
-                        v-model="item.producto"
-                        type="text"
-                        placeholder="Nombre del producto nuevo"
-                        class="flex-1 min-w-0 px-2 py-1 text-[11px] bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-lg outline-none focus:border-amber-500 transition"
-                      >
-                    </div>
                     <div class="flex items-center gap-1.5">
                       <label class="text-[9px] uppercase font-bold text-amber-500">Marca</label>
                       <input
                         v-model="item.marca"
                         type="text"
+                        tabindex="-1"
                         placeholder="Opcional"
                         class="w-24 px-2 py-1 text-[11px] bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-lg outline-none focus:border-amber-500 transition"
                       >
@@ -348,6 +343,7 @@
                       <label class="text-[9px] uppercase font-bold text-amber-500">Cat.</label>
                       <select
                         v-model="item.categoria_id"
+                        tabindex="-1"
                         class="px-2 py-1 text-[11px] bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-lg outline-none focus:border-amber-500 transition"
                       >
                         <option :value="null">General</option>
@@ -356,22 +352,23 @@
                       <BaseBadge variant="warning" size="xs">Nuevo</BaseBadge>
                     </div>
                   </template>
-                </div>
 
-                <!-- Hint: última compra (solo productos existentes, bajo demanda) -->
-                <div
-                  v-if="!esNuevoProducto(item) && item._productoId"
-                  class="mt-1.5 text-[10px] text-slate-400"
-                >
-                  <template v-if="ultimoCompraCache[item._productoId] !== undefined">
-                    <template v-if="ultimoCompraCache[item._productoId]">
-                      <i class="fa-solid fa-truck-field mr-1"></i>
-                      Últ. compra: <span class="font-mono-data font-semibold">{{ fc(ultimoCompraCache[item._productoId].precio_unitario) }}</span>
-                      <span v-if="ultimoCompraCache[item._productoId].proveedor"> · {{ ultimoCompraCache[item._productoId].proveedor }}</span>
-                    </template>
-                    <span v-else class="text-slate-400/60">Sin compras registradas</span>
+                  <!-- Producto existente: info de contexto (marca, categoría, última compra) -->
+                  <template v-else>
+                    <span v-if="item.marca" class="text-[10px] text-slate-400">{{ item.marca }}</span>
+                    <span v-if="item.marca" class="text-[10px] text-slate-300 dark:text-slate-600">·</span>
+                    <span v-if="item._productoId && ultimoCompraCache[item._productoId] !== undefined" class="text-[10px] text-slate-400">
+                      <template v-if="ultimoCompraCache[item._productoId]">
+                        <i class="fa-solid fa-truck-field mr-0.5"></i>
+                        Últ. compra: <span class="font-mono-data font-semibold">{{ fc(ultimoCompraCache[item._productoId].precio_unitario) }}</span>
+                        <span v-if="ultimoCompraCache[item._productoId].proveedor"> · {{ ultimoCompraCache[item._productoId].proveedor }}</span>
+                      </template>
+                      <span v-else class="text-slate-400/60">Sin compras registradas</span>
+                    </span>
+                    <span v-else-if="item._productoId" class="text-[10px] text-slate-400">
+                      <i class="fa-solid fa-circle-notch fa-spin mr-0.5"></i>Cargando...
+                    </span>
                   </template>
-                  <span v-else><i class="fa-solid fa-circle-notch fa-spin mr-1"></i>Buscando última compra...</span>
                 </div>
               </div>
             </div>
@@ -684,7 +681,6 @@ function _nuevoItem(producto = '', codigo_barras = '', cantidad = 1, precio = 0)
   return {
     _key: `item-${_itemCounter}-${Date.now()}`,
     _productoId: null,
-    _expanded: false,
     producto,
     codigo_barras,
     cantidad,
@@ -899,7 +895,12 @@ function onBusquedaKeydown(e) {
     indiceResaltado.value = Math.max(indiceResaltado.value - 1, 0)
   } else if (e.key === 'Enter') {
     e.preventDefault()
-    if (dropdownAbierto.value && resultados.value.length) {
+    // Búsqueda síncrona: el escáner USB escribe y da Enter más rápido
+    // que el debounce, así que forzamos la búsqueda antes de decidir.
+    if (busqueda.value.trim().length >= 2) {
+      buscarProductos(busqueda.value)
+    }
+    if (resultados.value.length) {
       seleccionarResultado(resultados.value[indiceResaltado.value])
     } else if (busqueda.value.trim()) {
       crearProductoNuevoDesdeBusqueda()
@@ -922,7 +923,6 @@ function crearProductoNuevoDesdeBusqueda() {
   if (!texto) return
   const esCodigo = /^\d{8,14}$/.test(texto)
   const item = _nuevoItem(esCodigo ? texto : texto, esCodigo ? texto : '')
-  item._expanded = true
   nuevaCompra.items.push(item)
   busqueda.value = ''
   resultados.value = []
@@ -943,6 +943,7 @@ function agregarItemDesdeProducto(prod) {
   item.precio_venta = prod.precio_venta || 0
   item.marca = prod.marca || ''
   nuevaCompra.items.push(item)
+  if (item._productoId) fetchUltimoCompra(item)
 }
 
 function cambiarCantidad(idx, delta) {
@@ -966,13 +967,6 @@ async function fetchUltimoCompra(item) {
         : null
     }
   } catch { /* se queda en null */ }
-}
-
-function toggleExpandir(idx) {
-  const item = nuevaCompra.items[idx]
-  if (!item) return
-  item._expanded = !item._expanded
-  if (item._expanded && item._productoId) fetchUltimoCompra(item)
 }
 
 function onCantidadEnter(idx) {
