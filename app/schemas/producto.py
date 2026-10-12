@@ -20,6 +20,7 @@ class ProductoBase(BaseModel):
     propiedades: Optional[dict] = None
     fuente: Optional[str] = "manual"
     categoria_id: Optional[int] = None
+    sector_id: Optional[int] = None
     stock_minimo: Optional[float] = 0.0
     stock_actual: Optional[float] = 0.0
     fecha_vencimiento: Optional[datetime] = None
@@ -50,6 +51,7 @@ class ProductoUpdate(BaseModel):
     propiedades: Optional[dict] = None
     fuente: Optional[str] = None
     categoria_id: Optional[int] = None
+    sector_id: Optional[int] = None
     stock_minimo: Optional[float] = None
     stock_actual: Optional[float] = None
     observaciones: Optional[str] = None

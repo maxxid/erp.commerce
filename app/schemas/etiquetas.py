@@ -13,7 +13,8 @@ class EtiquetasFiltros(BaseModel):
     incluir_nuevos: bool = True
     solo_con_stock: bool = False
     categoria_id: Optional[int] = None
-    orden: Literal['fecha_desc', 'fecha_asc', 'nombre', 'categoria'] = 'fecha_desc'
+    sector_id: Optional[int] = None
+    orden: Literal['fecha_desc', 'fecha_asc', 'nombre', 'categoria', 'sector'] = 'fecha_desc'
 
 
 class EtiquetaProductoOut(BaseModel):
@@ -29,6 +30,8 @@ class EtiquetaProductoOut(BaseModel):
     precio_por_kilo: Optional[float] = None
     categoria_id: Optional[int] = None
     categoria_nombre: Optional[str] = None
+    sector_id: Optional[int] = None
+    sector_nombre: Optional[str] = None
     stock_actual: float
     motivo: Literal['nuevo', 'cambio_precio', 'ambos'] = 'cambio_precio'
 

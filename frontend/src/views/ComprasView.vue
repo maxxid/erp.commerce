@@ -357,6 +357,29 @@
                     >
                   </div>
 
+                  <!-- Sector (todos): reubicación al cargar la mercadería -->
+                  <div class="flex items-center gap-1.5">
+                    <label class="text-[9px] uppercase font-bold text-slate-400">Sector</label>
+                    <select
+                      v-model="item.sector_id"
+                      tabindex="-1"
+                      class="px-2 py-1 text-[11px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-brand-500 transition"
+                    >
+                      <option :value="null">Sin sector</option>
+                      <option v-for="s in sectores" :key="s.id" :value="s.id">{{ s.nombre }}</option>
+                    </select>
+                    <button
+                      type="button"
+                      tabindex="-1"
+                      aria-label="Crear sector"
+                      title="Crear sector"
+                      class="shrink-0 w-5 h-5 rounded border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-brand-600 hover:border-brand-400 flex items-center justify-center transition"
+                      @click="abrirSectorQuick(item)"
+                    >
+                      <i class="fa-solid fa-plus text-[9px]"></i>
+                    </button>
+                  </div>
+
                   <!-- Producto nuevo: marca + categoría -->
                   <template v-if="esNuevoProducto(item)">
                     <div class="flex items-center gap-1.5">
@@ -403,6 +426,25 @@
               </div>
             </div>
           </TransitionGroup>
+
+          <!-- Quick-create sector (se abre desde el "+" de la fila 2) -->
+          <div
+            v-if="showSectorQuick"
+            class="mt-2 p-2 bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800/40 rounded-xl flex items-center gap-2"
+          >
+            <BaseInput
+              id="nuevo-sector-compra"
+              v-model="newSectorNombre"
+              placeholder="Nombre del sector"
+              size="sm"
+              class="flex-1"
+              @enter="quickCreateSector"
+            />
+            <BaseButton variant="primary" size="xs" @click="quickCreateSector">Crear</BaseButton>
+            <BaseButton variant="ghost" size="xs" aria-label="Cerrar" @click="cerrarSectorQuick">
+              <i class="fa-solid fa-xmark"></i>
+            </BaseButton>
+          </div>
         </div>
 
         <!-- Empty state -->
@@ -650,6 +692,10 @@ const router = useRouter()
 const proveedores = ref([])
 const productosCatalogo = ref([])
 const categorias = ref([])
+const sectores = ref([])
+const showSectorQuick = ref(false)
+const newSectorNombre = ref('')
+const sectorQuickItem = ref(null)
 let _itemCounter = 0
 
 const compras = ref([])
@@ -721,6 +767,7 @@ function _nuevoItem(producto = '', codigo_barras = '', cantidad = 1, precio = 0)
     precio_venta: 0,
     vencimiento: '',
     categoria_id: null,
+    sector_id: null,
   }
 }
 
@@ -837,10 +884,47 @@ async function fetchCategorias() {
   } catch { /* fallback to mock */ }
 }
 
+async function fetchSectores() {
+  try {
+    const data = await api.get('/api/sectores')
+    if (Array.isArray(data)) sectores.value = data
+  } catch { /* sin red: se queda con lo cargado */ }
+}
+
+async function quickCreateSector() {
+  const nombre = newSectorNombre.value.trim()
+  if (!nombre) return
+  try {
+    const resp = await api.post('/api/sectores', { nombre })
+    if (resp && resp.id) {
+      const ya_esta = sectores.value.some(s => s.id === resp.id)
+      if (!ya_esta) sectores.value = [...sectores.value, resp]
+      const destino = sectorQuickItem.value
+      if (destino && nuevaCompra.items.includes(destino)) destino.sector_id = resp.id
+      toast.success(`Sector "${resp.nombre}" creado`)
+    }
+  } catch (e) {
+    toast.error(e.message || 'Error al crear sector')
+  }
+  cerrarSectorQuick()
+}
+
+function abrirSectorQuick(item) {
+  sectorQuickItem.value = item
+  showSectorQuick.value = true
+  nextTick(() => document.getElementById('nuevo-sector-compra')?.focus())
+}
+
+function cerrarSectorQuick() {
+  showSectorQuick.value = false
+  sectorQuickItem.value = null
+  newSectorNombre.value = ''
+}
+
 async function syncData() {
   syncing.value = true
   try {
-    await Promise.all([fetchCompras(), fetchProveedores(), fetchProductosCatalogo(), fetchCategorias()])
+  await Promise.all([fetchCompras(), fetchProveedores(), fetchProductosCatalogo(), fetchCategorias(), fetchSectores()])
     toast.success('Datos sincronizados')
   } catch {
     toast.warning('Error al sincronizar')
@@ -1020,6 +1104,7 @@ function agregarItemDesdeProducto(prod) {
   item.precio = prod.precio_costo || prod.precio_referencia || 0
   item.precio_venta = prod.precio_venta || 0
   item.marca = prod.marca || ''
+  item.sector_id = prod.sector_id || null
   nuevaCompra.items.push(item)
   if (item._productoId) fetchUltimoCompra(item)
   return item
@@ -1135,6 +1220,7 @@ async function guardarCompra() {
         marca: i.marca || '',
         precio_venta: i.precio_venta || 0,
         categoria_id: i.categoria_id || null,
+        sector_id: i.sector_id || null,
         vencimiento: i.vencimiento || null,
       })),
     }

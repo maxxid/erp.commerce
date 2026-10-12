@@ -211,6 +211,9 @@ const defaultOfertaForm = () => ({
 const ofertaForm = reactive(defaultOfertaForm())
 
 const proveedores = ref([])
+const sectores = ref([])
+const showSectorQuick = ref(false)
+const newSectorNombre = ref('')
 
 const defaultForm = () => ({
   codigo_barras: '',
@@ -219,6 +222,7 @@ const defaultForm = () => ({
   precio_venta: 0,
   precio_costo: 0,
   categoria_id: null,
+  sector_id: null,
   stock_actual: 0,
   stock_minimo: 0,
   fecha_vencimiento: null,
@@ -390,6 +394,7 @@ async function fetchProductsData(checkPendientes = false) {
 onMounted(async () => {
   await fetchProductsData(true)
   fetchProveedores()
+  fetchSectores()
   abrirDesdeQuery()
 })
 watch(() => route.path, async (path) => {
@@ -463,6 +468,7 @@ function openEditModal(product) {
     precio_venta: product.tipo_venta === 'kilo' ? (product.precio_por_kilo || product.precio_venta) : product.precio_venta,
     precio_costo: product.precio_costo,
     categoria_id: product.categoria_id,
+    sector_id: product.sector_id || null,
     stock_actual: product.stock_actual,
     stock_minimo: product.stock_minimo || 0,
     fecha_vencimiento: product.fecha_vencimiento ? product.fecha_vencimiento.slice(0, 10) : null,
@@ -589,6 +595,8 @@ async function saveProduct() {
   saving.value = true
   try {
     const payload = { ...form }
+    // BaseSelect emite string (o '' al elegir "Sin sector"): normalizar a int|null.
+    payload.sector_id = form.sector_id === '' ? null : form.sector_id
     payload.controla_stock = form.controla_stock !== false
     if (form.tipo_venta === 'kilo') {
       payload.precio_por_kilo = form.precio_venta
@@ -777,6 +785,32 @@ async function fetchProveedores() {
     toast.error('No se pudieron cargar los proveedores')
     proveedores.value = []
   }
+}
+
+async function fetchSectores() {
+  try {
+    const data = await api.get('/api/sectores')
+    if (Array.isArray(data)) sectores.value = data
+  } catch {
+    sectores.value = []
+  }
+}
+
+async function quickCreateSector() {
+  const nombre = newSectorNombre.value.trim()
+  if (!nombre) return
+  try {
+    const resp = await api.post('/api/sectores', { nombre })
+    if (resp && resp.id) {
+      if (!sectores.value.some(s => s.id === resp.id)) sectores.value = [...sectores.value, resp]
+      form.sector_id = resp.id
+      toast.success(`Sector "${resp.nombre}" creado`)
+    }
+  } catch (e) {
+    toast.error(e.message || 'Error al crear sector')
+  }
+  newSectorNombre.value = ''
+  showSectorQuick.value = false
 }
 
 function formatFecha(fechaStr) {
@@ -1231,7 +1265,7 @@ function formatFecha(fechaStr) {
           description="Desactivá esto en fraccionados (panadería, chorizo, etc.): al vender no se descuenta de los lotes, no genera movimientos ni alertas de bajo stock. Solo queda registrado lo vendido (kg y $)."
         />
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div class="flex items-end gap-2">
             <div class="flex-1">
               <BaseSelect
@@ -1244,6 +1278,21 @@ function formatFecha(fechaStr) {
               />
             </div>
             <BaseButton variant="ghost" size="sm" aria-label="Nueva categoría" class="shrink-0 mb-0.5" @click="showCatQuick = true">
+              <i class="fa-solid fa-plus"></i>
+            </BaseButton>
+          </div>
+          <div class="flex items-end gap-2">
+            <div class="flex-1">
+              <BaseSelect
+                v-model="form.sector_id"
+                label="Sector"
+                :options="[{ value: null, label: 'Sin sector' }, ...sectores.map(s => ({ value: s.id, label: s.nombre }))]"
+                option-value="value"
+                option-label="label"
+                placeholder=""
+              />
+            </div>
+            <BaseButton variant="ghost" size="sm" aria-label="Nuevo sector" class="shrink-0 mb-0.5" @click="showSectorQuick = true">
               <i class="fa-solid fa-plus"></i>
             </BaseButton>
           </div>
@@ -1315,6 +1364,13 @@ function formatFecha(fechaStr) {
             <BaseButton variant="primary" size="xs" @click="quickCreateProveedor">Crear Proveedor</BaseButton>
             <BaseButton variant="ghost" size="xs" @click="showProvQuick = false"><i class="fa-solid fa-xmark"></i></BaseButton>
           </div>
+        </div>
+
+        <!-- Quick-create Sector -->
+        <div v-if="showSectorQuick" class="p-3 bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800/40 rounded-xl flex items-center gap-2">
+          <BaseInput v-model="newSectorNombre" placeholder="Nombre del sector" size="sm" class="flex-1" @enter="quickCreateSector" />
+          <BaseButton variant="primary" size="xs" @click="quickCreateSector">Crear</BaseButton>
+          <BaseButton variant="ghost" size="xs" @click="showSectorQuick = false"><i class="fa-solid fa-xmark"></i></BaseButton>
         </div>
 
         <div v-if="formError" class="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 rounded-xl border border-red-100 dark:border-red-800/50 text-xs font-medium flex items-center gap-2">

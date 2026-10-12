@@ -47,7 +47,7 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 
 ## ✅ Completados recientemente
 
-### IA con gating por plan — A1+A2+A3 hechos (Sectores y Panel pendientes) — 12/10/2026
+### IA con gating por plan — A1+A2+A3+B hechos (Panel pendiente) — 12/10/2026
 Nuevo eje de trabajo: **IA/LLM con plan de licencia**, **Sectores** para impresión de etiquetas y **panel de recategorización**. Orden decidido: IA → Sectores → Panel.
 
 **A1 — Capa de IA (`app/services/ia/`)**
@@ -73,7 +73,23 @@ Nuevo eje de trabajo: **IA/LLM con plan de licencia**, **Sectores** para impresi
 - `LicenciasView.vue`: columna **Plan** con badge, y select de plan en el modal de generación (catálogo desde `GET /api/licencia/estado`). También se arregló `loadLicenses`, que metía el JSON crudo y dejaba la tabla con fechas/estado vacíos
 - 17 tests (`tests/test_router_ia.py`). Total suite: **571 passed**
 
-**Pendiente:** B (Sectores) → C (Panel de recategorización). Detalle del diseño en el plan de trabajo de la sesión.
+**Pendiente:** C (Panel de recategorización). Detalle del diseño en el plan de trabajo de la sesión.
+
+### B — Sectores (ubicación física) para etiquetas y cargas — 12/10/2026
+Los sectores son **categorías físicas de ubicación** ("Golosinas", "Bebidas frías", "Estantería 3") y no entran en el módulo de Categorías. El feature `sectores` está en **todos los planes**.
+
+- `app/models/sector.py`: `nombre` (index, **sin unique en DB** — se valida en el router solo contra activos, así un sector borrado no bloquea recrear el nombre), `orden`, `activo`, `created_at`; relationship `productos`
+- `app/models/producto.py`: `producto.sector_id` (FK a `sectores`, nullable, index) + `producto.sector`
+- `app/routers/sectores.py`: `GET` (activos, un solo query de conteos), `POST` (**upsert**: activo existente → lo devuelve; borrado → lo reactiva), `PUT /{id}`, `DELETE /{id}` → **soft-delete + `sector_id = NULL` en sus productos** (sin estados colgantes; reactivar no restaura productos, devuelve `productos_afectados`)
+- `POST /api/productos/asignar-sector`: asignación **bulk** `{productos_ids, sector_id}` (valida sector activo, solo productos activos) — usado por la herramienta de la vista de Etiquetas
+- `app/schemas/producto.py` + `producto_service`: `sector_id` en create/update. **`actualizar_producto` ignora `None`** en su loop `updatable`, así que `sector_id` se maneja **fuera** del loop para poder limpiarlo
+- `compras.py`: al cargar mercadería, `items[].sector_id` **reubica productos existentes** y se aplica a los nuevos (`null` = no tocar)
+- `etiquetas`: filtro `sector_id`, orden `sector` (Sector.orden → Sector.nombre → Producto.nombre con `nullslast()`) y `sector_id`/`sector_nombre` en `EtiquetaProductoOut`
+- **UI**
+  - `ProductsView`: select **Sector** con botón "+" (quick-create inline) en la fila Categoría | Proveedor | **Sector** (`sm:grid-cols-3`); `form.sector_id` en defaults, en la carga del producto (no debe filtrarse entre productos) y normalizado en `saveProduct`
+  - `ComprasView`: fila 2 de cada item con select **Sector** + "+" (quick-create con foco automático); por defecto trae el sector actual del producto y al guardar reubica
+  - `EtiquetasPreciosView`: filtro **Sector**, orden **Sector (ubicación)**, columna Sector en la tabla y herramienta **"Asignar sector a la selección"** (bulk)
+- 31 tests (`tests/test_sectores.py`). Total suite: **602 passed**
 
 ### Rediseño de Etiquetas de Precios — 09/10/2026
 - **Layout de dos paneles** (desktop): controles a la izquierda (340px), tabla de preview a la derecha; en mobile se apilan

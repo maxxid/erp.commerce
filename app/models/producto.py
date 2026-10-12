@@ -58,6 +58,7 @@ class Producto(Base):
 
     fuente = Column(String(20), default="manual")
     categoria_id = Column(Integer, ForeignKey("categorias.id"), nullable=True, index=True)
+    sector_id = Column(Integer, ForeignKey("sectores.id"), nullable=True, index=True)
 
     stock_actual = Column(Float, default=0.0)
     stock_transito = Column(Float, default=0.0)    # Mercadería comprada, aún no recibida
@@ -93,6 +94,7 @@ class Producto(Base):
 
     # Relaciones
     categoria = relationship("Categoria", back_populates="productos")
+    sector = relationship("Sector", back_populates="productos")
     venta_items = relationship("VentaItem", back_populates="producto")
     compra_items = relationship("CompraItem", back_populates="producto")
     movimientos_stock = relationship("MovimientoStock", back_populates="producto")

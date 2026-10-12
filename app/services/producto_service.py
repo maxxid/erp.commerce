@@ -154,6 +154,11 @@ def actualizar_producto(db: Session, producto: Producto, data: dict) -> Producto
     if "activo" in data:
         producto.activo = data["activo"]
 
+    # Fuera del loop: `sector_id` sí acepta null (quitar el sector), mientras
+    # que el resto de los campos ignora los None para no pisar valores.
+    if "sector_id" in data:
+        producto.sector_id = data["sector_id"]
+
     producto.stock_actual = _suma_lotes_activos(db, producto.id)
 
     db.commit()

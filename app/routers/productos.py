@@ -162,6 +162,44 @@ class MarcarEtiquetadoRequest(BaseModel):
     productos_ids: list[int]
 
 
+class AsignarSectorRequest(BaseModel):
+    productos_ids: list[int]
+    sector_id: Optional[int] = None   # None = quitar el sector
+
+
+@router.post("/asignar-sector", response_model=RespuestaData)
+def asignar_sector(
+    data: AsignarSectorRequest,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "encargado")),
+):
+    """Asigna (o quita con sector_id null) un sector a un lote de productos."""
+    from app.models.sector import Sector
+
+    if not data.productos_ids:
+        raise HTTPException(status_code=400, detail="No se indicaron productos")
+
+    nombre_sector = None
+    if data.sector_id is not None:
+        sector = db.query(Sector).filter(Sector.id == data.sector_id, Sector.activo == True).first()
+        if not sector:
+            raise HTTPException(status_code=404, detail="Sector no encontrado")
+        nombre_sector = sector.nombre
+
+    filtro = (Producto.id.in_(data.productos_ids), Producto.activo == True)
+    afectados = db.query(func.count(Producto.id)).filter(*filtro).scalar() or 0
+    db.query(Producto).filter(*filtro).update(
+        {"sector_id": data.sector_id}, synchronize_session=False
+    )
+    db.commit()
+
+    accion = f"Sector '{nombre_sector}' asignado" if data.sector_id is not None else "Sector quitado"
+    return RespuestaData(
+        data={"asignados": afectados, "sector_id": data.sector_id},
+        message=f"{accion} a {afectados} producto(s)",
+    )
+
+
 @router.post("/marcar-etiquetado", response_model=RespuestaData)
 def marcar_etiquetado(
     data: MarcarEtiquetadoRequest,

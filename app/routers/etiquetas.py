@@ -35,7 +35,8 @@ def listar_para_etiquetar(
     incluir_nuevos: bool = Query(True),
     solo_con_stock: bool = Query(False),
     categoria_id: Optional[int] = Query(None),
-    orden: str = Query('fecha_desc', pattern='^(fecha_desc|fecha_asc|nombre|categoria)$'),
+    sector_id: Optional[int] = Query(None),
+    orden: str = Query('fecha_desc', pattern='^(fecha_desc|fecha_asc|nombre|categoria|sector)$'),
     page: int = Query(1, ge=1),
     page_size: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
@@ -49,6 +50,7 @@ def listar_para_etiquetar(
         incluir_nuevos=incluir_nuevos,
         solo_con_stock=solo_con_stock,
         categoria_id=categoria_id,
+        sector_id=sector_id,
         orden=orden,
     )
     
@@ -85,6 +87,8 @@ def listar_para_etiquetar(
             precio_por_kilo=float(p.precio_por_kilo) if p.precio_por_kilo else None,
             categoria_id=p.categoria_id,
             categoria_nombre=p.categoria.nombre if p.categoria else None,
+            sector_id=p.sector_id,
+            sector_nombre=p.sector.nombre if p.sector else None,
             stock_actual=float(p.stock_actual or 0),
             motivo=motivo,
         ))
@@ -102,19 +106,10 @@ def generar_pdf_etiquetas(
     user: Usuario = Depends(get_current_user),
 ):
     """Genera PDF con etiquetas de precios."""
-    from app.schemas.etiquetas import EtiquetasFiltros
-    
-    # Crear filtros con todos los parámetros incluyendo categoria_id y orden
-    filtros = EtiquetasFiltros(
-        desde=data.filtros.desde,
-        hasta=data.filtros.hasta,
-        incluir_cambios_precio=data.filtros.incluir_cambios_precio,
-        incluir_nuevos=data.filtros.incluir_nuevos,
-        solo_con_stock=data.filtros.solo_con_stock,
-        categoria_id=data.filtros.categoria_id,
-        orden=data.filtros.orden,
-    )
-    
+    # data.filtros ya es un EtiquetasFiltros: reconstruirlo campo por campo
+    # hacía que cualquier filtro nuevo se perdiera silenciosamente acá.
+    filtros = data.filtros
+
     productos = obtener_productos_para_etiquetar(db, filtros)
     
     if not productos:

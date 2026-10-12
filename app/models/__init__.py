@@ -7,6 +7,7 @@ en Base.metadata antes de crear las tablas.
 
 from app.models.categoria import Categoria
 from app.models.producto import Producto
+from app.models.sector import Sector
 from app.models.cliente import Cliente
 from app.models.proveedor import Proveedor
 from app.models.proveedor_pago import DeudaProveedor, PagoProveedor
@@ -27,6 +28,7 @@ from app.models.recarga import Recarga
 __all__ = [
     "Categoria",
     "Producto",
+    "Sector",
     "Cliente",
     "Proveedor",
     "DeudaProveedor",

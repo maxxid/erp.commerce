@@ -7,6 +7,7 @@ from sqlalchemy import or_, and_
 
 from app.models.producto import Producto
 from app.models.categoria import Categoria
+from app.models.sector import Sector
 from app.models.configuracion import Configuracion
 import json
 
@@ -63,9 +64,14 @@ def obtener_productos_para_etiquetar(
     # Filtro por categoría
     if filtros.categoria_id:
         query = query.filter(Producto.categoria_id == filtros.categoria_id)
-    
+
+    # Filtro por sector (dónde se pega la etiqueta)
+    if filtros.sector_id:
+        query = query.filter(Producto.sector_id == filtros.sector_id)
+
     query = query.outerjoin(Categoria, Producto.categoria_id == Categoria.id)
-    
+    query = query.outerjoin(Sector, Producto.sector_id == Sector.id)
+
     # Ordenamiento
     if filtros.orden == 'fecha_desc':
         query = query.order_by(Producto.created_at.desc())
@@ -73,6 +79,13 @@ def obtener_productos_para_etiquetar(
         query = query.order_by(Producto.created_at.asc())
     elif filtros.orden == 'nombre':
         query = query.order_by(Producto.nombre.asc())
+    elif filtros.orden == 'sector':
+        # Agrupa por dónde va colocada la etiqueta: sector, después nombre.
+        query = query.order_by(
+            Sector.orden.asc().nullslast(),
+            Sector.nombre.asc().nullslast(),
+            Producto.nombre.asc(),
+        )
     elif filtros.orden == 'categoria':
         query = query.order_by(Categoria.nombre.asc().nullslast(), Producto.nombre.asc())
     else:

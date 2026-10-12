@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from app.config import settings
 from app.database import engine, Base
 from app.models import *  # noqa: F401, F403 — Registrar todos los modelos
-from app.routers import auth, productos, categorias, dashboard, caja, clientes, ventas, proveedores, compras, calendario, backups, usuarios, auditoria, licencia, catalogo, ofertas, facturacion, configuracion as config_router, pagos, lotes, denominaciones, reportes, recargas, etiquetas, ia as ia_router
+from app.routers import auth, productos, categorias, dashboard, caja, clientes, ventas, proveedores, compras, calendario, backups, usuarios, auditoria, licencia, catalogo, ofertas, facturacion, configuracion as config_router, pagos, lotes, denominaciones, reportes, recargas, etiquetas, ia as ia_router, sectores
 
 
 def crear_app() -> FastAPI:
@@ -58,6 +58,7 @@ def crear_app() -> FastAPI:
     app.include_router(recargas.router)
     app.include_router(etiquetas.router)
     app.include_router(ia_router.router)
+    app.include_router(sectores.router)
 
     # Servir el frontend Vue 3 (producción)
     @app.get("/app")
@@ -239,6 +240,10 @@ def _migrate_new_columns():
         existentes_prod = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(productos)"))]
         if "precio_etiqueta" not in existentes_prod:
             conn.execute(sa.text("ALTER TABLE productos ADD COLUMN precio_etiqueta FLOAT"))
+            conn.commit()
+        if "sector_id" not in existentes_prod:
+            conn.execute(sa.text("ALTER TABLE productos ADD COLUMN sector_id INTEGER REFERENCES sectores (id)"))
+            conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_productos_sector_id ON productos (sector_id)"))
             conn.commit()
         if "observaciones" not in existentes_prod:
             conn.execute(sa.text("ALTER TABLE productos ADD COLUMN observaciones TEXT"))

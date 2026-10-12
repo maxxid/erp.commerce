@@ -47,7 +47,7 @@ class CompraCreate(BaseModel):
     sucursal_id: int = 1
     notas: Optional[str] = None
     recibir_directo: bool = False
-    items: Optional[List[dict]] = Field(default_factory=list, description="Lista de items: {codigo_barras, producto, cantidad, precio, categoria_id, vencimiento}")
+    items: Optional[List[dict]] = Field(default_factory=list, description="Lista de items: {codigo_barras, producto, cantidad, precio, categoria_id, sector_id, vencimiento}")
 
 
 class CompraItemAdd(BaseModel):
@@ -135,9 +135,16 @@ def crear(
             if item_data.get("precio_venta"):
                 nuevo_data["precio_venta"] = item_data.get("precio_venta")
             nuevo_data["fuente"] = "manual"
+            if item_data.get("sector_id"):
+                nuevo_data["sector_id"] = item_data["sector_id"]
             prod = producto_service.crear_producto(db, nuevo_data)
             productos_creados += 1
             producto_id = prod.id
+
+        # Reubicación: si al cargar se eligió sector, se aplica también a los
+        # productos que ya existían (null = no tocar).
+        if prod and item_data.get("sector_id"):
+            prod.sector_id = item_data["sector_id"]
 
         if producto_id is None and prod:
             producto_id = prod.id

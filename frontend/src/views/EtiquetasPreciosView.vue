@@ -41,6 +41,7 @@ const filtros = reactive({
   incluir_nuevos: true,
   solo_con_stock: false,
   categoria_id: null,
+  sector_id: null,
   orden: 'fecha_desc',
 })
 
@@ -72,18 +73,22 @@ const ordenOptions = [
   { value: 'fecha_asc', label: 'Más antiguos' },
   { value: 'nombre', label: 'Nombre (A-Z)' },
   { value: 'categoria', label: 'Categoría' },
+  { value: 'sector', label: 'Sector (ubicación)' },
 ]
 
 const tamano = ref('70x35')
 const borderless = ref(false)
 
 const categorias = ref([])
+const sectores = ref([])
 const productos = ref([])
 const historial = ref([])
 const loading = ref(false)
 const generando = ref(false)
 const marcando = ref(false)
 const showHistorial = ref(false)
+const sectorAsignar = ref(undefined)
+const asignandoSector = ref(false)
 
 const descripcionesEditadas = ref({})
 const selectedProductos = ref(new Set())
@@ -92,6 +97,7 @@ const tableColumns = [
   { key: 'select', label: '', width: 'w-10', align: 'center', mobile: false },
   { key: 'nombre', label: 'Producto' },
   { key: 'motivo', label: '', width: 'w-24', mobile: false },
+  { key: 'sector_nombre', label: 'Sector', width: 'w-28', mobile: false },
   { key: 'descripcion', label: 'Descripción', width: 'w-56', mobile: false },
   { key: 'precio', label: 'Precio', align: 'right', width: 'w-28' },
   { key: 'stock', label: 'Stock', align: 'right', width: 'w-16', mobile: false },
@@ -165,6 +171,37 @@ async function cargarCategorias() {
   }
 }
 
+async function cargarSectores() {
+  try {
+    const data = await api.get('/api/sectores')
+    sectores.value = Array.isArray(data) ? data : (data?.data || [])
+  } catch {
+    sectores.value = []
+  }
+}
+
+async function asignarSectorSeleccionados() {
+  const ids = [...selectedProductos.value]
+  if (!ids.length) {
+    toast.warning('Seleccioná los productos a los que querés asignar el sector')
+    return
+  }
+  asignandoSector.value = true
+  try {
+    const resp = await api.post('/api/productos/asignar-sector', {
+      productos_ids: ids,
+      sector_id: sectorAsignar.value ?? null,
+    })
+    toast.success(resp?.message || `${resp?.asignados ?? ids.length} producto(s) actualizados`)
+    await cargarSectores()
+    await cargarPreview(true)
+  } catch (e) {
+    toast.error(e?.data?.detail || 'Error al asignar sector')
+  } finally {
+    asignandoSector.value = false
+  }
+}
+
 async function cargarHistorial() {
   try {
     const data = await api.get('/api/etiquetas/historial')
@@ -185,6 +222,7 @@ async function cargarPreview(silent = false) {
     params.set('incluir_nuevos', String(filtros.incluir_nuevos))
     params.set('solo_con_stock', String(filtros.solo_con_stock))
     if (filtros.categoria_id) params.set('categoria_id', String(filtros.categoria_id))
+    if (filtros.sector_id) params.set('sector_id', String(filtros.sector_id))
     params.set('orden', filtros.orden)
     params.set('page', '1')
     params.set('page_size', '500')
@@ -314,6 +352,7 @@ function actualizarDescripcion(id, valor) {
 
 onMounted(async () => {
   await cargarCategorias()
+  await cargarSectores()
   await cargarHistorial()
   await cargarPreview(true)
 })
@@ -372,6 +411,14 @@ onMounted(async () => {
             label="Categoría"
             size="sm"
             :options="[{ value: null, label: 'Todas' }, ...categorias.map(c => ({ value: c.id, label: c.nombre }))]"
+            option-value="value"
+            option-label="label"
+          />
+          <BaseSelect
+            v-model="filtros.sector_id"
+            label="Sector"
+            size="sm"
+            :options="[{ value: null, label: 'Todos' }, ...sectores.map(s => ({ value: s.id, label: s.nombre }))]"
             option-value="value"
             option-label="label"
           />
@@ -485,6 +532,32 @@ onMounted(async () => {
               {{ todosSeleccionados ? 'Limpiar' : 'Todo' }}
             </BaseButton>
           </div>
+
+          <!-- Asignación masiva de sector -->
+          <div class="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
+            <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+              Asignar sector a la selección
+            </p>
+            <BaseSelect
+              v-model="sectorAsignar"
+              size="sm"
+              :options="[{ value: null, label: 'Sin sector (quitar)' }, ...sectores.map(s => ({ value: s.id, label: s.nombre }))]"
+              option-value="value"
+              option-label="label"
+              placeholder="Elegir sector…"
+            />
+            <BaseButton
+              variant="secondary"
+              size="sm"
+              class="w-full"
+              :loading="asignandoSector"
+              :disabled="!selectedProductos.size || sectorAsignar === undefined"
+              @click="asignarSectorSeleccionados"
+            >
+              <i class="fa-solid fa-location-dot mr-1"></i>
+              Asignar a {{ selectedProductos.size }} seleccionado(s)
+            </BaseButton>
+          </div>
         </BaseCard>
       </div>
 
@@ -517,6 +590,14 @@ onMounted(async () => {
               <BaseBadge :variant="motivoBadge(row.motivo).variant" size="xs">
                 {{ motivoBadge(row.motivo).label }}
               </BaseBadge>
+            </template>
+            <template #sector_nombre="{ row }">
+              <span
+                class="text-[11px] truncate block"
+                :class="row.sector_nombre ? 'text-slate-600 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500'"
+              >
+                {{ row.sector_nombre || '—' }}
+              </span>
             </template>
             <template #descripcion="{ row }">
               <BaseInput
