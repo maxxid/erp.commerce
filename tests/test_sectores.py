@@ -130,7 +130,7 @@ class TestActualizar:
     def test_renombrarse_a_si_mismo_esta_permitido(self, db, user):
         sector = _crear(db, "Mesa 1").data
         res = sectores_router.actualizar(sector.id, SectorUpdate(nombre="mesa 1"), db=db, user=user)
-        assert res.data.nombre == "mesa 1"
+        assert res.data.nombre == "Mesa 1"
 
     def test_reordenar(self, db, user):
         sector = _crear(db, "Mesa 1").data

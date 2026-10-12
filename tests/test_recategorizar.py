@@ -94,8 +94,8 @@ class TestResolver:
         assert svc._resolver("Bebidas", svc.catalogo(db))[1] == "Bebidas"
 
     def test_contencion_cubre_subcategoria(self, db):
-        _cat(db, "Bebidas frías")
-        assert svc._resolver("Bebidas", svc.catalogo(db))[1] == "Bebidas frías"
+        beb = _cat(db, "Bebidas frías")
+        assert svc._resolver("Bebidas", svc.catalogo(db))[1] == beb.nombre
 
     def test_categoria_corta_no_por_contencion(self, db):
         """'Pan' no debería casar con 'Panadería' por containment de 3 letras."""
@@ -443,7 +443,7 @@ class TestEndpointIA:
         p = _prod(db, "Coca Cola 500ml")
 
         def falso_completar(_db, *, sistema, usuario, como_json, max_tokens, temperatura):
-            assert "Bebidas frías" in usuario  # el catálogo real, con id
+            assert beb.nombre in usuario  # el catálogo real, con id
             assert f"{p.id} | Coca Cola 500ml" in usuario
             assert como_json is True
             return IARespuesta(
@@ -538,4 +538,4 @@ class TestEndpointCandidatos:
         assert resp.data.total == 2
         por_nombre = {f.nombre: f for f in resp.data.items}
         assert por_nombre["Alfajor Jorgito"].sugerencia is not None
-        assert por_nombre["Caja marrón"].sugerencia is None
+        assert por_nombre["Caja Marrón"].sugerencia is None

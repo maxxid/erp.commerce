@@ -10,7 +10,7 @@ from sqlalchemy import (
     Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text, JSON, Table,
     true, false,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, validates
 from datetime import datetime, timezone
 from app.database import Base
 
@@ -100,6 +100,18 @@ class Producto(Base):
     movimientos_stock = relationship("MovimientoStock", back_populates="producto")
     proveedores = relationship("Proveedor", secondary=producto_proveedor, back_populates="productos")
     lotes = relationship("Lote", back_populates="producto", cascade="all, delete-orphan")
+
+    @validates("nombre", "marca", "descripcion")
+    def _title_case(self, campo, valor):
+        # El protocolo del catálogo vive en el modelo para que lo cumplan también
+        # los caminos que no pasan por producto_service (seeds, imports, scripts,
+        # endpoints nuevos). El import va adentro: texto_service cuelga de
+        # app.services, cuyo __init__ importa producto_service, que importa
+        # estos modelos.
+        if not isinstance(valor, str):
+            return valor
+        from app.services.texto_service import title_case_es
+        return title_case_es(valor)
 
     def __repr__(self):
         return f"<Producto(id={self.id}, nombre='{self.nombre[:30]}', stock={self.stock_actual})>"

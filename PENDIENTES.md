@@ -47,6 +47,16 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 
 ## ✅ Completados recientemente
 
+### Title Case en el modelo (nivel 1) — 12/10/2026
+El protocolo de Title Case del catálogo pasó a vivir **en los modelos**, así que lo cumplen también los caminos que no pasan por `producto_service` (seeds, imports de catálogo, scripts, endpoints nuevos).
+
+- `@validates` en `Producto(nombre, marca, descripcion)`, `Categoria(nombre)` y `Sector(nombre)` aplicando `title_case_es`; no-op si el valor no es string. El import va **adentro** del validador: `texto_service` cuelga de `app.services`, cuyo `__init__` importa `producto_service`, que importa los modelos — importarlo arriba rompe en el orden `import app.models` primero (que es el de los tests)
+- Ya estaba cubierto a nivel servicio: `normalizar_producto_campos()` se llamaba en `crear_producto`, `actualizar_producto` y `guardar_desde_lookup` (alta manual, alta desde Compras, edición y auto-lookup). Lo que faltaban eran los caminos que se salteaban el servicio
+- Bonus: `categorias.nombre` es `unique`, así que dos altas del mismo concepto con distinto casing ahora **chocan** en vez de crear una categoría duplicada silenciosa. Y los nombres guardados pasan a ser los mismos que devuelve `_map_categoria()`, que es lo que compara el `find(c => c.nombre === resp.categoria)` de Products/Compras/QuickCreate
+- 11 tests nuevos (`tests/test_titlecase_modelos.py`); ajustados 4 que asercionaban el casing crudo del input (2 en `test_recategorizar`, 1 en `test_sectores`). Suite: **662 passed**
+
+**Pendiente (nivel 2):** el chequeo de duplicados de `categorias.crear` (`app/routers/categorias.py:42`) y de `producto_service._obtener_o_crear_categoria` (:237) comparan con igualdad exacta **contra el input crudo**. Con una variante de casing ("golosinas" con "Golosinas" existiendo) el chequeo no choca y el `INSERT` sí → **500**. Normalizar el nombre antes del chequeo lo cierra. `categorizacion_service._obtener_o_crear_categoria` ya compara con `normalizar()` (sin tildes ni mayúsculas) y no tiene el problema.
+
 ### IA con gating por plan — A1+A2+A3+B+C hechos — 12/10/2026
 Nuevo eje de trabajo: **IA/LLM con plan de licencia**, **Sectores** para impresión de etiquetas y **panel de recategorización**. Orden decidido: IA → Sectores → Panel.
 
