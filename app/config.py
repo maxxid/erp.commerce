@@ -64,5 +64,14 @@ class Settings:
     BACKUP_INTERVAL_MIN: int = int(os.getenv("BACKUP_INTERVAL_MIN", "0"))
     BACKUP_KEEP_LOCAL: int = int(os.getenv("BACKUP_KEEP_LOCAL", "5"))  # backups locales a conservar
 
+    # IA / LLM — la key interna (SaaS) vive SOLO en entorno y nunca en la DB,
+    # asi no se filtra por GET /api/config/ajustes. La key del cliente (BYOK)
+    # si va en DB y tiene prioridad sobre esta.
+    IA_DEFAULT_API_KEY: str = os.getenv("IA_DEFAULT_API_KEY", "")
+    IA_DEFAULT_BASE_URL: str = os.getenv("IA_DEFAULT_BASE_URL", "")
+    IA_DEFAULT_MODELO: str = os.getenv("IA_DEFAULT_MODELO", "")
+    IA_TIMEOUT: int = int(os.getenv("IA_TIMEOUT", "60"))
+    IA_MAX_REINTENTOS: int = int(os.getenv("IA_MAX_REINTENTOS", "2"))
+
 
 settings = Settings()
