@@ -94,7 +94,9 @@ Nada se mueve solo. `categorizacion_service.aplicar()` es **el único punto de e
   - botón "Aplicar N" → **modal de confirmación** con el detalle antes de escribir; los seleccionados sin cambio se descartan y se informan
 - 49 tests (`tests/test_recategorizar.py`). Total suite: **651 passed**
 
-**Pendiente:** correr `scripts/normalizar_productos_titlecase.py` en el server (one-time, toca datos reales — pendiente de decidir).
+**Script one-time ejecutado (12/10/2026):** `scripts/normalizar_productos_titlecase.py --aplicar` contra `/data/erp/erp_comercio.db` → 486 de 569 productos (599 campos: 466 `nombre`, 132 `marca`, 1 `descripcion`), 0 de 9 categorías. Verificado idempotente (segunda corrida: 0 cambios) y diff columna por columna sobre una copia: solo toca `nombre`/`marca`/`descripcion`; códigos de barras, precios e stock intactos (el único efecto colateral es `updated_at`, por el `onupdate` de SQLAlchemy). Backup: `/data/erp/erp_comercio.db.bak-20261012-titlecase`.
+
+El script quedó endurecido en `a39615f`: **dry-run por defecto** y exige `--aplicar`, imprime la DB real que va a usar y se niega a escribir si la URL sigue siendo el default `sqlite:///erp_comercio.db` (relativa al cwd, no es la de producción). `--db` se resuelve antes de importar `app.database`, porque ese módulo arma el engine en el import.
 
 ### B — Sectores (ubicación física) para etiquetas y cargas — 12/10/2026
 Los sectores son **categorías físicas de ubicación** ("Golosinas", "Bebidas frías", "Estantería 3") y no entran en el módulo de Categorías. El feature `sectores` está en **todos los planes**.
