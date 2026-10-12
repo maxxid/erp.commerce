@@ -910,13 +910,15 @@ function onBusquedaInput() {
   _debounceTimer = setTimeout(() => buscarProductos(busqueda.value), 150)
 }
 
+const norm = (s) => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+
 function buscarProductos(q) {
-  const query = q.trim().toLowerCase()
+  const query = norm(q.trim())
   if (!query) { resultados.value = []; dropdownAbierto.value = false; return }
   const scored = []
   for (const p of productosCatalogo.value) {
-    const nombre = (p.nombre || '').toLowerCase()
-    const barcode = (p.codigo_barras || '').toLowerCase()
+    const nombre = norm(p.nombre)
+    const barcode = norm(p.codigo_barras)
     let score = -1
     if (barcode === query) score = 0
     else if (nombre === query) score = 1
@@ -979,7 +981,15 @@ function crearProductoNuevoDesdeBusqueda() {
   busqueda.value = ''
   resultados.value = []
   dropdownAbierto.value = false
-  focoEnProducto(item)
+  if (esCodigo) {
+    // Producto nuevo con código: lookup en background, foco vuelve al
+    // buscador para seguir escaneando mientras busca.
+    lookupProducto(item)
+    nextTick(() => busquedaInputRef.value?.focus())
+  } else {
+    // Sin código (nombre tipeado): entra al producto para completar datos.
+    focoEnProducto(item)
+  }
 }
 
 function focoEnProducto(item) {
@@ -1032,6 +1042,7 @@ async function lookupProducto(item) {
   const code = (item.codigo_barras || '').trim()
   if (!code || code.length < 8 || item._lookup) return
   item._lookup = true
+  toast.info(`Buscando información de ${item.producto || code}...`)
   try {
     const resp = await api.post('/api/productos/lookup', { barcode: code })
     if (resp) {
@@ -1043,12 +1054,12 @@ async function lookupProducto(item) {
         const cat = categorias.value.find(c => c.nombre === resp.categoria)
         if (cat) item.categoria_id = cat.id
       }
-      toast.success(`Encontrado en ${resp.fuente || 'fuente externa'}`)
+      toast.success(`✓ ${resp.nombre || code} — encontrado en ${resp.fuente || 'fuente externa'}`)
     } else {
-      toast.info('Producto no encontrado en fuentes externas')
+      toast.info(`${code}: no encontrado en fuentes externas`)
     }
   } catch {
-    toast.info('Búsqueda sin resultados')
+    toast.info(`${code}: búsqueda sin resultados`)
   }
   item._lookup = false
 }
