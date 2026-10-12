@@ -47,7 +47,7 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 
 ## ✅ Completados recientemente
 
-### IA con gating por plan — A1+A2+A3+B hechos (Panel pendiente) — 12/10/2026
+### IA con gating por plan — A1+A2+A3+B+C hechos — 12/10/2026
 Nuevo eje de trabajo: **IA/LLM con plan de licencia**, **Sectores** para impresión de etiquetas y **panel de recategorización**. Orden decidido: IA → Sectores → Panel.
 
 **A1 — Capa de IA (`app/services/ia/`)**
@@ -73,7 +73,28 @@ Nuevo eje de trabajo: **IA/LLM con plan de licencia**, **Sectores** para impresi
 - `LicenciasView.vue`: columna **Plan** con badge, y select de plan en el modal de generación (catálogo desde `GET /api/licencia/estado`). También se arregló `loadLicenses`, que metía el JSON crudo y dejaba la tabla con fechas/estado vacíos
 - 17 tests (`tests/test_router_ia.py`). Total suite: **571 passed**
 
-**Pendiente:** C (Panel de recategorización). Detalle del diseño en el plan de trabajo de la sesión.
+### C — Panel de recategorización con IA — 12/10/2026
+Nada se mueve solo. `categorizacion_service.aplicar()` es **el único punto de escritura** y recibe lo que eligió una persona; la IA y las keywords solo proponen.
+
+- `app/services/categorizacion_service.py`
+  - `sugerir_local()`: diccionario `SINONIMOS` del rubro argentino (almacén/kiosco) + detección de que el **nombre de una categoría** esté escrito en el producto. Confianza 0.92 si aparece la categoría, 0.75 si la pista está en el nombre, 0.60 si solo en la descripción. Nunca sugiere `General` ni lo que el producto ya tiene
+  - `_resolver()`: casa el nombre canónico contra el catálogo real del cliente (igualdad, y contención solo si el canónico tiene ≥4 letras, para que "Pan" no capture "Panadería")
+  - `candidatos(modo, q, page, page_size)`: `pendientes` (sin categoría **o** en General), `sin_categoria`, `general`, `todos`; excluye inactivos y ya calcula `destino_id`
+  - `prompt_ia()` / `interpretar_ia()`: prompt en español con el catálogo real y JSON estricto; la respuesta se filtra (ids pedidos, `categoria_id` inventado → null, `nueva_categoria` cortada a 60 y descartada si es neutra, basura de tipos ignorada)
+  - `TAMANO_LOTE_IA = 20`; `aplicar()` crea/reutiliza categorías (dedup por nombre sin tildes ni mayúsculas), reactiva una inactiva y devuelve `{aplicados, categorias_creadas, errores}`
+- `app/routers/recategorizar.py`
+  - `GET /api/productos/sugerencias/candidatos` (admin/encargado) → `RespuestaData[CandidatosPage]` con `items/total/page/page_size` **adentro** del payload (si no, `api.js` desenvuelve el `data` y se pierde el total)
+  - `POST /api/productos/sugerencias/ia` con `requiere_feature("ia")` → **402** sin IA configurada, **409** límite agotado, **502** proveedor/respuesta ilegible; recorta el lote a 20
+  - `POST /api/productos/aplicar-sugerencias` → escribe y registra auditoría `recategorizacion_producto`; máximo 500 por llamada
+  - Registrado en `main.py` **antes** que `productos.router`, para que `/sugerencias/*` nunca caiga en un `/{producto_id}` genérico
+- `frontend/src/views/RecategorizarView.vue` + ruta `/recategorizar` + entrada en el sidebar (admin/encargado)
+  - filtros por modo y búsqueda, contador sin categoría / categorizadas, paginación
+  - **"Analizar con IA"** en lotes de 20 con barra de progreso; los resultados se pre-seleccionan para revisión
+  - cada fila tiene su select de destino (incluye `Nueva: X` cuando el modelo propuso una categoría inexistente) — elegir algo distinto de lo actual es la confirmación explícita
+  - botón "Aplicar N" → **modal de confirmación** con el detalle antes de escribir; los seleccionados sin cambio se descartan y se informan
+- 49 tests (`tests/test_recategorizar.py`). Total suite: **651 passed**
+
+**Pendiente:** correr `scripts/normalizar_productos_titlecase.py` en el server (one-time, toca datos reales — pendiente de decidir).
 
 ### B — Sectores (ubicación física) para etiquetas y cargas — 12/10/2026
 Los sectores son **categorías físicas de ubicación** ("Golosinas", "Bebidas frías", "Estantería 3") y no entran en el módulo de Categorías. El feature `sectores` está en **todos los planes**.

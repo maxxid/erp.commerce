@@ -36,6 +36,7 @@ const routeNames = {
   facturacion: 'Facturación Electrónica',
   ajustes: 'Ajustes',
   'etiquetas-precios': 'Etiquetas de Precios',
+  recategorizar: 'Recategorizar productos',
   cobrar: 'Cobrar',
   'cargar-mercaderia': 'Cargar Mercadería',
   'control-stock': 'Control de Stock'

@@ -45,6 +45,7 @@ const adminLinks = [
   { to: '/facturacion', icon: 'fa-file-invoice', label: 'Facturación', roles: ['admin', 'encargado'] },
   { to: '/usuarios', icon: 'fa-users-gear', label: 'Usuarios', roles: ['admin'] },
   { to: '/reportes', icon: 'fa-chart-line', label: 'Reportes', roles: ['admin', 'encargado'] },
+  { to: '/recategorizar', icon: 'fa-wand-magic-sparkles', label: 'Recategorizar', roles: ['admin', 'encargado'] },
   { to: '/licencias', icon: 'fa-key', label: 'Licencias', roles: ['admin'] },
   { to: '/ajustes', icon: 'fa-sliders', label: 'Ajustes', roles: ['admin'] },
   { to: '/auditoria', icon: 'fa-shield-halved', label: 'Auditoría', roles: ['admin'] }
