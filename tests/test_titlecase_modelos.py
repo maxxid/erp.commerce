@@ -6,6 +6,7 @@ que se salteaban el servicio (seeds, imports, scripts, endpoints nuevos). El
 """
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
@@ -15,6 +16,9 @@ from app.database import Base as _Base
 from app.models.categoria import Categoria
 from app.models.producto import Producto
 from app.models.sector import Sector
+from app.models.usuario import Usuario
+from app.routers import categorias as categorias_router
+from app.schemas.categoria import CategoriaCreate, CategoriaUpdate
 from app.services import producto_service
 
 
@@ -27,6 +31,14 @@ def db():
         yield session
     finally:
         session.close()
+
+
+@pytest.fixture
+def user(db):
+    u = Usuario(username="admin", password_hash="x", nombre="Admin", rol="admin")
+    db.add(u)
+    db.commit()
+    return u
 
 
 def _producto(**kwargs):
@@ -122,3 +134,35 @@ def test_categoria_unicas_solo_con_la_forma_canonica(db):
     with pytest.raises(IntegrityError):
         db.commit()
     db.rollback()
+
+
+def test_crear_rechaza_variante_de_casing(db, user):
+    categorias_router.crear(CategoriaCreate(nombre="Golosinas"), db=db, user=user)
+    with pytest.raises(HTTPException) as exc:
+        categorias_router.crear(CategoriaCreate(nombre="golosinas"), db=db, user=user)
+    assert exc.value.status_code == 400
+    assert db.query(Categoria).count() == 1
+
+
+def test_renombrar_a_variante_de_otra_choca(db, user):
+    categorias_router.crear(CategoriaCreate(nombre="Golosinas"), db=db, user=user)
+    otra = categorias_router.crear(CategoriaCreate(nombre="Bebidas"), db=db, user=user).data
+    with pytest.raises(HTTPException) as exc:
+        categorias_router.actualizar(otra.id, CategoriaUpdate(nombre="GOLOSINAS"), db=db, user=user)
+    assert exc.value.status_code == 400
+    assert db.get(Categoria, otra.id).nombre == "Bebidas"
+
+
+def test_renombrarse_a_si_mismo_con_otro_casing(db, user):
+    cat = categorias_router.crear(CategoriaCreate(nombre="Golosinas"), db=db, user=user).data
+    res = categorias_router.actualizar(cat.id, CategoriaUpdate(nombre="golosinas"), db=db, user=user)
+    assert res.data.nombre == "Golosinas"
+    assert db.query(Categoria).count() == 1
+
+
+def test_obtener_o_crear_reutiliza_por_casing(db):
+    creada = producto_service._obtener_o_crear_categoria(db, "golosinas")
+    otra = producto_service._obtener_o_crear_categoria(db, "GOLOSINAS")
+    assert creada.nombre == "Golosinas"
+    assert otra.id == creada.id
+    assert db.query(Categoria).count() == 1

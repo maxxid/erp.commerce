@@ -6,7 +6,7 @@ from sqlalchemy import or_, func
 from app.models.producto import Producto
 from app.models.categoria import Categoria
 from app.models.lote import Lote
-from app.services.texto_service import normalizar_producto_campos
+from app.services.texto_service import normalizar_producto_campos, title_case_es
 
 
 def _suma_lotes_activos(db: Session, producto_id: int) -> float:
@@ -233,7 +233,13 @@ def guardar_desde_lookup(db: Session, data: dict) -> Producto:
 
 
 def _obtener_o_crear_categoria(db: Session, nombre: str) -> Categoria:
-    """Busca una categoría por nombre o la crea si no existe."""
+    """Busca una categoría por nombre o la crea si no existe.
+
+    La comparación va contra la forma canónica: el modelo guarda title case, así
+    que comparar contra el input crudo dejaba pasar una variante de casing y el
+    INSERT chocaba con el unique de la columna.
+    """
+    nombre = title_case_es(nombre)
     cat = db.query(Categoria).filter(Categoria.nombre == nombre).first()
     if not cat:
         cat = Categoria(nombre=nombre)
