@@ -22,6 +22,7 @@ class GenerarRequest(BaseModel):
     cliente: str = Field(..., min_length=1, max_length=200)
     machine_id: str = Field(..., min_length=1, max_length=200)
     dias: int = Field(default=30, ge=1, le=365)
+    plan: str = Field(default="trial", max_length=50)
 
 
 @router.get("/machine-id", response_model=RespuestaData)
@@ -33,12 +34,37 @@ def machine_id():
 
 @router.get("/estado", response_model=RespuestaData)
 def estado(db: Session = Depends(get_db)):
-    """Estado de la licencia actual. No requiere auth."""
+    """Estado de la licencia actual. No requiere auth.
+
+    Expone el plan y las features que habilita, más el uso de IA del mes, para
+    que el frontend sepa qué mostrar/ocultar sin tener que preguntar por
+    separado.
+    """
+    from app.services import planes_service
+    from app.services.ia import registro as ia_registro
+    from app.services.ia import limites as ia_limites
+
     lic = licencia_service.obtener_licencia_activa(db)
     valida = licencia_service.licencia_valida(db)
+    plan = planes_service.plan_de(db)
+    features = planes_service.features_de(db)
+    cfg_ia = ia_registro.configuracion(db)
+
+    base = {
+        "plan": plan,
+        "planes": planes_service.catalogo(),
+        "features": features,
+        "ia_disponible": bool(features.get("ia")) and cfg_ia["habilitada"],
+        "ia_configurada": cfg_ia["habilitada"],
+        "ia_uso": {
+            "llamadas": ia_limites.leer(db)["llamadas"],
+            "limite": planes_service.limite_ia_de(db),
+        },
+    }
+
     if not lic:
         return RespuestaData(
-            data={"tiene_licencia": False, "valida": False},
+            data={**base, "tiene_licencia": False, "valida": False},
             message="Sin licencia activa"
         )
     exp = lic.fecha_expiracion
@@ -47,6 +73,7 @@ def estado(db: Session = Depends(get_db)):
     dias = max(0, (exp - datetime.now(timezone.utc)).days) if exp else 0
     return RespuestaData(
         data={
+            **base,
             "tiene_licencia": True,
             "valida": valida,
             "cliente": lic.cliente,
@@ -81,7 +108,9 @@ def activar(data: ActivarRequest, db: Session = Depends(get_db)):
 @router.post("/generar", response_model=RespuestaData)
 def generar(data: GenerarRequest, db: Session = Depends(get_db), user: Usuario = Depends(require_role("admin"))):
     """Genera una nueva clave de licencia (solo admin)."""
-    resultado = licencia_service.crear_licencia(db, data.cliente, data.machine_id, data.dias)
+    resultado = licencia_service.crear_licencia(
+        db, data.cliente, data.machine_id, data.dias, plan=data.plan
+    )
     return RespuestaData(data=resultado, message=f"Licencia generada: {resultado['clave']}")
 
 
@@ -93,6 +122,7 @@ def historial(db: Session = Depends(get_db), user: Usuario = Depends(require_rol
         {
             "id": l.id, "clave": l.clave, "cliente": l.cliente,
             "machine_id": l.machine_id,
+            "plan": getattr(l, "plan", None) or "trial",
             "fecha_inicio": l.fecha_inicio.isoformat() if l.fecha_inicio else None,
             "fecha_expiracion": l.fecha_expiracion.isoformat() if l.fecha_expiracion else None,
             "activa": l.activa,

@@ -62,14 +62,25 @@ def validar_clave(cliente: str, machine_id: str, fecha_expiracion: datetime, cla
     return clave.upper().replace(" ", "") == esperada.upper()
 
 
-def crear_licencia(db: Session, cliente: str, machine_id: str, dias: int = 30) -> dict:
-    """Crea una nueva licencia con clave firmada (uso admin)."""
+def crear_licencia(
+    db: Session, cliente: str, machine_id: str, dias: int = 30, plan: str = "trial"
+) -> dict:
+    """Crea una nueva licencia con clave firmada (uso admin).
+
+    `plan` define las features habilitadas (ver planes_service.PLANES).
+    """
+    from app.services.planes_service import PLANES, PLAN_DEFECTO
+
+    plan = (plan or "").strip().lower()
+    if plan not in PLANES:
+        plan = PLAN_DEFECTO
     expiracion = datetime.now(timezone.utc) + timedelta(days=dias)
     clave = generar_clave(cliente, machine_id, expiracion)
     lic = Licencia(
         clave=clave,
         cliente=cliente,
         machine_id=machine_id,
+        plan=plan,
         fecha_expiracion=expiracion,
     )
     db.add(lic)
@@ -78,6 +89,7 @@ def crear_licencia(db: Session, cliente: str, machine_id: str, dias: int = 30) -
     return {
         "id": lic.id, "clave": lic.clave, "cliente": lic.cliente,
         "machine_id": lic.machine_id,
+        "plan": lic.plan,
         "fecha_inicio": lic.fecha_inicio.isoformat(),
         "fecha_expiracion": lic.fecha_expiracion.isoformat(),
         "activa": lic.activa,

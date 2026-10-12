@@ -192,6 +192,7 @@ def _seed_database():
                     clave=generar_clave("DEMO", mid, exp_demo),
                     cliente="DEMO - Licencia de prueba",
                     machine_id=mid,
+                    plan="pro",
                     fecha_expiracion=exp_demo,
                     activa=True,
                 ))
@@ -208,6 +209,7 @@ def _seed_database():
                         clave=generar_clave("DEMO-TRIAL", mid, exp_demo),
                         cliente="DEMO-TRIAL - 30 dias de prueba",
                         machine_id=mid,
+                        plan="pro",
                         fecha_expiracion=exp_demo,
                         activa=True,
                     )
@@ -258,6 +260,15 @@ def _migrate_new_columns():
         existentes_lic = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(licencias)"))]
         if "machine_id" not in existentes_lic:
             conn.execute(sa.text("ALTER TABLE licencias ADD COLUMN machine_id VARCHAR(200)"))
+            conn.commit()
+        # Plan de servicio. Las licencias existentes quedan en 'pro' para que la
+        # instalación actual no pierda features al migrar; las nuevas se crean en
+        # 'trial' (default del modelo) hasta que el admin elija plan al generarlas.
+        if "plan" not in existentes_lic:
+            conn.execute(sa.text("ALTER TABLE licencias ADD COLUMN plan VARCHAR(50) NOT NULL DEFAULT 'pro'"))
+            conn.commit()
+        if "limite_ia_mes" not in existentes_lic:
+            conn.execute(sa.text("ALTER TABLE licencias ADD COLUMN limite_ia_mes INTEGER"))
             conn.commit()
         existentes_conf = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(configuraciones)"))]
         if "valor_texto" not in existentes_conf:

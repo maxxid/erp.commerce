@@ -47,6 +47,29 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 
 ## ✅ Completados recientemente
 
+### IA con gating por plan — en progreso (A1+A2 hechos, A3 pendiente) — 12/10/2026
+Nuevo eje de trabajo: **IA/LLM con plan de licencia**, **Sectores** para impresión de etiquetas y **panel de recategorización**. Orden decidido: IA → Sectores → Panel.
+
+**A1 — Capa de IA (`app/services/ia/`)**
+- `proveedor.py`: ABC `ProveedorIA.completar(sistema, usuario, como_json, ...) → IARespuesta(texto, tokens_in, tokens_out, modelo, reintentos)`; errores tipados `IADeshabilitada`, `LimiteAgotado`, `ErrorProveedor`
+- `openai_compat.py`: `ProveedorOpenAICompat` sobre `{base_url}/chat/completions`; retries con backoff acotado + `Retry-After` (statuses {408,409,425,429,500,502,503,504}, `dormir()` único punto mockeable); `extraer_json()` con escaneo balanceado (respeta strings/escapes/anidamiento)
+- `limites.py`: contador mensual en `configuraciones` (`ia_uso_YYYY_MM`); `verificar` chequea ANTES de llamar
+- `registro.py`: claves `ia_habilitada/ia_provider/ia_api_key/ia_base_url/ia_model/ia_limite_mes`; catálogo `PROVEEDORES` (groq/openai/deepseek/custom); `obtener`, `configuracion` (enmascarado, write-only), `completar` (punto único: gating+límites+registro), `probar`
+- Config solo por env: `IA_DEFAULT_API_KEY/BASE_URL/MODELO`, `IA_TIMEOUT`, `IA_MAX_REINTENTOS`. **La key de mi cuenta nunca va a la DB**; el BYOK del cliente sí (precedencia DB > env)
+- 57 tests (`tests/test_ia_proveedor.py`): `extraer_json`, reintentos, parseo de usage, enmascarado, precedencia, límites
+
+**A2 — Gating por plan**
+- `Licencia.plan` (`trial|basico|pro|enterprise`) + `Licencia.limite_ia_mes` (override por cliente); migración en `main.py` (las existentes quedan `pro` para no romper la instalación actual; inserts nuevos nacen `trial`)
+- `app/services/planes_service.py`: catálogo `PLANES` con `features` (`ia` solo en pro/enterprise; `sectores` en todos); `plan_de`, `features_de`, `tiene_feature`, `limite_ia_de` (licencia > config > default)
+- `app/auth/dependencies.py`: `requiere_feature(feature)` → **402 Payment Required** si el plan no lo incluye (el frontend distingue "no incluido en tu plan" de un error genérico)
+- `GET /api/licencia/estado` ahora expone `plan`, `planes`, `features`, `ia_disponible`, `ia_configurada`, `ia_uso {llamadas, limite}` — la misma respuesta consume `stores/auth.js`
+- `crear_licencia(..., plan=...)` y `POST /generar` aceptan plan; historial incluye plan
+- 40 tests (`tests/test_planes_licencia.py`). Total suite: **554 passed**
+
+**Pendiente A3:** UI Ajustes sección IA (toggle, provider, key enmascarada write-only, modelo, "Probar conexión", medidor de uso) + mostrar plan en LicenciasView y selector de plan al generar.
+
+**Después:** B (Sectores) → C (Panel de recategorización). Detalle del diseño en el plan de trabajo de la sesión.
+
 ### Rediseño de Etiquetas de Precios — 09/10/2026
 - **Layout de dos paneles** (desktop): controles a la izquierda (340px), tabla de preview a la derecha; en mobile se apilan
 - **Presets de fecha** (Hoy / 7 días / 30 días / 90 días) como pills clickeables; al cambiar las fechas a mano se marca "Personalizado"

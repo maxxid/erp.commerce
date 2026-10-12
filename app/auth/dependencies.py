@@ -68,3 +68,30 @@ def require_role(*roles: str):
         return user
 
     return role_checker
+
+
+def requiere_feature(feature: str):
+    """Factory de dependency: verifica que el plan de la licencia incluya la feature.
+
+    Devuelve 402 (Payment Required) para que el frontend pueda distinguir
+    "no incluido en tu plan" de un error genérico y ofrecer la mejora.
+
+    Uso:
+        @router.post("/sugerencias/ia")
+        def sugerir(_ = Depends(requiere_feature("ia")), db=Depends(get_db)):
+            ...
+    """
+    def feature_checker(
+        db: Session = Depends(get_db),
+        user: Usuario = Depends(get_current_user),
+    ) -> Usuario:
+        from app.services import planes_service
+
+        if not planes_service.tiene_feature(db, feature):
+            raise HTTPException(
+                status_code=402,
+                detail=f"La función '{feature}' no está incluida en tu plan",
+            )
+        return user
+
+    return feature_checker

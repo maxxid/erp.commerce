@@ -98,7 +98,7 @@ def configuracion(db: Session) -> dict:
         "modelo": modelo,
         "api_key_origen": origen,
         "api_key_enmascarada": enmascarar(api_key),
-        "limite_mes": _limite_config(db),
+        "limite_mes": limite_mes(db),
         "uso_mes": limites.leer(db),
     }
 
@@ -112,14 +112,16 @@ def enmascarar(key: str) -> str:
     return f"{key[:4]}••••{key[-4:]}"
 
 
-def _limite_config(db: Session) -> Optional[int]:
-    valor = config_service.get_config(db, CLAVE_LIMITE_MES)
-    if valor is None or str(valor).strip() == "":
-        return LIMITE_MES_DEFECTO
-    try:
-        return int(valor)
-    except (TypeError, ValueError):
-        return LIMITE_MES_DEFECTO
+def limite_mes(db: Session) -> Optional[int]:
+    """Límite mensual efectivo de llamadas.
+
+    Precedencia: licencia (override por cliente) > configuración (operador) >
+    default. Se importa `planes_service` adentro de la función para no armar un
+    ciclo de imports (él importa este módulo para leer la clave de config).
+    """
+    from app.services import planes_service
+
+    return planes_service.limite_ia_de(db)
 
 
 def obtener(db: Session) -> Optional[ProveedorIA]:
