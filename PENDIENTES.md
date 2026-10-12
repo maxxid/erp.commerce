@@ -47,7 +47,7 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 
 ## ✅ Completados recientemente
 
-### IA con gating por plan — en progreso (A1+A2 hechos, A3 pendiente) — 12/10/2026
+### IA con gating por plan — A1+A2+A3 hechos (Sectores y Panel pendientes) — 12/10/2026
 Nuevo eje de trabajo: **IA/LLM con plan de licencia**, **Sectores** para impresión de etiquetas y **panel de recategorización**. Orden decidido: IA → Sectores → Panel.
 
 **A1 — Capa de IA (`app/services/ia/`)**
@@ -64,11 +64,16 @@ Nuevo eje de trabajo: **IA/LLM con plan de licencia**, **Sectores** para impresi
 - `app/auth/dependencies.py`: `requiere_feature(feature)` → **402 Payment Required** si el plan no lo incluye (el frontend distingue "no incluido en tu plan" de un error genérico)
 - `GET /api/licencia/estado` ahora expone `plan`, `planes`, `features`, `ia_disponible`, `ia_configurada`, `ia_uso {llamadas, limite}` — la misma respuesta consume `stores/auth.js`
 - `crear_licencia(..., plan=...)` y `POST /generar` aceptan plan; historial incluye plan
-- 40 tests (`tests/test_planes_licencia.py`). Total suite: **554 passed**
+- 40 tests (`tests/test_planes_licencia.py`)
 
-**Pendiente A3:** UI Ajustes sección IA (toggle, provider, key enmascarada write-only, modelo, "Probar conexión", medidor de uso) + mostrar plan en LicenciasView y selector de plan al generar.
+**A3 — UI de IA**
+- `app/routers/ia.py`: `GET/PUT /api/ia/config` (admin/encargado y admin), `POST /api/ia/probar` con `requiere_feature("ia")` → **402 si el plan no incluye IA**. El snapshot trae `plan`, `plan_incluye_ia`, `disponible`, `limite_configurado`, `limite_mes` (efectivo), `uso_mes` — nunca la key cruda
+- `registro.guardar(db, cambios)` recibe **solo los campos enviados** (`model_fields_set`), así un campo ausente jamás se pisa con `None`; `api_key: ausente = no tocar, "" = borrar`
+- `AjustesView.vue` sección "Inteligencia Artificial": badge de estado en el header (Activa / Sin API key / Deshabilitada / Plan sin IA), banner violeta cuando el plan no incluye IA, medidor de uso del mes con barra (ámbar >80%), toggle, proveedor (al cambiarlo resetea URL/modelo a los del proveedor), API key write-only con máscara+origen y botón de borrar, URL base, modelo, límite mensual, y "Guardar y probar conexión" (guarda antes de probar)
+- `LicenciasView.vue`: columna **Plan** con badge, y select de plan en el modal de generación (catálogo desde `GET /api/licencia/estado`). También se arregló `loadLicenses`, que metía el JSON crudo y dejaba la tabla con fechas/estado vacíos
+- 17 tests (`tests/test_router_ia.py`). Total suite: **571 passed**
 
-**Después:** B (Sectores) → C (Panel de recategorización). Detalle del diseño en el plan de trabajo de la sesión.
+**Pendiente:** B (Sectores) → C (Panel de recategorización). Detalle del diseño en el plan de trabajo de la sesión.
 
 ### Rediseño de Etiquetas de Precios — 09/10/2026
 - **Layout de dos paneles** (desktop): controles a la izquierda (340px), tabla de preview a la derecha; en mobile se apilan

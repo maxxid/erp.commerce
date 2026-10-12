@@ -103,6 +103,51 @@ def configuracion(db: Session) -> dict:
     }
 
 
+def guardar(db: Session, cambios: dict) -> dict:
+    """Aplica cambios de configuración y devuelve el snapshot nuevo.
+
+    `cambios` solo trae los campos que el cliente mandó explícitamente, así un
+    campo que no se envió nunca se pisa con None. La key es write-only: se
+    guarda tal cual llega (vacío = borrar) y jamás se devuelve cruda.
+    """
+    if "provider" in cambios:
+        proveedor = (cambios["provider"] or "").strip().lower()
+        if proveedor and proveedor not in PROVEEDORES:
+            raise ValueError(f"Proveedor desconocido: {proveedor}")
+        if proveedor:
+            config_service.set_config(
+                db, CLAVE_PROVIDER, proveedor, "Proveedor de IA (groq|openai|deepseek|custom)"
+            )
+    if "habilitada" in cambios:
+        config_service.set_config(
+            db, CLAVE_HABILITADA,
+            "true" if cambios["habilitada"] else "false",
+            "Habilitar las features de IA",
+        )
+    if "api_key" in cambios:
+        config_service.set_config(
+            db, CLAVE_API_KEY, (cambios["api_key"] or "").strip(),
+            "API key propia del cliente (BYOK). Vacío = usar la interna.",
+        )
+    if "base_url" in cambios:
+        config_service.set_config(
+            db, CLAVE_BASE_URL, (cambios["base_url"] or "").strip(),
+            "URL base compatible con OpenAI. Vacío = la del proveedor.",
+        )
+    if "modelo" in cambios:
+        config_service.set_config(
+            db, CLAVE_MODELO, (cambios["modelo"] or "").strip(),
+            "Modelo a usar",
+        )
+    if "limite_mes" in cambios:
+        valor = cambios["limite_mes"]
+        config_service.set_config(
+            db, CLAVE_LIMITE_MES, "" if valor is None else str(int(valor)),
+            "Límite mensual de llamadas de IA. Vacío = default.",
+        )
+    return configuracion(db)
+
+
 def enmascarar(key: str) -> str:
     """gsk_abc...xyz1234 -> gsk_••••xyz1234, o vacío si no hay key."""
     if not key:

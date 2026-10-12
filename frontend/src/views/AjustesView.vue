@@ -42,6 +42,107 @@ const denominacionesExpanded = ref(false)
 const recargasExpanded = ref(false)
 const cajaExpanded = ref(false)
 const posExpanded = ref(false)
+const iaExpanded = ref(false)
+const iaProbando = ref(false)
+const iaConfig = ref(null)
+const iaKeyNueva = ref('')
+const iaLimiteTexto = ref('')
+
+const ESTADO_IA = computed(() => {
+  const c = iaConfig.value
+  if (!c) return { texto: 'Cargando…', clase: 'text-slate-400', icono: 'fa-solid fa-circle-notch animate-spin' }
+  if (!c.plan_incluye_ia) return { texto: `Plan ${c.plan}: sin IA`, clase: 'text-violet-600 dark:text-violet-400', icono: 'fa-solid fa-lock' }
+  if (c.configure_key) return { texto: 'Sin API key', clase: 'text-amber-500', icono: 'fa-solid fa-key' }
+  if (!c.habilitada) return { texto: 'Deshabilitada', clase: 'text-slate-500', icono: 'fa-solid fa-circle-minus' }
+  return { texto: 'Activa', clase: 'text-green-600 dark:text-green-400', icono: 'fa-solid fa-circle-check' }
+})
+
+const USO_IA = computed(() => {
+  const c = iaConfig.value
+  if (!c) return { llamadas: 0, limite: null, texto: '', pct: 0, sinLimite: true }
+  const llamadas = c.uso_mes?.llamadas || 0
+  const limite = c.limite_mes
+  const sinLimite = !limite || limite <= 0
+  return {
+    llamadas,
+    limite,
+    sinLimite,
+    pct: sinLimite ? 0 : Math.min(100, Math.round((llamadas / limite) * 100)),
+    texto: sinLimite ? `${llamadas} / sin límite` : `${llamadas} / ${limite}`,
+  }
+})
+
+async function loadIaConfig() {
+  try {
+    iaConfig.value = await api.get('/api/ia/config')
+    const crudo = iaConfig.value.limite_configurado
+    iaLimiteTexto.value = (crudo === null || crudo === undefined || crudo === '') ? '' : String(crudo)
+  } catch {
+    iaConfig.value = null
+  }
+}
+
+function onIaProviderChange(valor) {
+  iaConfig.value.provider = valor
+  const p = iaConfig.value.proveedores.find(x => x.id === valor)
+  if (p) {
+    iaConfig.value.base_url = p.base_url
+    iaConfig.value.modelo = p.modelo
+  }
+}
+
+async function guardarIaConfig({ silencioso = false } = {}) {
+  const cfg = iaConfig.value
+  if (!cfg) return false
+  saving.value = true
+  try {
+    const limite = iaLimiteTexto.value.trim()
+    const cambios = {
+      habilitada: cfg.habilitada,
+      provider: cfg.provider,
+      base_url: cfg.base_url,
+      modelo: cfg.modelo,
+      limite_mes: limite === '' ? null : Number(limite),
+    }
+    if (iaKeyNueva.value.trim()) cambios.api_key = iaKeyNueva.value.trim()
+    iaConfig.value = { ...cfg, ...(await api.put('/api/ia/config', cambios)) }
+    iaKeyNueva.value = ''
+    if (!silencioso) toast.success('Configuración de IA guardada')
+  } catch (e) {
+    toast.error(e.message || 'No se pudo guardar la configuración de IA')
+    saving.value = false
+    return false
+  }
+  saving.value = false
+  return true
+}
+
+async function borrarIaKey() {
+  saving.value = true
+  try {
+    iaConfig.value = { ...iaConfig.value, ...(await api.put('/api/ia/config', { api_key: '' })) }
+    toast.success('API key eliminada')
+  } catch (e) {
+    toast.error(e.message || 'No se pudo borrar la API key')
+  }
+  saving.value = false
+}
+
+async function probarIa() {
+  if (!await guardarIaConfig({ silencioso: true })) return
+  iaProbando.value = true
+  try {
+    const r = await api.post('/api/ia/probar')
+    if (r.ok) toast.success(r.detalle)
+    else toast.error(r.detalle)
+    await loadIaConfig()
+  } catch (e) {
+    toast.error(e.status === 402
+      ? (e.message || 'Tu plan no incluye IA. Actualizá la licencia para usarla.')
+      : (e.message || 'No se pudo conectar con el proveedor'))
+  }
+  iaProbando.value = false
+}
 
 const MEDIOS_PAGO_POS = [
   { value: 'efectivo', label: 'Efectivo', icon: 'fa-money-bill-wave' },
@@ -743,6 +844,7 @@ onMounted(async () => {
   await loadRecargas()
   await loadCajaConfig()
   await loadPosConfig()
+  await loadIaConfig()
 })
 </script>
 
@@ -1818,6 +1920,129 @@ onMounted(async () => {
           </BaseButton>
           <p class="text-[11px] text-slate-400">Los cambios se aplican al recargar el POS</p>
         </div>
+      </div>
+    </BaseCard>
+
+    <BaseCard v-if="!loading && iaConfig">
+      <button class="w-full text-left" @click="iaExpanded = !iaExpanded">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <i class="fa-solid fa-wand-magic-sparkles text-brand-600"></i>
+            Inteligencia Artificial
+          </h3>
+          <div class="flex items-center gap-3">
+            <span class="text-xs flex items-center gap-1" :class="ESTADO_IA.clase">
+              <i :class="ESTADO_IA.icono"></i>{{ ESTADO_IA.texto }}
+            </span>
+            <i :class="['fa-solid fa-chevron-down text-xs transition-transform', iaExpanded ? 'rotate-180' : '']"></i>
+          </div>
+        </div>
+      </button>
+
+      <div v-if="iaExpanded" class="mt-4 space-y-4 max-w-lg">
+        <div v-if="!iaConfig.plan_incluye_ia" class="bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 rounded-lg p-4">
+          <p class="text-xs text-violet-700 dark:text-violet-300">
+            <i class="fa-solid fa-lock mr-1"></i>
+            Tu plan <strong>{{ iaConfig.plan }}</strong> no incluye IA. Podés guardar la configuración,
+            pero no se va a usar hasta que actives una licencia Pro o Enterprise.
+          </p>
+        </div>
+
+        <div class="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg p-4 space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-slate-600 dark:text-slate-400 font-semibold">Uso del mes</span>
+            <span class="font-mono-data text-slate-700 dark:text-slate-300">{{ USO_IA.texto }} llamadas</span>
+          </div>
+          <div class="h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+            <div
+              class="h-full rounded-full transition-all"
+              :class="USO_IA.pct > 80 ? 'bg-amber-500' : 'bg-brand-500'"
+              :style="{ width: USO_IA.pct + '%' }"
+            ></div>
+          </div>
+          <p v-if="!USO_IA.sinLimite && USO_IA.pct >= 80" class="text-[11px] text-amber-600 dark:text-amber-400">
+            <i class="fa-solid fa-triangle-exclamation mr-1"></i>Cerca del límite mensual del plan.
+          </p>
+        </div>
+
+        <div class="space-y-4">
+          <BaseToggle
+            v-model="iaConfig.habilitada"
+            label="Habilitar IA"
+            description="Usa IA en las features que la soporten (categorización de productos, etc.)"
+            size="sm"
+            :disabled="iaConfig.configure_key"
+          />
+
+          <BaseSelect
+            :model-value="iaConfig.provider"
+            @update:modelValue="onIaProviderChange"
+            label="Proveedor"
+            description="Todos hablan la API compatible con OpenAI"
+            :options="iaConfig.proveedores.map(p => ({ value: p.id, label: p.nombre }))"
+            option-value="value"
+            option-label="label"
+            size="sm"
+          />
+
+          <div>
+            <BaseInput
+              v-model="iaKeyNueva"
+              label="API key"
+              type="password"
+              :placeholder="iaConfig.api_key_enmascarada ? 'Dejar vacío para mantener la actual' : 'Pegá tu API key'"
+              :hint="iaConfig.api_key_enmascarada
+                ? `Guardada: ${iaConfig.api_key_enmascarada} (origen: ${iaConfig.api_key_origen})`
+                : 'Write-only: una vez guardada solo se muestra enmascarada'"
+              size="sm"
+            />
+            <button
+              v-if="iaConfig.api_key_origen === 'cliente'"
+              type="button"
+              class="mt-1 text-[11px] text-rose-500 hover:underline"
+              @click="borrarIaKey"
+            >
+              Borrar la API key guardada
+            </button>
+          </div>
+
+          <BaseInput
+            v-model="iaConfig.base_url"
+            label="URL base"
+            placeholder="https://api.groq.com/openai/v1"
+            hint="Vacío = la del proveedor seleccionado"
+            size="sm"
+          />
+
+          <BaseInput
+            v-model="iaConfig.modelo"
+            label="Modelo"
+            placeholder="llama-3.3-70b-versatile"
+            hint="Vacío = el modelo por defecto del proveedor"
+            size="sm"
+          />
+
+          <BaseInput
+            v-model="iaLimiteTexto"
+            label="Límite mensual de llamadas"
+            type="number"
+            placeholder="1000 (por defecto)"
+            hint="Vacío = 1000 por defecto · 0 = sin límite · la licencia puede fijar uno menor"
+            size="sm"
+          />
+        </div>
+
+        <div class="flex items-center gap-3 pt-2">
+          <BaseButton variant="primary" :loading="saving" @click="guardarIaConfig()">
+            <i class="fa-solid fa-floppy-disk"></i> Guardar
+          </BaseButton>
+          <BaseButton variant="secondary" :loading="iaProbando" @click="probarIa">
+            <i class="fa-solid fa-plug"></i> Guardar y probar conexión
+          </BaseButton>
+        </div>
+        <p class="text-[11px] text-slate-400">
+          La key es write-only: nunca se vuelve a mostrar completa ni sale del servidor.
+        </p>
       </div>
     </BaseCard>
   </div>

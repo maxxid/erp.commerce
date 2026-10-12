@@ -21,6 +21,7 @@
         :columns="[
           { key: 'clave', label: 'Clave' },
           { key: 'client', label: 'Cliente' },
+          { key: 'plan', label: 'Plan' },
           { key: 'machineId', label: 'ID Máquina' },
           { key: 'expirationDate', label: 'Vencimiento' },
           { key: 'daysUntilExpiry', label: 'Días restantes', align: 'right' },
@@ -38,6 +39,9 @@
         </template>
         <template #client="{ row }">
           <span class="font-medium text-slate-900 dark:text-slate-100">{{ row.client || row.cliente }}</span>
+        </template>
+        <template #plan="{ row }">
+          <BaseBadge :variant="variantPlan(row.plan)" dot>{{ nombrePlan(row.plan) }}</BaseBadge>
         </template>
         <template #machineId="{ row }">
           <span class="font-mono-data text-slate-600 dark:text-slate-400 text-xs">{{ row.machineId }}</span>
@@ -89,6 +93,15 @@
       <form @submit.prevent="generateLicense" class="space-y-4">
         <BaseInput v-model="genForm.client" label="Nombre del cliente" placeholder="Nombre del cliente" required />
         <BaseInput v-model="genForm.machineId" label="ID de máquina" placeholder="MACHINE-XXXX-XXXX" required input-class="font-mono-data" />
+        <BaseSelect
+          v-model="genForm.plan"
+          label="Plan"
+          :options="planes.map(p => ({ value: p.id, label: `${p.nombre} — ${p.descripcion}` }))"
+          option-value="value"
+          option-label="label"
+          hint="Define qué funciones puede usar el cliente (IA, etc.)"
+          required
+        />
         <BaseSelect
           :model-value="genForm.days"
           @update:modelValue="genForm.days = Number($event)"
@@ -180,12 +193,34 @@ const genForm = reactive({
   client: '',
   machineId: '',
   days: 30,
+  plan: 'trial',
 })
+
+const planes = ref([{ id: 'trial', nombre: 'Prueba', descripcion: '30 días con features básicas' }])
+
+const PLANES_NOMBRE = { trial: 'Prueba', basico: 'Básico', pro: 'Pro', enterprise: 'Enterprise' }
+const PLANES_VARIANT = { trial: 'default', basico: 'info', pro: 'brand', enterprise: 'success' }
+
+function nombrePlan(plan) {
+  return PLANES_NOMBRE[plan] || PLANES_NOMBRE.trial
+}
+
+function variantPlan(plan) {
+  return PLANES_VARIANT[plan] || PLANES_VARIANT.trial
+}
+
+function diasRestantes(iso) {
+  if (!iso) return 0
+  const exp = new Date(iso)
+  if (Number.isNaN(exp.getTime())) return 0
+  return Math.max(0, Math.ceil((exp.getTime() - Date.now()) / 86400000))
+}
 
 function openGenerateModal() {
   genForm.client = ''
   genForm.machineId = ''
   genForm.days = 30
+  genForm.plan = 'trial'
   generatedKey.value = ''
   showGenerateModal.value = true
 }
@@ -197,9 +232,10 @@ async function generateLicense() {
       cliente: genForm.client,
       machine_id: genForm.machineId,
       dias: genForm.days,
+      plan: genForm.plan,
     })
     generatedKey.value = resp.clave
-    toast.success('Licencia generada correctamente')
+    toast.success(`Licencia ${nombrePlan(resp.plan)} generada`)
     await loadLicenses()
   } catch (e) {
     toast.error(e.message || 'Error al generar licencia')
@@ -236,12 +272,31 @@ function copyKey() {
 async function loadLicenses() {
   try {
     const data = await api.get('/api/licencia/historial')
-    if (data && data.length) licenses.value = data
+    if (data && data.length) {
+      licenses.value = data.map(l => ({
+        id: l.id,
+        clave: l.clave,
+        client: l.cliente,
+        plan: l.plan || 'trial',
+        machineId: l.machine_id || '—',
+        expirationDate: (l.fecha_expiracion || '').slice(0, 10),
+        daysUntilExpiry: diasRestantes(l.fecha_expiracion),
+        active: !!l.activa,
+      }))
+    }
   } catch { /* fallback to mock */ }
+}
+
+async function loadPlanes() {
+  try {
+    const estado = await api.get('/api/licencia/estado')
+    if (estado?.planes?.length) planes.value = estado.planes
+  } catch { /* fallback al catálogo mínimo */ }
 }
 
 onMounted(() => {
   loadLicenses()
+  loadPlanes()
 })
 </script>
 
