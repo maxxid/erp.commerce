@@ -47,6 +47,18 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 
 ## ✅ Completados recientemente
 
+### IA habilitada en producción (smoke end-to-end) — 12/10/2026
+La capa de IA pasó de "código listo" a **andando contra el proveedor real** en el server.
+
+- **Carga de la key:** `EnvironmentFile=-/etc/erp-comercio/ia.env` agregado al unit (`98584ea`/`34fdf30`), archivo `600` de `erp`. El cliente además guardó la key como **BYOK** desde Ajustes (`auditoria: ia_api_key_guardada {"origen":"ajustes"}`), así que manda la de la DB por precedencia `DB > env`. Los dos orígenes apuntan a la misma key de Groq
+- **`scripts/smoke_ia.py`**: imprime el snapshot de config, hace el ping y pide un lote con `sugerir_con_ia` (mismo endpoint que el panel). Dos flags que nacieron de problemas reales:
+  - `--env-file /etc/erp-comercio/ia.env` — correrlo a mano (ssh/sudo) **no hereda** el entorno que systemd arma para el servicio, así que decía "IA deshabilitada" mientras la app sí la tenía. Se lee **antes** de importar `app.config`, que congela `IA_DEFAULT_API_KEY` en el import
+  - `--aplicar` (dry-run por defecto, criterio de `normalizar_productos_titlecase.py`): escribe solo las propuestas cuya categoría destino difiere de la actual — el mismo filtro del panel — y registra auditoría `recategorizacion_producto` con `origen: scripts/smoke_ia.py --aplicar`
+- **Modelo:** `llama-3.3-70b-versatile` devuelve **404 model_not_found** en el Free tier (el catálogo del dashboard lo muestra, pero `/v1/models` no lo incluye para esa key). Default en `registro.py` → `openai/gpt-oss-120b`, test y placeholder de Ajustes actualizados; `ia_model` en la DB también (`98584ea`)
+- **Resultado:** ping `Conectado con openai/gpt-oss-120b`, lote de 10/556 candidatos → **2 aplicados** (391 "2 por Mil" → Otros, 308 "7 Seven Violet Cherry" → Bebidas), 8 ya estaban en la categoría propuesta, 0 errores, 0 categorías creadas; uso 4/1000. Auditoría `2352`
+- Commits: `d64d3ef` (script), `34fdf30` (`--env-file`), `98584ea` (modelo + `--aplicar`), `1d40e41` (auditoría). Suite: **666 passed**
+- **Al correr scripts en el server:** siempre `sudo -u erp` + `DATABASE_URL=sqlite:////data/erp/erp_comercio.db` (sin env, el default `sqlite:///erp_comercio.db` es otra DB) y `--env-file` para la key
+
 ### Title Case en el modelo (nivel 1) — 12/10/2026
 El protocolo de Title Case del catálogo pasó a vivir **en los modelos**, así que lo cumplen también los caminos que no pasan por `producto_service` (seeds, imports de catálogo, scripts, endpoints nuevos).
 
