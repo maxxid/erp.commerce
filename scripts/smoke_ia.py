@@ -56,7 +56,7 @@ from app.database import SessionLocal
 from app.models.usuario import Usuario
 from app.routers.recategorizar import sugerir_con_ia
 from app.schemas.recategorizar import SugerenciasIARequest
-from app.services import categorizacion_service as servicio
+from app.services import auditoria_service, categorizacion_service as servicio
 from app.services.ia import registro
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -156,6 +156,20 @@ def main():
             return 0
 
         resultado = servicio.aplicar(db, cambios)
+        if resultado["aplicados"] or resultado["categorias_creadas"]:
+            auditoria_service.registrar(
+                db,
+                user.id,
+                "recategorizacion_producto",
+                None,
+                None,
+                {
+                    "aplicados": resultado["aplicados"],
+                    "creadas": resultado["categorias_creadas"],
+                    "producto_ids": [c["producto_id"] for c in cambios][:50],
+                    "origen": "scripts/smoke_ia.py --aplicar",
+                },
+            )
         log.info("  aplicados: %s · categorías creadas: %s · errores: %s",
                  resultado["aplicados"],
                  [c["nombre"] for c in resultado["categorias_creadas"]],
