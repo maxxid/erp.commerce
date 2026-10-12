@@ -244,7 +244,14 @@
               <!-- Fila principal: nombre + stepper + precio + subtotal + delete -->
               <div class="flex items-center gap-2 px-3 py-2">
                 <div class="flex-1 min-w-0">
-                  <p class="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{{ item.producto }}</p>
+                  <p class="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">
+                    {{ item.producto }}
+                    <span
+                      v-if="item._fuente"
+                      class="inline-block ml-1 px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide rounded bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300 align-middle"
+                      :title="`Fuente: ${item._fuente}`"
+                    >{{ item._fuente }}</span>
+                  </p>
                   <p class="text-[10px] text-slate-400 font-mono-data truncate">{{ item.codigo_barras || '—' }}</p>
                 </div>
 
@@ -705,6 +712,7 @@ function _nuevoItem(producto = '', codigo_barras = '', cantidad = 1, precio = 0)
     _key: `item-${_itemCounter}-${Date.now()}`,
     _productoId: null,
     _lookup: false,
+    _fuente: null,
     producto,
     codigo_barras,
     cantidad,
@@ -1038,9 +1046,11 @@ async function fetchUltimoCompra(item) {
   } catch { /* se queda en null */ }
 }
 
-async function lookupProducto(item) {
-  const code = (item.codigo_barras || '').trim()
-  if (!code || code.length < 8 || item._lookup) return
+async function lookupProducto(rawItem) {
+  const code = (rawItem.codigo_barras || '').trim()
+  if (!code || code.length < 8 || rawItem._lookup) return
+  // Resolver el proxy reactivo: el objeto raw no dispara re-render.
+  const item = nuevaCompra.items.find(i => i._key === rawItem._key) || rawItem
   item._lookup = true
   toast.info(`Buscando información de ${item.producto || code}...`)
   try {
@@ -1054,11 +1064,14 @@ async function lookupProducto(item) {
         const cat = categorias.value.find(c => c.nombre === resp.categoria)
         if (cat) item.categoria_id = cat.id
       }
+      item._fuente = resp.fuente || 'externa'
       toast.success(`✓ ${resp.nombre || code} — encontrado en ${resp.fuente || 'fuente externa'}`)
     } else {
+      item._fuente = null
       toast.info(`${code}: no encontrado en fuentes externas`)
     }
   } catch {
+    item._fuente = null
     toast.info(`${code}: búsqueda sin resultados`)
   }
   item._lookup = false
