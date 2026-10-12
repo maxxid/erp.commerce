@@ -2017,7 +2017,7 @@ onMounted(async () => {
           <BaseInput
             v-model="iaConfig.modelo"
             label="Modelo"
-            placeholder="llama-3.3-70b-versatile"
+            placeholder="openai/gpt-oss-120b"
             hint="Vacío = el modelo por defecto del proveedor"
             size="sm"
           />

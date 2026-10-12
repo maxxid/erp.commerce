@@ -37,7 +37,8 @@ PROVEEDORES = {
     "groq": {
         "nombre": "Groq",
         "base_url": "https://api.groq.com/openai/v1",
-        "modelo": "llama-3.3-70b-versatile",
+        # En el Free tier llama-3.3-70b-versatile devuelve 404 (no hay acceso).
+        "modelo": "openai/gpt-oss-120b",
     },
     "openai": {
         "nombre": "OpenAI",

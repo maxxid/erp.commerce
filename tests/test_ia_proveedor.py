@@ -319,7 +319,7 @@ class TestConfiguracion:
         config_service.set_config(db, "ia_provider", "groq")
         cfg = registro.configuracion(db)
         assert cfg["base_url"] == "https://api.groq.com/openai/v1"
-        assert cfg["modelo"] == "llama-3.3-70b-versatile"
+        assert cfg["modelo"] == "openai/gpt-oss-120b"
 
     def test_limite_por_defecto(self, db):
         assert registro.configuracion(db)["limite_mes"] == registro.LIMITE_MES_DEFECTO

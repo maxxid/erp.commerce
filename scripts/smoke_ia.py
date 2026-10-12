@@ -1,8 +1,8 @@
 """Smoke test de la capa de IA contra el proveedor real.
 
-Solo lectura: verifica la config, hace un ping y pide sugerencias para un lote.
-**NUNCA llama a `aplicar()`** — nada se mueve sin que lo confirme una persona
-en el panel.
+Por defecto es solo lectura: verifica la config, hace un ping y pide sugerencias
+para un lote sin escribir nada. Con `--aplicar` escribe, y solo las propuestas
+que cambian de categoría (el mismo filtro que aplica el panel).
 
 Uso en el server:
 
@@ -73,6 +73,8 @@ def main():
     parser.add_argument("--lote", type=int, default=10, help="Cuántos productos analizar")
     parser.add_argument("--modo", default="pendientes", choices=MODOS)
     parser.add_argument("--solo-ping", action="store_true", help="Solo verificar la conexión")
+    parser.add_argument("--aplicar", action="store_true",
+                        help="Escribe las propuestas que cambian de categoría")
     args = parser.parse_args()
 
     db = SessionLocal()
@@ -133,7 +135,32 @@ def main():
             log.info("  [%s] -> %s · %s", s.producto_id, destino, s.motivo)
         log.info("  ignorados: %s · tokens_out: %s",
                  resp.data.ignorados, resp.data.tokens_out)
-        log.info("SMOKE OK")
+
+        if not args.aplicar:
+            log.info("SMOKE OK (solo lectura, nada aplicado)")
+            return 0
+
+        actual = {f["producto_id"]: f["categoria_actual_id"] for f in filas}
+        cambios = []
+        for s in resp.data.lote:
+            if s.categoria_id is not None and s.categoria_id == actual.get(s.producto_id):
+                log.info("  [%s] ya estaba en esa categoría, se salta", s.producto_id)
+                continue
+            cambios.append({
+                "producto_id": s.producto_id,
+                "categoria_id": s.categoria_id,
+                "nueva_categoria": s.nueva_categoria,
+            })
+        if not cambios:
+            log.info("SMOKE OK (nada para aplicar)")
+            return 0
+
+        resultado = servicio.aplicar(db, cambios)
+        log.info("  aplicados: %s · categorías creadas: %s · errores: %s",
+                 resultado["aplicados"],
+                 [c["nombre"] for c in resultado["categorias_creadas"]],
+                 resultado["errores"])
+        log.info("SMOKE OK (aplicado)")
         return 0
     except Exception as err:
         log.error("SMOKE FALLÓ: %s", err)
