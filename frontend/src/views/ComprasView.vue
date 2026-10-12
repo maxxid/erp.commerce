@@ -289,7 +289,7 @@
               <!-- Fila 2: datos del producto (siempre visible, campos click-only) -->
               <div class="px-3 pb-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/50">
                 <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                  <!-- Producto nuevo: nombre editable -->
+                  <!-- Producto nuevo: nombre editable + lupa lookup -->
                   <div v-if="esNuevoProducto(item)" class="w-full flex items-center gap-1.5">
                     <label class="text-[9px] uppercase font-bold text-amber-500 shrink-0">Nombre</label>
                     <input
@@ -299,6 +299,18 @@
                       placeholder="Nombre del producto nuevo"
                       class="flex-1 min-w-0 px-2 py-1 text-[11px] bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-lg outline-none focus:border-amber-500 transition"
                     >
+                    <button
+                      v-if="item.codigo_barras && item.codigo_barras.length >= 8"
+                      type="button"
+                      tabindex="-1"
+                      class="shrink-0 w-6 h-6 rounded-lg border border-amber-300 dark:border-amber-700 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30 flex items-center justify-center transition disabled:opacity-50"
+                      :disabled="item._lookup"
+                      title="Buscar en fuentes externas"
+                      @click="lookupProducto(item)"
+                    >
+                      <i v-if="item._lookup" class="fa-solid fa-circle-notch fa-spin text-[10px]"></i>
+                      <i v-else class="fa-solid fa-magnifying-glass text-[10px]"></i>
+                    </button>
                   </div>
 
                   <!-- Vencimiento (todos) -->
@@ -681,6 +693,7 @@ function _nuevoItem(producto = '', codigo_barras = '', cantidad = 1, precio = 0)
   return {
     _key: `item-${_itemCounter}-${Date.now()}`,
     _productoId: null,
+    _lookup: false,
     producto,
     codigo_barras,
     cantidad,
@@ -967,6 +980,31 @@ async function fetchUltimoCompra(item) {
         : null
     }
   } catch { /* se queda en null */ }
+}
+
+async function lookupProducto(item) {
+  const code = (item.codigo_barras || '').trim()
+  if (!code || code.length < 8 || item._lookup) return
+  item._lookup = true
+  try {
+    const resp = await api.post('/api/productos/lookup', { barcode: code })
+    if (resp) {
+      if (resp.nombre) item.producto = resp.nombre
+      if (resp.marca) item.marca = resp.marca
+      if (resp.precio_referencia) item.precio = resp.precio_referencia
+      if (resp.precio_venta) item.precio_venta = resp.precio_venta
+      if (resp.categoria) {
+        const cat = categorias.value.find(c => c.nombre === resp.categoria)
+        if (cat) item.categoria_id = cat.id
+      }
+      toast.success(`Encontrado en ${resp.fuente || 'fuente externa'}`)
+    } else {
+      toast.info('Producto no encontrado en fuentes externas')
+    }
+  } catch {
+    toast.info('Búsqueda sin resultados')
+  }
+  item._lookup = false
 }
 
 function onCantidadEnter(idx) {
