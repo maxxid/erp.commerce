@@ -206,9 +206,21 @@
           <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
             Ítems <span v-if="nuevaCompra.items.length">({{ nuevaCompra.items.length }})</span>
           </p>
-          <span v-if="nuevaCompra.items.length" class="text-sm font-mono-data font-bold text-slate-800 dark:text-slate-200">
-            Total: {{ fc(totalCompra) }}
-          </span>
+          <div class="flex items-center gap-2">
+            <button
+              v-if="nuevaCompra.items.length > 1"
+              type="button"
+              class="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 uppercase tracking-wide transition"
+              :title="`Orden: ${sortActual.label}. Clic para cambiar.`"
+              @click="ciclarOrden"
+            >
+              <i :class="['fa-solid', sortActual.icon]"></i>
+              {{ sortActual.label }}
+            </button>
+            <span v-if="nuevaCompra.items.length" class="text-sm font-mono-data font-bold text-slate-800 dark:text-slate-200">
+              Total: {{ fc(totalCompra) }}
+            </span>
+          </div>
         </div>
 
         <div v-if="nuevaCompra.items.length" class="space-y-2 max-h-[340px] overflow-y-auto overscroll-contain pr-1">
@@ -224,7 +236,7 @@
             move-class="transition duration-200 ease-out-expo"
           >
             <div
-              v-for="(item, idx) in nuevaCompra.items"
+              v-for="(item, idx) in itemsOrdenados"
               :key="item._key"
               class="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden"
             >
@@ -240,7 +252,7 @@
                   <button
                     type="button"
                     class="w-7 h-7 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
-                    @click="cambiarCantidad(idx, -1)"
+                    @click="cambiarCantidad(item, -1)"
                   >−</button>
                   <input
                     v-model.number="item.cantidad"
@@ -252,7 +264,7 @@
                   <button
                     type="button"
                     class="w-7 h-7 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
-                    @click="cambiarCantidad(idx, 1)"
+                    @click="cambiarCantidad(item, 1)"
                   >+</button>
                 </div>
 
@@ -280,7 +292,7 @@
                   type="button"
                   aria-label="Quitar ítem"
                   class="w-7 h-7 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 flex items-center justify-center transition shrink-0"
-                  @click="quitarItem(idx)"
+                  @click="quitarItem(item)"
                 >
                   <i class="fa-solid fa-trash text-[10px]"></i>
                 </button>
@@ -720,6 +732,34 @@ const totalCompra = computed(() =>
   nuevaCompra.items.reduce((sum, i) => sum + ((Number(i.cantidad) || 0) * (Number(i.precio) || 0)), 0)
 )
 
+// --- Ordenamiento de ítems ---
+const sortMode = ref('nuevos')
+const sortOptions = [
+  { key: 'nuevos', label: 'Últimos cargados', icon: 'fa-arrow-down-short-wide' },
+  { key: 'antiguos', label: 'Primeros cargados', icon: 'fa-arrow-up-short-wide' },
+  { key: 'az', label: 'Alfabético A-Z', icon: 'fa-arrow-down-a-z' },
+  { key: 'za', label: 'Alfabético Z-A', icon: 'fa-arrow-up-z-a' },
+  { key: 'precio', label: 'Precio', icon: 'fa-dollar-sign' },
+]
+const sortActual = computed(() => sortOptions.find(o => o.key === sortMode.value) || sortOptions[0])
+
+const itemsOrdenados = computed(() => {
+  const arr = [...nuevaCompra.items]
+  switch (sortMode.value) {
+    case 'antiguos': return arr
+    case 'az': return arr.sort((a, b) => (a.producto || '').localeCompare(b.producto || '', 'es'))
+    case 'za': return arr.sort((a, b) => (b.producto || '').localeCompare(a.producto || '', 'es'))
+    case 'precio': return arr.sort((a, b) => (Number(b.precio) || 0) - (Number(a.precio) || 0))
+    case 'nuevos':
+    default: return arr.reverse()
+  }
+})
+
+function ciclarOrden() {
+  const i = sortOptions.findIndex(o => o.key === sortMode.value)
+  sortMode.value = sortOptions[(i + 1) % sortOptions.length].key
+}
+
 onMounted(async () => {
   await Promise.all([fetchCompras(), fetchProveedores(), fetchProductosCatalogo(), fetchCategorias()])
   const detalleId = route.query.detalle
@@ -959,9 +999,7 @@ function agregarItemDesdeProducto(prod) {
   if (item._productoId) fetchUltimoCompra(item)
 }
 
-function cambiarCantidad(idx, delta) {
-  const item = nuevaCompra.items[idx]
-  if (!item) return
+function cambiarCantidad(item, delta) {
   item.cantidad = Math.max(1, (Number(item.cantidad) || 0) + delta)
 }
 
@@ -1021,8 +1059,9 @@ function onPrecioEnter() {
   nextTick(() => busquedaInputRef.value?.focus())
 }
 
-function quitarItem(idx) {
-  nuevaCompra.items.splice(idx, 1)
+function quitarItem(item) {
+  const i = nuevaCompra.items.findIndex(x => x._key === item._key)
+  if (i !== -1) nuevaCompra.items.splice(i, 1)
 }
 
 async function guardarCompra() {
