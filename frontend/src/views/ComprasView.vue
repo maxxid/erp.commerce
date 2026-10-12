@@ -239,6 +239,7 @@
               v-for="(item, idx) in itemsOrdenados"
               :key="item._key"
               class="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden"
+              @keydown="onItemKeydown($event)"
             >
               <!-- Fila principal: nombre + stepper + precio + subtotal + delete -->
               <div class="flex items-center gap-2 px-3 py-2">
@@ -258,8 +259,8 @@
                     v-model.number="item.cantidad"
                     type="number"
                     min="1"
+                    :data-qty-key="item._key"
                     class="w-14 text-center text-sm font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg py-1 outline-none focus:border-brand-500 transition"
-                    @keydown.enter.prevent="onCantidadEnter(idx)"
                   >
                   <button
                     type="button"
@@ -277,8 +278,6 @@
                     step="0.01"
                     placeholder="0.00"
                     class="w-full text-right text-sm font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 outline-none focus:border-brand-500 transition"
-                    :data-precio-idx="idx"
-                    @keydown.enter.prevent="onPrecioEnter(idx)"
                   >
                 </div>
 
@@ -964,11 +963,11 @@ function onBusquedaKeydown(e) {
 }
 
 function seleccionarResultado(prod) {
-  agregarItemDesdeProducto(prod)
+  const item = agregarItemDesdeProducto(prod)
   busqueda.value = ''
   resultados.value = []
   dropdownAbierto.value = false
-  nextTick(() => busquedaInputRef.value?.focus())
+  if (item) focoEnProducto(item)
 }
 
 function crearProductoNuevoDesdeBusqueda() {
@@ -980,7 +979,15 @@ function crearProductoNuevoDesdeBusqueda() {
   busqueda.value = ''
   resultados.value = []
   dropdownAbierto.value = false
-  nextTick(() => busquedaInputRef.value?.focus())
+  focoEnProducto(item)
+}
+
+function focoEnProducto(item) {
+  nextTick(() => {
+    const el = document.querySelector(`[data-qty-key="${item._key}"]`)
+    el?.focus()
+    el?.select()
+  })
 }
 
 // --- Items ---
@@ -988,7 +995,7 @@ function agregarItemDesdeProducto(prod) {
   const existente = nuevaCompra.items.find(i => i.codigo_barras && i.codigo_barras === prod.codigo_barras)
   if (existente) {
     existente.cantidad = (Number(existente.cantidad) || 0) + 1
-    return
+    return existente
   }
   const item = _nuevoItem(prod.nombre, prod.codigo_barras || '')
   item._productoId = prod.id || null
@@ -997,6 +1004,7 @@ function agregarItemDesdeProducto(prod) {
   item.marca = prod.marca || ''
   nuevaCompra.items.push(item)
   if (item._productoId) fetchUltimoCompra(item)
+  return item
 }
 
 function cambiarCantidad(item, delta) {
@@ -1045,18 +1053,29 @@ async function lookupProducto(item) {
   item._lookup = false
 }
 
-function onCantidadEnter(idx) {
-  nextTick(() => {
-    const el = document.querySelector(`[data-precio-idx="${idx}"]`)
-    el?.focus()
-  })
-}
-
-function onPrecioEnter() {
-  busqueda.value = ''
-  resultados.value = []
-  dropdownAbierto.value = false
-  nextTick(() => busquedaInputRef.value?.focus())
+function onItemKeydown(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    busqueda.value = ''
+    resultados.value = []
+    dropdownAbierto.value = false
+    nextTick(() => busquedaInputRef.value?.focus())
+    return
+  }
+  if (e.key === 'Tab') {
+    const row = e.currentTarget
+    const fields = Array.from(row.querySelectorAll('input, select'))
+    if (fields.length < 2) return
+    e.preventDefault()
+    const current = fields.indexOf(document.activeElement)
+    let next
+    if (e.shiftKey) {
+      next = current <= 0 ? fields.length - 1 : current - 1
+    } else {
+      next = current >= fields.length - 1 ? 0 : current + 1
+    }
+    fields[next].focus()
+  }
 }
 
 function quitarItem(item) {
