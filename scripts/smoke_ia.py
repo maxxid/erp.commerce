@@ -8,7 +8,11 @@ Uso en el server:
 
     cd /opt/erp-comercio && sudo -u erp bash -c 'source venv/bin/activate && \
         DATABASE_URL=sqlite:////data/erp/erp_comercio.db \
-        python scripts/smoke_ia.py'
+        python scripts/smoke_ia.py --env-file /etc/erp-comercio/ia.env'
+
+`--env-file` es necesario: el script corre a mano (ssh/sudo) y no hereda el
+entorno que systemd arma para el servicio, así que sin ese flag verías
+"IA deshabilitada" mientras la app sí tiene la key.
 
 Flags: --solo-ping, --lote N, --modo pendientes|sin_categoria|general|todos, --db URL
 """
@@ -21,13 +25,32 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-# Igual que normalizar_productos_titlecase: --db hay que resolverlo ANTES de
-# importar app.database, que arma el engine con settings.DATABASE_URL en el import.
+# Igual que normalizar_productos_titlecase: --db y --env-file hay que resolverlos
+# ANTES de importar app.database, que arma el engine con settings.DATABASE_URL en
+# el import (y app.config congela IA_DEFAULT_API_KEY en el mismo momento).
 _pre = argparse.ArgumentParser(add_help=False)
 _pre.add_argument("--db", default=None)
+_pre.add_argument("--env-file", default=None)
 _pre_args, _ = _pre.parse_known_args()
 if _pre_args.db:
     os.environ["DATABASE_URL"] = _pre_args.db
+
+
+def _leer_env_file(ruta: str) -> None:
+    """Carga un EnvironmentFile de systemd (key=value, # comentarios).
+
+    setdefault: lo que ya venga del entorno manda sobre el archivo.
+    """
+    for linea in Path(ruta).read_text(encoding="utf-8").splitlines():
+        linea = linea.strip()
+        if not linea or linea.startswith("#") or "=" not in linea:
+            continue
+        clave, valor = linea.split("=", 1)
+        os.environ.setdefault(clave.strip(), valor.strip().strip("\"'"))
+
+
+if _pre_args.env_file:
+    _leer_env_file(_pre_args.env_file)
 
 from app.database import SessionLocal
 from app.models.usuario import Usuario
@@ -45,6 +68,8 @@ MODOS = ("pendientes", "sin_categoria", "general", "todos")
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--db", default=None, help="DATABASE_URL (default: env DATABASE_URL)")
+    parser.add_argument("--env-file", default=None,
+                        help="EnvironmentFile de systemd, ej. /etc/erp-comercio/ia.env")
     parser.add_argument("--lote", type=int, default=10, help="Cuántos productos analizar")
     parser.add_argument("--modo", default="pendientes", choices=MODOS)
     parser.add_argument("--solo-ping", action="store_true", help="Solo verificar la conexión")
@@ -63,7 +88,7 @@ def main():
 
         if not cfg["habilitada"]:
             log.error("IA no habilitada: falta la API key "
-                      "(IA_DEFAULT_API_KEY en el unit, o BYOK en Ajustes > IA).")
+                      "(probá con --env-file /etc/erp-comercio/ia.env, o BYOK en Ajustes > IA).")
             return 1
 
         log.info("--- ping ---")
