@@ -321,7 +321,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { formatCurrency } from '@/composables/useUtils'
+import { formatCurrency, formatTimeShort } from '@/composables/useUtils'
 import api from '@/services/api'
 import { useToastStore } from '@/stores/toasts'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -479,7 +479,7 @@ async function syncCalendario() {
       dailySales.value = (d.ventas.items || []).map(v => ({
         id: v.id,
         numero: v.numero,
-        time: v.fecha ? new Date(v.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }) : '',
+        time: v.fecha ? formatTimeShort(v.fecha) : '',
         estado: v.estado || '',
         medio_pago: v.medio_pago || '',
         total: v.total || 0,
@@ -491,7 +491,7 @@ async function syncCalendario() {
         id: m.id,
         type: m.tipo || m.type || '',
         description: m.descripcion || '',
-        time: m.created_at ? new Date(m.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }) : '',
+        time: m.created_at ? formatTimeShort(m.created_at) : '',
         amount: m.monto || 0,
         medio_pago: m.medio_pago || '',
       }))
@@ -501,7 +501,7 @@ async function syncCalendario() {
         id: c.id,
         numero: c.numero,
         supplier: c.proveedor_nombre || '',
-        time: c.fecha ? new Date(c.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }) : '',
+        time: c.fecha ? formatTimeShort(c.fecha) : '',
         items: c.items ? c.items.reduce((s, i) => s + (i.cantidad || 0), 0) : 0,
         total: c.total || 0,
       }))

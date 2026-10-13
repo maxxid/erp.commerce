@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useNotificacionesStore } from '@/stores/notificaciones'
+import { timeAgo } from '@/composables/useUtils'
 
 const store = useNotificacionesStore()
 const router = useRouter()
@@ -19,17 +20,6 @@ function fueraDelPanel(e) {
 
 onMounted(() => document.addEventListener('click', fueraDelPanel))
 onUnmounted(() => document.removeEventListener('click', fueraDelPanel))
-
-function hace(iso) {
-  if (!iso) return ''
-  // El backend guarda UTC sin zona: se le agrega la Z para que la cuenta
-  // salga bien en cualquier máquina, sin depender del huso del navegador.
-  const min = Math.floor((Date.now() - new Date(iso + 'Z').getTime()) / 60000)
-  if (min < 1) return 'ahora'
-  if (min < 60) return `hace ${min} min`
-  if (min < 1440) return `hace ${Math.floor(min / 60)} h`
-  return `hace ${Math.floor(min / 1440)} d`
-}
 
 // A dónde lleva cada tipo de aviso cuando se hace clic.
 const destinos = {
@@ -113,7 +103,7 @@ async function marcarTodas() {
           <span class="min-w-0">
             <span class="flex items-center gap-2">
               <span class="text-xs font-semibold text-slate-800 dark:text-white truncate">{{ a.titulo }}</span>
-              <span class="text-[10px] text-slate-400 shrink-0">{{ hace(a.creada_en) }}</span>
+              <span class="text-[10px] text-slate-400 shrink-0">{{ timeAgo(a.creada_en) }}</span>
             </span>
             <span class="block text-xs text-slate-500 dark:text-slate-400 break-words">{{ a.mensaje }}</span>
           </span>

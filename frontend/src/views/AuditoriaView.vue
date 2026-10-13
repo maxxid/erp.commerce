@@ -92,7 +92,7 @@
       >
         <template #timestamp="{ row }">
           <span class="font-mono-data text-xs text-slate-600 dark:text-slate-400">{{ row.timestamp }}</span>
-          <div class="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">{{ timeAgo(row.timestamp) }}</div>
+          <div class="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">{{ timeAgo(row.creada_en || row.timestamp) }}</div>
         </template>
         <template #user="{ row }">
           <div class="flex items-center gap-2">
@@ -205,7 +205,7 @@
 import { ref, computed, onUnmounted, onMounted } from 'vue'
 import api from '@/services/api'
 import { useToastStore } from '@/stores/toasts'
-import { formatCurrency } from '@/composables/useUtils'
+import { formatCurrency, formatDateTime, timeAgo, parseFechaUTC } from '@/composables/useUtils'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseBadge from '@/components/ui/BaseBadge.vue'
@@ -366,19 +366,6 @@ function rowBgClass(log) {
   return 'hover:bg-slate-50'
 }
 
-function timeAgo(ts) {
-  if (!ts) return ''
-  const date = new Date(ts.replace(' ', 'T'))
-  const diff = Date.now() - date.getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'ahora'
-  if (mins < 60) return `hace ${mins} min`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `hace ${hours}h`
-  const days = Math.floor(hours / 24)
-  return `hace ${days}d`
-}
-
 async function refreshLogs() {
   syncing.value = true
   try {
@@ -386,7 +373,8 @@ async function refreshLogs() {
     if (data && data.length) {
       logs.value = data.map(e => ({
         id: e.id,
-        timestamp: e.created_at ? new Date(e.created_at).toLocaleString('sv') : '',
+        timestamp: e.created_at ? formatDateTime(e.created_at) : '',
+        creada_en: e.created_at || '',
         user: e.usuario_nombre || e.user || 'Sistema',
         type: e.tipo,
         event: e.tipo,
@@ -397,7 +385,7 @@ async function refreshLogs() {
         // carrito abandonado
         items_count: e.detalle?.items || 0,
         subtotal: e.detalle?.subtotal || 0,
-        abandoned_min: e.detalle?.abandonado_desde ? Math.floor((Date.now() - new Date(e.detalle.abandonado_desde)) / 60000) : 0,
+        abandoned_min: e.detalle?.abandonado_desde ? Math.floor((Date.now() - parseFechaUTC(e.detalle.abandonado_desde)) / 60000) : 0,
         // venta
         total: e.detalle?.total || e.detalle?.subtotal || 0,
         medio_pago: e.detalle?.medio_pago || '',

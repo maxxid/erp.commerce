@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
 import { useProductosStore } from '@/stores/productos'
-import { formatCurrency as fc } from '@/composables/useUtils'
+import { formatCurrency as fc, formatDateShort } from '@/composables/useUtils'
 import { colorDeCategoria } from '@/services/categorias'
 import { esStockBajo, esAgotado } from '@/services/stock'
 import api from '@/services/api'
@@ -831,9 +831,7 @@ async function quickCreateSector() {
 }
 
 function formatFecha(fechaStr) {
-  if (!fechaStr) return '—'
-  const fecha = new Date(fechaStr)
-  return fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  return formatDateShort(fechaStr)
 }
 </script>
 

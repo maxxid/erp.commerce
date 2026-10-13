@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useToastStore } from '@/stores/toasts'
+import { formatDateTime } from '@/composables/useUtils'
 import api from '@/services/api'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -54,8 +55,7 @@ async function emitirFactura() {
 }
 
 function formatoFecha(fecha) {
-  if (!fecha) return '-'
-  return new Date(fecha).toLocaleString('es-AR')
+  return formatDateTime(fecha)
 }
 
 function estadoBadge(tipo) {

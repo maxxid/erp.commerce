@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useToastStore } from '@/stores/toasts'
+import { formatDateShort } from '@/composables/useUtils'
 import api from '@/services/api'
 
 const props = defineProps({
@@ -45,12 +46,12 @@ const ventaNumero = computed(() => {
 
 const fechaEmision = computed(() => {
   if (!props.venta?.fecha) return ''
-  return new Date(props.venta.fecha).toLocaleDateString('es-AR')
+  return formatDateShort(props.venta.fecha)
 })
 
 const vencimientoCae = computed(() => {
   if (!props.factura?.vencimiento_cae) return ''
-  return new Date(props.factura.vencimiento_cae).toLocaleDateString('es-AR')
+  return formatDateShort(props.factura.vencimiento_cae)
 })
 
 const receptorLabel = computed(() => {

@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useToastStore } from '@/stores/toasts'
-import { formatCurrency } from '@/composables/useUtils'
+import { formatCurrency, formatDateShort, formatDateTime } from '@/composables/useUtils'
 import api from '@/services/api'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
@@ -26,12 +26,11 @@ function fechaISO(d) {
 }
 
 function formatFechaImpresion(iso) {
-  const d = new Date(iso)
-  return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return formatDateTime(iso)
 }
 
 function formatFechaCorta(iso) {
-  return new Date(iso).toLocaleDateString('es-AR')
+  return formatDateShort(iso)
 }
 
 const filtros = reactive({

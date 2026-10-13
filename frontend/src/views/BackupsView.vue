@@ -191,6 +191,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import api, { getToken } from '@/services/api'
 import { useToastStore } from '@/stores/toasts'
+import { formatDateTime } from '@/composables/useUtils'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
@@ -248,11 +249,7 @@ function formatBytes(bytes) {
 }
 
 function formatDate(iso) {
-  if (!iso) return '—'
-  try {
-    const d = new Date(iso)
-    return d.toLocaleString('es-AR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
-  } catch { return iso }
+  return formatDateTime(iso)
 }
 
 function mapBackup(b, idx) {

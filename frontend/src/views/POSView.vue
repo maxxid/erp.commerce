@@ -1458,7 +1458,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
 import { useProductosStore } from '@/stores/productos'
-import { formatCurrency as fc } from '@/composables/useUtils'
+import { formatCurrency as fc, formatTimeShort } from '@/composables/useUtils'
 import api from '@/services/api'
 import { useCajaStore } from '@/stores/caja'
 import { useCarritoStore } from '@/stores/carrito'
@@ -2080,7 +2080,7 @@ async function fetchRecentTransactions() {
           precio_unitario: i.precio_unitario
         })),
         itemCount: v.items ? v.items.length : 0,
-        hora: v.fecha ? new Date(v.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : '',
+        hora: v.fecha ? formatTimeShort(v.fecha) : '',
         createdAt: v.created_at ? new Date(v.created_at).getTime() : Date.now()
       }))
     }

@@ -674,7 +674,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
 import api from '@/services/api'
-import { formatCurrency as fc } from '@/composables/useUtils'
+import { formatCurrency as fc, formatDateShort, formatDateTime } from '@/composables/useUtils'
 import { useBarcodeScanner } from '@/composables/useBarcodeScanner'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
@@ -851,8 +851,8 @@ async function fetchCompras() {
           proveedor_telefono: c.proveedor_telefono || '',
           total: c.total || 0,
           estado: c.estado || '',
-          fecha: c.fecha ? new Date(c.fecha).toLocaleDateString('es-AR') : '',
-          fecha_hora: c.fecha ? new Date(c.fecha).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '',
+          fecha: c.fecha ? formatDateShort(c.fecha) : '',
+          fecha_hora: c.fecha ? formatDateTime(c.fecha) : '',
           notas: c.notas || '',
           total_cantidad,
           total_pendiente,
@@ -954,9 +954,7 @@ function estadoBadgeVariant(estado) {
 }
 
 function formatFecha(fechaStr) {
-  if (!fechaStr) return '—'
-  const d = new Date(fechaStr)
-  return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  return formatDateShort(fechaStr)
 }
 
 async function openDetailModal(compra) {

@@ -1056,7 +1056,7 @@ import { useCajaStore } from '@/stores/caja'
 import { useCarritoStore } from '@/stores/carrito'
 import router from '@/router'
 import api from '@/services/api'
-import { formatCurrency as fc } from '@/composables/useUtils'
+import { formatCurrency as fc, formatDateShort, formatTimeShort, formatDateTime, esHoy } from '@/composables/useUtils'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
@@ -1674,27 +1674,15 @@ async function verDetalleSesion(sesion) {
 }
 
 function formatFecha(fechaStr) {
-  if (!fechaStr) return '—'
-  const fecha = new Date(fechaStr)
-  return fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  return formatDateShort(fechaStr)
 }
 
 function formatHora(fechaStr) {
-  if (!fechaStr) return '—'
-  const fecha = new Date(fechaStr)
-  return fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+  return formatTimeShort(fechaStr) || '—'
 }
 
 function formatFechaHora(fechaStr) {
-  if (!fechaStr) return '—'
-  const fecha = new Date(fechaStr)
-  return fecha.toLocaleString('es-AR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  return formatDateTime(fechaStr)
 }
 
 onMounted(async () => {
@@ -1744,12 +1732,7 @@ async function fetchMovimientos() {
 }
 
 function esDeHoy(m) {
-  const f = new Date(m.created_at || m.fecha)
-  if (isNaN(f.getTime())) return true
-  const ahora = new Date()
-  return f.getFullYear() === ahora.getFullYear() &&
-    f.getMonth() === ahora.getMonth() &&
-    f.getDate() === ahora.getDate()
+  return esHoy(m.created_at || m.fecha)
 }
 
 async function fetchResumen() {
