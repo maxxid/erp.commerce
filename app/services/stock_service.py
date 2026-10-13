@@ -9,6 +9,7 @@ que crean/consumen stock de manera FEFO.
 """
 
 from typing import Optional, List, Tuple
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 from app.models.producto import Producto
 from app.models.movimiento_stock import MovimientoStock
@@ -138,18 +139,51 @@ def obtener_movimientos(
     return movimientos, total
 
 
-def productos_stock_bajo(db: Session, umbral: Optional[float] = None):
-    """Productos con stock igual o por debajo de su stock_minimo."""
-    from app.config import settings
+def filtro_bajo(query):
+    """Filtra productos bajo stock mínimo.
 
-    umbral = umbral or settings.LOW_STOCK_THRESHOLD
-    return (
-        db.query(Producto)
-        .filter(
-            Producto.activo == True,
-            Producto.stock_actual <= Producto.stock_minimo,
-            Producto.stock_minimo > 0,
-        )
-        .order_by(Producto.stock_actual)
-        .all()
+    Es la única definición de "stock bajo" del sistema: el producto está
+    activo, controla stock, tiene mínimo definido (minimo > 0) y su stock ya
+    lo alcanzó o lo pasó. El Dashboard, /productos/stock-bajo y el chip de
+    Productos usan esta misma regla.
+
+    Con mínimo en 0 no hay aviso: significa "no definí mínimo para este
+    producto", no "está al límite".
+    """
+    return query.filter(
+        Producto.activo == True,
+        Producto.controla_stock == True,
+        Producto.stock_minimo > 0,
+        Producto.stock_actual <= Producto.stock_minimo,
     )
+
+
+def filtro_agotado(query):
+    """Productos activos que controlan stock y quedaron en cero o menos."""
+    return query.filter(
+        Producto.activo == True,
+        Producto.controla_stock == True,
+        Producto.stock_actual <= 0,
+    )
+
+
+def filtro_reposicion(query):
+    """Productos a reponer: bajo mínimo o agotados.
+
+    Es el alcance del endpoint /productos/stock-bajo, más ancho que
+    filtro_bajo porque un producto agotado conviene comprarlo aunque nunca
+    le hayan puesto mínimo.
+    """
+    return query.filter(
+        Producto.activo == True,
+        Producto.controla_stock == True,
+        or_(
+            Producto.stock_actual <= 0,
+            and_(Producto.stock_minimo > 0, Producto.stock_actual <= Producto.stock_minimo),
+        ),
+    )
+
+
+def productos_stock_bajo(db: Session) -> List[Producto]:
+    """Lista los productos bajo stock mínimo, de lo más bajo a lo más alto."""
+    return filtro_bajo(db.query(Producto)).order_by(Producto.stock_actual).all()

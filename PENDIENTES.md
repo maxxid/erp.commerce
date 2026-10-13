@@ -47,6 +47,15 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 
 ## ✅ Completados recientemente
 
+### Un criterio único de "stock bajo" — 13/10/2026
+Había tres reglas distintas para lo mismo: el chip de Productos marcaba ~319 productos con `stock_minimo || 5` mientras el Dashboard marcaba 18 con `stock_minimo > 0`.
+
+- **Regla única** (`stock_service.filtro_bajo`): activo + controla stock + mínimo definido (`stock_minimo > 0`) + stock alcanzado o pasado. Con mínimo en 0 no hay aviso: significa "no definí mínimo", no "está al límite". Acompañan `filtro_agotado` (stock ≤ 0) y `filtro_reposicion` (bajo ∪ agotado, que es el alcance de `/productos/stock-bajo`)
+- **Backend:** el KPI "Stock Crítico", el detalle de stock crítico, `sin_stock` y `GET /api/dashboard/alertas` pasaron al helper; `/api/productos/stock-bajo` dejó de recalcular lotes producto por producto (549 queries por request) y ahora usa el mismo criterio que el resto
+- **Frontend:** `services/stock.js` con `esStockBajo`/`esAgotado` reemplaza el `stock_minimo || 5` en el chip, el filtro, el badge y el KPI del detalle de producto. Los agotados sin mínimo ahora se marcan con badge "Sin stock" en vez de quedar invisibles
+- **Borrado:** `LOW_STOCK_THRESHOLD` de `app/config.py`, que se leía y no se usaba en ningún filtro
+- 11 tests (`tests/test_stock_bajo.py`) que además verifican que KPI, alertas y endpoint digan lo mismo. Suite: **704 passed**
+
 ### IA habilitada en producción (smoke end-to-end) — 12/10/2026
 La capa de IA pasó de "código listo" a **andando contra el proveedor real** en el server.
 
@@ -709,7 +718,8 @@ Además, dos guards defensivos: `_clean_name` y `_map_categoria` reventaban con 
   - Impresora térmica (ESC/POS o similar)
   - Formato fiscal simplificado
 - **Reportes exportables (CSV/PDF)** — los reportes en `/reportes` se ven en pantalla pero no se exportan
-- **Notificaciones** — stock bajo, licencia por vencer, caja sin cerrar al final del día
+- **Notificaciones** — en curso: campana en el header con avisos leídos/no leídos (lectura por usuario o global, elegible en Ajustes), detalle de bajo stock con último proveedor de compra + precio de compra y venta, aviso por Telegram y fix de horario UTC→UTC-3 en Auditoría. Pendiente aparte: agrupar el bajo stock por lugar de compra ("Carrefour: 7 productos") para salir a comprar o armar la compra online
+- **`productos.stock_actual` desincronizado de los lotes** — en producción 169 de 549 productos que controlan stock tienen `stock_actual` distinto de la suma de sus lotes activos (167 con la columna **por encima**, máximo 22 unidades; 2 al revés). Como la columna es la que ven el Dashboard, el POS y el chip de Productos, esos 167 se ven con más stock del que dice FEFO; entre los 18 bajo mínimo, 1 ("Pipas Gigantes 50G": columna 0, lotes 10) está marcado por eso. **Solución propuesta:** `scripts/sincronizar_stock.py` con dry-run por defecto y `--aplicar`, recalculando sólo los productos que tienen lotes (los 10 que no tienen ninguno ya están en 0)
 - **Compras: producto similar o discontinuo** — al recibir, poder reemplazar un producto pedido por otro similar; marcar ítems como "no enviado / discontinuo"; registrar qué se recibió en lugar de qué se pidió
 
 ### Baja prioridad

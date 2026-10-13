@@ -378,24 +378,19 @@ def productos_stock_bajo(
     db: Session = Depends(get_db),
     user: Usuario = Depends(get_current_user),
 ):
-    """Lista productos con stock bajo (<= stock_minimo) o sin stock.
-    El stock se calcula siempre como suma de lotes activos.
-    Los productos con controla_stock=False quedan fuera: no se les descuenta stock."""
-    productos = db.query(Producto).filter(
-        Producto.activo == True, Producto.controla_stock == True
-    ).all()
-    for p in productos:
-        p.stock_actual = producto_service._suma_lotes_activos(db, p.id)
+    """Lista productos a reponer: bajo stock mínimo o sin stock.
 
-    productos = [
-        p for p in productos
-        if p.stock_actual == 0 or (p.stock_actual <= (p.stock_minimo or 0) and (p.stock_minimo or 0) > 0)
-    ]
-    productos.sort(key=lambda p: p.stock_actual)
+    Usa el mismo criterio que el Dashboard y el chip de Productos
+    (stock_service.filtro_reposicion). Los productos con controla_stock=False
+    quedan fuera: no se les descuenta stock.
+    """
+    productos = stock_service.filtro_reposicion(db.query(Producto)).order_by(
+        Producto.stock_actual
+    ).all()
     return RespuestaLista(
         data=productos,
         total=len(productos),
-        message=f"{len(productos)} producto(s) con stock bajo"
+        message=f"{len(productos)} producto(s) con stock bajo",
     )
 
 

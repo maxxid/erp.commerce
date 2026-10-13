@@ -44,7 +44,6 @@ class Settings:
     # Negocio
     DEFAULT_MARGIN: float = 30.0         # % de margen por defecto
     DEFAULT_ROUNDING: float = 50.0       # Redondeo de precio por defecto
-    LOW_STOCK_THRESHOLD: float = 5.0     # Umbral para alerta de stock bajo
 
     # Cloudflare R2 — Backup remoto
     R2_ENDPOINT: str = os.getenv("R2_ENDPOINT", "")

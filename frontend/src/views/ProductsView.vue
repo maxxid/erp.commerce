@@ -6,6 +6,7 @@ import { useToastStore } from '@/stores/toasts'
 import { useProductosStore } from '@/stores/productos'
 import { formatCurrency as fc } from '@/composables/useUtils'
 import { colorDeCategoria } from '@/services/categorias'
+import { esStockBajo, esAgotado } from '@/services/stock'
 import api from '@/services/api'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
@@ -116,7 +117,7 @@ function clearAllFilters() {
 
 const countStockBajo = computed(() => {
   try {
-    return products.value.filter(p => p && p.controla_stock !== false && Number(p.stock_actual) <= Number(p.stock_minimo || 5) && Number(p.stock_actual) >= 0).length
+    return products.value.filter(p => esStockBajo(p)).length
   } catch { return 0 }
 })
 
@@ -277,7 +278,7 @@ const filteredProducts = computed(() => {
       list = list.filter(p => p && p.categoria_id === filterCategory.value)
     }
     if (filterStockBajo.value) {
-      list = list.filter(p => p && p.controla_stock !== false && Number(p.stock_actual) <= Number(p.stock_minimo || 5) && Number(p.stock_actual) >= 0)
+      list = list.filter(p => esStockBajo(p))
     }
     if (filterPrecioDefasado.value) {
       list = list.filter(p => p && Number(p.precio_venta) > 0 && Number(p.precio_costo) > 0 && Number(p.precio_venta) <= Number(p.precio_costo))
@@ -1595,7 +1596,8 @@ function formatFecha(fechaStr) {
               <span v-if="viewProduct.producto.codigo_barras" class="font-mono-data text-[11px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">{{ viewProduct.producto.codigo_barras }}</span>
               <BaseBadge v-if="viewProduct.producto.tipo_venta" variant="default" size="xs">{{ viewProduct.producto.tipo_venta }}</BaseBadge>
               <BaseBadge v-if="viewProduct.producto.controla_stock === false" variant="default" size="xs" title="No controla stock">s/ctrl stock</BaseBadge>
-              <BaseBadge v-else-if="viewProduct.producto.stock_actual <= (viewProduct.producto.stock_minimo || 5)" variant="danger" size="xs">Stock bajo</BaseBadge>
+              <BaseBadge v-else-if="esStockBajo(viewProduct.producto)" variant="danger" size="xs">Stock bajo</BaseBadge>
+              <BaseBadge v-else-if="esAgotado(viewProduct.producto)" variant="danger" size="xs">Sin stock</BaseBadge>
             </div>
           </div>
         </div>
@@ -1604,7 +1606,7 @@ function formatFecha(fechaStr) {
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div class="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
             <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Stock</div>
-            <div class="font-mono-data font-bold text-lg" :class="viewProduct.producto.stock_actual <= (viewProduct.producto.stock_minimo || 5) ? 'text-rose-600' : 'text-slate-900 dark:text-white'">
+            <div class="font-mono-data font-bold text-lg" :class="esStockBajo(viewProduct.producto) || esAgotado(viewProduct.producto) ? 'text-rose-600' : 'text-slate-900 dark:text-white'">
               {{ formatNumber(viewProduct.producto.stock_actual) }}
             </div>
             <div class="text-[11px] text-slate-400 mt-0.5">Mín: {{ formatNumber(viewProduct.producto.stock_minimo) }}</div>

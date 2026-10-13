@@ -15,6 +15,7 @@ from app.schemas.common import RespuestaData
 from app.auth.dependencies import get_current_user
 from app.models.usuario import Usuario
 from app.services import recarga_service
+from app.services import stock_service
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 
@@ -507,8 +508,7 @@ def resumen(db: Session = Depends(get_db), user: Usuario = Depends(get_current_u
     valor_stock = db.query(func.coalesce(func.sum(Producto.precio_venta * Producto.stock_actual), 0)).filter(
         Producto.activo == True, Producto.precio_venta.isnot(None), Producto.stock_actual > 0).scalar() or 0
     total_clientes = db.query(func.count(Cliente.id)).filter(Cliente.activo == True).scalar() or 0
-    stock_bajo = db.query(func.count(Producto.id)).filter(
-        Producto.activo == True, Producto.stock_actual <= Producto.stock_minimo, Producto.stock_minimo > 0).scalar() or 0
+    stock_bajo = stock_service.filtro_bajo(db.query(Producto)).count()
 
     # Ventas del día
     ventas_hoy_rows = db.query(Venta).filter(Venta.estado == "confirmada", Venta.fecha >= hoy).all()
@@ -589,16 +589,16 @@ def resumen(db: Session = Depends(get_db), user: Usuario = Depends(get_current_u
         })
 
     # Stock crítico detalle
-    criticos = db.query(Producto).filter(
-        Producto.activo == True, Producto.stock_actual <= Producto.stock_minimo, Producto.stock_minimo > 0
-    ).order_by(Producto.stock_actual).limit(10).all()
+    criticos = stock_service.filtro_bajo(db.query(Producto)).order_by(
+        Producto.stock_actual
+    ).limit(10).all()
     criticos_lista = [{"id": p.id, "nombre": p.nombre, "stock_actual": p.stock_actual,
                        "stock_minimo": p.stock_minimo, "codigo_barras": p.codigo_barras} for p in criticos]
 
     # Sin stock
-    sin_stock = db.query(Producto).filter(
-        Producto.activo == True, Producto.stock_actual <= 0
-    ).order_by(Producto.updated_at.desc()).limit(10).all()
+    sin_stock = stock_service.filtro_agotado(db.query(Producto)).order_by(
+        Producto.updated_at.desc()
+    ).limit(10).all()
     sin_stock_lista = [{"id": p.id, "nombre": p.nombre, "codigo_barras": p.codigo_barras} for p in sin_stock]
 
     # Ticket promedio
@@ -989,14 +989,12 @@ def alertas(db: Session = Depends(get_db), user: Usuario = Depends(get_current_u
     alertas = []
 
     # Stock bajo
-    criticos = db.query(Producto).filter(
-        Producto.activo == True, Producto.stock_actual <= Producto.stock_minimo, Producto.stock_minimo > 0
-    ).count()
+    criticos = stock_service.filtro_bajo(db.query(Producto)).count()
     if criticos > 0:
         alertas.append({"tipo": "stock_bajo", "mensaje": f"{criticos} producto(s) bajo stock mínimo", "nivel": "warning"})
 
     # Sin stock
-    agotados = db.query(Producto).filter(Producto.activo == True, Producto.stock_actual <= 0).count()
+    agotados = stock_service.filtro_agotado(db.query(Producto)).count()
     if agotados > 0:
         alertas.append({"tipo": "sin_stock", "mensaje": f"{agotados} producto(s) agotados", "nivel": "danger"})
 
