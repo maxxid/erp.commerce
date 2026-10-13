@@ -266,6 +266,16 @@ def _migrate_new_columns():
             conn.execute(sa.text("ALTER TABLE productos ADD COLUMN es_recarga BOOLEAN NOT NULL DEFAULT 0"))
             conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_productos_es_recarga ON productos (es_recarga)"))
             conn.commit()
+        # Lo que la IA ya miró (escaneo incremental del panel). En la base de
+        # producción ya existe por un ALTER manual; acá queda para el resto.
+        if "ia_analizado" not in existentes_prod:
+            conn.execute(sa.text("ALTER TABLE productos ADD COLUMN ia_analizado BOOLEAN DEFAULT 0"))
+            conn.commit()
+        # Color por rubro. NULL = la pantalla usa el color por defecto del rubro.
+        existentes_cat = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(categorias)"))]
+        if "color" not in existentes_cat:
+            conn.execute(sa.text("ALTER TABLE categorias ADD COLUMN color VARCHAR(7)"))
+            conn.commit()
         existentes_lic = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(licencias)"))]
         if "machine_id" not in existentes_lic:
             conn.execute(sa.text("ALTER TABLE licencias ADD COLUMN machine_id VARCHAR(200)"))

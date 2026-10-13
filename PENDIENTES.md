@@ -59,6 +59,40 @@ La capa de IA pasó de "código listo" a **andando contra el proveedor real** en
 - Commits: `d64d3ef` (script), `34fdf30` (`--env-file`), `98584ea` (modelo + `--aplicar`), `1d40e41` (auditoría). Suite: **666 passed**
 - **Al correr scripts en el server:** siempre `sudo -u erp` + `DATABASE_URL=sqlite:////data/erp/erp_comercio.db` (sin env, el default `sqlite:///erp_comercio.db` es otra DB) y `--env-file` para la key
 
+### Panel de recategorización: selección global, escaneo incremental y colores — 12/10/2026
+Los tres arreglos que seguían al criterio de la IA (sección de arriba), en orden.
+
+**2 · "Seleccionar todo" alcanza todas las páginas** (`9ae8896`)
+- El problema real: la selección se caía al paginar (`cargar()` filtraba `marcados` contra la página visible) y el botón "Todo" sólo marcaba las filas visibles.
+- `GET /api/productos/sugerencias/ids` devuelve todos los ids del filtro; el servicio extrajo `_query_candidatos()` para que la lista paginada y los ids midan exactamente lo mismo.
+- `datosPorId` acumula las filas cargadas **y** las que devuelve la IA, así la lista de confirmación puede listar productos que la persona nunca abrió. Para eso `SugerenciaIA` ahora manda `nombre`, `categoria_actual_id` y `categoria_actual`: antes Pydantic los descartaba (el `for item in lote` del router los escribía para nada).
+- `confirmarAplicar` manda los cambios de a lotes de **500**, que es el máximo que acepta el backend, y suma todo en un solo toast.
+- La selección ahora se limpia al cambiar de filtro (modo o búsqueda), no al paginar.
+
+**3 · Escaneo incremental (`ia_analizado`)** (`faea18e`)
+- `sugerir_con_ia` llama a `marcar_analizados()` después de interpretar la respuesta: lo que la IA miró no vuelve a aparecer. Si la respuesta es ilegible o el proveedor falla, no se marca nada.
+- Modo **"Nuevos para la IA"** en el panel: filtra `ia_analizado IS NOT true` — `IS NOT` y no `== False` porque las filas previas a la migración quedaron en NULL.
+- `scripts/marcar_analizados.py` (dry-run por defecto, `--aplicar`): corrido en prod → **569 marcados**, y el rerun confirma que es idempotente.
+
+**4 · Color por categoría**
+- `categorias.color` (`#RRGGBB` o NULL) + migración en `_migrate_new_columns`. Aprovechó para agregar la migración de `productos.ia_analizado`, que **no estaba** (en prod existía sólo por un ALTER manual hecho a mano).
+- Los defaults viven en `frontend/src/services/categorias.js`: si la base no tiene color, la pantalla usa el del rubro → **todas las categorías ya se ven con color sin escribir nada**, y las nuevas también.
+- Puntito de color en la columna Categoría de **Productos** y junto a la categoría actual en **Recategorizar**. Editor `<input type="color">` por categoría en **Ajustes → Categorías y colores**, que escribe `color` y tapa el default.
+- 10 tests (`tests/test_categorias_color.py`). Suite: **693 passed**
+
+**Precisión medida a ciegas — `scripts/precision_ia.py`** (`ad1d4ff`/`32c30d5`)
+Clasifica una muestra con seed fijo y `prompt_ia(..., incluir_actual=False)` (el modelo no ve la respuesta), y compara contra la categoría actual.
+
+| muestra | propuestas | aciertos | ≥ 0.8 (lo que preselecciona la UI) | no propuso |
+|---|---|---|---|---|
+| seed 42 | 38 | 32 = 84,2% | 32/37 = **86,5%** | 2 |
+| seed 7 | 34 | 29 = 85,3% | 29/34 = **85,3%** | 6 |
+| **total** | **72** | **61 = 84,7%** | **61/71 = 85,9%** | **8** |
+
+- **Las "discrepancias" casi siempre eran la IA teniendo razón**: de las 11, casi todas proponían sacar algo que estaba mal categorizado — desodorante en Almacén → Perfumería, papel higiénico → Limpieza, bebida energizante → Bebidas, té y café → Cafetería, tapa de lasaña y manteca en Frescos → Almacén, pan → Frescos. O sea: 86% es un **piso**, no un techo.
+- La cobertura subió al 92%/85% con el prompt nuevo (regla de "no adivinar"): el modelo se anima más porque ahora tiene cómo decir "no sé" sin mandar cualquier cosa.
+
+
 ### Criterio de la IA: más contexto y "no adivinar" — 12/10/2026
 El panel mostraba la propuesta de la IA **con el mismo peso para todo**, y con un prompt que le daba poco de qué agarrarse. Se cambió el criterio de punta a punta.
 

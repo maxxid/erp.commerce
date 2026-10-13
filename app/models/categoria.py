@@ -17,6 +17,9 @@ class Categoria(Base):
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(100), unique=True, nullable=False, index=True)
     padre_id = Column(Integer, ForeignKey("categorias.id"), nullable=True)
+    # #RRGGBB o NULL. Si es NULL la pantalla usa el color por defecto del rubro:
+    # así una categoría nueva ya se ve con color sin que nadie la edite.
+    color = Column(String(7), nullable=True)
 
     activo = Column(Boolean, default=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

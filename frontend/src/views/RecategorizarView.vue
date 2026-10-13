@@ -2,6 +2,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useToastStore } from '@/stores/toasts'
 import api from '@/services/api'
+import { colorDeCategoria } from '@/services/categorias'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -113,6 +114,13 @@ function opcionesFila(row) {
   const base = [...opcionesBase.value]
   if (row._nueva) base.unshift({ value: -1, label: `Nueva: ${row._nueva}` })
   return base
+}
+
+// Color del puntito de la categoría actual: el guardado en la base o, si no,
+// el color por defecto del rubro.
+function colorDeFila(row) {
+  const cat = categorias.value.find(c => c.id === row.categoria_actual_id)
+  return colorDeCategoria(cat || { nombre: row.categoria_actual })
 }
 
 function motivoDe(f) {
@@ -512,11 +520,17 @@ onMounted(async () => {
         </template>
 
         <template #actual="{ row }">
-          <span
-            class="text-[11px] truncate block"
-            :class="row.categoria_actual ? 'text-slate-600 dark:text-slate-300' : 'text-amber-500'"
-          >
-            {{ row.categoria_actual || 'Sin categoría' }}
+          <span class="flex items-center gap-1.5 min-w-0">
+            <span
+              class="w-2 h-2 rounded-full shrink-0"
+              :style="{ backgroundColor: colorDeFila(row) }"
+            ></span>
+            <span
+              class="text-[11px] truncate"
+              :class="row.categoria_actual ? 'text-slate-600 dark:text-slate-300' : 'text-amber-500'"
+            >
+              {{ row.categoria_actual || 'Sin categoría' }}
+            </span>
           </span>
         </template>
 

@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
 import { useProductosStore } from '@/stores/productos'
 import { formatCurrency as fc } from '@/composables/useUtils'
+import { colorDeCategoria } from '@/services/categorias'
 import api from '@/services/api'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
@@ -27,6 +28,13 @@ const productosStore = useProductosStore()
 const products = computed(() => productosStore.productos)
 const categories = computed(() => productosStore.categorias)
 const ofertas = computed(() => productosStore.ofertas)
+
+// Color del puntito de la columna Categoría: el que está guardado en la base,
+// y si no, el color por defecto del rubro.
+function colorDeFila(row) {
+  const cat = categories.value.find(c => c.id === row.categoria_id)
+  return colorDeCategoria(cat || { nombre: row.categoria })
+}
 
 const searchInput = ref('')
 const searchQuery = ref('')
@@ -1086,9 +1094,15 @@ function formatFecha(fechaStr) {
         </div>
         <span v-else class="text-slate-300 dark:text-slate-600 text-xs">—</span>
       </template>
-      <template #categoria="{ row }">
-        <span class="text-xs text-slate-500 dark:text-slate-400">{{ row.categoria }}</span>
-      </template>
+        <template #categoria="{ row }">
+          <span class="flex items-center gap-1.5 min-w-0">
+            <span
+              class="w-2 h-2 rounded-full shrink-0"
+              :style="{ backgroundColor: colorDeFila(row) }"
+            ></span>
+            <span class="text-xs text-slate-500 dark:text-slate-400 truncate">{{ row.categoria }}</span>
+          </span>
+        </template>
       <template #oferta="{ row }">
         <div v-if="row._oferta" class="flex items-center justify-center gap-1">
           <BaseBadge :variant="ofertaTipoColor(row._oferta.tipo)" size="xs">

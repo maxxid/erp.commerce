@@ -1,7 +1,9 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useToastStore } from '@/stores/toasts'
+import { useProductosStore } from '@/stores/productos'
 import api from '@/services/api'
+import { colorDeCategoria } from '@/services/categorias'
 import { formatCurrency as fc } from '@/composables/useUtils'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
@@ -838,6 +840,43 @@ function displayCsr() {
   return csrContent.value.replace(/\\n/g, '\n')
 }
 
+// Colores por rubro (se ven en Productos y en Recategorizar)
+const productosStore = useProductosStore()
+const categoriasColores = ref([])
+const coloresNuevos = reactive({})
+const guardandoColor = ref(null)
+
+async function cargarCategoriasColores() {
+  try {
+    const data = await api.get('/api/categorias?page_size=500')
+    categoriasColores.value = Array.isArray(data) ? data : (data?.data || [])
+  } catch {
+    categoriasColores.value = []
+  }
+}
+
+function elegirColor(cat, valor) {
+  coloresNuevos[cat.id] = valor
+}
+
+async function guardarColor(cat) {
+  guardandoColor.value = cat.id
+  try {
+    const resp = await api.put(`/api/categorias/${cat.id}`, { color: coloresNuevos[cat.id] })
+    cat.color = resp?.data?.color ?? coloresNuevos[cat.id]
+    delete coloresNuevos[cat.id]
+    // Las otras pantallas leen el color del store: si ya está cargado hay que
+    // actualizarlo ahí, si no se queda con el anterior hasta el próximo reload.
+    const enStore = productosStore.categorias.find(c => c.id === cat.id)
+    if (enStore) enStore.color = cat.color
+    toast.success(`Color de ${cat.nombre} guardado`)
+  } catch (e) {
+    toast.error(e?.message || 'No se pudo guardar el color')
+  } finally {
+    guardandoColor.value = null
+  }
+}
+
 onMounted(async () => {
   await loadConfig()
   await loadDenominaciones()
@@ -845,6 +884,7 @@ onMounted(async () => {
   await loadCajaConfig()
   await loadPosConfig()
   await loadIaConfig()
+  await cargarCategoriasColores()
 })
 </script>
 
@@ -2043,6 +2083,54 @@ onMounted(async () => {
         <p class="text-[11px] text-slate-400">
           La key es write-only: nunca se vuelve a mostrar completa ni sale del servidor.
         </p>
+      </div>
+    </BaseCard>
+
+    <!-- Colores por rubro -->
+    <BaseCard v-if="!loading">
+      <div class="flex items-center justify-between gap-3">
+        <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <i class="fa-solid fa-palette text-brand-600"></i>
+          Categorías y colores
+        </h3>
+        <span class="text-[11px] text-slate-400">{{ categoriasColores.length }} categoría(s)</span>
+      </div>
+
+      <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+        El color se muestra en la columna Categoría de Productos y junto a la categoría
+        actual en Recategorizar. Si no se guarda ninguno, se usa el color por defecto del rubro.
+      </p>
+
+      <div class="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <div
+          v-for="cat in categoriasColores"
+          :key="cat.id"
+          class="flex items-center gap-3 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+        >
+          <input
+            type="color"
+            class="w-8 h-8 shrink-0 rounded cursor-pointer border-0 bg-transparent p-0"
+            :value="coloresNuevos[cat.id] || colorDeCategoria(cat)"
+            @input="elegirColor(cat, $event.target.value)"
+          />
+          <div class="min-w-0 flex-1">
+            <div class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">
+              {{ cat.nombre }}
+            </div>
+            <div class="text-[10px] text-slate-400 truncate">
+              {{ colorDeCategoria(cat) }}<span v-if="!cat.color"> · por defecto</span>
+            </div>
+          </div>
+          <BaseButton
+            v-if="coloresNuevos[cat.id]"
+            variant="primary"
+            size="xs"
+            :loading="guardandoColor === cat.id"
+            @click="guardarColor(cat)"
+          >
+            Guardar
+          </BaseButton>
+        </div>
       </div>
     </BaseCard>
   </div>
