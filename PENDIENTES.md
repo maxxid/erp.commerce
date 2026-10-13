@@ -47,6 +47,20 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 
 ## ✅ Completados recientemente
 
+### Sectores mobile: ubicar productos escaneando con la cámara — 13/10/2026
+Asignar sectores estando en el local seguía siendo de PC (Etiquetas). Ahora se recorre el estante con el celular apuntando a los códigos.
+
+- **`/sectores`** (nueva vista mobile, admin/encargado/repositor): elegir el sector donde estás parado con botones grandes que muestran cuántos productos tiene cada uno, y se abre la cámara de una (iOS exige toque para dar acceso)
+- **Escaneo continuo** con el composable `useBarcodeScanner` existente (BarcodeDetector en Android/Chrome, ZXing en iOS/Safari), cámara a pantalla completa con guía, cooldown 1,2 s
+- Cada código leído se **asigna al toque** vía el bulk `POST /api/productos/asignar-sector` con un solo id; el lookup es local sobre el store de productos, así que no hay round-trip por escaneo
+- **Lista de lo escaneado en la vuelta** con la marca "venía de X" para los que cambiaron de sector; **Deshacer último** (revierte al sector anterior, o a "sin sector") y **Limpiar**
+- Feedback para el que está con las manos ocupadas: vibración al acertar, flash verde con el nombre del producto, flash rojo + toast si el código no existe (queda en una lista "no encontrados" de la vuelta)
+- **Sector ya asignado** → aviso suave "ya estaba acá", no duplica la lista
+- Entrada manual de código por si la cámara no lee algo
+- Contadores por sector ajustados en vivo con lo asignado en la sesión
+- Entradas de descubrimiento: link **"Sectores (móvil)"** en el sidebar (igual que Cargar Mercadería) y **"Sectores"** en el menú hamburguesa de las 3 vistas mobile
+- Sin cambios de backend: reutiliza `GET /api/sectores`, el store de productos y `POST /api/productos/asignar-sector`. Commit `fdd3b03`
+
 ### Etiquetas: asignar sector rápido — 13/10/2026
 Asignar sectores desde Etiquetas era inviable: había que tildar producto por producto de un listado de hasta 500, con la selección escondida en un card del panel izquierdo.
 
