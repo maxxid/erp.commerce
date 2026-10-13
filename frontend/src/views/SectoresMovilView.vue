@@ -148,6 +148,13 @@
               <div class="text-sm font-medium text-slate-800 dark:text-white">Código no encontrado</div>
               <div class="text-[11px] text-slate-400 font-mono">{{ n }}</div>
             </div>
+            <button
+              v-if="puedeCrear"
+              class="px-3 py-1.5 rounded-lg bg-brand-600 text-white text-xs font-semibold shrink-0"
+              @click="abrirAlta(n)"
+            >
+              Crear
+            </button>
           </div>
         </template>
       </div>
@@ -181,8 +188,80 @@
       <div v-if="ultimoErrorFlash" class="absolute top-4 inset-x-4 rounded-xl bg-rose-500 text-white text-sm p-2.5 text-center font-semibold animate-fade-in">
         <i class="fa-solid fa-triangle-exclamation mr-1"></i>{{ ultimoErrorFlash }}
       </div>
+      <div v-if="ultimoNoEncontrado && puedeCrear" class="absolute bottom-16 inset-x-4 animate-fade-in">
+        <button
+          class="w-full rounded-xl bg-white text-slate-900 py-3 font-semibold text-sm shadow-lg"
+          @click="abrirAlta(ultimoNoEncontrado)"
+        >
+          <i class="fa-solid fa-plus mr-1"></i>Crear producto con el código {{ ultimoNoEncontrado }}
+        </button>
+      </div>
     </div>
   </div>
+
+  <!-- Alta rápida: producto que apareció en el estante y todavía no existe en el sistema -->
+  <BaseModal v-model="altaAbierta" title="Crear producto" size="md">
+    <div class="flex flex-col gap-3">
+      <div class="text-xs text-slate-500 dark:text-slate-400">
+        Se va a crear y asignar a <b class="text-brand-600 dark:text-brand-400">{{ sectorActivo?.nombre }}</b>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-slate-600 dark:text-slate-300">Código de barras</label>
+        <input
+          v-model="altaForm.codigo_barras"
+          type="text"
+          inputmode="numeric"
+          class="mt-1 w-full rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 px-3 py-2.5 text-sm"
+        />
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-slate-600 dark:text-slate-300">Nombre *</label>
+        <input
+          v-model="altaForm.nombre"
+          type="text"
+          class="mt-1 w-full rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 px-3 py-2.5 text-sm"
+          placeholder="Ej: Galletitas Oreo"
+        />
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-slate-600 dark:text-slate-300">Marca</label>
+        <input
+          v-model="altaForm.marca"
+          type="text"
+          class="mt-1 w-full rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 px-3 py-2.5 text-sm"
+        />
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-slate-600 dark:text-slate-300">Precio de venta</label>
+        <input
+          v-model="altaForm.precio_venta"
+          type="number"
+          inputmode="decimal"
+          min="0"
+          step="0.01"
+          class="mt-1 w-full rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 px-3 py-2.5 text-sm"
+        />
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-slate-600 dark:text-slate-300">Categoría</label>
+        <select
+          v-model="altaForm.categoria_id"
+          class="mt-1 w-full rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 px-3 py-2.5 text-sm"
+        >
+          <option :value="null">Sin categoría</option>
+          <option v-for="c in productosStore.categorias" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+        </select>
+      </div>
+      <button
+        class="w-full rounded-xl bg-brand-600 text-white py-3 font-semibold disabled:opacity-50"
+        :disabled="altaGuardando || !altaForm.nombre.trim()"
+        @click="guardarAlta"
+      >
+        <i v-if="altaGuardando" class="fa-solid fa-circle-notch animate-spin mr-1"></i>
+        Crear y asignar
+      </button>
+    </div>
+  </BaseModal>
 </template>
 
 <script setup>
@@ -193,6 +272,7 @@ import { useToastStore } from '@/stores/toasts'
 import { useProductosStore } from '@/stores/productos'
 import api from '@/services/api'
 import { useBarcodeScanner } from '@/composables/useBarcodeScanner'
+import BaseModal from '@/components/ui/BaseModal.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -210,6 +290,11 @@ const menuOpen = ref(false)
 const menuRef = ref(null)
 const ultimoFlash = ref('')
 const ultimoErrorFlash = ref('')
+const altaAbierta = ref(false)
+const altaGuardando = ref(false)
+const altaForm = ref({ codigo_barras: '', nombre: '', marca: '', precio_venta: null, categoria_id: null })
+// Último código que no existía, para ofrecer el alta rápida desde la cámara.
+const ultimoNoEncontrado = ref('')
 
 const menuItems = [
   { label: 'Cobro Móvil', icon: 'fa-cash-register', value: 'cobro', route: '/cobrar' },
@@ -222,6 +307,8 @@ const menuItems = [
 const productos = computed(() => productosStore.productos || [])
 const sinSectorCount = computed(() => productos.value.filter(p => p.activo && !p.sector_id).length)
 const movidosCount = computed(() => escaneados.value.filter(e => e.sector_anterior_id).length)
+// El backend sólo deja crear productos a admin y encargado.
+const puedeCrear = computed(() => ['admin', 'encargado'].includes((auth.currentUser?.rol || '').toLowerCase()))
 
 const nombresSector = computed(() => {
   const map = {}
@@ -265,6 +352,7 @@ function elegirSector(s) {
   sectorActivo.value = s
   escaneados.value = []
   noEncontrados.value = []
+  ultimoNoEncontrado.value = ''
   // iOS sólo deja abrir la cámara desde un toque, y el toque acaba de pasar.
   openScanner()
 }
@@ -296,11 +384,13 @@ async function procesarCodigo(raw) {
   if (!p) {
     noEncontrados.value.unshift(codigo)
     if (noEncontrados.value.length > 20) noEncontrados.value.pop()
+    ultimoNoEncontrado.value = codigo
     vibrar([60, 60, 60])
     flashError(`No existe el código ${codigo}`)
     toast.error(`Código ${codigo} no encontrado`)
     return
   }
+  ultimoNoEncontrado.value = ''
 
   if (p.sector_id === sectorActivo.value.id) {
     flashOk(`${p.nombre} ya estaba acá`)
@@ -359,6 +449,55 @@ async function deshacerUltimo() {
 function limpiarVuelta() {
   escaneados.value = []
   noEncontrados.value = []
+  ultimoNoEncontrado.value = ''
+}
+
+function abrirAlta(codigo) {
+  // En iOS el teclado con la cámara viva se comporta mal, así que cerramos la cámara.
+  closeCamera()
+  // El producto está en la mano: abrimos con el código ya puesto y el sector de esta vuelta.
+  altaForm.value = { codigo_barras: codigo, nombre: '', marca: '', precio_venta: null, categoria_id: null }
+  altaAbierta.value = true
+}
+
+async function guardarAlta() {
+  const form = altaForm.value
+  if (!form.nombre.trim() || altaGuardando.value) return
+  altaGuardando.value = true
+  try {
+    const producto = await api.post('/api/productos', {
+      codigo_barras: form.codigo_barras.trim() || null,
+      nombre: form.nombre.trim(),
+      marca: form.marca.trim() || null,
+      // El input number de Vue devuelve string; vacío no es un precio válido.
+      precio_venta: form.precio_venta === '' || form.precio_venta === null ? null : Number(form.precio_venta),
+      categoria_id: form.categoria_id,
+      sector_id: sectorActivo.value.id,
+    })
+    productosStore.updateProductoLocal(producto)
+    noEncontrados.value = noEncontrados.value.filter(c => c !== form.codigo_barras)
+    ultimoNoEncontrado.value = ''
+    escaneados.value.unshift({
+      id: producto.id,
+      nombre: producto.nombre,
+      marca: producto.marca,
+      codigo_barras: producto.codigo_barras,
+      sector_anterior_id: null,
+      sector_anterior: '',
+    })
+    sesionPorSector.value = {
+      ...sesionPorSector.value,
+      [sectorActivo.value.id]: (sesionPorSector.value[sectorActivo.value.id] || 0) + 1,
+    }
+    altaAbierta.value = false
+    vibrar()
+    flashOk(`Creado: ${producto.nombre}`)
+    toast.success(`${producto.nombre} creado en ${sectorActivo.value.nombre}`)
+  } catch (e) {
+    toast.error(e?.data?.detail || 'No se pudo crear el producto')
+  } finally {
+    altaGuardando.value = false
+  }
 }
 
 function navigateMenu(m) {
