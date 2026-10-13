@@ -384,6 +384,10 @@ const config = ref({
   qr_interop_mcc: '9700',
   avisos_lectura: 'usuario',
   avisos_granularidad: 'tipo',
+  stock_aviso_enabled: 'false',
+  stock_aviso_hora: '09:00',
+  telegram_bot_token: '',
+  telegram_chat_id: '',
 })
 
 const facturaAuto = ref({
@@ -469,6 +473,10 @@ const descs = {
   banco_alias: 'Alias de CBU/Alias para transferencias',
   avisos_lectura: 'Avisos: quién marca la lectura. usuario = cada uno tiene la suya; global = lo que lee uno vale para todos',
   avisos_granularidad: 'Avisos: cómo llega el stock bajo. tipo = un aviso por día; producto = un aviso por producto',
+  stock_aviso_enabled: 'Enviar el aviso de stock bajo por Telegram todos los días a la hora configurada',
+  stock_aviso_hora: 'Hora (Argentina) a la que se manda el aviso de stock bajo por Telegram',
+  telegram_bot_token: 'Token del bot de Telegram (lo da @BotFather, va después de "bot")',
+  telegram_chat_id: 'Chat ID o ID del canal donde se manda el aviso (lo da @userinfobot)',
   empresa_nombre: 'Razón Social para facturas electrónicas',
   empresa_domicilio: 'Domicilio comercial para facturas',
   empresa_condicion_iva: 'Condición frente al IVA: responsable_inscripto, monotributista, exento',
@@ -523,6 +531,21 @@ async function saveConfig(keys = null) {
     toast.error('Error al guardar configuración')
   }
   saving.value = false
+}
+
+const probando = ref(false)
+
+// Manda un mensaje de prueba al canal, sin esperar a la hora del aviso.
+async function probarEnvio() {
+  probando.value = true
+  try {
+    const resp = await api.post('/api/avisos/probar', {})
+    if (resp?.ok === false) toast.error(resp?.message || resp?.data?.detalle || 'No se pudo enviar el mensaje')
+    else toast.success('Mensaje de prueba enviado a Telegram')
+  } catch (e) {
+    toast.error(e?.data?.detail || 'No se pudo enviar el mensaje')
+  }
+  probando.value = false
 }
 
 function agregarCarritoDefault() {
@@ -2172,11 +2195,59 @@ onMounted(async () => {
         />
       </div>
 
-      <div class="mt-4 flex justify-end">
+      <hr class="my-5 border-slate-100 dark:border-slate-800" />
+
+      <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
+        <i class="fa-brands fa-telegram text-[#229ED9]"></i>
+        Aviso por Telegram
+      </h4>
+      <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+        Todos los días, a la hora que elijas, manda al canal el listado de productos bajo
+        mínimo con el proveedor de la última compra y los precios. Para armarlo: creá un bot
+        con <span class="font-semibold">@BotFather</span> (te da el token) y pasale el bot a
+        tu canal; el chat ID del canal lo da <span class="font-semibold">@userinfobot</span>.
+      </p>
+
+      <div class="mt-4 grid gap-4 sm:grid-cols-2 max-w-2xl">
+        <BaseSelect
+          v-model="config.stock_aviso_enabled"
+          label="Aviso automático"
+          :options="[
+            { value: 'false', label: 'Apagado' },
+            { value: 'true', label: 'Encendido' },
+          ]"
+        />
+        <BaseInput
+          v-model="config.stock_aviso_hora"
+          label="Hora (Argentina)"
+          type="time"
+        />
+        <BaseInput
+          v-model="config.telegram_bot_token"
+          label="Token del bot"
+          type="password"
+          placeholder="123456789:ABCdefGHI..."
+        />
+        <BaseInput
+          v-model="config.telegram_chat_id"
+          label="Chat ID o canal"
+          placeholder="-1001234567890"
+          hint="Empieza con -100 para los canales"
+        />
+      </div>
+
+      <div class="mt-4 flex flex-wrap items-center justify-end gap-2">
+        <BaseButton
+          variant="secondary"
+          :loading="probando"
+          @click="probarEnvio"
+        >
+          Probar envío
+        </BaseButton>
         <BaseButton
           variant="primary"
           :loading="saving"
-          @click="saveConfig(['avisos_lectura', 'avisos_granularidad'])"
+          @click="saveConfig(['avisos_lectura', 'avisos_granularidad', 'stock_aviso_enabled', 'stock_aviso_hora', 'telegram_bot_token', 'telegram_chat_id'])"
         >
           Guardar
         </BaseButton>

@@ -92,7 +92,7 @@ class TestGeneracion:
         assert aviso["mensaje"] == "1 producto(s) bajo stock mínimo"
         fila = aviso["data"]["productos"][0]
         assert fila["proveedor"] == "Carrefour"
-        assert notificaciones_service._mensaje_bajo(fila) == \
+        assert notificaciones_service.mensaje_bajo(fila) == \
             "Stock 2 / mínimo 8 — Proveedor: Carrefour — compra $1,500.00 — venta $2,500.00"
 
     def test_sin_compra_usa_el_costo_del_producto(self, db, user):
@@ -102,7 +102,7 @@ class TestGeneracion:
         fila = aviso_de(notificaciones_service.listar(db, user)["avisos"], "stock_bajo")["data"]["productos"][0]
         assert fila["proveedor"] is None
         assert fila["precio_compra"] == 800
-        assert notificaciones_service._mensaje_bajo(fila) == \
+        assert notificaciones_service.mensaje_bajo(fila) == \
             "Stock 0 / mínimo 3 — compra $800.00 — venta $1,200.00"
 
     def test_dos_veces_no_duplica(self, db, user):

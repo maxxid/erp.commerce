@@ -48,7 +48,7 @@ def _hoy_utc() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
-def _fila_producto(p: Producto, detalle: dict) -> dict:
+def fila_producto(p: Producto, detalle: dict) -> dict:
     d = detalle.get(p.id, {})
     return {
         "id": p.id,
@@ -62,7 +62,7 @@ def _fila_producto(p: Producto, detalle: dict) -> dict:
     }
 
 
-def _mensaje_bajo(fila: dict) -> str:
+def mensaje_bajo(fila: dict) -> str:
     """"Stock 2 / mínimo 8 — Proveedor: Carrefour — compra $150 — venta $250"."""
     partes = [
         f"Stock {fila['stock_actual']:g} / mínimo {fila['stock_minimo']:g}",
@@ -85,14 +85,14 @@ def _avisos_actuales(db: Session) -> List[dict]:
     bajos = stock_service.productos_stock_bajo(db)
     if bajos:
         detalle = stock_service.detalle_reposicion(db, bajos)
-        filas = [_fila_producto(p, detalle) for p in bajos]
+        filas = [fila_producto(p, detalle) for p in bajos]
         if modo_granularidad(db) == "producto":
             for fila in filas:
                 avisos.append({
                     "tipo": "stock_bajo",
                     "nivel": "warning",
                     "titulo": fila["nombre"],
-                    "mensaje": _mensaje_bajo(fila),
+                    "mensaje": mensaje_bajo(fila),
                     "data": fila,
                     "clave": f"stock_bajo:{fila['id']}:{hoy}",
                 })

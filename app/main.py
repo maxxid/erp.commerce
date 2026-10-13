@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from app.config import settings
 from app.database import engine, Base
 from app.models import *  # noqa: F401, F403 — Registrar todos los modelos
-from app.routers import auth, productos, categorias, dashboard, caja, clientes, ventas, proveedores, compras, calendario, backups, usuarios, auditoria, licencia, catalogo, ofertas, facturacion, configuracion as config_router, pagos, lotes, denominaciones, reportes, recargas, etiquetas, ia as ia_router, sectores, recategorizar, notificaciones
+from app.routers import auth, productos, categorias, dashboard, caja, clientes, ventas, proveedores, compras, calendario, backups, usuarios, auditoria, licencia, catalogo, ofertas, facturacion, configuracion as config_router, pagos, lotes, denominaciones, reportes, recargas, etiquetas, ia as ia_router, sectores, recategorizar, notificaciones, avisos
 
 
 def crear_app() -> FastAPI:
@@ -63,6 +63,7 @@ def crear_app() -> FastAPI:
     app.include_router(ia_router.router)
     app.include_router(sectores.router)
     app.include_router(notificaciones.router)
+    app.include_router(avisos.router)
 
     # Servir el frontend Vue 3 (producción)
     @app.get("/app")
@@ -104,6 +105,7 @@ def crear_app() -> FastAPI:
         _seed_database()
         _seed_producto_recarga()
         _start_backup_scheduler()
+        _start_avisos_scheduler()
 
     return app
 
@@ -556,6 +558,26 @@ def _start_backup_scheduler():
         print("[Backup] APScheduler no disponible. Instalá: pip install apscheduler")
     except Exception as e:
         print(f"[Backup] Error al iniciar scheduler: {e}")
+
+
+def _start_avisos_scheduler():
+    """Chequea cada 10 minutos si hay que mandar el aviso diario de stock bajo.
+
+    No se engancha a una hora fija del scheduler: el chequeo mira la config
+    (habilitado y hora) en cada vuelta, así se puede cambiar en Ajustes sin
+    reiniciar, y si el servicio estaba caído a la hora pierde, lo manda después.
+    """
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        from app.services.avisos_service import chequear_aviso_diario, CHEQUEO_CADA_MIN
+        scheduler = BackgroundScheduler()
+        scheduler.add_job(chequear_aviso_diario, "interval", minutes=CHEQUEO_CADA_MIN, id="aviso_stock_telegram")
+        scheduler.start()
+        print(f"[Avisos] Scheduler iniciado: chequeo de stock bajo cada {CHEQUEO_CADA_MIN} minuto(s)")
+    except ImportError:
+        print("[Avisos] APScheduler no disponible. Instalá: pip install apscheduler")
+    except Exception as e:
+        print(f"[Avisos] Error al iniciar scheduler: {e}")
 
 
 if __name__ == "__main__":
