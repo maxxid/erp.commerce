@@ -6,9 +6,16 @@ from pydantic import BaseModel, Field
 
 
 class SugerenciaIA(BaseModel):
-    """Resultado de IA para un producto (siempre requiere confirmación humana)."""
+    """Resultado de IA para un producto (siempre requiere confirmación humana).
+
+    `nombre` y `categoria_actual` viajan porque la selección del panel cruza
+    páginas: la fila puede no estar cargada cuando se confirma el cambio.
+    """
 
     producto_id: int
+    nombre: str = ""
+    categoria_actual_id: Optional[int] = None
+    categoria_actual: Optional[str] = None
     categoria_id: Optional[int] = None
     categoria_nombre: Optional[str] = None
     nueva_categoria: Optional[str] = None
@@ -44,6 +51,13 @@ class CandidatosPage(BaseModel):
     total: int = 0
     page: int = 1
     page_size: int = 50
+
+
+class SugerenciaIds(BaseModel):
+    """Todos los ids que matchean el filtro, para el "Seleccionar todo"."""
+
+    ids: list[int] = Field(default_factory=list)
+    total: int = 0
 
 
 class SugerenciasIARequest(BaseModel):

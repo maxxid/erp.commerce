@@ -219,6 +219,28 @@ class TestCandidatos:
         filas, total = svc.candidatos(db, modo="cualquier_cosa")
         assert total == 1
 
+    def test_ids_no_se_queda_en_la_primera_pagina(self, db):
+        lac = _cat(db, "Lacteos")
+        _prod(db, "Queso cremoso", categoria_id=lac.id)
+        for i in range(4):
+            _prod(db, f"Item {i}")
+
+        paginados, total = svc.candidatos(db, modo="todos", page=1, page_size=2)
+        ids, total_ids = svc.ids_candidatos(db, modo="todos")
+
+        assert len(paginados) == 2
+        assert total_ids == total == 5
+        assert len(ids) == 5
+
+    def test_ids_usa_el_mismo_filtro_que_la_lista(self, db):
+        gen = _cat(db, "General")
+        _prod(db, "En general", categoria_id=gen.id)
+        _prod(db, "Producto sin rubro")
+
+        ids, total = svc.ids_candidatos(db, modo="sin_categoria")
+        assert total == 1
+        assert len(ids) == 1
+
 
 # ---------------------------------------------------------------------------
 # Limpieza de la respuesta de la IA
@@ -478,8 +500,9 @@ class TestRutasRegistradas:
                 return ruta
         raise AssertionError(f"No existe {metodo} {path}")
 
-    def test_las_tres_rutas_existen(self):
+    def test_las_cuatro_rutas_existen(self):
         assert self._ruta("/api/productos/sugerencias/candidatos", "GET")
+        assert self._ruta("/api/productos/sugerencias/ids", "GET")
         assert self._ruta("/api/productos/sugerencias/ia", "POST")
         assert self._ruta("/api/productos/aplicar-sugerencias", "POST")
 
@@ -490,6 +513,11 @@ class TestRutasRegistradas:
 
     def test_candidatos_pide_rol(self):
         ruta = self._ruta("/api/productos/sugerencias/candidatos", "GET")
+        nombres = [d.name for d in ruta.dependant.dependencies]
+        assert "_user" in nombres
+
+    def test_ids_pide_rol(self):
+        ruta = self._ruta("/api/productos/sugerencias/ids", "GET")
         nombres = [d.name for d in ruta.dependant.dependencies]
         assert "_user" in nombres
 
@@ -621,3 +649,12 @@ class TestEndpointCandidatos:
         por_nombre = {f.nombre: f for f in resp.data.items}
         assert por_nombre["Alfajor Jorgito"].sugerencia is not None
         assert por_nombre["Caja Marrón"].sugerencia is None
+
+    def test_ids_devuelve_todo_el_filtro(self, db, user):
+        _prod(db, "Alfajor Jorgito")
+        _prod(db, "Caja marrón")
+
+        resp = router.listar_ids_candidatos(modo="todos", q="", db=db, _user=user)
+
+        assert resp.data.total == 2
+        assert len(resp.data.ids) == 2

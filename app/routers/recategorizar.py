@@ -1,8 +1,9 @@
 """Router del panel de recategorización.
 
-Tres pasos, siempre en este orden:
+Cuatro rutas, siempre en este orden:
 
 1. `GET  /sugerencias/candidatos`  → qué hay que revisar (sugerencia local ya calculada)
+1b. `GET  /sugerencias/ids`        → todos los ids del filtro, para "Seleccionar todo"
 2. `POST /sugerencias/ia`          → segundo parecer, en lotes (requiere el plan con IA)
 3. `POST /aplicar-sugerencias`     → el único que escribe, y recibe lo que eligió una persona
 """
@@ -18,6 +19,7 @@ from app.schemas.recategorizar import (
     AplicarRequest,
     AplicarResultado,
     CandidatosPage,
+    SugerenciaIds,
     SugerenciasIAOut,
     SugerenciasIARequest,
 )
@@ -42,6 +44,21 @@ def listar_candidatos(
     return RespuestaData(
         data=CandidatosPage(items=filas, total=total, page=page, page_size=page_size),
         message=f"{total} producto(s) para revisar",
+    )
+
+
+@router.get("/sugerencias/ids", response_model=RespuestaData[SugerenciaIds])
+def listar_ids_candidatos(
+    modo: str = Query("pendientes", pattern="^(pendientes|sin_categoria|general|todos)$"),
+    q: str = Query("", max_length=80),
+    db: Session = Depends(get_db),
+    _user: Usuario = Depends(require_role("admin", "encargado")),
+):
+    """Todos los ids del filtro: el "Seleccionar todo" no se queda en una página."""
+    ids, total = servicio.ids_candidatos(db, modo=modo, q=q)
+    return RespuestaData(
+        data=SugerenciaIds(ids=ids, total=total),
+        message=f"{total} producto(s) para seleccionar",
     )
 
 

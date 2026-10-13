@@ -271,15 +271,8 @@ def sugerir_local(
 MODOS = ("pendientes", "sin_categoria", "general", "todos")
 
 
-def candidatos(
-    db: Session,
-    *,
-    modo: str = "pendientes",
-    q: str = "",
-    page: int = 1,
-    page_size: int = 50,
-) -> tuple[list[dict[str, Any]], int]:
-    """Lista productos a revisar con la sugerencia local ya calculada."""
+def _query_candidatos(db: Session, *, modo: str, q: str):
+    """Filtro compartido: la lista paginada y el "Seleccionar todo" ven lo mismo."""
     if modo not in MODOS:
         modo = "pendientes"
 
@@ -309,6 +302,40 @@ def candidatos(
             | Producto.descripcion.ilike(like)
             | Producto.codigo_barras.ilike(like)
         )
+    return query
+
+
+def ids_candidatos(
+    db: Session,
+    *,
+    modo: str = "pendientes",
+    q: str = "",
+) -> tuple[list[int], int]:
+    """Todos los ids del filtro, no sólo la página que se está viendo.
+
+    El "Seleccionar todo" del panel tiene que alcanzar a las otras páginas, y
+    para eso necesita los ids sueltos: las filas vienen paginadas y traen la
+    sugerencia local ya calculada, que acá no hace falta.
+    """
+    query = _query_candidatos(db, modo=modo, q=q)
+    total = query.count()
+    ids = [
+        pid
+        for (pid,) in query.with_entities(Producto.id).order_by(Producto.nombre).all()
+    ]
+    return ids, total
+
+
+def candidatos(
+    db: Session,
+    *,
+    modo: str = "pendientes",
+    q: str = "",
+    page: int = 1,
+    page_size: int = 50,
+) -> tuple[list[dict[str, Any]], int]:
+    """Lista productos a revisar con la sugerencia local ya calculada."""
+    query = _query_candidatos(db, modo=modo, q=q)
 
     total = query.count()
     query = query.order_by(Producto.nombre).offset((page - 1) * page_size).limit(page_size)

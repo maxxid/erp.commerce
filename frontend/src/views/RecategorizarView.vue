@@ -33,12 +33,19 @@ const filas = ref([])
 const categorias = ref([])
 const cargando = ref(false)
 const aplicando = ref(false)
+const seleccionando = ref(false)
 
 // destino elegido por producto: id de categoría o -1 (crear la nueva que propuso la IA)
 const destinos = reactive({})
 const nuevas = reactive({})
 const propuestas = reactive({})
 const marcados = ref(new Set())
+
+// Datos de la fila por producto. La selección cruza páginas, así que hay que
+// acordarse de lo que se vio (páginas cargadas) y de lo que devolvió la IA:
+// sin esto no se puede armar la lista de confirmación de productos que la
+// persona nunca llegó a mirar.
+const datosPorId = reactive({})
 
 const iaDisponible = ref(false)
 const iaEstado = ref('')
@@ -61,17 +68,34 @@ const tableRows = computed(() => filas.value.map(f => ({
 
 const opcionesBase = computed(() => categorias.value.map(c => ({ value: c.id, label: c.nombre })))
 
-const seleccionados = computed(() => filas.value.filter(f => marcados.value.has(f.producto_id)))
+const seleccionados = computed(() => marcados.value.size)
+
+function aplicable(pid) {
+  const d = destinos[pid]
+  if (d === undefined || d === null) return false
+  if (d === -1) return !!nuevas[pid]
+  if (!d) return false
+  const dato = datosPorId[pid]
+  // Sin la fila no podemos comprobar que haya cambio, pero si hay destino es
+  // porque alguien lo eligió (o lo puso la IA), así que va.
+  return !dato || dato.categoria_actual_id !== d
+}
 
 // Filas que se pueden aplicar: seleccionadas, con destino elegido y con algo
 // que de verdad cambie (mover un producto a su propia categoría no es un cambio).
-const aplicables = computed(() => seleccionados.value.filter(f => {
-  const d = destinos[f.producto_id]
-  if (d === -1) return !!nuevas[f.producto_id]
-  return !!d && d !== f.categoria_actual_id
+const aplicables = computed(() => [...marcados.value].filter(aplicable).map(pid => {
+  const dato = datosPorId[pid] || {}
+  return { ...dato, producto_id: pid, nombre: dato.nombre || `#${pid}` }
 }))
 
-const descartados = computed(() => seleccionados.value.length - aplicables.value.length)
+const sinCambio = computed(() => [...marcados.value].filter(pid => {
+  const d = destinos[pid]
+  const dato = datosPorId[pid]
+  return !!dato && d !== undefined && d !== null && d !== -1 && !!d
+    && dato.categoria_actual_id === d
+}).length)
+
+const sinDestino = computed(() => seleccionados.value - aplicables.value.length - sinCambio.value)
 
 const progresoPct = computed(() => {
   if (!progreso.total) return 0
@@ -110,9 +134,32 @@ function toggle(id) {
   marcados.value = s
 }
 
-function toggleTodos() {
-  const todos = filas.value.every(f => marcados.value.has(f.producto_id))
-  marcados.value = todos ? new Set() : new Set(filas.value.map(f => f.producto_id))
+// Marca (o desmarca) todos los productos del filtro, no sólo los de la página:
+// el backend devuelve todos los ids y la selección vive del otro lado de la
+// paginación.
+async function toggleTodos() {
+  if (marcados.value.size) {
+    marcados.value = new Set()
+    return
+  }
+  const params = new URLSearchParams()
+  params.set('modo', modo.value)
+  if (q.value.trim()) params.set('q', q.value.trim())
+  seleccionando.value = true
+  try {
+    const resp = await api.get(`/api/productos/sugerencias/ids?${params}`)
+    const ids = Array.isArray(resp?.ids) ? resp.ids : []
+    if (!ids.length) {
+      toast.warning('No hay productos para ese filtro')
+      return
+    }
+    marcados.value = new Set(ids)
+    toast.success(`${ids.length} producto(s) seleccionados, en todas las páginas`)
+  } catch (e) {
+    toast.error(e?.message || 'No se pudieron seleccionar los productos')
+  } finally {
+    seleccionando.value = false
+  }
 }
 
 async function cargar() {
@@ -127,9 +174,10 @@ async function cargar() {
     filas.value = Array.isArray(resp?.items) ? resp.items : []
     total.value = resp?.total || 0
 
-    const conservar = new Set(filas.value.map(f => f.producto_id))
-    marcados.value = new Set([...marcados.value].filter(id => conservar.has(id)))
+    // Nada de filtrar `marcados` acá: la selección tiene que sobrevivir al
+    // cambio de página. Se limpia solo cuando cambia el filtro.
     filas.value.forEach(f => {
+      datosPorId[f.producto_id] = f
       if (destinos[f.producto_id] === undefined) destinos[f.producto_id] = f.destino_id
     })
   } catch (e) {
@@ -144,11 +192,13 @@ async function cargar() {
 function cambiarModo(key) {
   modo.value = key
   page.value = 1
+  marcados.value = new Set()
   cargar()
 }
 
 function buscar() {
   page.value = 1
+  marcados.value = new Set()
   cargar()
 }
 
@@ -189,6 +239,10 @@ async function buscarConIa() {
     try {
       const resp = await api.post('/api/productos/sugerencias/ia', { productos_ids: lote })
       for (const s of resp?.lote || []) {
+        // La fila puede no estar cargada (la selección cruza páginas), así que
+        // los datos que manda la IA son los que después alimentan la lista de
+        // confirmación.
+        datosPorId[s.producto_id] = { ...datosPorId[s.producto_id], ...s }
         if (s.nueva_categoria) {
           nuevas[s.producto_id] = s.nueva_categoria
           destinos[s.producto_id] = -1
@@ -233,6 +287,7 @@ function aplicarSeleccion() {
 async function confirmarAplicar() {
   showConfirm.value = false
   aplicando.value = true
+  let aplicados = 0
   try {
     const cambios = aplicables.value.map(f => {
       const d = destinos[f.producto_id]
@@ -240,12 +295,20 @@ async function confirmarAplicar() {
         ? { producto_id: f.producto_id, categoria_id: null, nueva_categoria: nuevas[f.producto_id] }
         : { producto_id: f.producto_id, categoria_id: d }
     })
-    const resp = await api.post('/api/productos/aplicar-sugerencias', { cambios })
-    const errores = resp?.data?.errores || []
-    toast.success(resp?.message || `${resp?.data?.aplicados ?? 0} producto(s) recategorizado(s)`)
+    // El backend corta en 500 por llamada: con "seleccionar todo" se pasa,
+    // así que se manda de a lotes y se suman los resultados (un solo toast).
+    const errores = []
+    const creadas = []
+    for (const lote of partirEnLotes(cambios, 500)) {
+      const resp = await api.post('/api/productos/aplicar-sugerencias', { cambios: lote })
+      aplicados += resp?.data?.aplicados || 0
+      errores.push(...(resp?.data?.errores || []))
+      creadas.push(...(resp?.data?.categorias_creadas || []))
+    }
+    toast.success(`${aplicados} producto(s) recategorizado(s)`)
     if (errores.length) toast.warning(`${errores.length} producto(s) no se pudieron aplicar`)
-    if (resp?.data?.categorias_creadas?.length) {
-      toast.info(`Categorías creadas: ${resp.data.categorias_creadas.map(c => c.nombre).join(', ')}`)
+    if (creadas.length) {
+      toast.info(`Categorías creadas: ${[...new Set(creadas.map(c => c.nombre))].join(', ')}`)
     }
     Object.keys(propuestas).forEach(k => delete propuestas[k])
     Object.keys(nuevas).forEach(k => delete nuevas[k])
@@ -254,6 +317,11 @@ async function confirmarAplicar() {
     await cargar()
   } catch (e) {
     toast.error(e?.message || 'No se pudieron aplicar los cambios')
+    if (aplicados) {
+      // Se aplicó al menos un lote: lo que ya se escribió hay que verlo.
+      marcados.value = new Set()
+      await cargar()
+    }
   } finally {
     aplicando.value = false
   }
@@ -336,7 +404,11 @@ onMounted(async () => {
           <span class="font-bold text-slate-900 dark:text-white">{{ resumen.sin }}</span> sin categoría ·
           <span class="font-bold text-slate-900 dark:text-white">{{ resumen.con }}</span> ya categorizadas
         </span>
-        <span v-if="marcados.size">{{ marcados.size }} seleccionado(s)</span>
+        <span v-if="marcados.size" class="text-right">
+          {{ marcados.size }} seleccionado(s)
+          <span v-if="sinDestino"> · {{ sinDestino }} sin destino</span>
+          <span v-if="sinCambio"> · {{ sinCambio }} sin cambios</span>
+        </span>
       </div>
     </BaseCard>
 
@@ -389,9 +461,15 @@ onMounted(async () => {
           <span class="font-bold text-slate-900 dark:text-white text-sm">{{ total }}</span> producto(s)
         </span>
         <div class="flex items-center gap-2">
-          <BaseButton variant="ghost" size="sm" :disabled="!filas.length" @click="toggleTodos">
-            <i :class="filas.every(f => marcados.has(f.producto_id)) ? 'fa-solid fa-square-minus' : 'fa-solid fa-square-check'"></i>
-            {{ filas.every(f => marcados.has(f.producto_id)) ? 'Limpiar' : 'Todo' }}
+          <BaseButton
+            variant="ghost"
+            size="sm"
+            :disabled="!filas.length"
+            :loading="seleccionando"
+            @click="toggleTodos"
+          >
+            <i :class="marcados.size ? 'fa-solid fa-square-minus' : 'fa-solid fa-square-check'"></i>
+            {{ marcados.size ? 'Limpiar' : 'Todo' }}
           </BaseButton>
           <BaseButton
             variant="primary"
@@ -401,7 +479,7 @@ onMounted(async () => {
             @click="aplicarSeleccion"
           >
             <i class="fa-solid fa-check-double mr-1.5"></i>
-            Aplicar {{ aplicables.length }}<span v-if="descartados"> ({{ descartados }} sin cambios)</span>
+            Aplicar {{ aplicables.length }}
           </BaseButton>
         </div>
       </div>
