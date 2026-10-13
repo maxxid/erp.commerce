@@ -47,6 +47,17 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 
 ## ✅ Completados recientemente
 
+### Campana de avisos (stock bajo y novedades) — 13/10/2026
+El sistema empieza a avisar en lugar de esperar a que alguien abra el Dashboard.
+
+- **Salen del criterio único:** los avisos usan `filtro_reposicion` (bajo ∪ agotado, el mismo helper del KPI del Dashboard y del chip de Productos), así la campana y la pantalla no pueden contradecirse
+- **`stock_service.detalle_reposicion`** arma el mensaje de cada producto: "Stock 2 / mínimo 8 — Proveedor: Carrefour — compra $1,500.00 — venta $2,500.00". El proveedor sale de la última compra no anulada (`CompraItem`→`Compra`→`Proveedor`) y si no hay compras, del proveedor principal en `producto_proveedor`; el precio de venta es el del producto
+- **Un aviso por día, no uno por clic:** `Notificacion` lleva una `clave` (tipo + fecha) y `generar` no duplica si el estado sigue igual; a los 30 días se borran solos. La lectura se guarda en `NotificacionLeida`, con `usuario_id` NULL = "leído para todos"
+- **Dos switches en Ajustes → Avisos:** `avisos_lectura` (usuario | global) decide si cada uno tiene la campana suya o si lo que lee uno le sirve a todos; `avisos_granularidad` (tipo | producto) decide si el bajo stock llega como un aviso con el listado adentro o como un aviso por producto para ir tildando
+- **Tipos que salen:** stock bajo, sin stock, caja abierta, lotes vencidos, lotes por vencer (7 días) y licencia por vencer
+- **Frontend:** campana en el header con badge de no leídas, panel con "Marcar todas como leídas", y el click lleva a la vista que corresponde (los de stock abren Productos con `?stock=bajo`, filtro que ya se lee solo)
+- 11 tests (`tests/test_notificaciones.py`). Suite: **715 passed**. Commit `87b5de0`
+
 ### Un criterio único de "stock bajo" — 13/10/2026
 Había tres reglas distintas para lo mismo: el chip de Productos marcaba ~319 productos con `stock_minimo || 5` mientras el Dashboard marcaba 18 con `stock_minimo > 0`.
 
@@ -718,7 +729,8 @@ Además, dos guards defensivos: `_clean_name` y `_map_categoria` reventaban con 
   - Impresora térmica (ESC/POS o similar)
   - Formato fiscal simplificado
 - **Reportes exportables (CSV/PDF)** — los reportes en `/reportes` se ven en pantalla pero no se exportan
-- **Notificaciones** — en curso: campana en el header con avisos leídos/no leídos (lectura por usuario o global, elegible en Ajustes), detalle de bajo stock con último proveedor de compra + precio de compra y venta, aviso por Telegram y fix de horario UTC→UTC-3 en Auditoría. Pendiente aparte: agrupar el bajo stock por lugar de compra ("Carrefour: 7 productos") para salir a comprar o armar la compra online
+- **Notificaciones (campana)** — lista y desplegada (`87b5de0`): avisos de stock bajo con el proveedor de la última compra y los precios de compra y venta, sin stock, caja abierta, lotes vencidos/por vencer y licencia por vencer. Dedup diario, lectura por usuario o global y granularidad "un aviso por día" | "uno por producto", las dos elegibles en Ajustes → Avisos. Faltan dos pasos: aviso proactivo por **Telegram** (requiere bot de @BotFather + chat_id del negocio) y el fix de horario **UTC→UTC-3** en Auditoría
+- **Agrupar el bajo stock por lugar de compra** — en la campana y en el detalle del Dashboard, juntar los productos bajo mínimo por el proveedor de su última compra ("Carrefour: 7 productos") para salir a comprar o armar la compra online de una
 - **`productos.stock_actual` desincronizado de los lotes** — en producción 169 de 549 productos que controlan stock tienen `stock_actual` distinto de la suma de sus lotes activos (167 con la columna **por encima**, máximo 22 unidades; 2 al revés). Como la columna es la que ven el Dashboard, el POS y el chip de Productos, esos 167 se ven con más stock del que dice FEFO; entre los 18 bajo mínimo, 1 ("Pipas Gigantes 50G": columna 0, lotes 10) está marcado por eso. **Solución propuesta:** `scripts/sincronizar_stock.py` con dry-run por defecto y `--aplicar`, recalculando sólo los productos que tienen lotes (los 10 que no tienen ninguno ya están en 0)
 - **Compras: producto similar o discontinuo** — al recibir, poder reemplazar un producto pedido por otro similar; marcar ítems como "no enviado / discontinuo"; registrar qué se recibió en lugar de qué se pidió
 
