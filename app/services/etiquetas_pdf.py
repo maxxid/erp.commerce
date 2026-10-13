@@ -250,38 +250,80 @@ def _dibujar_etiqueta_sencilla(
     prod: "Producto",
     descripcion_editada: str | None
 ):
-    """Etiqueta sencilla: solo precio grande + descripción, sin marca ni código.
+    """Etiqueta sencilla: marca + precio + descripción sobre marco ornamental.
 
-    Ocupa todo el espacio disponible de la etiqueta (mismo tamaño que la
-    completa). El precio va arriba bien grande y la descripción llena el
-    resto con todas las líneas que entren.
+    Sin código de barras ni fecha. Marco doble azul con florituras de
+    espiral en las 4 esquinas (estilo certificado). El contenido va
+    centrado y ocupa todo el interior del marco.
     """
-    padding = 3 * mm
+    import math
+
+    color = HexColor("#1F3A6E")
+
+    # ── Marco doble ──
+    inset1 = 1.6 * mm
+    inset2 = 2.5 * mm
+    c.setStrokeColor(color)
+    c.setLineWidth(0.7)
+    c.rect(x + inset1, y + inset1, w - 2 * inset1, h - 2 * inset1)
+    c.setLineWidth(0.25)
+    c.rect(x + inset2, y + inset2, w - 2 * inset2, h - 2 * inset2)
+
+    # ── Florituras de esquina ──
+    c.setFillColor(color)
+    s = 4.6 * mm
+    esquinas = [
+        (x + inset2, y + h - inset2, 1, -1),
+        (x + w - inset2, y + h - inset2, -1, -1),
+        (x + inset2, y + inset2, 1, 1),
+        (x + w - inset2, y + inset2, -1, 1),
+    ]
+    for cx, cy, sx, sy in esquinas:
+        c.saveState()
+        c.translate(cx, cy)
+        c.scale(sx, sy)
+        _floritura_esquina(c, s, math)
+        c.restoreState()
+
+    # ── Contenido: centrado dentro del marco ──
+    padding = 6 * mm
     inner_w = w - 2 * padding
     inner_x = x + padding
+    centro = x + w / 2
     top_y = y + h - padding
 
+    cursor = top_y
+
+    # Marca arriba, centrada
+    if prod.marca:
+        marca_str = prod.marca[:40]
+        marca_fs = 11
+        while marca_fs > 7 and c.stringWidth(marca_str, "Helvetica-Bold", marca_fs) > inner_w:
+            marca_fs -= 0.5
+        c.setFillColor(HexColor("#111111"))
+        c.setFont("Helvetica-Bold", marca_fs)
+        c.drawCentredString(centro, cursor - marca_fs, marca_str)
+        cursor -= marca_fs + 2.5 * mm
+
+    # Precio grande, centrado; baja de tamaño si no entra
     if prod.tipo_venta == "kilo" and prod.precio_por_kilo:
         precio_str = _formatear_precio(prod.precio_por_kilo) + " /kg"
     else:
         precio_str = _formatear_precio(prod.precio_venta)
+    precio_fs = 21
+    while precio_fs > 11 and c.stringWidth(precio_str, "Helvetica-Bold", precio_fs) > inner_w:
+        precio_fs -= 1
+    c.setFont("Helvetica-Bold", precio_fs)
+    c.drawCentredString(centro, cursor - precio_fs, precio_str)
+    cursor -= precio_fs + 3 * mm
 
-    # Precio arriba, bien grande, a todo el ancho disponible.
-    # Si no entra en una línea, bajamos el tamaño hasta que entre.
-    precio_font_size = 22
-    while precio_font_size > 12 and c.stringWidth(precio_str, "Helvetica-Bold", precio_font_size) > inner_w:
-        precio_font_size -= 1
-    c.setFont("Helvetica-Bold", precio_font_size)
-    baseline = top_y - precio_font_size
-    c.drawString(inner_x, baseline, precio_str)
-
-    # Descripción: llena todo el resto del espacio, con las líneas que entren.
+    # Descripción: llena todo el resto, con las líneas que entren
     desc = descripcion_editada if descripcion_editada is not None else (prod.descripcion or prod.nombre or "")
     if desc:
         desc_font = 10
         line_height = desc_font + 2
-        desc_top = baseline - 4 * mm
-        max_lines = max(1, int((desc_top - (y + padding)) / line_height))
+        desc_top = cursor
+        max_lines = max(1, int((desc_top - (y + padding + 1 * mm)) / line_height))
         c.setFont("Helvetica", desc_font)
         words = desc.split()
         lines = []
@@ -298,11 +340,85 @@ def _dibujar_etiqueta_sencilla(
                     break
         if current and len(lines) < max_lines:
             lines.append(current)
-        # Ellipsis en la última línea si se cortó
         if len(lines) == max_lines and words:
             last = lines[-1]
             while last and c.stringWidth(last + "...", "Helvetica", desc_font) > inner_w:
                 last = last[:-1]
             lines[-1] = last + "..."
+        c.setFillColor(HexColor("#111111"))
         for i, line in enumerate(lines):
-            c.drawString(inner_x, desc_top - i * line_height, line)
+            c.drawCentredString(centro, desc_top - i * line_height, line)
+
+
+def _floritura_esquina(c, s: float, math_mod):
+    """Floritura de esquina: dos espejos de espiral + tallos ondulados.
+
+    Se asume la transformación ya aplicada: esquina en (0,0) e interior
+    de la etiqueta en el cuadrante (+x, +y). s = tamaño aproximado.
+    """
+    # Espiral principal: ojo en la diagonal, cola cayendo sobre el eje x
+    # local (un borde de la etiqueta). Espejo de la diagonal → cola en eje y.
+    ojo_x = ojo_y = s * 0.62
+    r0 = s * 0.70
+    r1 = s * 0.06
+    vueltas = 1.35
+    # Ángulo inicial: la cola aterriza sobre y=0 (borde)
+    sin0 = -ojo_y / r0
+    ang0 = math_mod.asin(max(-1.0, sin0))
+    n = 40
+
+    def dibujar_espiral(swap):
+        p = c.beginPath()
+        for i in range(n + 1):
+            t = i / n
+            ang = ang0 - t * vueltas * 2 * math_mod.pi  # sentido horario
+            r = r0 * (r1 / r0) ** t
+            px = ojo_x + r * math_mod.cos(ang)
+            py = ojo_y + r * math_mod.sin(ang)
+            if swap:
+                px, py = py, px
+            if i == 0:
+                p.moveTo(px, py)
+            else:
+                p.lineTo(px, py)
+        c.drawPath(p)
+
+    c.setLineWidth(0.6)
+    dibujar_espiral(swap=False)
+    dibujar_espiral(swap=True)
+
+    # Tallo ondulado desde cada cola, siguiendo el borde
+    cola_x = ojo_x + r0 * math_mod.cos(ang0)
+    for swap in (False, True):
+        p = c.beginPath()
+        x0, y0 = cola_x, 0.01 * s
+        if swap:
+            x0, y0 = y0, x0
+        p.moveTo(x0, y0)
+        c1 = (1.10 * s, 0.10 * s)
+        c2 = (1.22 * s, -0.04 * s)
+        e = (1.38 * s, 0.08 * s)
+        if swap:
+            c1, c2, e = (c1[1], c1[0]), (c2[1], c2[0]), (e[1], e[0])
+        p.curveTo(c1[0], c1[1], c2[0], c2[1], e[0], e[1])
+        c.drawPath(p)
+        # Rizito al final del tallo
+        p2 = c.beginPath()
+        rq = s * 0.16
+        eye = (e[0] + rq * 0.4, e[1] + rq * 0.9)
+        for i in range(14):
+            t = i / 13
+            ang = -math_mod.pi * 0.55 - t * 0.9 * 2 * math_mod.pi
+            r = rq * (0.12) ** t
+            px = eye[0] + r * math_mod.cos(ang)
+            py = eye[1] + r * math_mod.sin(ang)
+            if swap:
+                px, py = py, px
+            if i == 0:
+                p2.moveTo(px, py)
+            else:
+                p2.lineTo(px, py)
+        c.drawPath(p2)
+
+    # Punto pequeño en el vértice
+    c.circle(s * 0.14, s * 0.14, s * 0.05, stroke=0, fill=1)

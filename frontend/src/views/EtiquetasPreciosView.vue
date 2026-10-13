@@ -544,7 +544,7 @@ onMounted(async () => {
           </div>
           <div class="grid grid-cols-2 gap-2">
             <button
-              v-for="opt in [{ v: 'completa', l: 'Completa', s: 'marca + código' }, { v: 'sencilla', l: 'Sencilla', s: 'solo precio + desc.' }]"
+              v-for="opt in [{ v: 'completa', l: 'Completa', s: 'marca + código' }, { v: 'sencilla', l: 'Sencilla', s: 'marca + marco' }]"
               :key="opt.v"
               class="p-2.5 rounded-xl border text-center transition-all"
               :class="modelo === opt.v
@@ -568,12 +568,20 @@ onMounted(async () => {
               class="bg-white border border-slate-300 rounded-md p-2 shadow-sm mx-auto select-none overflow-hidden"
               :style="labelSizeStyle"
             >
-              <!-- Modelo sencilla: solo precio grande + descripción, ocupando todo -->
+              <!-- Modelo sencilla: marca + precio + desc centrados, marco ornamental azul -->
               <template v-if="modelo === 'sencilla'">
-                <div class="text-[18px] font-extrabold text-slate-900 leading-none">
-                  {{ formatCurrency(previewLabel.precio) }}<span v-if="previewLabel.esKilo" class="text-[11px] font-bold ml-0.5">/kg</span>
+                <div class="h-full flex flex-col items-center justify-center px-3 py-2 border-2 border-double border-[#1F3A6E] rounded-[2px] relative overflow-hidden">
+                  <!-- Rizos de esquina (mockup del marco ornamental) -->
+                  <span class="absolute top-0.5 left-0.5 text-[8px] leading-none text-[#1F3A6E] select-none">◜</span>
+                  <span class="absolute top-0.5 right-0.5 text-[8px] leading-none text-[#1F3A6E] select-none rotate-90">◜</span>
+                  <span class="absolute bottom-0.5 left-0.5 text-[8px] leading-none text-[#1F3A6E] select-none -rotate-90">◜</span>
+                  <span class="absolute bottom-0.5 right-0.5 text-[8px] leading-none text-[#1F3A6E] select-none rotate-180">◜</span>
+                  <div v-if="previewLabel.marca" class="text-[7px] font-bold text-slate-800 leading-none mb-0.5">{{ previewLabel.marca }}</div>
+                  <div class="text-[15px] font-extrabold text-slate-900 leading-none">
+                    {{ formatCurrency(previewLabel.precio) }}<span v-if="previewLabel.esKilo" class="text-[9px] font-bold ml-0.5">/kg</span>
+                  </div>
+                  <div class="text-[6px] text-slate-700 leading-tight mt-1 text-center line-clamp-3">{{ previewLabel.descripcion || previewLabel.nombre }}</div>
                 </div>
-                <div class="text-[7px] text-slate-700 leading-tight mt-1.5 line-clamp-4">{{ previewLabel.descripcion || previewLabel.nombre }}</div>
               </template>
               <!-- Modelo completa: marca + precio arriba, fecha, desc, código -->
               <template v-else>
