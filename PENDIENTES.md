@@ -47,6 +47,17 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 
 ## ✅ Completados recientemente
 
+### Etiquetas: asignar sector rápido — 13/10/2026
+Asignar sectores desde Etiquetas era inviable: había que tildar producto por producto de un listado de hasta 500, con la selección escondida en un card del panel izquierdo.
+
+- **Buscador instantáneo** sobre lo ya cargado (nombre, código, marca o categoría, sin tildes, mismo criterio que Productos) y chip **"Sin sector (N)"** que muestra de una cuántos quedan sin ubicar. El flujo completo quedó en 4 clics: filtrar → "Seleccionar todo lo filtrado" → elegir sector → Asignar
+- **Seleccionar todo lo filtrado**: el tilde del header y el botón trabajan sobre lo que se ve, no sobre el listado entero; si el filtro cambia, lo que quedó afuera se deselecciona solo, así "Asignar a N" nunca agarra productos invisibles
+- **Sector editable en la fila**: un select compacto por producto que guarda al toque, para arreglos sueltos sin selections ni modales
+- **La asignación masiva actualiza en pantalla sin recargar**: si el filtro "sin sector" está activo, los recién asignados se van solos de la lista y ya se agarra el próximo grupo
+- **Generar PDF y marcar impreso usan lo que se ve** (selección, o filtrado si no hay selección): nunca imprimen productos escondidos por el filtro
+- **`BaseTable`:** slot por encabezado de columna (`header-<key>`), retrocompatible con todas las tablas existentes
+- Sin cambios de backend: se reutiliza `POST /api/productos/asignar-sector`. Commit `8c4f895`
+
 ### Aviso proactivo por Telegram — 13/10/2026
 Además de la campana, el ERP avisa sin que nadie abra el sistema.
 
