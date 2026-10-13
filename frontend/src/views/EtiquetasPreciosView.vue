@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useToastStore } from '@/stores/toasts'
 import { formatCurrency, formatDateShort, formatDateTime } from '@/composables/useUtils'
 import api from '@/services/api'
@@ -92,6 +92,43 @@ const asignandoSector = ref(false)
 const descripcionesEditadas = ref({})
 const selectedProductos = ref(new Set())
 
+// Búsqueda y filtros de vista: se aplican sobre lo ya cargado, sin volver
+// a pegarle al backend, así se filtra al toque mientras se asignan sectores.
+const busqueda = ref('')
+const soloSinSector = ref(false)
+
+// Mismo criterio que Productos: minúsculas y sin tildes.
+const normalizeStr = v => {
+  const s = String(v ?? '').toLowerCase()
+  return s === 'null' || s === 'undefined' ? '' : s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+}
+
+const productosFiltrados = computed(() => {
+  let lista = productos.value
+  if (soloSinSector.value) lista = lista.filter(p => !p.sector_id)
+  const q = normalizeStr(busqueda.value).trim()
+  if (q) {
+    lista = lista.filter(p =>
+      normalizeStr(p.nombre).includes(q)
+      || normalizeStr(p.marca).includes(q)
+      || normalizeStr(p.codigo_barras).includes(q)
+      || normalizeStr(p.categoria_nombre).includes(q)
+    )
+  }
+  return lista
+})
+
+const sinSectorCount = computed(() => productos.value.filter(p => !p.sector_id).length)
+
+// La selección vive sobre lo que se ve: si el filtro cambia, lo que quedó
+// afuera se deselecciona solo, así "Asignar a N" nunca incluye invisibles.
+watch(productosFiltrados, (lista) => {
+  const visibles = new Set(lista.map(p => p.id))
+  for (const id of [...selectedProductos.value]) {
+    if (!visibles.has(id)) selectedProductos.value.delete(id)
+  }
+})
+
 const tableColumns = [
   { key: 'select', label: '', width: 'w-10', align: 'center', mobile: false },
   { key: 'nombre', label: 'Producto' },
@@ -102,17 +139,17 @@ const tableColumns = [
   { key: 'stock', label: 'Stock', align: 'right', width: 'w-16', mobile: false },
 ]
 
-const tableRows = computed(() => productos.value.map(p => ({
+const tableRows = computed(() => productosFiltrados.value.map(p => ({
   ...p,
   precio: p.tipo_venta === 'kilo' && p.precio_por_kilo ? p.precio_por_kilo : p.precio_venta,
 })))
 
-const sinStockCount = computed(() => productos.value.filter(p => (p.stock_actual || 0) <= 0).length)
+const sinStockCount = computed(() => productosFiltrados.value.filter(p => (p.stock_actual || 0) <= 0).length)
 const totalEtiquetas = computed(() => productos.value.length)
 const productosSeleccionados = computed(() => productos.value.filter(p => selectedProductos.value.has(p.id)))
 
 const previewLabel = computed(() => {
-  const lista = productosSeleccionados.value.length ? productosSeleccionados.value : productos.value
+  const lista = productosSeleccionados.value.length ? productosSeleccionados.value : productosFiltrados.value
   if (!lista.length) return null
   const p = lista[0]
   const desc = descripcionesEditadas.value[p.id] ?? p.descripcion ?? ''
@@ -135,16 +172,22 @@ const labelSizeStyle = computed(() => {
 })
 
 const todosSeleccionados = computed(() => {
-  if (!productos.value.length) return false
-  return productos.value.every(p => selectedProductos.value.has(p.id))
+  if (!productosFiltrados.value.length) return false
+  return productosFiltrados.value.every(p => selectedProductos.value.has(p.id))
 })
 
+// Selecciona todo lo que se ve (lo filtrado), no el listado entero.
 function toggleSelectAll() {
   if (todosSeleccionados.value) {
-    selectedProductos.value.clear()
+    productosFiltrados.value.forEach(p => selectedProductos.value.delete(p.id))
   } else {
-    productos.value.forEach(p => selectedProductos.value.add(p.id))
+    productosFiltrados.value.forEach(p => selectedProductos.value.add(p.id))
   }
+}
+
+function limpiarBusqueda() {
+  busqueda.value = ''
+  soloSinSector.value = false
 }
 
 function toggleProducto(id) {
@@ -153,6 +196,10 @@ function toggleProducto(id) {
   } else {
     selectedProductos.value.add(id)
   }
+}
+
+function filaSeleccionadaClass(row) {
+  return selectedProductos.value.has(row.id) ? 'bg-brand-50/70 dark:bg-brand-950/25' : ''
 }
 
 function motivoBadge(motivo) {
@@ -187,17 +234,41 @@ async function asignarSectorSeleccionados() {
   }
   asignandoSector.value = true
   try {
+    const sector = sectores.value.find(s => s.id === sectorAsignar.value) || null
     const resp = await api.post('/api/productos/asignar-sector', {
       productos_ids: ids,
       sector_id: sectorAsignar.value ?? null,
     })
-    toast.success(resp?.message || `${resp?.asignados ?? ids.length} producto(s) actualizados`)
-    await cargarSectores()
-    await cargarPreview(true)
+    // Se arregla en pantalla sin recargar: si el filtro es "sin sector", los
+    // recién asignados se van solos de la lista y ya podés agarrar el próximo
+    // grupo sin esperar nada.
+    const set = new Set(ids)
+    productos.value = productos.value.map(p => set.has(p.id)
+      ? { ...p, sector_id: sectorAsignar.value ?? null, sector_nombre: sector?.nombre || null }
+      : p)
+    selectedProductos.value.clear()
+    toast.success(`${resp?.asignados ?? ids.length} producto(s) → ${sector?.nombre || 'sin sector'}`)
   } catch (e) {
     toast.error(e?.data?.detail || 'Error al asignar sector')
   } finally {
     asignandoSector.value = false
+  }
+}
+
+// Cambiar el sector de un producto desde la fila, sin selections ni modales.
+async function cambiarSectorFila(row, valor) {
+  const p = productos.value.find(x => x.id === row.id)
+  if (!p) return
+  const sector = sectores.value.find(s => s.id === valor) || null
+  try {
+    await api.post('/api/productos/asignar-sector', {
+      productos_ids: [p.id],
+      sector_id: valor ?? null,
+    })
+    p.sector_id = valor ?? null
+    p.sector_nombre = sector?.nombre || null
+  } catch (e) {
+    toast.error(e?.data?.detail || 'Error al asignar sector')
   }
 }
 
@@ -264,9 +335,11 @@ function parsearDetalle409(e) {
 }
 
 async function generarPDF(forzar = false) {
+  // Lo que se ve es lo que se imprime: si hay selección, esa; si no, todo lo
+  // filtrado. Nunca imprime productos que están escondidos por el filtro.
   const idsAImprimir = selectedProductos.value.size > 0
     ? [...selectedProductos.value]
-    : productos.value.map(p => p.id)
+    : productosFiltrados.value.map(p => p.id)
 
   if (!idsAImprimir.length) {
     toast.error('No hay productos para generar etiquetas')
@@ -320,7 +393,7 @@ function confirmarGenerarConStockCero() {
 async function marcarImpreso() {
   const idsAMarcar = selectedProductos.value.size > 0
     ? [...selectedProductos.value]
-    : productos.value.map(p => p.id)
+    : productosFiltrados.value.map(p => p.id)
 
   if (!idsAMarcar.length) {
     toast.error('No hay productos para marcar')
@@ -499,12 +572,15 @@ onMounted(async () => {
 
         <!-- Acciones -->
         <BaseCard padding="md" class="space-y-3">
-          <div class="flex items-center justify-between text-xs">
+          <div class="flex items-center justify-between gap-2 text-xs flex-wrap">
             <span class="text-slate-500 dark:text-slate-400">
               <span class="font-bold text-slate-900 dark:text-white text-sm">{{ totalEtiquetas }}</span> etiqueta(s)
             </span>
             <span v-if="selectedProductos.size > 0" class="px-2 py-0.5 rounded-full bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300 font-medium">
               {{ selectedProductos.size }} sel.
+            </span>
+            <span v-if="sinSectorCount > 0" class="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-medium">
+              {{ sinSectorCount }} sin sector
             </span>
             <span v-else-if="sinStockCount > 0" class="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-medium">
               {{ sinStockCount }} sin stock
@@ -526,51 +602,118 @@ onMounted(async () => {
             <BaseButton @click="marcarImpreso" :loading="marcando" variant="success" size="sm" :disabled="!productos.length">
               <i class="fa-solid fa-check mr-1"></i> Marcar impreso
             </BaseButton>
-            <BaseButton @click="toggleSelectAll" variant="ghost" size="sm" :disabled="!productos.length">
+            <BaseButton @click="toggleSelectAll" variant="ghost" size="sm" :disabled="!productosFiltrados.length">
               <i :class="todosSeleccionados ? 'fa-solid fa-square-minus' : 'fa-solid fa-square-check'"></i>
-              {{ todosSeleccionados ? 'Limpiar' : 'Todo' }}
-            </BaseButton>
-          </div>
-
-          <!-- Asignación masiva de sector -->
-          <div class="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
-            <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-              Asignar sector a la selección
-            </p>
-            <BaseSelect
-              v-model="sectorAsignar"
-              size="sm"
-              :options="[{ value: null, label: 'Sin sector (quitar)' }, ...sectores.map(s => ({ value: s.id, label: s.nombre }))]"
-              option-value="value"
-              option-label="label"
-              placeholder="Elegir sector…"
-            />
-            <BaseButton
-              variant="secondary"
-              size="sm"
-              class="w-full"
-              :loading="asignandoSector"
-              :disabled="!selectedProductos.size || sectorAsignar === undefined"
-              @click="asignarSectorSeleccionados"
-            >
-              <i class="fa-solid fa-location-dot mr-1"></i>
-              Asignar a {{ selectedProductos.size }} seleccionado(s)
+              {{ todosSeleccionados ? 'Deseleccionar' : 'Todo lo filtrado' }}
             </BaseButton>
           </div>
         </BaseCard>
       </div>
 
       <!-- Panel derecho: tabla -->
-      <div>
-        <BaseCard v-if="productos.length" padding="none">
+      <div class="space-y-3">
+        <!-- Buscador y filtro "sin sector" -->
+        <div v-if="productos.length" class="flex flex-wrap items-center gap-2">
+          <div class="relative flex-1 min-w-[180px]">
+            <BaseInput
+              v-model="busqueda"
+              size="sm"
+              placeholder="Buscar por nombre, código, marca o categoría…"
+              input-class="pr-9"
+            >
+              <template #prefix>
+                <i class="fa-solid fa-magnifying-glass text-slate-400"></i>
+              </template>
+              <template #suffix>
+                <button
+                  v-if="busqueda"
+                  type="button"
+                  aria-label="Limpiar búsqueda"
+                  class="w-5 h-5 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                  @click="busqueda = ''"
+                >
+                  <i class="fa-solid fa-xmark text-[10px]"></i>
+                </button>
+              </template>
+            </BaseInput>
+          </div>
+          <button
+            type="button"
+            class="px-3 py-[7px] rounded-lg text-xs font-semibold border flex items-center gap-1.5 transition-all"
+            :class="soloSinSector
+              ? 'bg-amber-500 text-white border-amber-500 shadow-sm shadow-amber-500/20'
+              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-amber-300 dark:hover:border-amber-700'"
+            @click="soloSinSector = !soloSinSector"
+          >
+            <i class="fa-solid fa-location-dot"></i>
+            Sin sector
+            <span
+              class="px-1.5 py-0.5 rounded-full text-[10px] font-bold"
+              :class="soloSinSector ? 'bg-white/25 text-white' : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'"
+            >{{ sinSectorCount }}</span>
+          </button>
+        </div>
+
+        <!-- Barra de selección y asignación masiva -->
+        <div
+          v-if="productos.length"
+          class="flex flex-wrap items-center gap-2 px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+        >
+          <span class="text-xs text-slate-500 dark:text-slate-400">
+            Viendo <b class="text-slate-800 dark:text-white">{{ productosFiltrados.length }}</b><span v-if="productosFiltrados.length !== totalEtiquetas"> de {{ totalEtiquetas }}</span>
+            <span v-if="selectedProductos.size"> · <b class="text-brand-600 dark:text-brand-400">{{ selectedProductos.size }}</b> sel.</span>
+          </span>
+          <div class="ml-auto flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              class="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-40"
+              :disabled="!productosFiltrados.length"
+              @click="toggleSelectAll"
+            >
+              <i :class="todosSeleccionados ? 'fa-solid fa-square-minus' : 'fa-solid fa-square-check'" class="mr-1"></i>
+              {{ todosSeleccionados ? 'Deseleccionar' : 'Seleccionar todo lo filtrado' }}
+            </button>
+            <BaseSelect
+              v-model="sectorAsignar"
+              size="sm"
+              class="w-44"
+              :options="[{ value: null, label: 'Sin sector (quitar)' }, ...sectores.map(s => ({ value: s.id, label: s.nombre }))]"
+              option-value="value"
+              option-label="label"
+              placeholder="Elegir sector…"
+            />
+            <BaseButton
+              size="sm"
+              variant="primary"
+              :loading="asignandoSector"
+              :disabled="!selectedProductos.size || sectorAsignar === undefined"
+              @click="asignarSectorSeleccionados"
+            >
+              <i class="fa-solid fa-location-dot mr-1"></i>
+              Asignar
+            </BaseButton>
+          </div>
+        </div>
+
+        <BaseCard v-if="productos.length && productosFiltrados.length" padding="none">
           <BaseTable
             :columns="tableColumns"
             :rows="tableRows"
             :loading="loading"
+            :row-class="filaSeleccionadaClass"
             empty-title="No hay productos"
             empty-text="Ajustá los filtros y dale a Actualizar"
             empty-icon="fa-tag"
           >
+            <template #header-select>
+              <input
+                type="checkbox"
+                aria-label="Seleccionar todo lo filtrado"
+                class="w-3.5 h-3.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
+                :checked="todosSeleccionados"
+                @click="toggleSelectAll"
+              />
+            </template>
             <template #select="{ row }">
               <input
                 type="checkbox"
@@ -591,12 +734,16 @@ onMounted(async () => {
               </BaseBadge>
             </template>
             <template #sector_nombre="{ row }">
-              <span
-                class="text-[11px] truncate block"
-                :class="row.sector_nombre ? 'text-slate-600 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500'"
+              <select
+                :value="row.sector_id ?? ''"
+                class="w-full max-w-[150px] text-[11px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-2 py-1 cursor-pointer hover:border-brand-300 dark:hover:border-brand-700 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 transition-colors"
+                :title="row.sector_nombre ? `Sector: ${row.sector_nombre}` : 'Sin sector'"
+                @click.stop
+                @change="cambiarSectorFila(row, $event.target.value === '' ? null : Number($event.target.value))"
               >
-                {{ row.sector_nombre || '—' }}
-              </span>
+                <option value="">Sin sector</option>
+                <option v-for="s in sectores" :key="s.id" :value="s.id">{{ s.nombre }}</option>
+              </select>
             </template>
             <template #descripcion="{ row }">
               <BaseInput
@@ -623,6 +770,16 @@ onMounted(async () => {
             </template>
           </BaseTable>
         </BaseCard>
+
+        <EmptyState
+          v-else-if="!loading && productos.length"
+          icon="fa-magnifying-glass"
+          title="Sin resultados"
+          text="Ningún producto de esta vista previa coincide con la búsqueda o el filtro de sector."
+          action-text="Limpiar búsqueda"
+          compact
+          @action="limpiarBusqueda"
+        />
 
         <EmptyState
           v-else-if="!loading"

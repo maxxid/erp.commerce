@@ -106,7 +106,7 @@ const mobileCols = computed(() =>
               @click="col.sortable ? emit('sort', col.key) : null"
             >
               <span class="flex items-center gap-1" :class="{ 'justify-end': col.align === 'right', 'justify-center': col.align === 'center' }">
-                {{ col.label }}
+                <slot :name="'header-' + col.key">{{ col.label }}</slot>
                 <i v-if="col.sortable" class="fa-solid fa-sort text-slate-300 dark:text-slate-600 text-[10px]"></i>
               </span>
             </th>
