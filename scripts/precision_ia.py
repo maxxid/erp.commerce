@@ -145,7 +145,7 @@ def main() -> int:
         ilegibles = 0
 
         for ids_lote in lotes:
-            filas, _ = servicio.detalle(db, ids_lote)
+            filas, nombres_por_id = servicio.detalle(db, ids_lote)
             cat = servicio.catalogo(db)
             try:
                 respuesta = registro.completar(
@@ -190,7 +190,8 @@ def main() -> int:
                 fila_res = {
                     "producto_id": pid,
                     "actual": actual,
-                    "propuesta": it.get("nueva_categoria") or propuesta,
+                    "propuesta": it.get("nueva_categoria") or nombres_por_id.get(propuesta)
+                    or f"id {propuesta}",
                     "confianza": _confianza(it),
                     "motivo": str(it.get("motivo") or "").strip()[:80],
                 }
