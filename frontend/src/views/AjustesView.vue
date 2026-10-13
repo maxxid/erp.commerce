@@ -382,6 +382,8 @@ const config = ref({
   qr_interop_nombre: '',
   qr_interop_ciudad: '',
   qr_interop_mcc: '9700',
+  avisos_lectura: 'usuario',
+  avisos_granularidad: 'tipo',
 })
 
 const facturaAuto = ref({
@@ -465,6 +467,8 @@ const descs = {
   banco_nombre: 'Nombre del banco para transferencias',
   banco_titular: 'Nombre del titular de la cuenta',
   banco_alias: 'Alias de CBU/Alias para transferencias',
+  avisos_lectura: 'Avisos: quién marca la lectura. usuario = cada uno tiene la suya; global = lo que lee uno vale para todos',
+  avisos_granularidad: 'Avisos: cómo llega el stock bajo. tipo = un aviso por día; producto = un aviso por producto',
   empresa_nombre: 'Razón Social para facturas electrónicas',
   empresa_domicilio: 'Domicilio comercial para facturas',
   empresa_condicion_iva: 'Condición frente al IVA: responsable_inscripto, monotributista, exento',
@@ -2131,6 +2135,51 @@ onMounted(async () => {
             Guardar
           </BaseButton>
         </div>
+      </div>
+    </BaseCard>
+
+    <!-- Avisos (campana del header) -->
+    <BaseCard v-if="!loading">
+      <div class="flex items-center justify-between gap-3">
+        <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <i class="fa-solid fa-bell text-brand-600"></i>
+          Avisos
+        </h3>
+      </div>
+
+      <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+        La campana del header junta lo que necesita atención: stock bajo (con el proveedor
+        de la última compra y los precios de compra y venta), caja abierta, lotes por
+        vencer y licencia por vencer.
+      </p>
+
+      <div class="mt-4 grid gap-4 sm:grid-cols-2">
+        <BaseSelect
+          v-model="config.avisos_lectura"
+          label="Lectura de los avisos"
+          :options="[
+            { value: 'usuario', label: 'Cada usuario tiene los suyos' },
+            { value: 'global', label: 'Compartida: lo que lee uno vale para todos' },
+          ]"
+        />
+        <BaseSelect
+          v-model="config.avisos_granularidad"
+          label="Stock bajo"
+          :options="[
+            { value: 'tipo', label: 'Un aviso por día, con el listado adentro' },
+            { value: 'producto', label: 'Un aviso por producto (para ir tildando)' },
+          ]"
+        />
+      </div>
+
+      <div class="mt-4 flex justify-end">
+        <BaseButton
+          variant="primary"
+          :loading="saving"
+          @click="saveConfig(['avisos_lectura', 'avisos_granularidad'])"
+        >
+          Guardar
+        </BaseButton>
       </div>
     </BaseCard>
   </div>

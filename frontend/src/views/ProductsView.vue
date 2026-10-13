@@ -405,14 +405,22 @@ onMounted(async () => {
   fetchProveedores()
   fetchSectores()
   abrirDesdeQuery()
+  aplicarFiltrosDesdeQuery()
 })
 watch(() => route.path, async (path) => {
   if (path === '/products') {
     await fetchProductsData()
     abrirDesdeQuery()
+    aplicarFiltrosDesdeQuery()
   }
 })
 watch(() => route.query.editar, abrirDesdeQuery)
+
+// La campana de avisos manda ?stock=bajo: abre Productos con el filtro de
+// bajo mínimo puesto, así el aviso lleva al lugar donde se arregla.
+function aplicarFiltrosDesdeQuery() {
+  filterStockBajo.value = route.query.stock === 'bajo'
+}
 
 // El dashboard manda ?editar=<id> cuando desplegás una categoría y tocás un
 // producto, para corregir de una qué categoría tiene puesta. Espera a que los

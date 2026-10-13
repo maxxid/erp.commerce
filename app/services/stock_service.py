@@ -187,3 +187,76 @@ def filtro_reposicion(query):
 def productos_stock_bajo(db: Session) -> List[Producto]:
     """Lista los productos bajo stock mínimo, de lo más bajo a lo más alto."""
     return filtro_bajo(db.query(Producto)).order_by(Producto.stock_actual).all()
+
+
+def detalle_reposicion(db: Session, productos) -> dict:
+    """Por producto, de dónde se compró y a qué precio.
+
+    Para avisar "comprá esto" alcanza con el producto y el stock, pero no
+    alcanza para salir a comprar: hace falta el proveedor y a qué precio salió
+    la última vez. Se toma el proveedor de la última compra no anulada; si el
+    producto nunca se compró, el vínculo producto-proveedor (el principal si
+    hay más de uno) y por último el `precio_costo` cargado a mano.
+
+    Devuelve {producto_id: {proveedor, precio_compra, precio_venta, origen}}.
+    """
+    from app.models.compra import Compra, CompraItem
+    from app.models.proveedor import Proveedor
+    from app.models.producto import producto_proveedor
+
+    ids = [p.id for p in productos]
+    if not ids:
+        return {}
+
+    detalle = {}
+    # Ordenado por producto y por fecha: la primera fila de cada producto es
+    # su compra más reciente.
+    compras = (
+        db.query(CompraItem.producto_id, CompraItem.precio_unitario, Proveedor.nombre)
+        .join(Compra, Compra.id == CompraItem.compra_id)
+        .join(Proveedor, Proveedor.id == Compra.proveedor_id)
+        .filter(CompraItem.producto_id.in_(ids), Compra.estado != "anulada")
+        .order_by(CompraItem.producto_id, Compra.fecha.desc())
+        .all()
+    )
+    for producto_id, precio, proveedor in compras:
+        if producto_id in detalle:
+            continue
+        detalle[producto_id] = {
+            "proveedor": proveedor,
+            "precio_compra": float(precio or 0),
+            "origen": "compra",
+        }
+
+    faltantes = [pid for pid in ids if pid not in detalle]
+    if faltantes:
+        vinculos = (
+            db.query(
+                producto_proveedor.c.producto_id,
+                producto_proveedor.c.costo,
+                Proveedor.nombre,
+            )
+            .join(Proveedor, Proveedor.id == producto_proveedor.c.proveedor_id)
+            .filter(producto_proveedor.c.producto_id.in_(faltantes))
+            .order_by(producto_proveedor.c.producto_id, producto_proveedor.c.es_principal.desc())
+            .all()
+        )
+        for producto_id, costo, nombre in vinculos:
+            if producto_id in detalle:
+                continue
+            detalle[producto_id] = {
+                "proveedor": nombre,
+                "precio_compra": float(costo or 0),
+                "origen": "vinculo",
+            }
+
+    for p in productos:
+        d = detalle.setdefault(p.id, {"proveedor": None, "precio_compra": 0.0, "origen": None})
+        if d["precio_compra"] <= 0:
+            costo = float(p.precio_costo or 0)
+            if costo > 0:
+                d["precio_compra"] = costo
+                d["origen"] = "producto"
+        d["precio_venta"] = float(p.precio_venta or 0)
+
+    return detalle

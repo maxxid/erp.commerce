@@ -3,6 +3,7 @@ import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
 import { useCajaStore } from '@/stores/caja'
+import { useNotificacionesStore } from '@/stores/notificaciones'
 import { useCalculadoraStore } from '@/stores/calculadora'
 import { pageLoading } from '@/router'
 import router from '@/router'
@@ -20,6 +21,7 @@ import CalculadoraFlotante from '@/components/caja/CalculadoraFlotante.vue'
 const auth = useAuthStore()
 const toast = useToastStore()
 const cajaStore = useCajaStore()
+const notificacionesStore = useNotificacionesStore()
 
 const apiMode = ref('real')
 const apiBaseUrl = ref('')
@@ -95,6 +97,7 @@ watch(() => router.currentRoute.value.fullPath, () => { menuAbierto.value = fals
 watch(() => auth.authenticated, (val) => {
   if (val) {
     cajaStore.fetchEstado()
+    notificacionesStore.fetch()
     syncCatalogoSilently()
   }
 })
@@ -113,6 +116,7 @@ onMounted(async () => {
   await auth.checkLicense()
   if (auth.authenticated) {
     cajaStore.fetchEstado()
+    notificacionesStore.fetch()
     syncCatalogoSilently()
   }
 })

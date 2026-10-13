@@ -24,6 +24,7 @@ from app.models.licencia import Licencia
 from app.models.oferta import Oferta
 from app.models.factura_electronica import FacturaElectronica
 from app.models.recarga import Recarga
+from app.models.notificacion import Notificacion, NotificacionLeida
 
 __all__ = [
     "Categoria",
@@ -50,4 +51,6 @@ __all__ = [
     "Oferta",
     "FacturaElectronica",
     "Recarga",
+    "Notificacion",
+    "NotificacionLeida",
 ]

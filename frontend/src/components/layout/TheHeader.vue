@@ -5,6 +5,7 @@ import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseToggle from '@/components/ui/BaseToggle.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import SyncIndicator from '@/components/layout/SyncIndicator.vue'
+import NotificationBell from '@/components/layout/NotificationBell.vue'
 import { useSounds } from '@/composables/useSounds'
 
 const props = defineProps({
@@ -149,6 +150,8 @@ function saveSettings() {
       ></div>
 
       <SyncIndicator />
+
+      <NotificationBell />
 
       <button
         type="button"
