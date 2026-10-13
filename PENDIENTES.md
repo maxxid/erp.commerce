@@ -47,6 +47,25 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 
 ## ✅ Completados recientemente
 
+### Aviso proactivo por Telegram — 13/10/2026
+Además de la campana, el ERP avisa sin que nadie abra el sistema.
+
+- **`avisos_service.py`:** una vez por día, a la hora que se elige en Ajustes → Avisos, manda al canal el mismo listado de la campana (mismas palabras, `mensaje_bajo` compartido). El chequeo corre cada 10 minutos con APScheduler —mismo patrón que los backups— y **lee la config en cada vuelta**: la hora y el token se cambian sin reiniciar, y si el servicio estaba caído a la hora pierde, el aviso sale igual más tarde
+- **Cuándo no manda:** si el switch está apagado, si falta el token o el chat ID, si todavía no llegó la hora, o si no hay ningún producto bajo mínimo (y en ese caso no anota el envío, así si algo se cae a cero a la tarde avisa ese mismo día)
+- **`POST /api/avisos/probar`** (solo admin) manda un mensaje de prueba ahora, para confirmar que el bot y el canal están bien antes de encender el switch. Todo queda en auditoría (`aviso_stock_telegram`, `aviso_stock_telegram_prueba`)
+- **Ajustes → Avisos:** switch, hora (Argentina), token del bot (@BotFather) y chat ID del canal (@userinfobot)
+- 13 tests (`tests/test_avisos.py`). Suite: **728 passed**. Commit `e0b062d`
+- **Para activarlo:** crear el bot con `@BotFather`, sumarlo al canal del negocio, y pegar token + chat ID en Ajustes. Hasta entonces no manda nada
+
+### Las horas de la DB se ven en hora Argentina — 13/10/2026
+La base guarda UTC sin zona, y JavaScript tomaba esos strings como hora local de la máquina de quien mira: un evento de las 09:00 UTC se veía 06:00 en Argentina, y el "hace X min" de Auditoría mentía por 3 horas.
+
+- **`useUtils`:** `parseFechaUTC` pone la `'Z'` a mano a los strings naive y respeta los que ya traen zona; `formatDateShort` / `formatDateTime` / `formatTimeShort` formatean en `America/Argentina/Buenos_Aires`; las fechas **sin hora** (`YYYY-MM-DD`, vencimientos de lotes y CAE) se quedan en UTC para que no se corra un día; `timeAgo` y `esHoy` compartidos
+- **Auditoría:** el timestamp de la tabla, el "hace X min" y los minutos del carrito abandonado
+- **Caja:** los formateadores de fecha/hora de las sesiones y movimientos, y el "es de hoy"
+- **Compras, POS, Calendario, Facturación, Backups, Etiquetas de precios, FacturaDetalleModal y Productos:** mismos helpers en lugar de `new Date()` a secas
+- **No se tocaron** los Date armados en el navegador (calendarios, rangos del día del Cierre, tickets del POS): ahí el valor ya es local y no tenía bug. Commit `b63c84f`
+
 ### Campana de avisos (stock bajo y novedades) — 13/10/2026
 El sistema empieza a avisar en lugar de esperar a que alguien abra el Dashboard.
 
@@ -729,7 +748,8 @@ Además, dos guards defensivos: `_clean_name` y `_map_categoria` reventaban con 
   - Impresora térmica (ESC/POS o similar)
   - Formato fiscal simplificado
 - **Reportes exportables (CSV/PDF)** — los reportes en `/reportes` se ven en pantalla pero no se exportan
-- **Notificaciones (campana)** — lista y desplegada (`87b5de0`): avisos de stock bajo con el proveedor de la última compra y los precios de compra y venta, sin stock, caja abierta, lotes vencidos/por vencer y licencia por vencer. Dedup diario, lectura por usuario o global y granularidad "un aviso por día" | "uno por producto", las dos elegibles en Ajustes → Avisos. Faltan dos pasos: aviso proactivo por **Telegram** (requiere bot de @BotFather + chat_id del negocio) y el fix de horario **UTC→UTC-3** en Auditoría
+- **Notificaciones (campana)** — lista y desplegada (`87b5de0`): avisos de stock bajo con el proveedor de la última compra y los precios de compra y venta, sin stock, caja abierta, lotes vencidos/por vencer y licencia por vencer. Dedup diario, lectura por usuario o global y granularidad "un aviso por día" | "uno por producto", las dos elegibles en Ajustes → Avisos
+- **Aviso por Telegram** — `avisos_service.py` desplegado (`e0b062d`): una vez por día, a la hora elegida en Ajustes → Avisos, manda al canal el mismo listado de la campana (producto, stock/mínimo, proveedor de la última compra, precios). Chequeo cada 10 minutos con APScheduler, reintentos si falla, y botón "Probar envío". **Falta la config del usuario**: crear un bot con `@BotFather`, sumarlo al canal del negocio y pegar en Ajustes el token y el chat ID (lo da `@userinfobot`). Sin eso el switch queda apagado y no manda nada
 - **Agrupar el bajo stock por lugar de compra** — en la campana y en el detalle del Dashboard, juntar los productos bajo mínimo por el proveedor de su última compra ("Carrefour: 7 productos") para salir a comprar o armar la compra online de una
 - **`productos.stock_actual` desincronizado de los lotes** — en producción 169 de 549 productos que controlan stock tienen `stock_actual` distinto de la suma de sus lotes activos (167 con la columna **por encima**, máximo 22 unidades; 2 al revés). Como la columna es la que ven el Dashboard, el POS y el chip de Productos, esos 167 se ven con más stock del que dice FEFO; entre los 18 bajo mínimo, 1 ("Pipas Gigantes 50G": columna 0, lotes 10) está marcado por eso. **Solución propuesta:** `scripts/sincronizar_stock.py` con dry-run por defecto y `--aplicar`, recalculando sólo los productos que tienen lotes (los 10 que no tienen ninguno ya están en 0)
 - **Compras: producto similar o discontinuo** — al recibir, poder reemplazar un producto pedido por otro similar; marcar ítems como "no enviado / discontinuo"; registrar qué se recibió en lugar de qué se pidió
