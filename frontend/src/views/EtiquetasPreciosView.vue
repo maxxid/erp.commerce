@@ -77,6 +77,7 @@ const ordenOptions = [
 
 const tamano = ref('70x35')
 const borderless = ref(false)
+const modelo = ref('completa')
 
 const categorias = ref([])
 const sectores = ref([])
@@ -355,6 +356,7 @@ async function generarPDF(forzar = false) {
       descripciones_editadas: descripcionesEditadas.value,
       productos_ids: idsAImprimir,
       forzar,
+      modelo: modelo.value,
     }
 
     const response = await api.request('POST', '/api/etiquetas/precios/generar-pdf', payload, null, { responseType: 'blob' })
@@ -363,7 +365,7 @@ async function generarPDF(forzar = false) {
       const url = window.URL.createObjectURL(response)
       const a = document.createElement('a')
       a.href = url
-      a.download = `etiquetas-${filtros.desde}-a-${filtros.hasta}-${tamano.value}.pdf`
+      a.download = `etiquetas-${filtros.desde}-a-${filtros.hasta}-${tamano.value}${modelo.value !== 'completa' ? `-${modelo.value}` : ''}.pdf`
       document.body.appendChild(a)
       a.click()
       a.remove()
@@ -540,6 +542,20 @@ onMounted(async () => {
               <div class="text-[10px] text-slate-400 mt-0.5">{{ opt.s }}</div>
             </button>
           </div>
+          <div class="grid grid-cols-2 gap-2">
+            <button
+              v-for="opt in [{ v: 'completa', l: 'Completa', s: 'marca + código' }, { v: 'sencilla', l: 'Sencilla', s: 'solo precio + desc.' }]"
+              :key="opt.v"
+              class="p-2.5 rounded-xl border text-center transition-all"
+              :class="modelo === opt.v
+                ? 'border-brand-500 bg-brand-50 dark:bg-brand-950/30 ring-1 ring-brand-500'
+                : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'"
+              @click="modelo = opt.v"
+            >
+              <div class="text-xs font-bold" :class="modelo === opt.v ? 'text-brand-700 dark:text-brand-300' : 'text-slate-700 dark:text-slate-300'">{{ opt.l }}</div>
+              <div class="text-[10px] text-slate-400 mt-0.5">{{ opt.s }}</div>
+            </button>
+          </div>
           <label class="flex items-center gap-2.5 cursor-pointer">
             <input type="checkbox" v-model="borderless" class="w-3.5 h-3.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
             <span class="text-xs text-slate-600 dark:text-slate-300">Sin bordes (A4 completo)</span>
@@ -552,20 +568,30 @@ onMounted(async () => {
               class="bg-white border border-slate-300 rounded-md p-2 shadow-sm mx-auto select-none overflow-hidden"
               :style="labelSizeStyle"
             >
-              <div v-if="previewLabel.marca" class="text-[8px] font-bold text-slate-800 truncate leading-none">{{ previewLabel.marca }}</div>
-              <div class="border-t border-slate-400 my-1"></div>
-              <div class="text-[7px] text-slate-700 leading-tight line-clamp-2 min-h-[14px]">{{ previewLabel.descripcion || previewLabel.nombre }}</div>
-              <!-- Barcode mockup -->
-              <div class="flex items-end gap-[1px] h-[18px] my-1 justify-center overflow-hidden">
-                <div v-for="i in 40" :key="i" class="bg-slate-800" :style="{ width: (i % 3 === 0 ? '2px' : '1px'), height: (i % 5 === 0 ? '100%' : '80%') }"></div>
-              </div>
-              <div class="flex items-baseline justify-between">
-                <span class="text-[13px] font-extrabold text-slate-900 leading-none">
-                  {{ formatCurrency(previewLabel.precio) }}<span v-if="previewLabel.esKilo" class="text-[9px] font-bold ml-0.5">/kg</span>
-                </span>
-                <span class="text-[6px] text-slate-400">{{ new Date().toLocaleDateString('es-AR') }}</span>
-              </div>
-              <div class="text-center text-[6px] font-mono text-slate-500 mt-0.5 truncate">{{ previewLabel.codigo }}</div>
+              <!-- Modelo sencilla: solo precio grande + descripción, ocupando todo -->
+              <template v-if="modelo === 'sencilla'">
+                <div class="text-[18px] font-extrabold text-slate-900 leading-none">
+                  {{ formatCurrency(previewLabel.precio) }}<span v-if="previewLabel.esKilo" class="text-[11px] font-bold ml-0.5">/kg</span>
+                </div>
+                <div class="text-[7px] text-slate-700 leading-tight mt-1.5 line-clamp-4">{{ previewLabel.descripcion || previewLabel.nombre }}</div>
+              </template>
+              <!-- Modelo completa: marca + precio arriba, fecha, desc, código -->
+              <template v-else>
+                <div v-if="previewLabel.marca" class="text-[8px] font-bold text-slate-800 truncate leading-none">{{ previewLabel.marca }}</div>
+                <div class="border-t border-slate-400 my-1"></div>
+                <div class="text-[7px] text-slate-700 leading-tight line-clamp-2 min-h-[14px]">{{ previewLabel.descripcion || previewLabel.nombre }}</div>
+                <!-- Barcode mockup -->
+                <div class="flex items-end gap-[1px] h-[18px] my-1 justify-center overflow-hidden">
+                  <div v-for="i in 40" :key="i" class="bg-slate-800" :style="{ width: (i % 3 === 0 ? '2px' : '1px'), height: (i % 5 === 0 ? '100%' : '80%') }"></div>
+                </div>
+                <div class="flex items-baseline justify-between">
+                  <span class="text-[13px] font-extrabold text-slate-900 leading-none">
+                    {{ formatCurrency(previewLabel.precio) }}<span v-if="previewLabel.esKilo" class="text-[9px] font-bold ml-0.5">/kg</span>
+                  </span>
+                  <span class="text-[6px] text-slate-400">{{ new Date().toLocaleDateString('es-AR') }}</span>
+                </div>
+                <div class="text-center text-[6px] font-mono text-slate-500 mt-0.5 truncate">{{ previewLabel.codigo }}</div>
+              </template>
             </div>
           </div>
         </BaseCard>

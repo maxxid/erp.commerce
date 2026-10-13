@@ -130,10 +130,12 @@ def generar_pdf_etiquetas(
         productos=productos,
         tamano=data.tamano,
         borderless=data.borderless,
-        descripciones_editadas=data.descripciones_editadas
+        descripciones_editadas=data.descripciones_editadas,
+        modelo=data.modelo,
     )
     
-    filename = f"etiquetas-{data.filtros.desde}-a-{data.filtros.hasta}-{data.tamano}.pdf"
+    sufijo_modelo = f"-{data.modelo}" if data.modelo != "completa" else ""
+    filename = f"etiquetas-{data.filtros.desde}-a-{data.filtros.hasta}-{data.tamano}{sufijo_modelo}.pdf"
     
     return Response(
         content=pdf_bytes,

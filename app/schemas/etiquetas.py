@@ -45,6 +45,7 @@ class GenerarPDFRequest(BaseModel):
     borderless: bool = False
     descripciones_editadas: dict[int, str] = {}
     forzar: bool = False   # Generar igual con productos de stock cero (omite el 409)
+    modelo: Literal["completa", "sencilla"] = "completa"  # sencilla: solo precio + descripción, sin código de barras
 
 
 class HistorialImpresionOut(BaseModel):

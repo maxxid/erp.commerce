@@ -76,9 +76,15 @@ def generar_etiquetas_pdf(
     productos: List["Producto"],
     tamano: str,
     borderless: bool,
-    descripciones_editadas: Dict[int, str]
+    descripciones_editadas: Dict[int, str],
+    modelo: str = "completa",
 ) -> bytes:
-    """Genera PDF con etiquetas de precios en A4 horizontal."""
+    """Genera PDF con etiquetas de precios en A4 horizontal.
+
+    modelo:
+      - "completa": marca + precio + fecha + descripción + código de barras
+      - "sencilla": solo precio grande + descripción, ocupando todo el espacio
+    """
     if not REPORTLAB_DISPONIBLE:
         raise ReportlabNoDisponible(
             "reportlab no esta instalado. Instala con: pip install 'reportlab>=4.0'"
@@ -129,7 +135,10 @@ def generar_etiquetas_pdf(
             c.setLineWidth(0.3)
             c.rect(x, y, label_w, label_h)
 
-        _dibujar_etiqueta(c, x, y, label_w, label_h, prod, descripciones_editadas.get(prod.id))
+        if modelo == "sencilla":
+            _dibujar_etiqueta_sencilla(c, x, y, label_w, label_h, prod, descripciones_editadas.get(prod.id))
+        else:
+            _dibujar_etiqueta(c, x, y, label_w, label_h, prod, descripciones_editadas.get(prod.id))
 
     c.save()
     return buffer.getvalue()
@@ -233,3 +242,67 @@ def _dibujar_etiqueta(
     if barcode_y < min_barcode_y:
         barcode_y = min_barcode_y
     _dibujar_codigo_barras(c, inner_x, barcode_y, inner_w, barcode_h, codigo_num)
+
+
+def _dibujar_etiqueta_sencilla(
+    c,
+    x: float, y: float, w: float, h: float,
+    prod: "Producto",
+    descripcion_editada: str | None
+):
+    """Etiqueta sencilla: solo precio grande + descripción, sin marca ni código.
+
+    Ocupa todo el espacio disponible de la etiqueta (mismo tamaño que la
+    completa). El precio va arriba bien grande y la descripción llena el
+    resto con todas las líneas que entren.
+    """
+    padding = 3 * mm
+    inner_w = w - 2 * padding
+    inner_x = x + padding
+    top_y = y + h - padding
+
+    if prod.tipo_venta == "kilo" and prod.precio_por_kilo:
+        precio_str = _formatear_precio(prod.precio_por_kilo) + " /kg"
+    else:
+        precio_str = _formatear_precio(prod.precio_venta)
+
+    # Precio arriba, bien grande, a todo el ancho disponible.
+    # Si no entra en una línea, bajamos el tamaño hasta que entre.
+    precio_font_size = 22
+    while precio_font_size > 12 and c.stringWidth(precio_str, "Helvetica-Bold", precio_font_size) > inner_w:
+        precio_font_size -= 1
+    c.setFont("Helvetica-Bold", precio_font_size)
+    baseline = top_y - precio_font_size
+    c.drawString(inner_x, baseline, precio_str)
+
+    # Descripción: llena todo el resto del espacio, con las líneas que entren.
+    desc = descripcion_editada if descripcion_editada is not None else (prod.descripcion or prod.nombre or "")
+    if desc:
+        desc_font = 10
+        line_height = desc_font + 2
+        desc_top = baseline - 4 * mm
+        max_lines = max(1, int((desc_top - (y + padding)) / line_height))
+        c.setFont("Helvetica", desc_font)
+        words = desc.split()
+        lines = []
+        current = ""
+        for word in words:
+            test = (current + " " + word).strip()
+            if c.stringWidth(test, "Helvetica", desc_font) <= inner_w:
+                current = test
+            else:
+                if current:
+                    lines.append(current)
+                current = word
+                if len(lines) >= max_lines:
+                    break
+        if current and len(lines) < max_lines:
+            lines.append(current)
+        # Ellipsis en la última línea si se cortó
+        if len(lines) == max_lines and words:
+            last = lines[-1]
+            while last and c.stringWidth(last + "...", "Helvetica", desc_font) > inner_w:
+                last = last[:-1]
+            lines[-1] = last + "..."
+        for i, line in enumerate(lines):
+            c.drawString(inner_x, desc_top - i * line_height, line)
