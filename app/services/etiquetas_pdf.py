@@ -261,12 +261,12 @@ def _dibujar_etiqueta_sencilla(
     color = HexColor("#1F3A6E")
 
     # ── Marco doble ──
-    inset1 = 1.6 * mm
-    inset2 = 2.5 * mm
+    inset1 = 1.5 * mm
+    inset2 = 2.3 * mm
     c.setStrokeColor(color)
-    c.setLineWidth(0.7)
+    c.setLineWidth(1.4)
     c.rect(x + inset1, y + inset1, w - 2 * inset1, h - 2 * inset1)
-    c.setLineWidth(0.25)
+    c.setLineWidth(0.6)
     c.rect(x + inset2, y + inset2, w - 2 * inset2, h - 2 * inset2)
 
     # ── Florituras de esquina ──
@@ -286,7 +286,7 @@ def _dibujar_etiqueta_sencilla(
         c.restoreState()
 
     # ── Contenido: centrado dentro del marco ──
-    padding = 6 * mm
+    padding = 4.5 * mm
     inner_w = w - 2 * padding
     inner_x = x + padding
     centro = x + w / 2
@@ -297,33 +297,33 @@ def _dibujar_etiqueta_sencilla(
     # Marca arriba, centrada
     if prod.marca:
         marca_str = prod.marca[:40]
-        marca_fs = 11
-        while marca_fs > 7 and c.stringWidth(marca_str, "Helvetica-Bold", marca_fs) > inner_w:
+        marca_fs = 10
+        while marca_fs > 6.5 and c.stringWidth(marca_str, "Helvetica-Bold", marca_fs) > inner_w:
             marca_fs -= 0.5
         c.setFillColor(HexColor("#111111"))
         c.setFont("Helvetica-Bold", marca_fs)
         c.drawCentredString(centro, cursor - marca_fs, marca_str)
-        cursor -= marca_fs + 2.5 * mm
+        cursor -= marca_fs + 1.5 * mm
 
     # Precio grande, centrado; baja de tamaño si no entra
     if prod.tipo_venta == "kilo" and prod.precio_por_kilo:
         precio_str = _formatear_precio(prod.precio_por_kilo) + " /kg"
     else:
         precio_str = _formatear_precio(prod.precio_venta)
-    precio_fs = 21
-    while precio_fs > 11 and c.stringWidth(precio_str, "Helvetica-Bold", precio_fs) > inner_w:
+    precio_fs = 20
+    while precio_fs > 10 and c.stringWidth(precio_str, "Helvetica-Bold", precio_fs) > inner_w:
         precio_fs -= 1
     c.setFont("Helvetica-Bold", precio_fs)
     c.drawCentredString(centro, cursor - precio_fs, precio_str)
-    cursor -= precio_fs + 3 * mm
+    cursor -= precio_fs + 4 * mm
 
-    # Descripción: llena todo el resto, con las líneas que entren
+    # Descripción: llena todo el resto, con las líneas que entren (2-3 típico)
     desc = descripcion_editada if descripcion_editada is not None else (prod.descripcion or prod.nombre or "")
     if desc:
-        desc_font = 10
-        line_height = desc_font + 2
+        desc_font = 9.5
+        line_height = desc_font + 1.5
         desc_top = cursor
-        max_lines = max(1, int((desc_top - (y + padding + 1 * mm)) / line_height))
+        max_lines = max(1, int((desc_top - (y + padding)) / line_height))
         c.setFont("Helvetica", desc_font)
         words = desc.split()
         lines = []
