@@ -20,6 +20,9 @@ const MODOS = [
   { key: 'todos', label: 'Todos' },
 ]
 const TAMANO_LOTE_IA = 20
+// Por debajo de esto la IA no está segura: se muestra la propuesta pero no se
+// marca sola, la marca la persona.
+const UMBRAL_CONFIANZA = 0.8
 
 const modo = ref('pendientes')
 const q = ref('')
@@ -179,6 +182,8 @@ async function buscarConIa() {
   progreso.activo = true
   progreso.hecho = 0
   progreso.total = ids.length
+  let propuestasNuevas = 0
+  let preseleccionadas = 0
 
   for (const lote of lotes) {
     try {
@@ -192,7 +197,11 @@ async function buscarConIa() {
           destinos[s.producto_id] = s.categoria_id
         }
         propuestas[s.producto_id] = s
-        marcados.value.add(s.producto_id)
+        propuestasNuevas += 1
+        if (Number(s.confianza) >= UMBRAL_CONFIANZA) {
+          marcados.value.add(s.producto_id)
+          preseleccionadas += 1
+        }
       }
       progreso.hecho += lote.length
     } catch (e) {
@@ -204,8 +213,13 @@ async function buscarConIa() {
     }
   }
   progreso.activo = false
-  const n = Object.keys(propuestas).length
-  if (n) toast.success(`${n} producto(s) con propuesta de la IA — revisalos antes de aplicar`)
+  if (propuestasNuevas) {
+    const bajas = propuestasNuevas - preseleccionadas
+    const detalle = bajas ? ` · ${bajas} con confianza baja quedaron sin marcar` : ''
+    toast.success(`${propuestasNuevas} propuesta(s) de la IA — ${preseleccionadas} preseleccionadas${detalle}`)
+  } else {
+    toast.info('La IA no propuso nada para esa selección: prefirió no adivinar')
+  }
 }
 
 function aplicarSeleccion() {
@@ -444,6 +458,13 @@ onMounted(async () => {
             <BaseBadge v-if="etiquetaDe(row)" :variant="etiquetaDe(row) === 'IA' ? 'info' : 'brand'" size="xs">
               {{ etiquetaDe(row) }}
             </BaseBadge>
+            <span
+              v-if="propuestas[row.producto_id]"
+              class="text-[10px] font-semibold ml-1"
+              :class="Number(propuestas[row.producto_id].confianza) >= UMBRAL_CONFIANZA
+                ? 'text-emerald-500 dark:text-emerald-400'
+                : 'text-amber-500 dark:text-amber-400'"
+            >{{ Math.round(Number(propuestas[row.producto_id].confianza || 0) * 100) }}%</span>
             <div class="text-[10px] text-slate-400 truncate mt-0.5">{{ motivoDe(row) || '—' }}</div>
           </div>
         </template>

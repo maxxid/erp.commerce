@@ -33,6 +33,29 @@ TAMANO_LOTE_IA = 20
 # Los motores no sugieren el cajón de entrada.
 CATEGORIA_NEUTRA = {"general", "sin categoria", "sin categorias", "otro", "otros", "varios"}
 
+# Qué entra en cada categoría. Clave ya normalizada (minúsculas y sin tildes),
+# así se compara directo contra `normalizar(nombre)`. Le damos al modelo el
+# contenido de la categoría porque el nombre solo no alcanza: "Golosinas" para
+# un kiosco incluye los snacks salados, y eso no se deduce del título.
+RUBROS: dict[str, str] = {
+    "golosinas": "chocolates, caramelos, galletitas dulces, chicles, snacks dulces y salados",
+    "almacen": "aceites, conservas, enlatados, pastas, harinas, arroz, legumbres, "
+               "especias, aderezos, salsa de tomate, café de máquina",
+    "bebidas": "gaseosas, aguas, jugos, energizantes, infusiones frías, cervezas sin alcohol",
+    "bebidas alcoholicas": "vinos, cervezas, destilados, espumantes",
+    "frescos": "lácteos, quesos, fiambre, carnes, aves, frutas y verduras, huevos",
+    "lacteos": "leche, yogurt, manteca, crema, quesos",
+    "limpieza": "detergente, lavandina, jabón, desinfectante, esponjas, bolsas de residuo",
+    "papeleria": "resmas, tintas, cartuchos",
+    "cafeteria": "café en grano y molido, yerba, té, azúcar, endulzantes, saquitos",
+    "libreria": "útiles escolares, libretas, lapiceras, lapices, gomas, compases",
+    "perfumeria": "perfumes, desodorantes, cremas, shampoo, acondicionador, "
+                  "maquillaje, cuidado personal",
+    "kiosco": "revistas, diarios, cigarrillos, fichas, tarjetas, artículos de regalo",
+    "panaderia": "pan, facturas, bizcochitos, massas",
+    "helados": "helado, paletas, postres congelados",
+}
+
 
 # ---------------------------------------------------------------------------
 # Normalización
@@ -349,33 +372,72 @@ SISTEMA_IA = (
     "Respondé SOLO con un objeto JSON con la clave \"sugerencias\", una lista "
     "con un elemento por producto, en el mismo orden en que llegaron:\n"
     "{\"sugerencias\":[{\"producto_id\":12,\"categoria_id\":5,"
-    "\"nueva_categoria\":null,\"motivo\":\"...\"}]}\n"
+    "\"nueva_categoria\":null,\"confianza\":0.9,\"motivo\":\"...\"}]}\n"
     "Reglas:\n"
     "- categoria_id debe ser un id exacto del catálogo, o null si ninguna encaja.\n"
+    "- Si no estás seguro, devolvé categoria_id null y nueva_categoria null: es "
+    "mejor no proponer nada que mandar un producto a la categoría equivocada.\n"
+    "- \"confianza\" es tu certeza real entre 0 y 1. Bajala cuando el nombre es "
+    "ambiguo, la marca no ayuda o la descripción viene vacía.\n"
+    "- Evitá las categorías de relleno (General, Otros, Varios) salvo que nada "
+    "de lo anterior encaje.\n"
     "- \"nueva_categoria\" solo si el producto es claramente de un rubro que falta "
     "en el catálogo: nombre corto, sin tildes, mayúscula inicial (ej. \"Electrónica\"); "
     "si usás una, dejá categoria_id en null.\n"
     "- Nunca uses ids que no estén en el catálogo.\n"
-    "- \"motivo\" es una frase corta y concreta en español.\n"
-    "- No escribas nada fuera del JSON."
+    "- \"motivo\" es una frase corta y concreta en español que cite la pista que "
+    "usaste (nombre, marca o descripción).\n"
+    "- No escribas nada fuera del JSON.\n"
+    "Ejemplos:\n"
+    "- \"Coca Cola 500ml | Coca-Cola | gaseosa sabor cola\" -> la categoría "
+    "\"Bebidas\" del catálogo, confianza 0.95, motivo \"gaseosa sabor cola\".\n"
+    "- \"Aceite Girasol 1.5L Natura | Natura |\" -> la categoría \"Almacén\", "
+    "confianza 0.9, motivo \"aceite comestible\".\n"
+    "- \"Papas Fritas 45g | McCorn |\" -> la categoría \"Golosinas\", confianza "
+    "0.85, motivo \"snack salado, entra en golosinas\".\n"
+    "- \"2 por Mil 2x1000 | Promo | combo promocional\" -> categoria_id null, "
+    "confianza 0.2, motivo \"nombre de promo, no indica rubro\"."
 )
 
 
 def prompt_ia(
     productos: list[dict[str, Any]],
     cat: list[tuple[int, str]],
+    *,
+    incluir_actual: bool = True,
 ) -> str:
-    catalogo_txt = "\n".join(f"{cid} | {nombre}" for cid, nombre in cat) or "(vacío)"
+    """Catálogo con su contenido + productos con toda la pista disponible.
+
+    `incluir_actual=False` esconde la categoría que el producto ya tiene: es lo
+    que usa el test de precisión para pedir el veredicto a ciegas, sin que el
+    modelo se copie de la respuesta.
+    """
+    catalogo_lineas = []
+    for cid, nombre in cat:
+        rubro = RUBROS.get(normalizar(nombre))
+        catalogo_lineas.append(
+            f"{cid} | {nombre}" + (f" | qué entra: {rubro}" if rubro else "")
+        )
+    catalogo_txt = "\n".join(catalogo_lineas) or "(vacío)"
+
     lineas = []
     for p in productos:
         desc = (p.get("descripcion") or "").strip()[:120]
-        marca = (p.get("marca") or "-").strip()
-        lineas.append(f"{p['producto_id']} | {p['nombre']} | {marca} | {desc}")
+        marca = (p.get("marca") or "").strip() or "-"
+        barras = (p.get("codigo_barras") or "").strip() or "-"
+        fila = f"{p['producto_id']} | {p['nombre']} | {marca} | {barras}"
+        if incluir_actual:
+            fila += f" | actual: {p.get('categoria_actual') or 'sin categoría'}"
+        lineas.append(f"{fila} | {desc}")
+
+    cabecera = "Productos (id | nombre | marca | código de barras"
+    if incluir_actual:
+        cabecera += " | categoría actual"
+    cabecera += " | descripción):"
+
     return (
-        "Catálogo (id | categoría):\n"
-        f"{catalogo_txt}\n\n"
-        "Productos (id | nombre | marca | descripción):\n"
-        f"{chr(10).join(lineas)}"
+        f"Catálogo (id | categoría | contenido):\n{catalogo_txt}\n\n"
+        f"{cabecera}\n{chr(10).join(lineas)}"
     )
 
 
@@ -426,6 +488,14 @@ def interpretar_ia(
         if cat_id is None and not nueva:
             continue
 
+        # Si el modelo no manda confianza, 0.5: ni para preseleccionar ni para
+        # descartar. Se recorta al rango para que la UI pueda comparar tranquila.
+        try:
+            confianza = float(it.get("confianza"))
+        except (TypeError, ValueError):
+            confianza = 0.5
+        confianza = round(min(1.0, max(0.0, confianza)), 2)
+
         motivo = str(it.get("motivo") or "").strip()[:140]
         salida.append({
             "producto_id": pid,
@@ -435,6 +505,7 @@ def interpretar_ia(
             "categoria_id": cat_id,
             "categoria_nombre": dict(cat).get(cat_id) if cat_id else None,
             "nueva_categoria": nueva,
+            "confianza": confianza,
             "motivo": motivo or "IA",
         })
     return salida

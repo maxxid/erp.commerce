@@ -12,6 +12,7 @@ class SugerenciaIA(BaseModel):
     categoria_id: Optional[int] = None
     categoria_nombre: Optional[str] = None
     nueva_categoria: Optional[str] = None
+    confianza: float = 0.0
     motivo: str = ""
 
 

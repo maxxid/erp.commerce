@@ -310,6 +310,68 @@ class TestInterpretarIA:
         assert svc.interpretar_ia(crudo, filas, svc.catalogo(db)) == []
 
 
+class TestConfianzaIA:
+    def test_lee_la_confianza_que_mando_el_modelo(self, db):
+        beb = _cat(db, "Bebidas")
+        p = _prod(db, "Coca Cola 500ml")
+        crudo = json.dumps({"sugerencias": [
+            {"producto_id": p.id, "categoria_id": beb.id, "confianza": 0.93,
+             "motivo": "gaseosa"},
+        ]})
+        out = svc.interpretar_ia(crudo, _filas_de(db, p), svc.catalogo(db))
+        assert out[0]["confianza"] == 0.93
+
+    def test_confianza_ausente_o_basura_cae_en_05(self, db):
+        beb = _cat(db, "Bebidas")
+        p = _prod(db, "Coca Cola 500ml")
+        crudo = json.dumps({"sugerencias": [
+            {"producto_id": p.id, "categoria_id": beb.id, "confianza": "no-numero"},
+        ]})
+        out = svc.interpretar_ia(crudo, _filas_de(db, p), svc.catalogo(db))
+        assert out[0]["confianza"] == 0.5
+
+    def test_la_confianza_no_se_sale_del_rango(self, db):
+        beb = _cat(db, "Bebidas")
+        p = _prod(db, "Coca Cola 500ml")
+        crudo = json.dumps({"sugerencias": [
+            {"producto_id": p.id, "categoria_id": beb.id, "confianza": 7},
+        ]})
+        out = svc.interpretar_ia(crudo, _filas_de(db, p), svc.catalogo(db))
+        assert out[0]["confianza"] == 1.0
+
+
+class TestPromptIA:
+    def test_manda_toda_la_pista_del_producto(self, db):
+        beb = _cat(db, "Bebidas")
+        p = _prod(db, "Coca Cola 500ml", categoria_id=beb.id, marca="Coca-Cola",
+                  descripcion="gaseosa")
+        texto = svc.prompt_ia(_filas_de(db, p), svc.catalogo(db))
+
+        assert f"{p.id} | {p.nombre} | {p.marca} | {p.codigo_barras}" in texto
+        assert f"actual: {beb.nombre}" in texto
+
+    def test_explica_que_entra_en_las_categorias_que_conoce(self, db):
+        _cat(db, "Golosinas")
+        _cat(db, "Una Categoría Rara")
+        texto = svc.prompt_ia([], svc.catalogo(db))
+
+        assert "snacks dulces y salados" in texto
+        # solo la que está en el diccionario lleva aclaración
+        assert texto.count("qué entra") == 1
+
+    def test_puede_esconder_la_categoria_actual(self, db):
+        beb = _cat(db, "Bebidas")
+        p = _prod(db, "Coca Cola 500ml", categoria_id=beb.id)
+        texto = svc.prompt_ia(_filas_de(db, p), svc.catalogo(db), incluir_actual=False)
+
+        assert f"actual: {beb.nombre}" not in texto
+        assert "categoría actual" not in texto
+
+    def test_el_sistema_pide_no_adivinar_y_pedir_confianza(self):
+        assert "no proponer nada" in svc.SISTEMA_IA
+        assert "confianza" in svc.SISTEMA_IA
+
+
 # ---------------------------------------------------------------------------
 # Aplicación (el único punto de escritura)
 # ---------------------------------------------------------------------------
@@ -460,6 +522,26 @@ class TestEndpointIA:
         )
         assert resp.data.lote[0].categoria_id == beb.id
         assert resp.data.tokens_out == 30
+
+    def test_la_confianza_llega_a_la_respuesta(self, db, user, monkeypatch):
+        beb = _cat(db, "Bebidas")
+        p = _prod(db, "Coca Cola 500ml")
+
+        def falso_completar(_db, *, sistema, usuario, como_json, max_tokens, temperatura):
+            return IARespuesta(
+                texto=json.dumps({"sugerencias": [
+                    {"producto_id": p.id, "categoria_id": beb.id,
+                     "confianza": 0.42, "motivo": "gaseosa"},
+                ]}),
+                tokens_out=10,
+            )
+
+        monkeypatch.setattr(ia_registro, "completar", falso_completar)
+        resp = router.sugerir_con_ia(
+            SugerenciasIARequest(productos_ids=[p.id]),
+            db=db, _user=user, _plan=user,
+        )
+        assert resp.data.lote[0].confianza == 0.42
 
     def test_sin_ia_configurada_devuelve_402(self, db, user, monkeypatch):
         p = _prod(db, "Coca Cola 500ml")

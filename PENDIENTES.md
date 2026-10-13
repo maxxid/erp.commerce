@@ -59,6 +59,16 @@ La capa de IA pasó de "código listo" a **andando contra el proveedor real** en
 - Commits: `d64d3ef` (script), `34fdf30` (`--env-file`), `98584ea` (modelo + `--aplicar`), `1d40e41` (auditoría). Suite: **666 passed**
 - **Al correr scripts en el server:** siempre `sudo -u erp` + `DATABASE_URL=sqlite:////data/erp/erp_comercio.db` (sin env, el default `sqlite:///erp_comercio.db` es otra DB) y `--env-file` para la key
 
+### Criterio de la IA: más contexto y "no adivinar" — 12/10/2026
+El panel mostraba la propuesta de la IA **con el mismo peso para todo**, y con un prompt que le daba poco de qué agarrarse. Se cambió el criterio de punta a punta.
+
+- **Prompt con todas las pistas:** `prompt_ia()` manda `id | nombre | marca | código de barras | categoría actual | descripción[:120]` (antes id/nombre/marca/descripción). El catálogo dejó de ser `id | nombre` solo: cada categoría del nuevo diccionario **`RUBROS`** (golosinas, almacén, bebidas, frescos, limpieza, papelería, cafetería…) lleva `| qué entra: ...`, para que el modelo sepa qué significa el nombre
+- **No adivinar:** `SISTEMA_IA` ahora pide **`confianza` entre 0 y 1** por sugerencia y agrega la regla central: si ninguna categoría encaja claramente, devolver `categoria_id` **null** — mejor no proponer que meter mal un producto. Además prohíbe inventar ids fuera del catálogo y desalienta las categorías de relleno (General/Otros/Varios). Cuatro ejemplos few-shot, incluido un caso ambiguo ("2 por Mil") con confianza 0.2
+- **Confianza en el flujo:** `interpretar_ia()` la lee con default **0.5** (si el modelo no la manda o manda basura) y la recorta a `[0,1]`; nuevo campo `confianza` en `SugerenciaIA`
+- **UI:** `UMBRAL_CONFIANZA = 0.8` en `RecategorizarView.vue`. La propuesta se muestra igual, pero **solo se preselecciona si llega ≥ 0.8** (antes se marcaba todo sin mirar). El % aparece al lado del badge en la columna Sugerencia (verde ≥ 0.8 / ámbar debajo) y el toast resume cuántas se preseleccionaron y cuántas quedaron sin marcar
+- **`incluir_actual=False`:** flag en `prompt_ia()` para esconder la categoría actual, que es lo que necesita medir la precisión a ciegas (paso siguiente)
+- **Tests:** 8 nuevos (`TestConfianzaIA`, `TestPromptIA`, +1 endpoint que verifica que la confianza llega al JSON de respuesta). Suite: **674 passed**
+
 ### Title Case en el modelo (nivel 1) — 12/10/2026
 El protocolo de Title Case del catálogo pasó a vivir **en los modelos**, así que lo cumplen también los caminos que no pasan por `producto_service` (seeds, imports de catálogo, scripts, endpoints nuevos).
 
