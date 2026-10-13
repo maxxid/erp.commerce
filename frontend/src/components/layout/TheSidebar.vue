@@ -35,6 +35,7 @@ const mainLinks = [
   { to: '/calendario', icon: 'fa-calendar', label: 'Calendario' },
   { to: '/compras', icon: 'fa-truck-ramp-box', label: 'Compras / Stock', roles: ['admin', 'encargado', 'repositor'] },
   { to: '/cargar-mercaderia', icon: 'fa-box-open', label: 'Cargar Mercadería', roles: ['admin', 'encargado', 'repositor'] },
+  { to: '/sectores', icon: 'fa-location-dot', label: 'Sectores (móvil)', roles: ['admin', 'encargado', 'repositor'] },
   { to: '/precios-online', icon: 'fa-globe', label: 'Precios Online', roles: ['admin', 'encargado', 'repositor'] },
   { to: '/proveedores', icon: 'fa-industry', label: 'Proveedores', roles: ['admin', 'encargado', 'repositor'] },
   { to: '/clientes', icon: 'fa-address-book', label: 'Clientes y Ctas. Ctes', roles: ['admin', 'encargado'] }
