@@ -17,6 +17,7 @@ const MODOS = [
   { key: 'pendientes', label: 'Sin categorizar' },
   { key: 'sin_categoria', label: 'Sin categoría' },
   { key: 'general', label: 'En "General"' },
+  { key: 'nuevos', label: 'Nuevos para la IA' },
   { key: 'todos', label: 'Todos' },
 ]
 const TAMANO_LOTE_IA = 20

@@ -30,7 +30,7 @@ router = APIRouter(prefix="/api/productos", tags=["Recategorización"])
 
 @router.get("/sugerencias/candidatos", response_model=RespuestaData[CandidatosPage])
 def listar_candidatos(
-    modo: str = Query("pendientes", pattern="^(pendientes|sin_categoria|general|todos)$"),
+    modo: str = Query("pendientes", pattern="^(pendientes|sin_categoria|general|todos|nuevos)$"),
     q: str = Query("", max_length=80),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
@@ -49,7 +49,7 @@ def listar_candidatos(
 
 @router.get("/sugerencias/ids", response_model=RespuestaData[SugerenciaIds])
 def listar_ids_candidatos(
-    modo: str = Query("pendientes", pattern="^(pendientes|sin_categoria|general|todos)$"),
+    modo: str = Query("pendientes", pattern="^(pendientes|sin_categoria|general|todos|nuevos)$"),
     q: str = Query("", max_length=80),
     db: Session = Depends(get_db),
     _user: Usuario = Depends(require_role("admin", "encargado")),
@@ -102,6 +102,10 @@ def sugerir_con_ia(
 
     for item in lote:
         item["categoria_actual"] = nombre_por_id.get(item["categoria_actual_id"]) or item["categoria_actual"]
+
+    # Acá queda registrado que estos productos ya fueron analizados: el modo
+    # "nuevos" (escaneo incremental) se fija en esto para no volver a mirarlos.
+    servicio.marcar_analizados(db, [f["producto_id"] for f in filas])
 
     return RespuestaData(
         data=SugerenciasIAOut(

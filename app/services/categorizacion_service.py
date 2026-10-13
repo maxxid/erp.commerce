@@ -268,7 +268,7 @@ def sugerir_local(
 # Candidatos (lo que muestra el panel)
 # ---------------------------------------------------------------------------
 
-MODOS = ("pendientes", "sin_categoria", "general", "todos")
+MODOS = ("pendientes", "sin_categoria", "general", "todos", "nuevos")
 
 
 def _query_candidatos(db: Session, *, modo: str, q: str):
@@ -289,6 +289,11 @@ def _query_candidatos(db: Session, *, modo: str, q: str):
         query = query.outerjoin(Categoria, Producto.categoria_id == Categoria.id).filter(
             (Producto.categoria_id.is_(None)) | (func.lower(Categoria.nombre) == "general")
         )
+    elif modo == "nuevos":
+        # Escaneo incremental: todo lo que la IA todavía no miró. `isnot(True)`
+        # y no `== False` porque las filas anteriores a la migración quedaron
+        # con NULL, y NULL significa "nunca se analizó".
+        query = query.filter(Producto.ia_analizado.isnot(True))
 
     # `ilike` sin normalizar: si normalizás acá el texto y la columna no está
     # normalizada, "cafe" deja de encontrar "Café" y se pierde lo poco que
@@ -391,6 +396,23 @@ def detalle(db: Session, productos_ids: list[int]) -> tuple[list[dict], dict[int
 # ---------------------------------------------------------------------------
 # Sugerencia por IA
 # ---------------------------------------------------------------------------
+
+def marcar_analizados(db: Session, productos_ids: list[int]) -> int:
+    """Deja constancia de que la IA ya miró estos productos.
+
+    Es lo que hace incremental el modo "nuevos": lo que se analizó no vuelve a
+    aparecer en el próximo escaneo, y lo que se creó después sí.
+    """
+    if not productos_ids:
+        return 0
+    actualizados = (
+        db.query(Producto)
+        .filter(Producto.id.in_(productos_ids), Producto.ia_analizado.isnot(True))
+        .update({Producto.ia_analizado: True}, synchronize_session=False)
+    )
+    db.commit()
+    return actualizados
+
 
 SISTEMA_IA = (
     "Sos el clasificador de productos de un almacén y kiosco argentino. "

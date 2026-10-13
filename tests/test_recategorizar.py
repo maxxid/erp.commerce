@@ -241,6 +241,39 @@ class TestCandidatos:
         assert total == 1
         assert len(ids) == 1
 
+    def test_modo_nuevos_solo_lo_que_la_ia_no_miro(self, db):
+        visto = _prod(db, "Ya analizado")
+        recien = _prod(db, "Recién cargado")
+        antes_de_la_columna = _prod(db, "Antes de la columna")
+        visto.ia_analizado = True
+        antes_de_la_columna.ia_analizado = None  # como quedan las filas viejas
+        db.commit()
+
+        filas, total = svc.candidatos(db, modo="nuevos")
+        ids = {f["producto_id"] for f in filas}
+        assert ids == {recien.id, antes_de_la_columna.id}
+        assert total == 2
+
+        ids_totales, total_ids = svc.ids_candidatos(db, modo="nuevos")
+        assert total_ids == 2
+        assert set(ids_totales) == ids
+
+
+class TestMarcarAnalizados:
+    def test_marca_los_que_faltaban_y_no_repite(self, db):
+        a = _prod(db, "Uno")
+        b = _prod(db, "Dos")
+        b.ia_analizado = True
+        db.commit()
+
+        assert svc.marcar_analizados(db, [a.id, b.id]) == 1
+        db.refresh(a)
+        assert a.ia_analizado
+        assert b.ia_analizado
+
+    def test_sin_ids_no_toca_nada(self, db):
+        assert svc.marcar_analizados(db, []) == 0
+
 
 # ---------------------------------------------------------------------------
 # Limpieza de la respuesta de la IA
@@ -570,6 +603,45 @@ class TestEndpointIA:
             db=db, _user=user, _plan=user,
         )
         assert resp.data.lote[0].confianza == 0.42
+
+    def test_analizar_deja_constancia_para_el_modo_nuevos(self, db, user, monkeypatch):
+        beb = _cat(db, "Bebidas")
+        analizado = _prod(db, "Coca Cola 500ml")
+        otro = _prod(db, "Alfajor Jorgito")
+
+        def falso_completar(_db, *, sistema, usuario, como_json, max_tokens, temperatura):
+            return IARespuesta(
+                texto=json.dumps({"sugerencias": [
+                    {"producto_id": analizado.id, "categoria_id": beb.id, "motivo": "x"},
+                ]}),
+                tokens_out=10,
+            )
+
+        monkeypatch.setattr(ia_registro, "completar", falso_completar)
+        router.sugerir_con_ia(
+            SugerenciasIARequest(productos_ids=[analizado.id]),
+            db=db, _user=user, _plan=user,
+        )
+        db.refresh(analizado)
+        db.refresh(otro)
+        assert analizado.ia_analizado
+        assert not otro.ia_analizado
+
+    def test_si_la_respuesta_es_ilegible_no_marca_nada(self, db, user, monkeypatch):
+        p = _prod(db, "Coca Cola 500ml")
+
+        def no_es_json(_db, *, sistema, usuario, como_json, max_tokens, temperatura):
+            return IARespuesta(texto="esto no es un objeto JSON", tokens_out=5)
+
+        monkeypatch.setattr(ia_registro, "completar", no_es_json)
+        with pytest.raises(HTTPException) as exc:
+            router.sugerir_con_ia(
+                SugerenciasIARequest(productos_ids=[p.id]),
+                db=db, _user=user, _plan=user,
+            )
+        assert exc.value.status_code == 502
+        db.refresh(p)
+        assert not p.ia_analizado
 
     def test_sin_ia_configurada_devuelve_402(self, db, user, monkeypatch):
         p = _prod(db, "Coca Cola 500ml")
