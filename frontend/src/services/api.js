@@ -1,10 +1,23 @@
 const API_BASE = ''
 
+// Sin timeout un fetch quedaba colgado para siempre (p. ej. al despertar
+// de sleep con la red caída) y la vista se quedaba en loading eterno.
+const REQUEST_TIMEOUT_MS = 30000
+
+let sessionExpiredDispatched = false
+
+function notifySessionExpired() {
+  if (sessionExpiredDispatched) return
+  sessionExpiredDispatched = true
+  window.dispatchEvent(new CustomEvent('apex:session-expired'))
+}
+
 function getToken() {
   return localStorage.getItem('apex_token')
 }
 
 function setToken(token) {
+  sessionExpiredDispatched = false
   localStorage.setItem('apex_token', token)
 }
 
@@ -36,8 +49,26 @@ async function request(method, path, body = null, params = null, fetchOptions = 
   if (body && method !== 'GET') {
     options.body = JSON.stringify(body)
   }
+  if (!options.signal && typeof AbortSignal !== 'undefined' && AbortSignal.timeout) {
+    options.signal = AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+  }
 
-  const response = await fetch(`${API_BASE}${path}${buildQuery(params)}`, options)
+  let response
+  try {
+    response = await fetch(`${API_BASE}${path}${buildQuery(params)}`, options)
+  } catch (e) {
+    if (e?.name === 'TimeoutError' || e?.name === 'AbortError') {
+      const error = new Error('El servidor no responde (timeout)')
+      error.status = 0
+      error.data = { detail: 'El servidor no responde (timeout)' }
+      throw error
+    }
+    throw e
+  }
+
+  if (response.status === 401 && !path.startsWith('/api/auth/')) {
+    notifySessionExpired()
+  }
 
   if (fetchOptions.responseType === 'blob') {
     const blob = await response.blob()

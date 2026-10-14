@@ -60,9 +60,24 @@ router.beforeEach((to, from) => {
   return
 })
 
-router.afterEach(() => {
+router.afterEach((to, from, failure) => {
   clearTimeout(loadTimer)
   loadTimer = setTimeout(() => { pageLoading.value = false }, 300)
+  // Navegación exitosa: si veníamos de un reload post-deploy, liberar el
+  // flag para que la próxima actualización también pueda recuperarse.
+  if (!failure) sessionStorage.removeItem('apex-reload-post-deploy')
+})
+
+// Si un chunk lazy ya no existe (deploy nuevo con el index.html viejo
+// cacheado), recargamos una sola vez para levantar el shell actualizado.
+router.onError((error, to) => {
+  const msg = String(error?.message || error || '')
+  const esChunkPerdido = /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed|Unable to preload CSS/i.test(msg)
+  if (!esChunkPerdido) return
+  const flag = 'apex-reload-post-deploy'
+  if (sessionStorage.getItem(flag)) return
+  sessionStorage.setItem(flag, '1')
+  window.location.assign(`/app${to?.fullPath || '/'}`)
 })
 
 export default router

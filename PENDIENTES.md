@@ -30,7 +30,7 @@ Estrategia: **responsive en las vistas existentes + pantallas dedicadas solo par
 - [ ] Después: DashboardView (ya casi), CalendarioView, PreciosOnlineView, EtiquetasPreciosView, AjustesView, UsuariosView, AuditoriaView, LicenciasView, BackupsView — mínimo: que no se rompan
 
 ### Fase 4 — PWA / offline
-- [ ] Registrar el service worker (`dist/sw.js` existe pero `main.js` no lo registra) y cachear el app shell
+- [x] Registrar el service worker (se registra en `index.html`: `navigator.serviceWorker.register('/app/sw.js')`) y cachear el app shell — endurecido el 13/10/2026 (network-first shell + versión por deploy, ver sección de fix arriba)
 - [ ] Extender el patrón de ventas pendientes del POS (`addPendingSale`) a CobroMovil
 - [ ] Prompt suave de "Agregar a pantalla de inicio"
 
@@ -46,6 +46,16 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 ---
 
 ## ✅ Completados recientemente
+
+### Fix: la app se colgaba tras volver de un rato / deploy nuevo — 13/10/2026
+Dos causas raíz del "vuelvo a la app y queda todo colgado hasta hard refresh":
+
+- **Service worker con versión congelada**: `CACHE_VERSION` estaba hardcodeado (`apex-erp-v5`) y nunca se bumpceaba; el `index.html` cacheado seguía referenciando chunks hasheados borrados del server tras cada deploy → el import lazy del router fallaba en silencio y la navegación se trababa. Ahora: **network-first para el shell** (navegaciones + `index.html`), cache-first solo para assets hasheados (inmutables), y `postbuild.cjs` stampa `dist/sw.js` con el commit (`apex-erp-<sha>`) para que cada deploy instale el SW nuevo y limpie los caches viejos
+- **Token JWT (20 h) sin manejo global de 401**: `authenticated` quedaba `true` en memoria y todas las llamadas fallaban en silencio. Ahora `api.js` intercepta 401 (excepto `/api/auth/*`) → evento `apex:session-expired` → logout + redirect a `/login` + toast; más revalidación silenciosa del token al volver a la pestaña (`visibilitychange`, throttle 5 min)
+- **Timeout de 30 s en todo fetch** (`AbortSignal.timeout`): un fetch colgado tras despertar de sleep ya no deja la vista en loading eterno
+- **`router.onError`**: ante un chunk 404 post-deploy recarga una sola vez (flag en `sessionStorage`, sin loops)
+- **`controllerchange` del SW** → reload automático cuando se instala una versión nueva (solo si ya había un SW controlando)
+- De paso: bug en `PreciosOnlineView` — el PDF de análisis de precios pasaba `{ responseType: 'blob' }` como `params` (el 2do argumento de `api.get`), el botón nunca funcionó. Commit `633589d+1`
 
 ### Sectores mobile: ubicar productos escaneando con la cámara — 13/10/2026
 Asignar sectores estando en el local seguía siendo de PC (Etiquetas). Ahora se recorre el estante con el celular apuntando a los códigos.

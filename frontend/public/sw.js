@@ -1,4 +1,8 @@
-const CACHE_VERSION = 'apex-erp-v5'
+// El placeholder lo stampa scripts/postbuild.cjs en dist/ con el commit:
+// así cada deploy cambia los bytes del SW y el browser lo instala solo
+// (limpia los caches viejos en activate y deja de servir un index.html
+// obsoleto que pedía chunks hasheados que ya no existen).
+const CACHE_VERSION = '__BUILD_ID__'
 const STATIC_CACHE = `${CACHE_VERSION}-static`
 const DATA_CACHE = `${CACHE_VERSION}-data`
 
@@ -71,6 +75,25 @@ self.addEventListener('fetch', (event) => {
 
   if (event.request.method !== 'GET') return
 
+  // Shell (navegación e index.html): network-first. Un deploy nuevo tiene
+  // que llegar apenas se publique; si no, el index.html cacheado seguía
+  // referenciando chunks hasheados borrados del server y la app se trababa.
+  if (event.request.mode === 'navigate' || url.pathname === '/app/' || url.pathname === '/app/index.html') {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            const clone = response.clone()
+            caches.open(STATIC_CACHE).then((cache) => cache.put('/app/index.html', clone))
+          }
+          return response
+        })
+        .catch(() => caches.match('/app/index.html'))
+    )
+    return
+  }
+
+  // Assets hasheados (inmutables): cache-first con revalidación en background.
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) {
@@ -91,10 +114,6 @@ self.addEventListener('fetch', (event) => {
           caches.open(STATIC_CACHE).then((cache) => cache.put(event.request, clone))
         }
         return response
-      }).catch(() => {
-        if (event.request.mode === 'navigate') {
-          return caches.match('/app/index.html')
-        }
       })
     })
   )

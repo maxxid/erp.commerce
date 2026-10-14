@@ -33,6 +33,9 @@ const shortcutsModalOpen = ref(false)
 const menuAbierto = ref(false)
 let clockInterval = null
 let networkTimeout = null
+let lastTokenCheck = 0
+
+const TOKEN_RECHECK_MS = 5 * 60 * 1000
 
 const globalShortcuts = [
   { key: 'Ctrl+K', description: 'Abrir búsqueda global' },
@@ -92,6 +95,39 @@ function syncCatalogoSilently() {
   }).catch(() => {})
 }
 
+// El token vence a las 20 h; sin esto la app seguía "logueada" en memoria
+// y todas las llamadas fallaban 401 en silencio hasta un hard refresh.
+function onSessionExpired() {
+  if (!auth.authenticated) return
+  auth.logout()
+  toast.warning('Sesión expirada, volvé a iniciar sesión')
+  const redirect = router.currentRoute.value.fullPath
+  router.push({ path: '/login', query: redirect === '/login' ? {} : { redirect } })
+}
+
+// Al volver a la pestaña (p. ej. después de un rato en otra), revalidamos
+// el token contra el backend. Throttle de 5 min para no llamar en cada
+// ida y vuelta chica.
+async function revalidarTokenSilencioso() {
+  if (!auth.authenticated) return
+  const ahora = Date.now()
+  if (ahora - lastTokenCheck < TOKEN_RECHECK_MS) return
+  lastTokenCheck = ahora
+  try {
+    await api.get('/api/auth/me')
+  } catch { /* el 401 ya dispara onSessionExpired vía api.js */ }
+}
+
+function onVisibilityChange() {
+  if (document.visibilityState === 'visible') revalidarTokenSilencioso()
+}
+
+// Service worker actualizado → recargamos una sola vez para levantar el
+// shell nuevo (si no, el index.html viejo seguía pidiendo chunks 404).
+function onControllerChange() {
+  window.location.reload()
+}
+
 watch(() => router.currentRoute.value.fullPath, () => { menuAbierto.value = false })
 
 watch(() => auth.authenticated, (val) => {
@@ -113,6 +149,16 @@ onMounted(async () => {
     bumpNetwork()
     return origFetch.apply(this, args)
   }
+  window.addEventListener('apex:session-expired', onSessionExpired)
+  document.addEventListener('visibilitychange', onVisibilityChange)
+  // Solo recargar si ya había un SW controlando (no en la primera
+  // instalación, que claim() también dispara controllerchange).
+  if ('serviceWorker' in navigator) {
+    const yaHabiaController = !!navigator.serviceWorker.controller
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (yaHabiaController) onControllerChange()
+    })
+  }
   await auth.checkLicense()
   if (auth.authenticated) {
     cajaStore.fetchEstado()
@@ -124,6 +170,8 @@ onMounted(async () => {
 onUnmounted(() => {
   if (clockInterval) clearInterval(clockInterval)
   window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('apex:session-expired', onSessionExpired)
+  document.removeEventListener('visibilitychange', onVisibilityChange)
   clearTimeout(networkTimeout)
 })
 </script>

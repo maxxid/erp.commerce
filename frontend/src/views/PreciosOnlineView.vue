@@ -271,8 +271,7 @@ async function descargarAnalisisPdf() {
   descargandoPdf.value = true
   try {
     const url = `/api/productos/${productoInfo.value.id}/analisis-precios/pdf`
-    const { data } = await api.get(url, { responseType: 'blob' })
-    const blob = new Blob([data], { type: 'application/pdf' })
+    const blob = await api.request('GET', url, null, null, { responseType: 'blob' })
     const link = document.createElement('a')
     link.href = URL.createObjectURL(blob)
     link.download = `analisis-precios-${productoInfo.value.id}.pdf`
