@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from app.config import settings
 from app.database import engine, Base
 from app.models import *  # noqa: F401, F403 — Registrar todos los modelos
-from app.routers import auth, productos, categorias, dashboard, caja, clientes, ventas, proveedores, compras, calendario, backups, usuarios, auditoria, licencia, catalogo, ofertas, facturacion, configuracion as config_router, pagos, lotes, denominaciones, reportes, recargas, etiquetas, ia as ia_router, sectores, recategorizar, notificaciones, avisos
+from app.routers import auth, productos, categorias, dashboard, caja, clientes, ventas, proveedores, compras, calendario, backups, usuarios, auditoria, licencia, catalogo, ofertas, facturacion, configuracion as config_router, pagos, lotes, denominaciones, reportes, recargas, etiquetas, ia as ia_router, sectores, recategorizar, notificaciones, avisos, permisos
 
 
 def crear_app() -> FastAPI:
@@ -48,6 +48,7 @@ def crear_app() -> FastAPI:
     app.include_router(calendario.router)
     app.include_router(backups.router)
     app.include_router(usuarios.router)
+    app.include_router(permisos.router)
     app.include_router(auditoria.router)
     app.include_router(licencia.router)
     app.include_router(catalogo.router)
@@ -346,6 +347,14 @@ def _migrate_new_columns():
         existentes_rc = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(recargas)"))]
         if "genera_egreso" not in existentes_rc:
             conn.execute(sa.text("ALTER TABLE recargas ADD COLUMN genera_egreso BOOLEAN NOT NULL DEFAULT 1"))
+            conn.commit()
+        # usuarios: permisos especiales otorgados a esa persona, JSON con la
+        # lista de claves (ver app/auth/permisos.py). Las filas existentes
+        # quedan con "[]", o sea sin permisos extra, que es el comportamiento
+        # de antes de tocar esto.
+        existentes_us = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(usuarios)"))]
+        if "permisos" not in existentes_us:
+            conn.execute(sa.text("ALTER TABLE usuarios ADD COLUMN permisos TEXT NOT NULL DEFAULT '[]'"))
             conn.commit()
         # Cuentas corrientes con proveedor: saldo cacheado en el maestro
         # (la verdad son las filas de deudas_proveedor y pagos_proveedor).

@@ -118,25 +118,28 @@ class TestToggleDeUsuario:
         router_usuarios.alternar_activo(
             u.id, router_usuarios.ActivoRequest(activo=False), db, _admin(db),
         )
-        assert u.activo is False
+        # El "es False" es contra el objeto que trae SQLAlchemy. En SQLite un
+        # booleano se guarda como 0/1 y a veces vuelve como int: se compara
+        # contra 0 para no depender de eso.
+        assert not u.activo
 
         # Un segundo click con el mismo estado no debe "negar" y reactivarlo.
         router_usuarios.alternar_activo(
             u.id, router_usuarios.ActivoRequest(activo=False), db, _admin(db),
         )
-        assert u.activo is False
+        assert not u.activo
 
         router_usuarios.alternar_activo(
             u.id, router_usuarios.ActivoRequest(activo=True), db, _admin(db),
         )
-        assert u.activo is True
+        assert bool(u.activo) is True
 
     def test_sin_pedido_de_estado_invierte_el_actual(self, db):
         u = _cajero(db)
 
         router_usuarios.alternar_activo(u.id, None, db, _admin(db))
 
-        assert u.activo is False
+        assert not u.activo
 
     def test_no_se_puede_desactivar_a_un_admin(self, db):
         admin = _admin(db)
@@ -207,7 +210,8 @@ class TestToggleDeLicencia:
             )
 
         assert exc.value.status_code == 400
-        assert lic.activa is True
+        # Sigue activa: el backend la dejó tranquila.
+        assert bool(lic.activa) is True
 
     def test_se_puede_apagar_la_ultima_si_esta_vencida(self, db):
         """Una licencia vencida ya no deja entrar a nadie: apagarla no empeora nada."""

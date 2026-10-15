@@ -52,7 +52,10 @@ const adminLinks = [
 
 function allowed(link) {
   if (!link.roles) return true
-  const r = (auth.currentUser?.rol || 'admin').toLowerCase()
+  // Si por algún motivo no hay usuario cargado, se asume el rol con menos
+  // derechos. Antes era 'admin' y, mientras el store se hidrataba, el menú
+  // mostraba toda la sección de administración a cualquiera.
+  const r = (auth.currentUser?.rol || 'repositor').toLowerCase()
   return link.roles.includes(r)
 }
 
@@ -271,7 +274,7 @@ function doLogout() {
         </div>
         <div v-if="!showCollapsed" class="overflow-hidden flex-1 min-w-0">
           <h4 class="text-xs font-semibold text-white truncate">{{ auth.currentUser?.nombre || 'Administrador' }}</h4>
-          <p class="text-[10px] text-slate-500 uppercase tracking-wider truncate font-semibold">{{ auth.currentUser?.rol || 'admin' }}</p>
+          <p class="text-[10px] text-slate-500 uppercase tracking-wider truncate font-semibold">{{ auth.currentUser?.rol || '—' }}</p>
         </div>
         <button
           v-if="!showCollapsed"

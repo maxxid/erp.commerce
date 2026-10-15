@@ -3,15 +3,17 @@ Dependencias de FastAPI para autenticación y autorización.
 
 Proporciona:
 - get_current_user: extrae el usuario del token JWT
-- require_role: verifica que el usuario tenga un rol específico
+- require_role: deja pasar a los roles dados o a quien tenga el permiso
+  especial que corresponda
 """
 
-from typing import List
+from typing import List, Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.auth.security import decodificar_token
+from app.auth.permisos import tiene_permiso
 from app.models.usuario import Usuario
 
 security_scheme = HTTPBearer()
@@ -51,21 +53,33 @@ def get_current_user(
     return user
 
 
-def require_role(*roles: str):
-    """Factory de dependency: verifica que el usuario tenga uno de los roles dados.
+def require_role(*roles: str, permiso: Optional[str] = None):
+    """Factory de dependency: deja pasar a los roles dados y a quien tenga el
+    permiso especial `permiso`.
+
+    El permiso es un "pase suelto" que el dueño le otorga a una persona
+    puntual desde la pestaña de Usuarios, sin tener que cambiarle el rol:
+    que un cajero vea los reportes, que un repositor pueda anular una venta.
+    El dueño (admin) entra siempre, así que no hay riesgo de que se quede
+    afuera de su propio sistema.
 
     Uso:
-        @router.post("/productos")
-        def crear_producto(user = Depends(require_role("admin", "encargado"))):
+        @router.get("/reportes")
+        def reportes(_ = Depends(require_role("admin", "encargado", permiso="ver_reportes"))):
             ...
     """
     def role_checker(user: Usuario = Depends(get_current_user)) -> Usuario:
-        if user.rol not in roles:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Se requiere rol: {', '.join(roles)}",
-            )
-        return user
+        if user.rol in roles:
+            return user
+        if permiso and tiene_permiso(user, permiso):
+            return user
+        detalle = f"Se requiere rol: {', '.join(roles)}"
+        if permiso:
+            detalle += f" o el permiso '{permiso}'"
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=detalle,
+        )
 
     return role_checker
 

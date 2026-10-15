@@ -5,7 +5,7 @@ Usuario: operador del sistema con roles (admin, cajero, encargado, repositor).
 Sucursal: punto de venta físico, prepara para multi-sucursal.
 """
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from app.database import Base
@@ -37,6 +37,9 @@ class Usuario(Base):
     password_hash = Column(String(200), nullable=False)
     nombre = Column(String(150), nullable=False)
     rol = Column(String(20), nullable=False, default="cajero")  # admin | cajero | encargado | repositor
+    # JSON con los permisos especiales otorgados a esta persona, p. ej.
+    # ["ver_reportes"]. Ver app/auth/permisos.py. El dueño no necesita ninguno.
+    permisos = Column(Text, nullable=False, default="[]")
     activo = Column(Boolean, default=True)
     ultimo_login = Column(DateTime, nullable=True)
 

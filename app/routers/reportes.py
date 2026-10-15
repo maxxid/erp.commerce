@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, require_role
 from app.database import get_db
 from app.models.producto import Producto
 from app.models.usuario import Usuario
@@ -31,7 +31,7 @@ def vendido_por_peso(
     hasta: str = Query(..., description="Fecha final YYYY-MM-DD (inclusive)"),
     producto_id: Optional[int] = Query(None, description="Filtra un producto puntual"),
     db: Session = Depends(get_db),
-    user: Usuario = Depends(get_current_user),
+    user: Usuario = Depends(require_role("admin", "encargado", permiso="ver_reportes")),
 ):
     """Vendido por peso: kg e importe por producto en un rango de fechas.
 
@@ -114,7 +114,7 @@ def reporte_recargas(
     desde: str = Query(..., description="Fecha inicial YYYY-MM-DD"),
     hasta: str = Query(..., description="Fecha final YYYY-MM-DD (inclusive)"),
     db: Session = Depends(get_db),
-    user: Usuario = Depends(get_current_user),
+    user: Usuario = Depends(require_role("admin", "encargado", permiso="ver_reportes")),
 ):
     """Recargas de dinero digital: cuánto se cargó, cuánto se cobró y la ganancia.
 

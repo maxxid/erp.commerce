@@ -103,7 +103,7 @@ def obtener(
 def crear(
     data: ClienteCreate,
     db: Session = Depends(get_db),
-    user: Usuario = Depends(require_role("admin", "encargado")),
+    user: Usuario = Depends(require_role("admin", "encargado", permiso="gestionar_clientes")),
 ):
     """Crea un cliente nuevo."""
     cliente = Cliente(**data.model_dump())
@@ -125,7 +125,7 @@ def actualizar(
     cliente_id: int,
     data: ClienteUpdate,
     db: Session = Depends(get_db),
-    user: Usuario = Depends(require_role("admin", "encargado")),
+    user: Usuario = Depends(require_role("admin", "encargado", permiso="gestionar_clientes")),
 ):
     """Actualiza un cliente."""
     cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()

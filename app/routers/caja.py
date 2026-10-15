@@ -539,7 +539,7 @@ def borrar_pago_proveedor(
 def calendario_caja(
     mes: Optional[str] = Query(None, description="Mes en formato YYYY-MM. Si viene vacío usa el mes actual"),
     db: Session = Depends(get_db),
-    user: Usuario = Depends(require_role("admin", "encargado")),
+    user: Usuario = Depends(require_role("admin", "encargado", permiso="ver_caja")),
 ):
     """Resumen por día del mes (semáforo): verde ok, amarillo corrección, rojo sin conciliar."""
     import calendar as _cal
@@ -658,7 +658,7 @@ def calendario_caja(
 def dia_caja(
     fecha: str = Query(..., description="Fecha en formato YYYY-MM-DD"),
     db: Session = Depends(get_db),
-    user: Usuario = Depends(require_role("admin", "encargado")),
+    user: Usuario = Depends(require_role("admin", "encargado", permiso="ver_caja")),
 ):
     """Detalle de un día: sesiones, desglose por medio y ventas (tickets)."""
     from datetime import datetime, timedelta
@@ -791,7 +791,7 @@ def movimientos(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
-    user: Usuario = Depends(require_role("admin", "encargado")),
+    user: Usuario = Depends(require_role("admin", "encargado", permiso="ver_caja")),
 ):
     movs, total = caja_service.listar_movimientos(db, page=page, page_size=page_size)
     data = [{
@@ -831,7 +831,7 @@ def reportes_caja(
     fecha_inicio: Optional[str] = Query(None, description="Fecha inicio (YYYY-MM-DD)"),
     fecha_fin: Optional[str] = Query(None, description="Fecha fin (YYYY-MM-DD)"),
     db: Session = Depends(get_db),
-    user: Usuario = Depends(require_role("admin", "encargado")),
+    user: Usuario = Depends(require_role("admin", "encargado", permiso="ver_caja")),
 ):
     """Reporte de sesiones de caja con aperturas, cierres y discrepancias."""
     from datetime import datetime, timedelta

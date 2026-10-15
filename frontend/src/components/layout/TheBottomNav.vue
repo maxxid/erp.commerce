@@ -13,7 +13,9 @@ const items = [
 
 function allowed(item) {
   if (!item.roles) return true
-  const r = (auth.currentUser?.rol || 'admin').toLowerCase()
+  // Mismo criterio que el sidebar: sin usuario cargado se asume el rol con
+  // menos derechos, no el que ve todo.
+  const r = (auth.currentUser?.rol || 'repositor').toLowerCase()
   return item.roles.includes(r)
 }
 </script>

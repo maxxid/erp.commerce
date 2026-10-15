@@ -47,6 +47,38 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 
 ## ✅ Completados recientemente
 
+### Fase C4 de la ronda de 19 bugs: permisos — una sola lista de quién puede qué — 15/10/2026
+El **18**. El problema no era "falta una pantalla de permisos": era que la lista de **quién puede qué estaba escrita a mano en tres sitios distintos** —los `require_role(...)` de cada router, los `meta.roles` del router del frontend y el `allowed()` del sidebar— y **ya habían divergido en 14 puntos concretos**:
+
+- el **repositor** ve "Cargar Mercadería" y el backend le devuelve 403 al confirmar
+- el **cajero** abre la pantalla de Caja, pero los reportes de caja lo rechazan
+- el **sidebar** trataba a un usuario sin datos cargados como **`admin`** y le mostraba todo el menú de administración
+- el **encargado** ve el POS en todos lados, pero `POST /api/ventas` es solo admin/cajero
+
+**Lo que quedó:**
+
+**1. Una sola tabla** — `app/auth/permisos.py`, con los 4 roles, las 7 áreas del sistema y los permisos especiales. De ahí sale todo: ya no hay tres listas que se puedan desincronizar.
+
+**2. `GET /api/permisos`** (solo el dueño) devuelve la matriz completa. La pestaña de Usuarios tiene el botón **"Qué puede hacer cada rol"**, que la muestra en modo lectura: área, acción y un ✓ por rol. Las acciones que además se le pueden dar a una persona puntual llevan una llavecita ámbar.
+
+**3. Permisos especiales por persona** — 4 pases sueltos, con checkbox en el modal de "Nuevo/Editar usuario" y con badge en la columna **"Permisos extra"** de la tabla:
+- `ver_reportes` → ver la pantalla de Reportes
+- `gestionar_clientes` → dar de alta y editar clientes (ver la lista puede cualquiera, porque el POS la necesita para cobrar)
+- `ver_caja` → ver el calendario, el día y los movimientos de caja
+- `anular_ventas` → anular una venta cobrada
+
+**4. `require_role` acepta permisos** — `require_role("admin", "encargado", permiso="ver_reportes")` deja pasar al rol **o** a quien tenga el pase. El **dueño (admin) siempre entra**, así que no existe forma de que se quede afuera de su propio sistema por un detalle de carga.
+
+**5. Arreglos que salieron del mapeo:**
+- el **fallback `'admin'`** del sidebar y del bottom nav pasó a **`'repositor'`** (el rol con menos derechos); antes, mientras el store se hidrataba, se veía todo el menú de administración
+- `Usuario.permisos` es una columna nueva (`TEXT NOT NULL DEFAULT '[]'`) con su migración en `_migrate_new_columns`; las filas viejas quedan sin permisos extra, o sea el comportamiento exacto de antes
+- un permiso viejo que ya no exista **no cuelga**: se ignora. Y si el dueño manda uno inventado, el backend responde 400 con su nombre
+- los permisos se **validan en backend** al crear y al editar
+
+**Ojo con esto:** para que el checkbox signifique algo, 2 endpoints de Reportes y el de anular ventas pasaron de "cualquiera autenticado" a "admin, encargado o el permiso". En la práctica **no cambia para nadie** que hoy lo usaba: esas pantallas ya estaban restringidas en el frontend, así que un cajero o un repositor nunca las vieron.
+
+**Tests:** `tests/test_permisos.py` (29). Suite: **806 passed**
+
 ### Fase C2 de la ronda de 19 bugs: modo offline que no corta el trabajo — 15/10/2026
 El **19**. La app ya era PWA (service worker cacheando el shell), ya tenía la cola de ventas pendientes y el indicador de "sin conexión" — pero **el arranque la tiraba al piso cada vez que se cortaba el internet**. Los 4 bloqueos:
 

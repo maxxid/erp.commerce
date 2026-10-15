@@ -3,14 +3,18 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field, field_validator
-from typing import Optional
+from typing import List, Optional
+import json
 from app.database import get_db
 from app.auth.security import hash_password
 from app.auth.dependencies import require_role
+from app.auth.permisos import permisos_de, validar_permisos
 from app.models.usuario import Usuario
 from app.schemas.common import RespuestaBase, RespuestaData, RespuestaLista
 
 router = APIRouter(prefix="/api/usuarios", tags=["Usuarios"])
+
+ROLES_VALIDOS = ("admin", "cajero", "encargado", "repositor")
 
 
 class UsuarioCreate(BaseModel):
@@ -18,6 +22,9 @@ class UsuarioCreate(BaseModel):
     password: str = Field(..., min_length=4)
     nombre: str = Field(..., min_length=1, max_length=150)
     rol: str = Field(default="cajero")  # admin | cajero | encargado | repositor
+    # Permisos especiales sueltos, p. ej. ["ver_reportes"]. Ver
+    # app/auth/permisos.py. Irrelevante para el rol admin, que tiene todo.
+    permisos: Optional[List[str]] = None
 
 
 class UsuarioUpdate(BaseModel):
@@ -25,6 +32,8 @@ class UsuarioUpdate(BaseModel):
     rol: Optional[str] = None
     activo: Optional[bool] = None
     password: Optional[str] = Field(None, min_length=4)
+    # None = no tocar los permisos; [] = sacarles todos.
+    permisos: Optional[List[str]] = None
 
     @field_validator("password", mode="before")
     @classmethod
@@ -46,6 +55,7 @@ def _usuario_to_dict(u: Usuario) -> dict:
         "username": u.username,
         "nombre": u.nombre,
         "rol": u.rol,
+        "permisos": permisos_de(u),
         "activo": u.activo,
         "ultimo_login": u.ultimo_login.isoformat() if u.ultimo_login else None,
         "created_at": u.created_at.isoformat() if u.created_at else None,
@@ -85,13 +95,14 @@ def crear(
     existente = db.query(Usuario).filter(Usuario.username == data.username).first()
     if existente:
         raise HTTPException(status_code=400, detail="El username ya existe")
-    if data.rol not in ("admin", "cajero", "encargado", "repositor"):
+    if data.rol not in ROLES_VALIDOS:
         raise HTTPException(status_code=400, detail="Rol inválido")
     nuevo = Usuario(
         username=data.username,
         password_hash=hash_password(data.password),
         nombre=data.nombre,
         rol=data.rol,
+        permisos=json.dumps(validar_permisos(data.permisos)),
     )
     db.add(nuevo)
     db.commit()
@@ -113,9 +124,11 @@ def actualizar(
     if data.nombre is not None:
         u.nombre = data.nombre
     if data.rol is not None:
-        if data.rol not in ("admin", "cajero", "encargado", "repositor"):
+        if data.rol not in ROLES_VALIDOS:
             raise HTTPException(status_code=400, detail="Rol inválido")
         u.rol = data.rol
+    if data.permisos is not None:
+        u.permisos = json.dumps(validar_permisos(data.permisos))
     if data.activo is not None:
         if not data.activo:
             _validar_desactivacion(u, current_user)
@@ -134,7 +147,7 @@ def _validar_desactivacion(u: Usuario, current_user: Usuario) -> None:
     Sin esta guarda, un admin que se desactiva solo queda con la única cuenta
     capaz de reactivarlo bloqueada.
     """
-    if u.rol == "admin":
+    if u.rol.lower() == "admin":
         raise HTTPException(status_code=400, detail="No se puede desactivar un usuario Administrador")
     if u.id == current_user.id:
         raise HTTPException(status_code=400, detail="No podés desactivar tu propio usuario")

@@ -265,7 +265,7 @@ def anular(
     venta_id: int,
     edit: bool = Query(False, description="Si es true, se registra como edición en auditoría"),
     db: Session = Depends(get_db),
-    user: Usuario = Depends(require_role("admin", "encargado", "cajero")),
+    user: Usuario = Depends(require_role("admin", "encargado", "cajero", permiso="anular_ventas")),
 ):
     """Anula una venta confirmada, revirtiendo stock y caja."""
     venta = venta_service.obtener_venta(db, venta_id)
