@@ -29,6 +29,22 @@ function touchSync() {
   try { localStorage.setItem('apex-last-sync', String(Date.now())) } catch {}
 }
 
+// Error de red (sin conexión o el servidor no contesta). Va con status 0 para
+// que todo el mundo sepa que **no** es un rechazo del servidor: sin esto la
+// app no podía diferenciar "se cortó el internet" de "venció la sesión" y
+// terminaba echando al usuario de su propia cuenta.
+function errorDeRed(mensaje) {
+  const error = new Error(mensaje)
+  error.status = 0
+  error.red = true
+  error.data = { detail: mensaje }
+  return error
+}
+
+export function esErrorDeRed(error) {
+  return Boolean(error?.red) || error?.status === 0
+}
+
 function buildQuery(params) {
   if (!params) return ''
   const search = new URLSearchParams()
@@ -58,12 +74,10 @@ async function request(method, path, body = null, params = null, fetchOptions = 
     response = await fetch(`${API_BASE}${path}${buildQuery(params)}`, options)
   } catch (e) {
     if (e?.name === 'TimeoutError' || e?.name === 'AbortError') {
-      const error = new Error('El servidor no responde (timeout)')
-      error.status = 0
-      error.data = { detail: 'El servidor no responde (timeout)' }
-      throw error
+      throw errorDeRed('El servidor no responde (timeout)')
     }
-    throw e
+    // `fetch` tira un TypeError cuando no hay red o el servidor no contesta.
+    throw errorDeRed('Sin conexión con el servidor')
   }
 
   if (response.status === 401 && !path.startsWith('/api/auth/')) {

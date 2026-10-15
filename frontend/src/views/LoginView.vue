@@ -116,6 +116,20 @@ function copyMachineId() {
           </BaseButton>
         </div>
 
+        <!-- Sin red no se puede confirmar la clave (eso lo hace el servidor),
+             así que se explica de una vez en vez de fallar al clickear. -->
+        <div
+          v-if="auth.licenseChecked && auth.hasLicense && auth.licenseValid && auth.offline"
+          class="mb-5 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-xl text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2"
+        >
+          <i class="fa-solid fa-triangle-exclamation mt-0.5"></i>
+          <span>
+            <strong class="font-semibold">Sin conexión con el servidor.</strong>
+            Acá no se puede confirmar la clave. Si ya habías iniciado sesión en
+            este equipo, la app entra sola con esa última sesión.
+          </span>
+        </div>
+
         <!-- Login Form -->
         <form v-if="auth.licenseChecked && auth.hasLicense && auth.licenseValid" class="space-y-5" @submit.prevent="doLogin()">
           <BaseInput

@@ -118,6 +118,12 @@ async function revalidarTokenSilencioso() {
   } catch { /* el 401 ya dispara onSessionExpired vía api.js */ }
 }
 
+// Volvió la internet: se vuelve a preguntar licencia y token al servidor, así
+// sale el modo offline y se ve si algo cambió mientras estuvimos caídos.
+function onOnline() {
+  auth.revalidar()
+}
+
 function onVisibilityChange() {
   if (document.visibilityState === 'visible') revalidarTokenSilencioso()
 }
@@ -150,6 +156,7 @@ onMounted(async () => {
     return origFetch.apply(this, args)
   }
   window.addEventListener('apex:session-expired', onSessionExpired)
+  window.addEventListener('online', onOnline)
   document.addEventListener('visibilitychange', onVisibilityChange)
   // Solo recargar si ya había un SW controlando (no en la primera
   // instalación, que claim() también dispara controllerchange).
@@ -171,6 +178,7 @@ onUnmounted(() => {
   if (clockInterval) clearInterval(clockInterval)
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('apex:session-expired', onSessionExpired)
+  window.removeEventListener('online', onOnline)
   document.removeEventListener('visibilitychange', onVisibilityChange)
   clearTimeout(networkTimeout)
 })

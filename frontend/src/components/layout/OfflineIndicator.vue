@@ -1,19 +1,21 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useOfflineSales } from '@/composables/useOfflineSales'
+import { useAuthStore } from '@/stores/auth'
 
-const isOffline = ref(!navigator.onLine)
+const auth = useAuthStore()
+const hayRed = ref(navigator.onLine)
 const pendingSalesCount = ref(0)
 const sincronizando = ref(false)
 
 const { syncPendingSales } = useOfflineSales()
 
 function onOnline() {
-  isOffline.value = false
+  hayRed.value = true
   // Al reconectar, sincronizar sin esperar a que abran el POS
   syncPendingSales()
 }
-function onOffline() { isOffline.value = true }
+function onOffline() { hayRed.value = false }
 
 async function sincronizarAhora() {
   if (sincronizando.value) return
@@ -48,6 +50,10 @@ onUnmounted(() => {
   window.removeEventListener('apex-pending-sales-updated', loadPendingCount)
 })
 
+// `navigator.onLine` solo sabe si hay una tarjeta de red conectada: hay
+// locales con el wifi levantado y sin internet. Por eso el aviso también
+// mira `auth.offline`, que se pone cuando el servidor dejó de contestar.
+const isOffline = computed(() => !hayRed.value || auth.offline)
 const showIndicator = computed(() => isOffline.value || pendingSalesCount.value > 0)
 const indicatorClass = computed(() => isOffline.value ? 'bg-red-600' : 'bg-amber-500')
 </script>
@@ -64,7 +70,10 @@ const indicatorClass = computed(() => isOffline.value ? 'bg-red-600' : 'bg-amber
     <div v-if="showIndicator" class="fixed top-0 left-0 right-0 z-[200] text-white text-xs text-center py-1.5 px-4 font-medium" :class="indicatorClass">
       <template v-if="isOffline">
         <i class="fa-solid fa-circle-exclamation mr-1.5"></i>
-        Sin conexión. Ventas guardadas localmente.
+        Modo offline — trabajando con los datos de la última sesión.
+        <span v-if="pendingSalesCount > 0" class="ml-1">
+          {{ pendingSalesCount }} venta(s) se sincronizan al volver la conexión.
+        </span>
       </template>
       <template v-else-if="pendingSalesCount > 0">
         <i class="fa-solid fa-clock-rotate-left mr-1.5"></i>

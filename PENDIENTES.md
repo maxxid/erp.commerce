@@ -47,6 +47,24 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 
 ## ✅ Completados recientemente
 
+### Fase C2 de la ronda de 19 bugs: modo offline que no corta el trabajo — 15/10/2026
+El **19**. La app ya era PWA (service worker cacheando el shell), ya tenía la cola de ventas pendientes y el indicador de "sin conexión" — pero **el arranque la tiraba al piso cada vez que se cortaba el internet**. Los 4 bloqueos:
+
+- **`checkLicense()` sin red** fallaba y la pantalla de login se volvía la de **activación de licencia**, como si el comercio no tuviera licencia
+- **`checkAutoLogin()` sin red** fallaba y hacía `clearToken()`: te borraba la sesión. **Cada corte de internet desloguaba a todos**
+- **`api.js` no distinguía** "se cortó la red" de "sesión vencida": el `TypeError` de `fetch` salía crudo y sin status, así que no se podía decidir nada en función del motivo
+- **`navigator.onLine`** solo sabe si hay tarjeta de red: con el wifi levantado y sin internet no aparecía ningún aviso
+
+**Qué quedó:**
+- `api.js` envuelve los errores de red con `status: 0` y exporta `esErrorDeRed()`. Un 401 real sigue echando al usuario igual: eso sí es sesión vencida de verdad
+- **Última licencia y última sesión guardadas en `localStorage`** (`apex-licencia-cache`, `apex-sesion-offline`). Si el fallo es de red, se entra con eso y se sigue trabajando con lo cacheado. `logout()` borra la sesión cacheada, porque cerrar sesión es una decisión y no se debe poder volver a entrar a la fuerza
+- Sin tarjeta de red no se esperan los 30 s del timeout: se va directo al caché
+- **"Modo offline — trabajando con los datos de la última sesión"** en el indicador superior, que ahora también mira `auth.offline` y no solo `navigator.onLine`. Las ventas pendientes se siguen avisando
+- Al volver la internet (`window online`), `auth.revalidar()` vuelve a preguntar licencia y token: sale el modo offline y se ve si algo cambió mientras estuvimos caídos
+- La pantalla de login avisa que **sin el servidor no se puede confirmar la clave**, en vez de fallar recién al clickear
+- **A propósito NO se cacheó `/api/auth/me` ni `/api/licencia/estado` en el service worker**: cachear autenticación hace que la app diga "estás adentro" con datos viejos y sin forma de enterarse de que el servidor ya no lo acepta. La caché vive en `localStorage`, es explícita y solo se usa cuando el fallo es de red
+- **Tests:** `tests/test_modo_offline.py` (12). Suite: **777 passed**
+
 ### Fase C1 de la ronda de 19 bugs: lo que se le compró a cada proveedor — 15/10/2026
 La Fase C traía 4 ítems (15, 16, 18, 19) y se dividió en **C1 = 15**, **C2 = 19 (offline)**, **C4 = 18 (permisos)**. El **16 —beneficio de compra del empleado— quedó pendiente** a pedido del dueño (ver "Pendientes activos").
 
@@ -821,7 +839,7 @@ Además, dos guards defensivos: `_clean_name` y `_map_categoria` reventaban con 
 
 ### Alta prioridad
 - **Ronda de 19 bugs — ítem 16: beneficio de compra del empleado** (diseño ya acordado con el dueño el 15/10/2026, **falta implementar**): cuando un **cajero atiende su propia compra** en el POS puede aplicar un beneficio. El dueño le otorga en la ficha del usuario: **% máximo por compra + tope mensual en $**, y elige si es **general o solo para rubros** marcados (el árbol de `Categoria` ya tiene jerarquía padre/hijo). Dos botones en el POS: el descuento (limitado al %) y **"Al costo"** con `Producto.precio_costo` (los productos sin costo cargado no se pueden vender al costo, hay que avisar y no cobrar 0). **Se valida en backend** al confirmar la venta, no solo ocultando el input: hoy `PUT /api/ventas/{id}/confirmar` acepta cualquier descuento y `agregar_item` acepta cualquier precio. Ojo: la lógica del carrito está **duplicada** en `POSView.vue` y `CobroMovilView.vue`, hay que tocar las dos. Migración de columnas en `usuarios` (hoy no hay ningún campo de permisos ni de descuento). **Los ítems 15, 18 y 19 de esa ronda quedaron cerrados el 15/10/2026** (ver "Completados recientemente": Fase C1, C2 y C4)
-- **Modo offline completo del POS** — el arranque sin conexión está por arreglarse en la Fase C2 (siguiente), pero **vender y cobrar sin conexión de punta a punta quedó pendiente**: falta testear caja, catálogo y la reconciliación al volver. La cola de ventas (`useOfflineSales`) ya existe y es la base
+- **Modo offline completo del POS** — el arranque sin conexión ya no corta el trabajo (Fase C2, 15/10/2026: se entra con la última sesión y se ve el aviso "Modo offline"), pero **vender y cobrar sin conexión de punta a punta quedó pendiente**: falta testear caja, catálogo y la reconciliación al volver. La cola de ventas (`useOfflineSales`) ya existe y es la base. El dueño pidió dejarlo para más adelante hasta testear lo que ya se desplegó
 - **MercadoPago: select de ciudad por provincia** — `app/services/mercadopago_service.py` ya tiene provincia como select (24 valores válidos); falta el segundo select de ciudad/localidad que dependa de la provincia elegida, porque MP rechaza si el `city_name` no es válido
 - **Seguridad clave privada AFIP** — la clave se guarda encriptada en la DB con una key hardcodeada (`"erp-afip-key-encryption-v1"`). Si alguien accede a DB + código fuente puede descifrarla. **Solución propuesta:** no guardar clave privada en DB — solo descargar (botón "Descargar .key" ya existe) y que el usuario la guarde localmente. Alternativa: secrets manager (AWS Secrets Manager, etc.). Requiere re-flujo de setup de AFIP.
 
