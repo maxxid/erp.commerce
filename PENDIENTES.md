@@ -47,6 +47,16 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 
 ## ✅ Completados recientemente
 
+### Historial de Caja: sesiones mal agrupadas y filtro de fechas corrido — 15/10/2026
+El dueño reportó el resumen del Historial de Caja con datos imposibles: una sesión con Apertura $0 y Cierre $156.000 (que no le correspondía), otras "Abierta" con Ingresos $0 pese a ventas reales. Causa raíz y fix:
+
+- **`GET /api/caja/reportes` iteraba los movimientos en orden DESC** pero la agrupación (apertura → ingresos/egresos → cierre) asume orden cronológico. Contra los datos reales: el cierre de la sesión de las 09:40 se asignaba a la apertura de las 22:19, los ingresos/egresos de la sesión quedaban huérfanos (`sesion_actual` en `None`) y las sesiones sin cierre aparecían "Abierta" eternamente. Ahora itera en ASC (`created_at, id`) y revierte la lista para mostrar la más reciente arriba
+- **Estado "sin_cierre"**: una sesión reemplazada por una apertura posterior sin cierre ya no muestra "Abierta" (que en la práctica nunca se puede cerrar) sino **"Sin cierre"** en rojo — con el auto-cierre desactivado en el server, es la única forma de ver esas jornadas olvidadas
+- **Totales para toda sesión**: antes solo se calculaban al momento del cierre; las sesiones abiertas o sin cierre mostraban Ingresos y Egresos en $0
+- **Fechas en hora local (AR)**: `/reportes`, `/dia` y `/calendario` convierten los límites de fecha local argentina a UTC con **+3h** (00:00 AR = 03:00 UTC). Los dos últimos **restaban** 3h y su ventana quedaba corrida 6 horas: cortaba las tardes/noches (donde caen los cierres de las 22:00) y el último día del mes en el calendario perdía la noche. En el frontend: `calcularFechasFiltro` manda fechas locales en vez de `toISOString()` (a las 23:59 AR ya era el día siguiente en UTC), y `verDetalleSesion`/el título del modal usan `fechaLocalAR()` en vez de la parte de fecha del ISO en UTC (una sesión abierta 22:19 AR mostraba el día siguiente)
+- **Verificado contra la DB real**: la sesión 13/10 09:40 ahora muestra Cerrada con cierre $156.000 = $33.900 + $135.100 − $13.000 ✓; 12/10 y 13/10 22:19 como "Sin cierre"; 14/10 cerrada con $123.550 ✓. De paso quedaron a la vista discrepancias reales que el bug ocultaba (p. ej. 10/10: cierre $50.200 vs. saldo $83.950 — eso es un tema de la operatoria, no del sistema)
+- **10 tests nuevos** (`tests/test_caja_reportes_historial.py`, 738 en total): regresión del cierre mal asignado, sesiones sin cierre, totales sin cierre, orden, rango de fechas en hora AR y cierre automático en el historial
+
 ### Fix: la app se colgaba tras volver de un rato / deploy nuevo — 13/10/2026
 Dos causas raíz del "vuelvo a la app y queda todo colgado hasta hard refresh":
 
