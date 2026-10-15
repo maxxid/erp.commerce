@@ -1,12 +1,14 @@
 """Router de Licencia: activar, estado, generar (admin)."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime, timezone
 from app.database import get_db
 from app.auth.dependencies import require_role
+from app.models.licencia import Licencia
 from app.models.usuario import Usuario
 from app.schemas.common import RespuestaBase, RespuestaData, RespuestaLista
 from app.services import licencia_service
@@ -23,6 +25,27 @@ class GenerarRequest(BaseModel):
     machine_id: str = Field(..., min_length=1, max_length=200)
     dias: int = Field(default=30, ge=1, le=365)
     plan: str = Field(default="trial", max_length=50)
+
+
+class ActivaRequest(BaseModel):
+    """Estado que el cliente quiere dejar. Sin esto se invierte el actual."""
+    activa: Optional[bool] = None
+
+
+def _licencia_to_dict(l: Licencia) -> dict:
+    exp = l.fecha_expiracion
+    if exp and exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    dias = max(0, (exp - datetime.now(timezone.utc)).days) if exp else 0
+    return {
+        "id": l.id, "clave": l.clave, "cliente": l.cliente,
+        "machine_id": l.machine_id,
+        "plan": getattr(l, "plan", None) or "trial",
+        "fecha_inicio": l.fecha_inicio.isoformat() if l.fecha_inicio else None,
+        "fecha_expiracion": l.fecha_expiracion.isoformat() if l.fecha_expiracion else None,
+        "dias_restantes": dias,
+        "activa": l.activa,
+    }
 
 
 @router.get("/machine-id", response_model=RespuestaData)
@@ -118,15 +141,71 @@ def generar(data: GenerarRequest, db: Session = Depends(get_db), user: Usuario =
 def historial(db: Session = Depends(get_db), user: Usuario = Depends(require_role("admin"))):
     """Historial de licencias generadas."""
     licencias = licencia_service.historial_licencias(db)
-    data = [
-        {
-            "id": l.id, "clave": l.clave, "cliente": l.cliente,
-            "machine_id": l.machine_id,
-            "plan": getattr(l, "plan", None) or "trial",
-            "fecha_inicio": l.fecha_inicio.isoformat() if l.fecha_inicio else None,
-            "fecha_expiracion": l.fecha_expiracion.isoformat() if l.fecha_expiracion else None,
-            "activa": l.activa,
-        }
-        for l in licencias
-    ]
+    data = [_licencia_to_dict(l) for l in licencias]
     return RespuestaLista(data=data, total=len(data), message=f"{len(data)} licencia(s)")
+
+
+def _no_desactivar_la_unica(db: Session, lic: Licencia) -> None:
+    """No se puede dejar a la app sin licencia.
+
+    El login arranca pidiendo una licencia válida: si se desactiva la única de
+    esta máquina, no queda nadie que pueda entrar para volver a activarla. Con
+    esto, desactivar es para apagar una licencia vieja, no la que se está usando.
+
+    Una licencia vencida ya no deja entrar a nadie, así que apagarla no empeora
+    nada y queda libre.
+    """
+    exp = lic.fecha_expiracion
+    if exp and exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    if exp and exp <= datetime.now(timezone.utc):
+        return
+    mid = licencia_service.obtener_machine_id()
+    # Es la licencia de otro cliente: a esta máquina no la deja sin nada.
+    if lic.machine_id and lic.machine_id != mid:
+        return
+    otras = (
+        db.query(Licencia)
+        .filter(
+            Licencia.id != lic.id,
+            Licencia.activa == True,
+            or_(Licencia.machine_id == mid, Licencia.machine_id.is_(None)),
+        )
+        .count()
+    )
+    if otras == 0:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Es la única licencia vigente de esta máquina: desactivarla "
+                "dejaría a todos sin poder entrar."
+            ),
+        )
+
+
+@router.patch("/{licencia_id}/toggle", response_model=RespuestaData)
+def alternar_activa(
+    licencia_id: int,
+    data: Optional[ActivaRequest] = None,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin")),
+):
+    """Activa/desactiva una licencia (solo admin).
+
+    El botón "Desactivar" de la vista llamaba a esta ruta, que no existía: el
+    `catch` se tragaba el 404 y la tabla mostraba "Inactiva" mientras en la base
+    seguía activa.
+    """
+    lic = db.query(Licencia).filter(Licencia.id == licencia_id).first()
+    if not lic:
+        raise HTTPException(status_code=404, detail="Licencia no encontrada")
+    activa = data.activa if data and data.activa is not None else not lic.activa
+    if not activa:
+        _no_desactivar_la_unica(db, lic)
+    lic.activa = bool(activa)
+    db.commit()
+    db.refresh(lic)
+    return RespuestaData(
+        data=_licencia_to_dict(lic),
+        message=f"Licencia {lic.clave} {'activada' if activa else 'desactivada'}",
+    )

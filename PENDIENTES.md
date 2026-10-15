@@ -47,6 +47,20 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 
 ## ✅ Completados recientemente
 
+### Fase C1 de la ronda de 19 bugs: lo que se le compró a cada proveedor — 15/10/2026
+La Fase C traía 4 ítems (15, 16, 18, 19) y se dividió en **C1 = 15**, **C2 = 19 (offline)**, **C4 = 18 (permisos)**. El **16 —beneficio de compra del empleado— quedó pendiente** a pedido del dueño (ver "Pendientes activos").
+
+**15 · Proveedores → ver lo que se le compró**
+- Botón 🧺 **"Ver compras"** en cada fila de `ProveedoresView.vue`: abre un modal con **compras realizadas · total comprado · última compra**, la tabla **Fecha · OC · Producto · Cant. · $ Unit. · Subtotal** (la lista aplanada de los ítems de cada orden, de más reciente a más vieja) y el bloque **"Comentarios del proveedor"** con las notas de cada OC, con fecha y autor
+- **Sin endpoint nuevo**: todo sale de `GET /api/compras?proveedor_id=`, que ya devolvía items y notas
+- Las órdenes **anuladas** no se listan ni suman (queda un aviso con cuántas hay); sus comentarios sí aparecen, marcados como anulados, porque lo que avisó el vendedor sirve aunque después se haya anulado
+
+**3 arreglos que salieron del mapeo**
+- **Editar un usuario sin tocar la contraseña fallaba** con 422 y la vista decía "no se pudo guardar" sin motivo: el form manda `password: ""` y el backend exigía 4 caracteres. Ahora clave vacía (o de solo espacios) = "no cambiarla", y la vista solo la manda si se escribió una nueva
+- **El toggle activar/desactivar ignoraba el body** que mandaba la vista y simplemente negaba el estado actual: dos clicks rápidos sobre la misma fila terminaban dejando al usuario como estaba. `PATCH /api/usuarios/{id}/toggle` ahora respeta `{activo: ...}` (y si no viene nada, invierte)
+- **"Desactivar" en la pestaña de licencias no hacía nada**: llamaba a `PATCH /api/licencia/{id}/toggle`, que **no existía** (estaba documentado en `MAESTRO.md` igual). Se creó el endpoint, y además **no se puede apagar la única licencia vigente de esta máquina**: el login arranca pidiendo licencia válida, así que se quedaría todo el mundo afuera y sin nadie para reactivarla. Una licencia vencida o de otra máquina se puede apagar sin problema
+- **Tests:** `tests/test_correcciones_admin.py` (15). Suite: **765 passed**
+
 ### Ronda de 19 bugs — Fase A (rápidos) + Fase B (caja/POS) — 15/10/2026
 El dueño mandó 19 arreglos y mejoras. Se trabajaron en dos fases y **ambas quedaron cerradas**. Queda abierta la **Fase C (15, 16, 18, 19): hay que sentarse a decidir el diseño antes de tocar código**.
 
@@ -806,7 +820,8 @@ Además, dos guards defensivos: `_clean_name` y `_map_categoria` reventaban con 
 ## 📋 Pendientes activos
 
 ### Alta prioridad
-- **Ronda de 19 bugs — Fase C (15, 16, 18, 19)** — las fases A y B quedaron cerradas el 15/10/2026 (ver arriba). Estos 4 **no se tocaron a propósito**: son cambios de diseño (no arreglos de código) y hay que definirlos con el dueño antes de empezar. Pedir la lista y acordar alcance en la próxima sesión
+- **Ronda de 19 bugs — ítem 16: beneficio de compra del empleado** (diseño ya acordado con el dueño el 15/10/2026, **falta implementar**): cuando un **cajero atiende su propia compra** en el POS puede aplicar un beneficio. El dueño le otorga en la ficha del usuario: **% máximo por compra + tope mensual en $**, y elige si es **general o solo para rubros** marcados (el árbol de `Categoria` ya tiene jerarquía padre/hijo). Dos botones en el POS: el descuento (limitado al %) y **"Al costo"** con `Producto.precio_costo` (los productos sin costo cargado no se pueden vender al costo, hay que avisar y no cobrar 0). **Se valida en backend** al confirmar la venta, no solo ocultando el input: hoy `PUT /api/ventas/{id}/confirmar` acepta cualquier descuento y `agregar_item` acepta cualquier precio. Ojo: la lógica del carrito está **duplicada** en `POSView.vue` y `CobroMovilView.vue`, hay que tocar las dos. Migración de columnas en `usuarios` (hoy no hay ningún campo de permisos ni de descuento). **Los ítems 15, 18 y 19 de esa ronda quedaron cerrados el 15/10/2026** (ver "Completados recientemente": Fase C1, C2 y C4)
+- **Modo offline completo del POS** — el arranque sin conexión está por arreglarse en la Fase C2 (siguiente), pero **vender y cobrar sin conexión de punta a punta quedó pendiente**: falta testear caja, catálogo y la reconciliación al volver. La cola de ventas (`useOfflineSales`) ya existe y es la base
 - **MercadoPago: select de ciudad por provincia** — `app/services/mercadopago_service.py` ya tiene provincia como select (24 valores válidos); falta el segundo select de ciudad/localidad que dependa de la provincia elegida, porque MP rechaza si el `city_name` no es válido
 - **Seguridad clave privada AFIP** — la clave se guarda encriptada en la DB con una key hardcodeada (`"erp-afip-key-encryption-v1"`). Si alguien accede a DB + código fuente puede descifrarla. **Solución propuesta:** no guardar clave privada en DB — solo descargar (botón "Descargar .key" ya existe) y que el usuario la guarde localmente. Alternativa: secrets manager (AWS Secrets Manager, etc.). Requiere re-flujo de setup de AFIP.
 

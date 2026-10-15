@@ -225,11 +225,15 @@ function esAdminProtegido(user) {
 async function saveUser() {
   saving.value = true
   try {
+    // La clave solo viaja si se escribió una nueva: mandarla vacía hacía que el
+    // backend la rechace y la edición entera fallara.
+    const payload = { nombre: form.nombre, rol: form.rol }
+    if (form.password) payload.password = form.password
     if (editingUser.value) {
-      const resp = await api.put(`/api/usuarios/${editingUser.value.id}`, form)
+      const resp = await api.put(`/api/usuarios/${editingUser.value.id}`, payload)
       if (resp && resp.id) Object.assign(editingUser.value, aFila(resp))
     } else {
-      const resp = await api.post('/api/usuarios', form)
+      const resp = await api.post('/api/usuarios', { ...payload, username: form.username })
       if (resp && resp.id) users.value.push(aFila(resp))
     }
   } catch (e) {
@@ -245,7 +249,9 @@ async function toggleUser(user) {
   if (esAdminProtegido(user)) return
   toggling.value[user.id] = true
   try {
-    const resp = await api.patch(`/api/usuarios/${user.id}/toggle`, { active: !user.active })
+    // Mandamos el estado que queremos, no "niega": dos clicks rápidos sobre la
+    // misma fila terminaban dejando al usuario como estaba al principio.
+    const resp = await api.patch(`/api/usuarios/${user.id}/toggle`, { activo: !user.active })
     if (resp && typeof resp.activo === 'boolean') user.active = resp.activo
     toast.success(resp?.message || 'Usuario actualizado')
   } catch (e) {

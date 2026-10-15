@@ -83,6 +83,15 @@
               variant="ghost"
               size="sm"
               icon-only
+              @click="openComprasModal(row)"
+              title="Ver las compras que se le hicieron"
+            >
+              <i class="fa-solid fa-basket-shopping"></i>
+            </BaseButton>
+            <BaseButton
+              variant="ghost"
+              size="sm"
+              icon-only
               @click="openEditModal(row)"
               title="Editar"
             >
@@ -166,6 +175,87 @@
         </div>
       </form>
     </BaseModal>
+
+    <BaseModal
+      :model-value="showComprasModal"
+      :title="proveedorCompras ? `Compras a ${proveedorCompras.nombre}` : 'Compras'"
+      size="2xl"
+      @update:model-value="showComprasModal = $event"
+    >
+      <div v-if="cargandoCompras" class="py-12 text-center text-sm text-slate-500 dark:text-slate-400">
+        <i class="fa-solid fa-circle-notch animate-spin"></i>
+        Cargando compras...
+      </div>
+
+      <div v-else class="space-y-5">
+        <div class="grid grid-cols-3 gap-3">
+          <div class="rounded-xl bg-slate-50 dark:bg-slate-800/60 p-3">
+            <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Compras</p>
+            <p class="text-xl font-mono-data font-bold text-slate-900 dark:text-slate-100 mt-0.5">{{ comprasVigentes.length }}</p>
+          </div>
+          <div class="rounded-xl bg-slate-50 dark:bg-slate-800/60 p-3">
+            <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Total comprado</p>
+            <p class="text-xl font-mono-data font-bold text-slate-900 dark:text-slate-100 mt-0.5">{{ fc(totalComprado) }}</p>
+          </div>
+          <div class="rounded-xl bg-slate-50 dark:bg-slate-800/60 p-3">
+            <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Última compra</p>
+            <p class="text-xl font-mono-data font-bold text-slate-900 dark:text-slate-100 mt-0.5">
+              {{ ultimaCompra ? formatDateShort(ultimaCompra) : '—' }}
+            </p>
+          </div>
+        </div>
+
+        <div v-if="filasCompras.length">
+          <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">Productos comprados</h4>
+          <BaseTable :columns="columnasCompras" :rows="filasCompras">
+            <template #fecha="{ row }">
+              <span class="text-xs font-mono-data text-slate-600 dark:text-slate-400">{{ formatDateTime(row.fecha) }}</span>
+            </template>
+            <template #numero="{ row }">
+              <span class="font-mono-data text-slate-600 dark:text-slate-400">{{ row.numero }}</span>
+            </template>
+            <template #producto="{ row }">
+              <span class="font-medium text-slate-900 dark:text-slate-100">{{ row.producto }}</span>
+            </template>
+            <template #cantidad="{ row }">
+              <span class="font-mono-data">{{ formatoCantidad(row.cantidad) }}</span>
+            </template>
+            <template #precio_unitario="{ row }">
+              <span class="font-mono-data">{{ fc(row.precio_unitario) }}</span>
+            </template>
+            <template #subtotal="{ row }">
+              <span class="font-mono-data font-semibold text-slate-900 dark:text-slate-100">{{ fc(row.subtotal) }}</span>
+            </template>
+          </BaseTable>
+        </div>
+
+        <p v-else class="py-6 text-center text-sm text-slate-500 dark:text-slate-400">
+          Todavía no cargaste órdenes de compra a este proveedor.
+        </p>
+
+        <p v-if="comprasAnuladas.length" class="text-[11px] text-slate-400 dark:text-slate-500">
+          {{ comprasAnuladas.length }} orden(es) anulada(s): no se listan arriba ni suman en el total.
+        </p>
+
+        <div v-if="comprasConNotas.length">
+          <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">Comentarios del proveedor</h4>
+          <div class="space-y-2">
+            <div
+              v-for="c in comprasConNotas"
+              :key="'notas-' + c.id"
+              class="rounded-xl border border-slate-200 dark:border-slate-700 p-3"
+            >
+              <p class="mb-1 text-[11px] text-slate-500 dark:text-slate-400">
+                <span class="font-semibold text-slate-700 dark:text-slate-300">OC {{ c.numero }}</span>
+                · {{ formatDateTime(c.fecha) }}
+                <BaseBadge v-if="c.estado === 'anulada'" variant="danger" size="xs">anulada</BaseBadge>
+              </p>
+              <p class="whitespace-pre-line text-sm text-slate-700 dark:text-slate-300">{{ c.notas }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </BaseModal>
   </div>
 </template>
 
@@ -179,6 +269,7 @@ import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseTable from '@/components/ui/BaseTable.vue'
 import BaseBadge from '@/components/ui/BaseBadge.vue'
+import { formatCurrency as fc, formatDateShort, formatDateTime } from '@/composables/useUtils'
 
 const toast = useToastStore()
 
@@ -308,6 +399,78 @@ async function toggleActive(supplier) {
     toast.error(e?.response?.data?.detail || e?.data?.detail || e.message || 'Error al cambiar estado')
   } finally {
     togglingId.value = null
+  }
+}
+
+// --- Qué le compramos a este proveedor -------------------------------------
+// Todo lo que se ve acá ya lo devuelve GET /api/compras?proveedor_id=, así que
+// no hay endpoint nuevo: la vista arma la lista de productos aplanando los
+// ítems de cada orden.
+
+const showComprasModal = ref(false)
+const proveedorCompras = ref(null)
+const comprasProveedor = ref([])
+const cargandoCompras = ref(false)
+
+const columnasCompras = [
+  { key: 'fecha', label: 'Fecha' },
+  { key: 'numero', label: 'OC' },
+  { key: 'producto', label: 'Producto' },
+  { key: 'cantidad', label: 'Cant.' },
+  { key: 'precio_unitario', label: '$ Unit.' },
+  { key: 'subtotal', label: 'Subtotal' },
+]
+
+// Una orden anulada no compró nada: no ocupa lugar en la lista de productos ni
+// suma en el total. Los comentarios sí se muestran igual, porque lo que avisó
+// el vendedor sirve aunque después se haya anulado.
+const comprasVigentes = computed(() =>
+  comprasProveedor.value.filter(c => c.estado !== 'anulada'))
+
+const comprasAnuladas = computed(() =>
+  comprasProveedor.value.filter(c => c.estado === 'anulada'))
+
+const totalComprado = computed(() =>
+  comprasVigentes.value.reduce((suma, c) => suma + (c.total || 0), 0))
+
+const ultimaCompra = computed(() => comprasVigentes.value[0]?.fecha || null)
+
+const comprasConNotas = computed(() =>
+  comprasProveedor.value.filter(c => (c.notas || '').trim()))
+
+const filasCompras = computed(() =>
+  comprasVigentes.value.flatMap(c =>
+    (c.items || []).map(i => ({
+      id: `${c.id}-${i.id}`,
+      fecha: c.fecha,
+      numero: c.numero,
+      producto: i.producto_nombre || '—',
+      cantidad: i.cantidad,
+      precio_unitario: i.precio_unitario,
+      subtotal: i.subtotal,
+    }))))
+
+// Las cantidades pueden venir con decimales (lo que se pesa por kilo).
+function formatoCantidad(v) {
+  return Number(v || 0).toLocaleString('es-AR', { maximumFractionDigits: 3 })
+}
+
+async function openComprasModal(supplier) {
+  proveedorCompras.value = supplier
+  comprasProveedor.value = []
+  cargandoCompras.value = true
+  showComprasModal.value = true
+  try {
+    const data = await api.get('/api/compras', { proveedor_id: supplier.id, page_size: 200 })
+    // El backend las trae de más reciente a más vieja; lo repetimos acá porque
+    // ese orden es parte de lo que se ve, no un detalle del endpoint.
+    comprasProveedor.value = (Array.isArray(data) ? data : [])
+      .slice()
+      .sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0))
+  } catch (e) {
+    toast.error('No se pudieron cargar las compras de este proveedor')
+  } finally {
+    cargandoCompras.value = false
   }
 }
 </script>

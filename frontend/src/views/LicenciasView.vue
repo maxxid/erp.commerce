@@ -258,9 +258,15 @@ async function activateLicense(lic) {
 async function deactivateLicense(lic) {
   toggling.value[lic.id] = true
   try {
-    await api.patch(`/api/licencia/${lic.id}/toggle`, { active: false })
-  } catch { /* fallback */ }
-  lic.active = false
+    const resp = await api.patch(`/api/licencia/${lic.id}/toggle`, { activa: false })
+    // El backend puede negarlo (es la única licencia activa de la máquina) y
+    // antes el error quedaba silenciado: la tabla mostraba "Inactiva" mientras
+    // en la base seguía activa.
+    if (resp && typeof resp.activa === 'boolean') lic.active = resp.activa
+    toast.success(resp?.message || 'Licencia desactivada')
+  } catch (e) {
+    toast.error(e?.data?.detail || e.message || 'No se pudo desactivar la licencia')
+  }
   toggling.value[lic.id] = false
 }
 

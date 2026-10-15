@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from app.database import get_db
 from app.auth.security import hash_password
@@ -25,6 +25,19 @@ class UsuarioUpdate(BaseModel):
     rol: Optional[str] = None
     activo: Optional[bool] = None
     password: Optional[str] = Field(None, min_length=4)
+
+    @field_validator("password", mode="before")
+    @classmethod
+    def _clave_vacia_es_none(cls, v):
+        """El form manda "" cuando no se quiere tocar la clave.
+
+        `min_length=4` rechazaba eso con un 422, así que editar un usuario sin
+        escribir una clave nueva parecía "no se pudo guardar" sin decir por qué.
+        """
+        if v is None:
+            return None
+        v = v.strip() if isinstance(v, str) else v
+        return v or None
 
 
 def _usuario_to_dict(u: Usuario) -> dict:
@@ -127,21 +140,31 @@ def _validar_desactivacion(u: Usuario, current_user: Usuario) -> None:
         raise HTTPException(status_code=400, detail="No podés desactivar tu propio usuario")
 
 
+class ActivoRequest(BaseModel):
+    """Estado que el cliente quiere dejar. Sin esto se invierte el actual."""
+    activo: Optional[bool] = None
+
+
 @router.patch("/{usuario_id}/toggle", response_model=RespuestaData)
 def alternar_activo(
     usuario_id: int,
-    body: dict = None,
+    data: Optional[ActivoRequest] = None,
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(require_role("admin")),
 ):
-    """Activa/desactiva un usuario. El admin no puede desactivarse."""
+    """Activa/desactiva un usuario. El admin no puede desactivarse.
+
+    El cliente manda el estado que quiere en vez de que el servidor niegue el
+    actual: con dos clicks rápidos sobre la misma fila, el "niega" terminaba
+    volviendo a activar a quien recién se había desactivado.
+    """
     u = db.query(Usuario).filter(Usuario.id == usuario_id).first()
     if not u:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    nuevo = not u.activo
+    nuevo = data.activo if data and data.activo is not None else not u.activo
     if not nuevo:
         _validar_desactivacion(u, current_user)
-    u.activo = nuevo
+    u.activo = bool(nuevo)
     db.commit()
     db.refresh(u)
     return RespuestaData(
