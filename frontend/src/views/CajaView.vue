@@ -219,8 +219,11 @@
               <td class="px-4 py-3 text-right font-mono-data text-xs text-emerald-600">{{ fc(sesion.total_ingresos) }}</td>
               <td class="px-4 py-3 text-right font-mono-data text-xs text-rose-600">{{ fc(sesion.total_egresos) }}</td>
               <td class="px-4 py-3 text-center">
-                <BaseBadge :variant="sesion.estado === 'cerrada' ? 'success' : 'warning'" size="xs">
-                  {{ sesion.estado === 'cerrada' ? 'Cerrada' : 'Abierta' }}
+                <BaseBadge
+                  :variant="sesion.estado === 'cerrada' ? 'success' : (sesion.estado === 'sin_cierre' ? 'danger' : 'warning')"
+                  size="xs"
+                >
+                  {{ sesion.estado === 'cerrada' ? 'Cerrada' : (sesion.estado === 'sin_cierre' ? 'Sin cierre' : 'Abierta') }}
                 </BaseBadge>
                 <BaseBadge v-if="sesion.fue_automatico" variant="info" size="xs" class="ml-1">Auto</BaseBadge>
               </td>
@@ -279,7 +282,7 @@
               Sesión {{ sesionSeleccionada.apertura_id ? '#' + sesionSeleccionada.apertura_id : '' }}
             </div>
             <div class="text-xs text-slate-500 dark:text-slate-400">
-              {{ formatFechaDia(sesionSeleccionada.apertura_fecha?.split('T')[0] || '') }}
+              {{ formatFechaDia(fechaLocalAR(sesionSeleccionada.apertura_fecha) || '') }}
             </div>
           </div>
           <div class="flex items-center gap-2">
@@ -1056,7 +1059,7 @@ import { useCajaStore } from '@/stores/caja'
 import { useCarritoStore } from '@/stores/carrito'
 import router from '@/router'
 import api from '@/services/api'
-import { formatCurrency as fc, formatDateShort, formatTimeShort, formatDateTime, esHoy } from '@/composables/useUtils'
+import { formatCurrency as fc, formatDateShort, formatTimeShort, formatDateTime, esHoy, fechaLocalAR } from '@/composables/useUtils'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
@@ -1615,9 +1618,12 @@ function calcularFechasFiltro() {
     fin = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0, 23, 59, 59)
   }
 
+  // Fecha local (YYYY-MM-DD) sin pasar por toISOString: a las 23:59 AR,
+  // toISOString() ya es el día siguiente en UTC y el rango se corría un día.
+  const aFechaLocal = (d) => d.toLocaleDateString('sv')
   return {
-    inicio: inicio.toISOString().split('T')[0],
-    fin: fin.toISOString().split('T')[0]
+    inicio: aFechaLocal(inicio),
+    fin: aFechaLocal(fin)
   }
 }
 
@@ -1653,13 +1659,15 @@ async function fetchReportes() {
 }
 
 async function verDetalleSesion(sesion) {
-  // Obtener la fecha de la apertura para usar el endpoint /dia que tiene datos completos
+  // Obtener la fecha local (ARG) de la apertura para usar el endpoint /dia,
+  // que agrupa los movimientos por día local: la parte de fecha del ISO de la
+  // apertura es UTC y una sesión abierta a las 22:19 AR caería al día siguiente.
   if (!sesion.apertura_fecha) {
     sesionSeleccionada.value = sesion
     showDetalleSesion.value = true
     return
   }
-  const fecha = sesion.apertura_fecha.split('T')[0]
+  const fecha = fechaLocalAR(sesion.apertura_fecha)
   try {
     const resp = await api.get(`/api/caja/dia?fecha=${fecha}`)
     // Buscar la sesión específica en el día (puede haber varias)

@@ -86,6 +86,15 @@ export function esHoy(v) {
   return mismoDia(d) === mismoDia(new Date())
 }
 
+// Fecha local (YYYY-MM-DD) en hora del negocio. Para los endpoints de caja
+// que agrupan por día argentino: la parte de fecha de un ISO en UTC puede
+// ser el día siguiente (una sesión abierta 22:19 AR es 01:19 UTC).
+export function fechaLocalAR(v) {
+  const d = parseFechaUTC(v)
+  if (isNaN(d)) return ''
+  return d.toLocaleDateString('sv', { timeZone: TZ_AR })
+}
+
 // "hace 5 min" / "hace 2h" / "hace 3d", para las listas de eventos.
 export function timeAgo(v) {
   if (!v) return ''

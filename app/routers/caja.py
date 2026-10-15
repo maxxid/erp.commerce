@@ -548,11 +548,13 @@ def calendario_caja(
         aaaa, mm = ahora.year, ahora.month
 
     dias_del_mes = _cal.monthrange(aaaa, mm)[1]
-    # Límites en UTC de un día local argentino (00:00 AR = 03:00 UTC del mismo día)
+    # Límites en UTC de un mes local argentino. El front manda fechas AR y
+    # created_at es UTC: 00:00 AR = 03:00 UTC del mismo día, así que se suman
+    # 3h (restarlas dejaba la ventana corrida 6 horas y perdía las noches).
     inicio_ar = datetime(aaaa, mm, 1)
     fin_ar = inicio_ar.replace(day=dias_del_mes, hour=23, minute=59, second=59)
-    inicio_utc = inicio_ar - timedelta(hours=3)
-    fin_utc = fin_ar - timedelta(hours=3)
+    inicio_utc = inicio_ar + timedelta(hours=3)
+    fin_utc = fin_ar + timedelta(hours=3)
 
     movs = (
         db.query(MovimientoCaja)
@@ -659,8 +661,11 @@ def dia_caja(
     except ValueError:
         raise HTTPException(status_code=400, detail="Fecha inválida. Formato: YYYY-MM-DD")
 
-    inicio_utc = fecha_dt - timedelta(hours=3)
-    fin_utc = fecha_dt.replace(hour=23, minute=59, second=59) - timedelta(hours=3)
+    # El front manda la fecha local argentina y created_at es UTC: 00:00 AR =
+    # 03:00 UTC del mismo día (restar 3h dejaba la ventana corrida 6 horas y
+    # cortaba las tardes/noches, que es donde caen los cierres).
+    inicio_utc = fecha_dt + timedelta(hours=3)
+    fin_utc = fecha_dt.replace(hour=23, minute=59, second=59) + timedelta(hours=3)
 
     movs = (
         db.query(MovimientoCaja)
@@ -817,21 +822,23 @@ def reportes_caja(
     user: Usuario = Depends(require_role("admin", "encargado")),
 ):
     """Reporte de sesiones de caja con aperturas, cierres y discrepancias."""
-    from datetime import datetime
+    from datetime import datetime, timedelta
     from app.models.movimiento_caja import MovimientoCaja
-    
-    # Parsear fechas
+
+    # Parsear fechas. El front manda fechas locales argentinas y created_at se
+    # guarda en UTC: 00:00 AR = 03:00 UTC del mismo día, así que los límites se
+    # corren +3h para que "hoy" sea realmente el día local completo.
     fecha_ini = None
     fecha_fi = None
     if fecha_inicio:
         try:
-            fecha_ini = datetime.strptime(fecha_inicio, "%Y-%m-%d")
-        except:
+            fecha_ini = datetime.strptime(fecha_inicio, "%Y-%m-%d") + timedelta(hours=3)
+        except ValueError:
             pass
     if fecha_fin:
         try:
-            fecha_fi = datetime.strptime(fecha_fin, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
-        except:
+            fecha_fi = datetime.strptime(fecha_fin, "%Y-%m-%d").replace(hour=23, minute=59, second=59) + timedelta(hours=3)
+        except ValueError:
             pass
     
     # Obtener todos los movimientos en el rango
@@ -844,7 +851,10 @@ def reportes_caja(
     if fecha_fi:
         query = query.filter(MovimientoCaja.created_at <= fecha_fi)
     
-    movimientos = query.order_by(MovimientoCaja.created_at.desc()).all()
+    # Orden ASC: la agrupación (apertura -> ingresos -> cierre) recorre la
+    # sesión en el orden en que ocurrió. Con DESC cada cierre se le asignaba a
+    # la apertura siguiente y los movimientos de la sesión quedaban huérfanos.
+    movimientos = query.order_by(MovimientoCaja.created_at.asc(), MovimientoCaja.id.asc()).all()
     
     # Agrupar por sesiones (apertura -> cierre)
     sesiones = []
@@ -862,6 +872,10 @@ def reportes_caja(
                 apertura_cuentas_pendiente += mov.monto or 0
             continue
         if mov.tipo == "apertura":
+            # Una apertura nueva sin cierre previo cierra de facto la sesión
+            # anterior: no está "abierta", quedó sin cierre registrado.
+            if sesion_actual is not None:
+                sesion_actual["estado"] = "sin_cierre"
             # Nueva sesión
             sesion_actual = {
                 "id": mov.id,
@@ -895,13 +909,6 @@ def reportes_caja(
             sesion_actual["cierre_comentario"] = mov.comentario_concil
             sesion_actual["estado"] = "cerrada"
             
-            # Calcular saldo final
-            total_ingresos = sum(i["monto"] for i in sesion_actual["ingresos"])
-            total_egresos = sum(e["monto"] for e in sesion_actual["egresos"])
-            sesion_actual["total_ingresos"] = total_ingresos
-            sesion_actual["total_egresos"] = total_egresos
-            sesion_actual["saldo_final"] = sesion_actual["apertura_monto"] + total_ingresos - total_egresos
-            
             # Detectar si fue automático (usar campo booleano)
             sesion_actual["fue_automatico"] = bool(mov.fue_automatico)
             
@@ -921,6 +928,19 @@ def reportes_caja(
                 "descripcion": mov.descripcion,
                 "fecha": mov.created_at.isoformat() if mov.created_at else None
             })
+    
+    # Totales para toda sesión (también las abiertas y las que quedaron sin
+    # cierre): antes solo se calculaban al cerrar, y las sesiones sin cierre
+    # mostraban ingresos y egresos en $0.
+    for sesion in sesiones:
+        total_ingresos = sum(i["monto"] for i in sesion["ingresos"])
+        total_egresos = sum(e["monto"] for e in sesion["egresos"])
+        sesion["total_ingresos"] = total_ingresos
+        sesion["total_egresos"] = total_egresos
+        sesion["saldo_final"] = sesion["apertura_monto"] + total_ingresos - total_egresos
+    
+    # La tabla muestra la sesión más reciente arriba
+    sesiones.reverse()
     
     # Obtener cierres parciales (arqueos por método)
     cierres_parciales = db.query(MovimientoCaja).filter(
