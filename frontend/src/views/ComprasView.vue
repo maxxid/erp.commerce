@@ -815,7 +815,7 @@ function ciclarOrden() {
 }
 
 onMounted(async () => {
-  await Promise.all([fetchCompras(), fetchProveedores(), fetchProductosCatalogo(), fetchCategorias()])
+  await Promise.all([fetchCompras(), fetchProveedores(), fetchProductosCatalogo(), fetchCategorias(), fetchSectores()])
   const detalleId = route.query.detalle
   if (detalleId) {
     const compra = compras.value.find(c => c.id === Number(detalleId))

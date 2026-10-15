@@ -329,6 +329,10 @@ def _migrate_new_columns():
             # proveedor): el id del proveedor va en referencia_id y el de la
             # sesión acá.
             ("sesion_cierre_id", "INTEGER"),
+            # 0 = el egreso no sale de ninguna caja del sistema (pago
+            # particular, paga patronal): queda en el historial pero no baja
+            # el esperado de ningún medio de pago.
+            ("afecta_caja", "INTEGER NOT NULL DEFAULT 1"),
         ]:
             if col not in existentes_mc:
                 conn.execute(sa.text(f"ALTER TABLE movimientos_caja ADD COLUMN {col} {tipo}"))

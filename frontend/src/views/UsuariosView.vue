@@ -29,6 +29,11 @@
             {{ row.role }}
           </BaseBadge>
         </template>
+        <template #lastAccess="{ row }">
+          <span class="text-xs text-slate-500 dark:text-slate-400">
+            {{ row.lastAccess ? formatFechaHora(row.lastAccess) : '—' }}
+          </span>
+        </template>
         <template #active="{ row }">
           <BaseBadge :variant="row.active ? 'success' : 'danger'" size="sm" dot :pulse="row.active">
             {{ row.active ? 'Activo' : 'Inactivo' }}
@@ -47,29 +52,28 @@
               <i class="fa-solid fa-pen-to-square"></i>
             </BaseButton>
             <BaseButton
-              v-if="row.active"
+              v-if="!esAdminProtegido(row)"
               variant="ghost"
               size="sm"
               iconOnly
               :loading="toggling[row.id]"
-              title="Desactivar"
-              aria-label="Desactivar"
+              :title="row.active ? 'Desactivar' : 'Activar'"
+              :aria-label="row.active ? 'Desactivar' : 'Activar'"
               @click="toggleUser(row)"
             >
-              <i class="fa-solid fa-circle-xmark text-red-600"></i>
+              <i
+                :class="row.active
+                  ? 'fa-solid fa-circle-xmark text-red-600'
+                  : 'fa-solid fa-circle-check text-green-600'"
+              ></i>
             </BaseButton>
-            <BaseButton
+            <span
               v-else
-              variant="ghost"
-              size="sm"
-              iconOnly
-              :loading="toggling[row.id]"
-              title="Activar"
-              aria-label="Activar"
-              @click="toggleUser(row)"
+              class="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase px-1"
+              title="Un Administrador no se puede desactivar"
             >
-              <i class="fa-solid fa-circle-check text-green-600"></i>
-            </BaseButton>
+              <i class="fa-solid fa-lock mr-1"></i>Protegido
+            </span>
           </div>
         </template>
       </BaseTable>
@@ -100,15 +104,15 @@
           :placeholder="editingUser ? 'Dejar vacío para mantener' : 'Ingresar contraseña'"
         />
         <BaseSelect
-          v-model="form.role"
+          v-model="form.rol"
           label="Rol"
           required
           placeholder="Seleccionar rol"
           :options="[
-            { value: 'Admin', label: 'Administrador' },
-            { value: 'Encargado', label: 'Encargado' },
-            { value: 'Cajero', label: 'Cajero' },
-            { value: 'Repositor', label: 'Repositor' }
+            { value: 'admin', label: 'Administrador' },
+            { value: 'encargado', label: 'Encargado' },
+            { value: 'cajero', label: 'Cajero' },
+            { value: 'repositor', label: 'Repositor' }
           ]"
           option-value="value"
           option-label="label"
@@ -130,7 +134,8 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import api from '@/services/api'
-import { formatCurrency } from '@/composables/useUtils'
+import { useToastStore } from '@/stores/toasts'
+import { formatDateTime } from '@/composables/useUtils'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
@@ -162,18 +167,31 @@ const showModal = ref(false)
 const editingUser = ref(null)
 const saving = ref(false)
 const toggling = ref({})
+const toast = useToastStore()
+
+// El backend manda { rol, activo, ultimo_login } y la vista usa
+// { role, active, lastAccess }.
+function aFila(u) {
+  return {
+    id: u.id,
+    username: u.username,
+    nombre: u.nombre,
+    role: u.rol,
+    active: !!u.activo,
+    lastAccess: u.ultimo_login || null,
+  }
+}
+
+function formatFechaHora(fecha) {
+  return fecha ? formatDateTime(fecha) : '—'
+}
 
 const form = reactive({
   username: '',
   nombre: '',
   password: '',
-  role: '',
+  rol: '',
 })
-
-function roleClass(role) {
-  const map = { admin: 'bg-purple-50 text-purple-700', encargado: 'bg-blue-50 text-blue-700', cajero: 'bg-amber-50 text-amber-700', repositor: 'bg-teal-50 text-teal-700' }
-  return map[role] || 'bg-slate-50 text-slate-700'
-}
 
 function roleIcon(role) {
   const map = { admin: 'fa-solid fa-shield-halved', encargado: 'fa-solid fa-user-tie', cajero: 'fa-solid fa-calculator', repositor: 'fa-solid fa-box' }
@@ -185,7 +203,7 @@ function openCreateModal() {
   form.username = ''
   form.nombre = ''
   form.password = ''
-  form.role = ''
+  form.rol = ''
   showModal.value = true
 }
 
@@ -194,61 +212,52 @@ function openEditModal(user) {
   form.username = user.username
   form.nombre = user.nombre
   form.password = ''
-  form.role = user.role
+  form.rol = user.role
   showModal.value = true
+}
+
+// El admin no se desactiva (ni propio ni ajeno): lo decide el backend y acá
+// se oculta la acción para que no parezca que falta.
+function esAdminProtegido(user) {
+  return (user.role || '').toLowerCase() === 'admin'
 }
 
 async function saveUser() {
   saving.value = true
   try {
     if (editingUser.value) {
-      await api.put(`/api/usuarios/${editingUser.value.id}`, form)
-      editingUser.value.username = form.username
-      editingUser.value.nombre = form.nombre
-      editingUser.value.role = form.role
+      const resp = await api.put(`/api/usuarios/${editingUser.value.id}`, form)
+      if (resp && resp.id) Object.assign(editingUser.value, aFila(resp))
     } else {
-      await api.post('/api/usuarios', form)
-      users.value.push({
-        id: users.value.length + 1,
-        username: form.username,
-        nombre: form.nombre,
-        role: form.role,
-        active: true,
-        lastAccess: '—',
-      })
+      const resp = await api.post('/api/usuarios', form)
+      if (resp && resp.id) users.value.push(aFila(resp))
     }
-  } catch {
-    if (editingUser.value) {
-      editingUser.value.username = form.username
-      editingUser.value.nombre = form.nombre
-      editingUser.value.role = form.role
-    } else {
-      users.value.push({
-        id: users.value.length + 1,
-        username: form.username,
-        nombre: form.nombre,
-        role: form.role,
-        active: true,
-        lastAccess: '—',
-      })
-    }
+  } catch (e) {
+    toast.error(e.message || 'No se pudo guardar el usuario')
+    saving.value = false
+    return
   }
   saving.value = false
   showModal.value = false
 }
 
 async function toggleUser(user) {
+  if (esAdminProtegido(user)) return
   toggling.value[user.id] = true
   try {
-    await api.patch(`/api/usuarios/${user.id}/toggle`, { active: !user.active })
-  } catch { /* fallback */ }
-  user.active = !user.active
+    const resp = await api.patch(`/api/usuarios/${user.id}/toggle`, { active: !user.active })
+    if (resp && typeof resp.activo === 'boolean') user.active = resp.activo
+    toast.success(resp?.message || 'Usuario actualizado')
+  } catch (e) {
+    toast.error(e.message || 'No se pudo cambiar el estado')
+  }
   toggling.value[user.id] = false
 }
+
 onMounted(async () => {
   try {
-    const data = await api.get('/api/usuarios')
-    if (data && data.length) users.value = data
+    const data = await api.get('/api/usuarios', { solo_activos: false, page_size: 200 })
+    if (data && data.length) users.value = data.map(aFila)
   } catch { /* fallback to mock */ }
 })
 </script>

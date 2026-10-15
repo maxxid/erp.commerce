@@ -1,0 +1,1 @@
+const a={smartpoint:"SmartPoint",mercadopago_qr:"QR MercadoPago",mercadopago_pos:"POS MercadoPago",qr_interop:"QR BCRA"},e=Object.keys(a);function t(){return e.reduce((o,r)=>(o[r]=0,o),{})}export{e as M,a,t as c};

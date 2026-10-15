@@ -357,7 +357,9 @@ function getMonday(d) {
 }
 
 function formatDate(date) {
-  return date.toISOString().split('T')[0]
+  // Día local (sin paso por UTC): toISOString() restaba 3h y con un "Hoy"
+  // cargado en la madrugada pedía el día anterior.
+  return date.toLocaleDateString('sv')
 }
 
 function setDateFilter(key) {
@@ -515,7 +517,7 @@ async function syncCalendario() {
       modifiedProducts.value = (d.productos.modificados_lista || []).map(p => ({
         id: p.id,
         name: p.nombre || '',
-        code: p.codigo_barras || '',
+        change: p.cambio || 'editado',
       }))
     }
     if (d && d.clientes) {

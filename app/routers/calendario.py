@@ -15,6 +15,10 @@ from app.models.movimiento_caja import MovimientoCaja
 
 router = APIRouter(prefix="/api/calendario", tags=["Calendario"])
 
+# La DB guarda UTC y el negocio opera en Argentina (UTC-3): un día local corre
+# de 03:00 UTC a 03:00 UTC del día siguiente.
+_OFFSET_LOCAL = timedelta(hours=3)
+
 
 @router.get("/dia", response_model=RespuestaData)
 def actividad_dia(
@@ -34,8 +38,11 @@ def actividad_dia(
         except ValueError:
             desde = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
             hasta = desde + timedelta(days=1)
-        inicio = desde.replace(hour=0, minute=0, second=0, microsecond=0)
-        fin = (hasta.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1))
+        # Las fechas llegan como día local (Argentina): el día argentino corre de
+        # 00:00 a 03:00 UTC. Sin el corrimiento, "Hoy" metía la tarde/noche de
+        # ayer (21-24 AR = 00-03 UTC de hoy) y dejaba afuera la madrugada local.
+        inicio = desde.replace(hour=0, minute=0, second=0, microsecond=0) + _OFFSET_LOCAL
+        fin = (hasta.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)) + _OFFSET_LOCAL
         return _actividad_rango(inicio, fin, f"{fecha_desde} a {fecha_hasta}", db)
 
     try:
@@ -43,10 +50,59 @@ def actividad_dia(
     except ValueError:
         dia = datetime.now(timezone.utc)
 
-    inicio = dia.replace(hour=0, minute=0, second=0, microsecond=0)
+    inicio = dia.replace(hour=0, minute=0, second=0, microsecond=0) + _OFFSET_LOCAL
     fin = inicio + timedelta(days=1)
 
     return _actividad_rango(inicio, fin, fecha or inicio.strftime("%Y-%m-%d"), db)
+
+
+def _ediciones_reales(inicio: datetime, fin: datetime, db: Session) -> tuple[set, dict]:
+    """IDs editados por usuario en el rango, con el detalle de qué cambió."""
+    from app.models.auditoria import Auditoria
+    import json
+
+    eventos = (
+        db.query(Auditoria)
+        .filter(
+            Auditoria.tipo.in_(["producto_actualizado", "producto_desactivado"]),
+            Auditoria.created_at >= inicio, Auditoria.created_at < fin,
+        )
+        .all()
+    )
+    ids: set = set()
+    cambios: dict = {}
+    for e in eventos:
+        try:
+            detalle = json.loads(e.detalle) if e.detalle else {}
+        except (ValueError, TypeError):
+            continue
+        pid = detalle.get("producto_id")
+        if not pid:
+            continue
+        ids.add(pid)
+        campos = detalle.get("campos_actualizados") or []
+        if campos:
+            etiquetas = {
+                "precio_venta": "precio de venta", "precio_costo": "precio de costo",
+                "nombre": "nombre", "categoria_id": "categoría", "sector_id": "sector",
+                "stock_minimo": "stock mínimo", "activo": "activo",
+            }
+            cambios[pid] = ", ".join(etiquetas.get(c, c) for c in campos[:3])
+        else:
+            cambios[pid] = "editado"
+    return ids, cambios
+
+
+def _productos_vendidos(inicio: datetime, fin: datetime, db: Session) -> set:
+    """IDs con ventas en el rango (su updated_at se mueve por el descuento de stock)."""
+    filas = (
+        db.query(VentaItem.producto_id)
+        .join(Venta, VentaItem.venta_id == Venta.id)
+        .filter(Venta.fecha >= inicio, Venta.fecha < fin)
+        .distinct()
+        .all()
+    )
+    return {f[0] for f in filas}
 
 
 def _actividad_rango(inicio: datetime, fin: datetime, label: str, db: Session) -> RespuestaData:
@@ -113,14 +169,17 @@ def _actividad_rango(inicio: datetime, fin: datetime, label: str, db: Session) -
             ]
         })
 
-    # Productos creados/modificados
+    # Productos creados/modificados.
+    # Ojo: una VENTA también mueve producto.updated_at (descuenta stock), así que
+    # "modificados" se arma con la auditoría de edición real + los que cambiaron
+    # sin venta en el rango. Si no, cada producto vendido aparecía modificado.
     prod_nuevos = (
         db.query(Producto)
         .filter(Producto.created_at >= inicio, Producto.created_at < fin)
         .order_by(Producto.created_at.desc())
         .all()
     )
-    prod_modif = (
+    prod_modif_candidatos = (
         db.query(Producto)
         .filter(
             Producto.updated_at >= inicio, Producto.updated_at < fin,
@@ -129,6 +188,12 @@ def _actividad_rango(inicio: datetime, fin: datetime, label: str, db: Session) -
         .order_by(Producto.updated_at.desc())
         .all()
     )
+    editados, cambios = _ediciones_reales(inicio, fin, db)
+    vendidos = _productos_vendidos(inicio, fin, db)
+    prod_modif = [
+        p for p in prod_modif_candidatos
+        if p.id in editados or p.id not in vendidos
+    ]
 
     # Clientes nuevos
     cli_nuevos = (
@@ -150,7 +215,12 @@ def _actividad_rango(inicio: datetime, fin: datetime, label: str, db: Session) -
         "caja": {
             "movimientos": caja_data,
             "ingresos_totales": sum(m.monto for m in movs_caja if m.tipo == "ingreso"),
-            "egresos_totales": sum(m.monto for m in movs_caja if m.tipo == "egreso"),
+            # Los egresos externos (pago particular, paga patronal) van en el
+            # historial pero no son plata de las cajas del sistema.
+            "egresos_totales": sum(
+                m.monto for m in movs_caja
+                if m.tipo == "egreso" and m.afecta_caja
+            ),
         },
         "compras": {
             "recibidas": len(compras),
@@ -163,6 +233,7 @@ def _actividad_rango(inicio: datetime, fin: datetime, label: str, db: Session) -
                               "created_at": p.created_at.isoformat() if p.created_at else None}
                              for p in prod_nuevos],
             "modificados_lista": [{"id": p.id, "nombre": p.nombre, "codigo_barras": p.codigo_barras,
+                                    "cambio": cambios.get(p.id, "editado"),
                                     "updated_at": p.updated_at.isoformat() if p.updated_at else None}
                                    for p in prod_modif],
         },

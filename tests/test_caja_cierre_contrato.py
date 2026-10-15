@@ -25,6 +25,7 @@ RAIZ_FRONTS = Path(__file__).resolve().parent.parent / "frontend" / "src"
 CAJA_VIEW = RAIZ_FRONTS / "views" / "CajaView.vue"
 POS_VIEW = RAIZ_FRONTS / "views" / "POSView.vue"
 ARQUEO = RAIZ_FRONTS / "components" / "caja" / "ArqueoMedios.vue"
+APERTURA_MODAL = RAIZ_FRONTS / "components" / "caja" / "AperturaCajaModal.vue"
 CONTADOR_TRANSFERENCIAS = RAIZ_FRONTS / "components" / "caja" / "ContadorTransferenciasModal.vue"
 ROUTER_CAJA = Path(__file__).resolve().parent.parent / "app" / "routers" / "caja.py"
 
@@ -36,11 +37,11 @@ def _texto(path):
 
 
 def test_archivos_de_caja_existen():
-    for path in (CAJA_VIEW, POS_VIEW, ARQUEO, CONTADOR_TRANSFERENCIAS, ROUTER_CAJA):
+    for path in (CAJA_VIEW, POS_VIEW, ARQUEO, APERTURA_MODAL, CONTADOR_TRANSFERENCIAS, ROUTER_CAJA):
         assert path.exists(), f"falta {path}"
 
 
-@pytest.mark.parametrize("path", [CAJA_VIEW, POS_VIEW, ARQUEO, CONTADOR_TRANSFERENCIAS])
+@pytest.mark.parametrize("path", [CAJA_VIEW, POS_VIEW, ARQUEO, APERTURA_MODAL, CONTADOR_TRANSFERENCIAS])
 def test_archivos_de_caja_sin_mojibake(path):
     """El cierre de caja se edita a mano y una doble codificación se cuela sin
     romper el build: solo queda la palabra corrupta en pantalla."""
@@ -72,9 +73,14 @@ def test_cuentas_digitales_no_se_precargan(vista, funcion):
         f"anterior ({precarga}); deben quedar en 0"
     )
 
-    # El 0 por defecto tiene que estar explícito, no implícito.
-    assert re.search(r"MEDIOS_CUENTA\.forEach\(m\s*=>\s*\{\s*saldos\[m\]\s*=\s*0\s*\}\)", bloque), (
-        f"{vista}: las cuentas no arrancan en 0"
+
+def test_cuentas_digitales_arrancan_en_cero():
+    """El 0 de las cuentas tiene que ser explícito y vivir en el componente de
+    apertura, que es el único que arma ese formulario."""
+    texto = _texto(APERTURA_MODAL)
+    assert "cuentasEnCero()" in texto, "el modal de apertura no inicializa las cuentas en 0"
+    assert "Object.assign(saldos_cuentas, cuentasEnCero())" in texto, (
+        "al reabrir el modal las cuentas conservan el saldo cargado la vez anterior"
     )
 
 
@@ -85,11 +91,27 @@ def test_saldo_anterior_solo_como_referencia(vista, funcion):
     texto = _texto(funcion)
     guarda = "saldosUltimosCuentas" in texto
     if guarda:
-        assert "ayer" in texto, f"{vista}: se guarda el saldo anterior pero no se muestra"
+        # El saldo se pasa al modal, que es el único que lo muestra.
+        assert "saldos-ultimos" in texto, (
+            f"{vista}: se guarda el saldo anterior pero no se pasa al modal"
+        )
     else:
         assert "saldos-cuentas" not in texto, (
             f"{vista}: se consulta el saldo del cierre anterior y se descarta"
         )
+
+
+def test_el_saldo_anterior_se_muestra_a_la_vista():
+    """Guardarlo en un ref y no mostrarlo es lo mismo que no guardarlo: el
+    botón "ayer" es la única forma de usar ese número."""
+    texto = _texto(APERTURA_MODAL)
+    assert "ayer" in texto, "el modal de apertura no muestra el saldo de ayer"
+    assert re.search(r"saldosUltimos\[cuenta\.valor\] > 0", texto), (
+        "el botón de cargar el saldo de ayer no se muestra solo cuando hay saldo"
+    )
+    assert re.search(
+        r'@click="saldos_cuentas\[cuenta\.valor\] = saldosUltimos\[cuenta\.valor\]"', texto
+    ), "el saldo de ayer no se puede cargar con un clic"
 
 
 # --- Conteo de medios: efectivo por denominación, cuentas por transferencia ---
@@ -172,10 +194,34 @@ def test_extraccion_nunca_supera_el_efectivo_esperado():
 
 def test_extraccion_se_deshabilita_sin_monto():
     texto = _texto(ARQUEO)
-    puede = re.search(r"const puedeExtraer = computed\(\(\)\s*=>\s*(.*?)\)\n", texto)
-    assert puede, "ArqueoMedios no deshabilita el botón de extracción"
-    assert "porExtraer.value <= 0" in puede.group(1), (
+    bloqueado = re.search(r"const extraerBloqueado = computed\(\(\)\s*=>\s*(.*?)\)\n", texto)
+    assert bloqueado, "ArqueoMedios no deshabilita el botón de extracción"
+    assert "porExtraer.value <= 0" in bloqueado.group(1), (
         "se puede registrar una extracción de 0"
+    )
+    # El computed es "no se puede": el disabled del botón va sin negar.
+    assert re.search(
+        r':disabled="(extraerBloqueado|pagoBloqueado)"', texto
+    ), "el disabled de un botón bloqueado está negado: queda invertido"
+
+
+def test_pago_a_proveedor_se_deshabilita_sin_datos():
+    """El computed es "no se puede pagar" (falta monto, nombre o la caja está
+    bloqueada). Con el disabled negado el botón quedaba apagado cuando el form
+    estaba completo y encendido cuando estaba incompleto, donde además la
+    función lo ignora: nunca llegaba a registrarse."""
+    texto = _texto(ARQUEO)
+    bloqueado = re.search(r"const pagoBloqueado = computed\(\(\)\s*=>\s*(.*?)\n\)", texto, re.S)
+    assert bloqueado, "ArqueoMedios no tiene el estado bloqueado del pago"
+    cuerpo = bloqueado.group(1)
+    assert "props.disabled" in cuerpo, "el pago no respeta el bloqueo de la caja"
+    assert "pagoMonto.value" in cuerpo, "el pago no valida el monto"
+    assert "pagoNombreEfectivo.value" in cuerpo, "el pago no valida el nombre"
+    assert re.search(r":disabled=\"pagoBloqueado\"", texto), (
+        "el botón de pago sigue con el disabled invertido"
+    )
+    assert re.search(r"if \(pagoBloqueado\.value\) return", texto), (
+        "registrarPago no guarda contra el estado bloqueado"
     )
 
 

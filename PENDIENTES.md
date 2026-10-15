@@ -47,6 +47,28 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 
 ## ✅ Completados recientemente
 
+### Ronda de 19 bugs — Fase A (rápidos) + Fase B (caja/POS) — 15/10/2026
+El dueño mandó 19 arreglos y mejoras. Se trabajaron en dos fases y **ambas quedaron cerradas**. Queda abierta la **Fase C (15, 16, 18, 19): hay que sentarse a decidir el diseño antes de tocar código**.
+
+**Fase A — rápidos (6, 7, 10, 11, 12, 13, 14, 17)**
+
+- **6 y 7 · Sidebar:** "Cargar Mercadería" y "Sectores" se mudaron de Gestión a la sección **Vista Móvil**, que es donde viven realmente las pantallas de piso
+- **10 · Fecha de los movimientos:** la tabla "Movimientos del Día" mostraba el ISO crudo de la DB en UTC (`2026-10-14T15:32:00Z`). Pasa por `formatFechaHora` (hora Argentina)
+- **11 · "Hoy" en el Calendario:** `/dia` comparaba contra la fecha UTC, así que a las 20:00 AR "hoy" seguía siendo ayer y el día se veía vacío. `_OFFSET_LOCAL = +3h` aplicado en **las dos ramas** del endpoint y `formatDate` con `toLocaleDateString('sv')` para que el input reciba `yyyy-mm-dd`
+- **12 · "Productos modificados":** el candidato era cualquier `updated_at` movido (también lo que mueve el stock al vender) y la columna de *qué cambió* leía `code`, un campo que el backend no manda, así que salía siempre vacía. Ahora se cruza con la **auditoría** (`producto_actualizado` / `producto_desactivado`): entra si hubo edición real o si no se vendió en el período, se explica con `cambio` y los productos desactivados también cuentan
+- **13 · Sectores en Compras:** `fetchSectores()` no se llamaba en `onMounted`, así que los select de sector de cada item arrancaban vacíos
+- **14 · Alta rápida de proveedor:** pedía CUIT en un campo de celular. `newProvCelular` reemplaza a `newProvCuit` y guarda `telefono`
+- **17 · Desactivar usuarios:** se podía dejar al **admin** (o a uno mismo) sin acceso. `_validar_desactivacion` lo prohíbe, existe `PATCH /{id}/toggle`, la fila mapea `role/active/lastAccess`, el rol se pinta en minúsculas y la acción desaparece sobre el admin protegido
+
+**Fase B — caja y POS (1, 2, 3, 4, 5, 8, 9)**
+
+- **1, 2, 3 · Un solo modal de apertura (`components/caja/AperturaCajaModal.vue`):** el POS tenía su propio modal, desactualizado (sugiere `ultimoCierre.monto`, que **incluye** las cuentas digitales que no están en el cajón, y no tiene "Contar billetes"). Ahora es el mismo componente en Caja y en POS. El aviso aclara que el último cierre es **solo el efectivo del cajón**, y el sugerido usa `saldo_efectivo`. El flujo quedó en lo que el dueño lo pensó: **"Conté en el cajón"** → **"Dejo en caja (fondo)"** → **"Te llevás (retiro)"** calculado solo; "Dejo" arranca igual a lo contado, así que confirmar sin mirar no retira nada. Las cuentas digitales siguen abriendo en 0, con el saldo de ayer al lado como referencia y un clic para copiarlo
+- **4 · La doble resta del retiro:** el form mandaba `monto_inicial = contado − retiro` **y además** `monto_retiro`, y el backend creaba el egreso encima → el arqueo nacía esperando el retiro restado dos veces (ningún test lo cubría, porque `monto_retiro > 0` no se probaba). Ahora manda `monto_inicial = max(contado, dejo)` y `monto_retiro = max(0, contado − dejo)`, así que el esperado arranca igual al fondo. Además: NaN en el arqueo cuando el efectivo esperado coincidía con "Dejo", y el `:disabled` de **"Registrar pago" estaba negado** — el botón salía apagado cuando el form estaba completo y encendido cuando no, donde la función lo ignora. Nunca llegó a registrarse
+- **5 · Egresos que no afectan a las cajas:** nueva columna `movimientos_caja.afecta_caja` (migración en `_migrate_new_columns`, `DEFAULT 1` = todo lo viejo queda como estaba). En **Nuevo Movimiento → Egreso** aparece "¿Sale de una caja del sistema?". Si la respuesta es "No" (pago particular, paga patronal, giro desde cuenta propia), el movimiento queda en el historial con badge **externo** pero **no baja el esperado de ningún medio**: si lo bajara, el cajero cerraría con una diferencia de plata que nunca estuvo en el cajón. El filtro está en los 4 cálculos de saldos (`_saldos_de_sesion`, `obtener_saldo_por_medio`, `obtener_resumen_por_medio_pago`, `obtener_detalle_medio_sesion`), en los reportes de `/reportes` y `/dia`, y en `egresos_totales` del Calendario
+- **8 · Medios de pago en mobile:** el POS mostraba solo siglas ("EFP", "DÉB"). Grid `grid-cols-3 sm:grid-cols-7` con las etiquetas siempre visibles y los números ocultos en pantalla chica
+- **9 · Configuración del POS con una sola verdad:** `GET/PUT /api/config/pos` pasó a claves camelCase, se agregó `calculadoraAlcance` / `calculadoraHistorial` y es accesible para el cajero (antes exigía admin, así que el POS no podía leerla). El POS la trae en `onMounted` y la manda a `posPrefs.setEnabledPaymentMethods`; un `watch` sobre `mediosPago` baja del carrito un medio que quedó apagado. El localStorage quedó como **caché**, no como fuente
+- **Tests:** 12 nuevos (`tests/test_caja_egresos_externos.py` + las guardas de contrato de ArqueoMedios y del modal de apertura). Suite: **750 passed**
+
 ### Historial de Caja: sesiones mal agrupadas y filtro de fechas corrido — 15/10/2026
 El dueño reportó el resumen del Historial de Caja con datos imposibles: una sesión con Apertura $0 y Cierre $156.000 (que no le correspondía), otras "Abierta" con Ingresos $0 pese a ventas reales. Causa raíz y fix:
 
@@ -784,6 +806,7 @@ Además, dos guards defensivos: `_clean_name` y `_map_categoria` reventaban con 
 ## 📋 Pendientes activos
 
 ### Alta prioridad
+- **Ronda de 19 bugs — Fase C (15, 16, 18, 19)** — las fases A y B quedaron cerradas el 15/10/2026 (ver arriba). Estos 4 **no se tocaron a propósito**: son cambios de diseño (no arreglos de código) y hay que definirlos con el dueño antes de empezar. Pedir la lista y acordar alcance en la próxima sesión
 - **MercadoPago: select de ciudad por provincia** — `app/services/mercadopago_service.py` ya tiene provincia como select (24 valores válidos); falta el segundo select de ciudad/localidad que dependa de la provincia elegida, porque MP rechaza si el `city_name` no es válido
 - **Seguridad clave privada AFIP** — la clave se guarda encriptada en la DB con una key hardcodeada (`"erp-afip-key-encryption-v1"`). Si alguien accede a DB + código fuente puede descifrarla. **Solución propuesta:** no guardar clave privada en DB — solo descargar (botón "Descargar .key" ya existe) y que el usuario la guarde localmente. Alternativa: secrets manager (AWS Secrets Manager, etc.). Requiere re-flujo de setup de AFIP.
 

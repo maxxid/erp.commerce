@@ -61,6 +61,17 @@ def _es_apertura_de_caja(m: MovimientoCaja) -> bool:
     return m.tipo == "apertura" and not m.medio_pago
 
 
+def es_egreso_externo(m: MovimientoCaja) -> bool:
+    """True si el egreso no sale de ninguna caja del sistema.
+
+    El dueño registra pagos que no pasan por caja (pago particular, paga
+    patronal, giro desde cuenta propia). Van al historial y se pueden ver, pero
+    no restan de ningún esperado: si restaran, el cajero cerraría la caja con
+    una diferencia de plata que nunca estuvo ahí.
+    """
+    return m.tipo == "egreso" and not bool(m.afecta_caja)
+
+
 def _fila_saldo() -> dict:
     """Fila vacía de saldos por medio de pago."""
     return {"apertura": 0.0, "ingresos": 0.0, "egresos": 0.0, "esperado": 0.0}
@@ -495,6 +506,9 @@ def _saldos_de_sesion(db: Session, apertura: MovimientoCaja, cierre_id: int, suc
     fila["apertura"] += apertura.monto or 0.0
 
     for m in _movimientos_de_sesion(db, apertura, cierre_id, sucursal_id):
+        # Un egreso que no sale de ninguna caja no mueve ningún esperado.
+        if es_egreso_externo(m):
+            continue
         if m.tipo == "apertura" and m.medio_pago:
             fila = saldos.setdefault(m.medio_pago, _fila_saldo())
             fila["apertura"] += m.monto or 0.0
@@ -973,17 +987,22 @@ def registrar_egreso(
     referencia_id: Optional[int] = None,
     sucursal_id: int = 1,
     medio_pago: Optional[str] = None,
+    afecta_caja: bool = True,
 ) -> MovimientoCaja:
     """Registra un egreso de dinero (ej: pago a proveedor, retiro, recarga).
 
     `medio_pago` indica de qué cuenta sale el dinero (para las recargas, la cuenta
     digital desde la que se carga). Si se deja None se comporta como antes.
+
+    `afecta_caja=False` marca un pago que no sale de ninguna caja del sistema:
+    se registra y se puede ver, pero no baja el esperado de ningún medio.
     """
     movimiento = MovimientoCaja(
         tipo="egreso",
         monto=monto,
         descripcion=descripcion,
         medio_pago=medio_pago,
+        afecta_caja=afecta_caja,
         referencia_tipo=referencia_tipo,
         referencia_id=referencia_id,
         usuario_id=usuario_id,
@@ -1016,6 +1035,9 @@ def obtener_saldo_por_medio(db: Session, sucursal_id: int = 1) -> dict:
 
     saldos: dict = {}
     for m in movimientos:
+        # Un egreso que no sale de ninguna caja no mueve ningún esperado.
+        if es_egreso_externo(m):
+            continue
         # Cierre total: fin del ciclo
         if m.tipo == "cierre" and not m.medio_pago:
             break
@@ -1159,6 +1181,9 @@ def obtener_resumen_por_medio_pago(db: Session, sucursal_id: int = 1) -> dict:
     egresos_total = 0
     egresos_por_medio: dict = {}
     for m in movimientos:
+        # Un egreso que no sale de ninguna caja no mueve ningún esperado.
+        if es_egreso_externo(m):
+            continue
         # Cierre total: fin de la sesión actual
         if m.tipo == "cierre" and not m.medio_pago:
             break
@@ -1409,6 +1434,9 @@ def obtener_detalle_medio_sesion(
     seleccion: List[tuple] = []
     for m in movimientos:
         if (m.medio_pago or "efectivo") != medio_pago:
+            continue
+        # Un egreso que no sale de ninguna caja no mueve ningún esperado.
+        if es_egreso_externo(m):
             continue
         if m.tipo == "apertura":
             # La apertura del cajón se agrega aparte (es de la sesión, no un

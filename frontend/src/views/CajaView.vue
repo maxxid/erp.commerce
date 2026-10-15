@@ -62,8 +62,14 @@
       </div>
       <div class="overflow-x-auto">
         <BaseTable v-if="movements.length" :columns="movementColumns" :rows="movements">
+          <template #fecha="{ row }">
+            <span class="text-xs font-mono-data">{{ formatFechaHora(row.fecha) }}</span>
+          </template>
           <template #tipo="{ row }">
-            <BaseBadge :variant="row.tipo === 'Ingreso' ? 'success' : 'danger'" size="xs">{{ row.tipo }}</BaseBadge>
+            <span class="inline-flex items-center gap-1">
+              <BaseBadge :variant="row.tipo === 'Ingreso' ? 'success' : 'danger'" size="xs">{{ row.tipo }}</BaseBadge>
+              <BaseBadge v-if="row.externo" variant="warning" size="xs" title="No salió de ninguna caja del sistema: no modifica el esperado de ningún medio">externo</BaseBadge>
+            </span>
           </template>
           <template #monto="{ row }">
             <span class="font-mono-data font-bold" :class="row.tipo === 'Ingreso' ? 'text-emerald-600' : 'text-rose-600'">
@@ -690,7 +696,7 @@
             :proveedores="proveedores"
             :bloquear-cerrados="false"
             :cierre-id="cierreSesionId"
-            @contar="abrirContadorBilletes('arqueo', $event)"
+            @contar="abrirContadorBilletes($event)"
             @contar-medio="abrirContadorTransferencias($event)"
             @agregar-retiro="agregarRetiroSesion"
             @borrar-retiro="borrarRetiro($event, true)"
@@ -749,6 +755,13 @@
           Para un egreso indicá de qué cuenta salió el dinero (ej: una transferencia de MercadoPago al banco).
         </p>
         <BaseInput v-model="nuevoMovimiento.comentario" label="Comentario" placeholder="Descripción del movimiento" />
+        <BaseSelect
+          v-if="nuevoMovimiento.tipo === 'Egreso'"
+          v-model="nuevoMovimiento.afectaCaja"
+          label="¿Sale de una caja del sistema?"
+          :options="OPCIONES_AFECTA_CAJA"
+          hint="Si la plata no salió de ninguna caja (pago particular, paga patronal), elegí 'No': queda en el historial pero no cambia el esperado de ningún medio."
+        />
         <div class="flex gap-2 pt-2">
           <BaseButton variant="secondary" size="sm" block @click="showNuevoMovimiento = false">Cancelar</BaseButton>
           <BaseButton :loading="saving" :disabled="saving" variant="primary" size="sm" block @click="registrarMovimiento">
@@ -759,145 +772,14 @@
       </div>
     </BaseModal>
 
-    <!-- Modal Apertura de Caja -->
-    <BaseModal v-model="showAperturaModal" title="Apertura de Caja" size="md" :hide-footer="true">
-      <div class="space-y-5">
-        <div v-if="cajaStore.ultimoCierre && cajaStore.ultimoCierre.monto > 0" class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4">
-          <div class="flex items-center gap-2 mb-2">
-            <i class="fa-solid fa-info-circle text-amber-500"></i>
-            <span class="font-semibold text-amber-700 dark:text-amber-300 text-sm">Último cierre detectado</span>
-            <BaseBadge v-if="cajaStore.ultimoCierre.fue_automatico" variant="warning" size="xs">Automático</BaseBadge>
-          </div>
-          <p class="text-xs text-amber-600 dark:text-amber-400 mb-2">
-            Monto del último cierre: <span class="font-mono-data font-bold">{{ fc(cajaStore.ultimoCierre.monto) }}</span>
-          </p>
-          <p v-if="cajaStore.ultimoCierre.fecha_local_str" class="text-[10px] text-amber-500 dark:text-amber-400">
-            Fecha: {{ cajaStore.ultimoCierre.fecha_local_str }}
-          </p>
-        </div>
-
-        <div class="space-y-4">
-          <div>
-            <label class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block mb-1">Monto inicial sugerido</label>
-            <div class="relative">
-              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold">$</span>
-              <input
-                v-model.number="aperturaForm.monto_inicial"
-                type="number"
-                min="0"
-                step="100"
-                class="w-full pl-7 pr-3 py-2.5 text-lg font-mono-data font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition"
-                placeholder="0.00"
-              />
-            </div>
-            <div class="flex items-center justify-between gap-2 mt-1">
-              <p class="text-[10px] text-slate-400">Monto con el que inicia la caja (efectivo)</p>
-              <BaseButton variant="ghost" size="xs" @click="abrirContadorBilletes('apertura')">
-                <i class="fa-solid fa-money-bill-wave"></i> Contar billetes
-              </BaseButton>
-            </div>
-          </div>
-
-          <div class="border-t border-slate-200 dark:border-slate-700 pt-4">
-            <label class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block mb-1">Retiro de efectivo (opcional)</label>
-            <div class="relative">
-              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold">$</span>
-              <input
-                v-model.number="aperturaForm.monto_retiro"
-                type="number"
-                min="0"
-                step="100"
-                class="w-full pl-7 pr-3 py-2.5 text-lg font-mono-data font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition"
-                placeholder="0.00"
-              />
-            </div>
-            <p class="text-[10px] text-slate-400 mt-1">Efectivo que se aparta/retira al abrir (ej: fondo para cambio)</p>
-          </div>
-
-          <div v-if="aperturaForm.monto_retiro > 0">
-            <label class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block mb-1">Motivo del retiro</label>
-            <input
-              v-model="aperturaForm.motivo_retiro"
-              type="text"
-              class="w-full px-3 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition"
-              placeholder="Ej: Fondo para cambio, Retiro de efectivo..."
-            />
-          </div>
-
-          <div class="border-t border-slate-200 dark:border-slate-700 pt-4">
-            <div class="flex items-center gap-2 mb-1">
-              <label class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Saldos iniciales de cuentas digitales</label>
-              <BaseButton variant="ghost" size="xs" @click="abrirCuentasDigitales = !abrirCuentasDigitales">
-                <i :class="abrirCuentasDigitales ? 'fa-solid fa-chevron-up' : 'fa-solid fa-chevron-down'"></i>
-                {{ abrirCuentasDigitales ? 'Ocultar' : 'Mostrar' }}
-              </BaseButton>
-            </div>
-            <p class="text-[10px] text-slate-400 mb-2">
-              Cargá el saldo que muestra hoy cada app. Arranca en 0: se anota lo que ves
-              ahora, no lo que quedó ayer.
-            </p>
-            <div v-if="abrirCuentasDigitales" class="space-y-2">
-              <div v-for="cuenta in cuentasDigitales" :key="cuenta.valor" class="flex items-center gap-2">
-                <div class="flex-1">
-                  <div class="flex items-center justify-between gap-2">
-                    <label class="text-xs text-slate-600 dark:text-slate-300">{{ cuenta.label }}</label>
-                    <!-- El saldo de ayer, a la vista pero no cargado. -->
-                    <button
-                      v-if="saldosUltimosCuentas[cuenta.valor] > 0"
-                      type="button"
-                      class="text-[10px] text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 transition shrink-0"
-                      title="Cargar el saldo con el que quedó en el último cierre"
-                      @click="aperturaForm.saldos_cuentas[cuenta.valor] = saldosUltimosCuentas[cuenta.valor]"
-                    >
-                      ayer {{ fc(saldosUltimosCuentas[cuenta.valor]) }}
-                    </button>
-                  </div>
-                  <div class="relative mt-0.5">
-                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold">$</span>
-                    <input
-                      v-model.number="aperturaForm.saldos_cuentas[cuenta.valor]"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      inputmode="decimal"
-                      class="w-full pl-7 pr-3 py-2 text-sm font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition"
-                      placeholder="0.00"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-            <p v-else-if="totalSaldosCuentasApertura > 0" class="text-[10px] text-slate-500">
-              Cuentas a controlar: {{ cuentasConSaldoApertura }} — total {{ fc(totalSaldosCuentasApertura) }}
-            </p>
-          </div>
-
-          <div class="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
-            <div class="flex items-center justify-between">
-              <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Monto final de apertura (cajón)</span>
-              <span class="font-mono-data font-bold text-2xl text-brand-600 dark:text-brand-400">{{ fc(montoFinalApertura) }}</span>
-            </div>
-            <p v-if="aperturaForm.monto_retiro > 0" class="text-[10px] text-slate-400 mt-1 text-right">
-              {{ fc(aperturaForm.monto_inicial) }} - {{ fc(aperturaForm.monto_retiro) }} = {{ fc(montoFinalApertura) }}
-            </p>
-            <div v-if="totalSaldosCuentasApertura > 0" class="flex items-center justify-between mt-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-              <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Total a controlar (cajón + cuentas)</span>
-              <span class="font-mono-data font-bold text-lg text-indigo-600 dark:text-indigo-400">{{ fc(montoFinalApertura + totalSaldosCuentasApertura) }}</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="flex gap-3 pt-2">
-          <BaseButton variant="secondary" class="flex-1" :disabled="opening" @click="showAperturaModal = false">
-            Cancelar
-          </BaseButton>
-          <BaseButton variant="primary" class="flex-1" :loading="opening" :disabled="opening" @click="confirmarAperturaCaja">
-            <i :class="opening ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-lock-open'"></i>
-            {{ opening ? 'Abriendo...' : 'Abrir Caja' }}
-          </BaseButton>
-        </div>
-      </div>
-    </BaseModal>
+    <!-- Modal Apertura de Caja (mismo componente que usa el POS) -->
+    <AperturaCajaModal
+      v-model="showAperturaModal"
+      :ultimo-cierre="cajaStore.ultimoCierre"
+      :saldos-ultimos="saldosUltimosCuentas"
+      :loading="opening"
+      @confirmar="confirmarAperturaCaja"
+    />
 
     <!-- Modal Cierre de Caja -->
     <BaseModal v-model="showCierreModal" title="Cierre de Caja" size="lg" :hide-footer="true">
@@ -932,7 +814,7 @@
           :guardando-retiro="guardandoRetiroActual"
           :guardando-pago="guardandoPago"
           :proveedores="proveedores"
-          @contar="abrirContadorBilletes('arqueo', $event)"
+          @contar="abrirContadorBilletes($event)"
           @contar-medio="abrirContadorTransferencias($event)"
           @agregar-retiro="agregarRetiroCierreActual"
           @borrar-retiro="borrarRetiro($event, false)"
@@ -1069,6 +951,8 @@ import BaseTable from '@/components/ui/BaseTable.vue'
 import BaseBadge from '@/components/ui/BaseBadge.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import ContadorBilletesModal from '@/components/caja/ContadorBilletesModal.vue'
+import AperturaCajaModal from '@/components/caja/AperturaCajaModal.vue'
+import { MEDIOS_CUENTA } from '@/composables/cajaCuentas'
 import ContadorTransferenciasModal from '@/components/caja/ContadorTransferenciasModal.vue'
 import ArqueoMedios from '@/components/caja/ArqueoMedios.vue'
 import { useSounds } from '@/composables/useSounds'
@@ -1095,28 +979,15 @@ const showCierreModal = ref(false)
 const showAperturaModal = ref(false)
 const cierreComentario = ref('')
 
-const aperturaForm = reactive({
-  monto_inicial: 0,
-  monto_retiro: 0,
-  motivo_retiro: '',
-  saldos_cuentas: {},
-})
-
-const abrirCuentasDigitales = ref(false)
-// Saldo con el que quedó cada cuenta en el último cierre. Se muestra como
-// referencia al lado del input, pero nunca se precarga: las cuentas abren en 0.
-const saldosUltimosCuentas = ref({})
-
-const montoFinalApertura = computed(() => {
-  return Math.max(0, aperturaForm.monto_inicial - aperturaForm.monto_retiro)
-})
-
 const showContadorBilletes = ref(false)
 const showContadorTransferencias = ref(false)
 const contadorContexto = ref(null)
 
+// Saldo con el que quedó cada cuenta digital en el último cierre. Va al modal
+// de apertura solo como referencia: las cuentas arrancan en 0.
+const saldosUltimosCuentas = ref({})
+
 const TITULOS_CONTADOR = {
-  apertura: 'Contar efectivo — Apertura de caja',
   arqueo: 'Contar efectivo — Cierre de caja',
 }
 
@@ -1125,19 +996,17 @@ const tituloContadorBilletes = computed(() => TITULOS_CONTADOR[contadorContexto.
 const valorActualContador = computed(() => {
   const ctx = contadorContexto.value
   if (!ctx) return 0
-  if (ctx === 'apertura') return Number(aperturaForm.monto_inicial) || 0
   return Number(ctx?.metodo?.montoReal) || 0
 })
 
-function abrirContadorBilletes(contexto, metodo = null) {
-  contadorContexto.value = metodo ? { contexto, metodo } : contexto
+function abrirContadorBilletes(metodo) {
+  contadorContexto.value = { contexto: 'arqueo', metodo }
   showContadorBilletes.value = true
 }
 
 function aplicarConteoBilletes(total) {
   const ctx = contadorContexto.value
-  if (ctx === 'apertura') aperturaForm.monto_inicial = total
-  else if (ctx?.metodo) ctx.metodo.montoReal = total
+  if (ctx?.metodo) ctx.metodo.montoReal = total
   toast.success(`Total contado: ${fc(total)}`)
 }
 
@@ -1163,7 +1032,7 @@ function aplicarConteoTransferencias(total) {
 // contador de billetes y este es para las cuentas.
 function abrirContadorTransferencias(metodo) {
   if (metodo?.valor === 'efectivo') {
-    abrirContadorBilletes('arqueo', metodo)
+    abrirContadorBilletes(metodo)
     return
   }
   contadorContexto.value = { contexto: 'arqueo', metodo }
@@ -1227,9 +1096,6 @@ const MEDIO_LABELS = {
   cta_corriente: 'Cta. Cte.',
 }
 
-// Cuentas digitales: el saldo vive en la app del proveedor, no en el cajón
-const MEDIOS_CUENTA = ['smartpoint', 'mercadopago_qr', 'mercadopago_pos', 'qr_interop']
-
 const MEDIO_COLORS = {
   efectivo: 'bg-emerald-500',
   debito: 'bg-blue-500',
@@ -1237,26 +1103,20 @@ const MEDIO_COLORS = {
   transferencia: 'bg-amber-500',
 }
 
-const cuentasDigitales = computed(() => MEDIOS_CUENTA.map(v => ({ valor: v, label: MEDIO_LABELS[v] || v })))
-
 const cuentasConSaldo = computed(() =>
   Object.entries(cajaStore.saldos_cuentas || {})
     .map(([medio, saldo]) => ({ medio, label: MEDIO_LABELS[medio] || medio, saldo }))
     .filter(c => c.saldo)
 )
 
-const totalSaldosCuentasApertura = computed(() =>
-  Object.values(aperturaForm.saldos_cuentas || {}).reduce((sum, v) => sum + (Number(v) || 0), 0)
-)
+const nuevoMovimiento = reactive({ tipo: 'Ingreso', monto: 0, metodo: 'Efectivo', comentario: '', afectaCaja: '1' })
 
-const cuentasConSaldoApertura = computed(() =>
-  cuentasDigitales.value
-    .filter(c => (Number(aperturaForm.saldos_cuentas[c.valor]) || 0) > 0)
-    .map(c => c.label)
-    .join(', ')
-)
-
-const nuevoMovimiento = reactive({ tipo: 'Ingreso', monto: 0, metodo: 'Efectivo', comentario: '' })
+// Un egreso puede no salir de ninguna caja del sistema. El select manda '1'/'0'
+// porque BaseSelect convierte el valor del <option> a string.
+const OPCIONES_AFECTA_CAJA = [
+  { value: '1', label: 'Sí — sale de una caja' },
+  { value: '0', label: 'No — pago particular (no toca las cajas)' },
+]
 
 // Selector de medio del movimiento manual: incluye las cuentas digitales para
 // poder registrar, por ejemplo, una transferencia de MP al banco.
@@ -1733,6 +1593,8 @@ async function fetchMovimientos() {
         monto: m.monto,
         metodo: MEDIO_LABELS[m.medio_pago] || m.medio_pago || '',
         comentario: m.descripcion || '',
+        // True = el egreso no salió de ninguna caja del sistema.
+        externo: m.afecta_caja === false,
         created_at: m.created_at,
       }))
     }
@@ -1772,79 +1634,43 @@ async function syncData() {
 async function abrirCaja() {
   await cajaStore.fetchUltimoCierre()
   await cargarSaldosCuentasSugeridos()
-
-  // Se sugiere solo el efectivo que quedó en el cajón: el total del cierre suma
-  // también las cuentas digitales, que van por su propia cuenta.
-  const ultimo = cajaStore.ultimoCierre
-  const efectivo = ultimo ? (ultimo.saldo_efectivo ?? ultimo.monto) : 0
-  aperturaForm.monto_inicial = efectivo > 0 ? efectivo : 0
-  aperturaForm.monto_retiro = 0
-  aperturaForm.motivo_retiro = ''
   showAperturaModal.value = true
 }
 
-// Las cuentas digitales abren siempre en 0.
-//
-// Antes se precargaban con el saldo del último cierre, y el resultado era que
-// un clic de más abría la caja con un saldo inventado: si el cajero no miraba
-// el campo y confirmaba directo, el arqueo del día ya nacía con una diferencia
-// que no se explica. El saldo real de la app se escribe a mano; el de ayer
-// queda a la vista como referencia, no como valor.
+// El saldo del último cierre se guarda solo para mostrarlo al lado del input
+// como referencia. Nunca se escribe en el formulario: si se precargara, un clic
+// de más abriría la caja con un saldo que nadie vio, y el arqueo del día nace
+// con una diferencia que no se explica.
 async function cargarSaldosCuentasSugeridos() {
-  const saldos = {}
-  MEDIOS_CUENTA.forEach(m => { saldos[m] = 0 })
+  const saldosUltimos = {}
   try {
     const data = await api.get('/api/caja/saldos-cuentas')
     const sugeridos = data?.saldos || {}
-    // Se guarda aparte, solo para mostrarlo al lado del input.
-    saldosUltimosCuentas.value = {}
     MEDIOS_CUENTA.forEach(m => {
-      if (sugeridos[m] != null) saldosUltimosCuentas.value[m] = Number(sugeridos[m]) || 0
+      if (sugeridos[m] != null) saldosUltimos[m] = Number(sugeridos[m]) || 0
     })
   } catch { /* sin sugeridos: quedan en 0 */ }
-  aperturaForm.saldos_cuentas = saldos
+  saldosUltimosCuentas.value = saldosUltimos
 }
 
-async function confirmarAperturaCaja() {
-  if (aperturaForm.monto_inicial < 0) {
-    toast.error('El monto inicial no puede ser negativo')
-    return
-  }
-  if (aperturaForm.monto_retiro < 0) {
-    toast.error('El monto de retiro no puede ser negativo')
-    return
-  }
-  if (aperturaForm.monto_retiro > aperturaForm.monto_inicial) {
-    toast.error('El monto de retiro no puede ser mayor al monto inicial')
-    return
-  }
-  const saldosCuentas = {}
-  for (const m of MEDIOS_CUENTA) {
-    const v = Number(aperturaForm.saldos_cuentas[m]) || 0
-    if (v < 0) {
-      toast.error(`El saldo inicial de ${MEDIO_LABELS[m]} no puede ser negativo`)
-      return
-    }
-    if (v > 0) saldosCuentas[m] = v
-  }
-
+async function confirmarAperturaCaja(payload) {
   opening.value = true
   try {
     await api.post('/api/caja/apertura', {
-      monto_inicial: montoFinalApertura.value,
-      monto_retiro: aperturaForm.monto_retiro,
-      motivo_retiro: aperturaForm.motivo_retiro,
-      saldos_cuentas: saldosCuentas,
+      monto_inicial: payload.monto_inicial,
+      monto_retiro: payload.monto_retiro,
+      motivo_retiro: payload.motivo_retiro,
+      saldos_cuentas: payload.saldos_cuentas,
     })
     await cajaStore.fetchEstado()
     await fetchMovimientos()
     showAperturaModal.value = false
-    
-    let msg = `Caja abierta con $${montoFinalApertura.value.toLocaleString()}`
-    if (aperturaForm.monto_retiro > 0) {
-      msg += ` (retiro: $${aperturaForm.monto_retiro.toLocaleString()})`
+
+    let msg = `Caja abierta con ${fc(payload.fondo)}`
+    if (payload.monto_retiro > 0) {
+      msg += ` · te llevaste ${fc(payload.monto_retiro)}`
     }
-    const nCuentas = Object.keys(saldosCuentas).length
+    const nCuentas = Object.keys(payload.saldos_cuentas).length
     if (nCuentas) {
       msg += ` · ${nCuentas} cuenta${nCuentas > 1 ? 's' : ''} digital${nCuentas > 1 ? 'es' : ''} a controlar`
     }
@@ -2046,11 +1872,13 @@ async function registrarMovimiento() {
         || (esIngreso ? 'Ingreso manual' : 'Egreso manual'),
       medio_pago: medio,
     }
+    if (!esIngreso) body.afecta_caja = nuevoMovimiento.afectaCaja !== '0'
     await api.post(esIngreso ? '/api/caja/ingreso' : '/api/caja/egreso', body)
     await fetchMovimientos()
     await fetchResumen()
     nuevoMovimiento.monto = 0
     nuevoMovimiento.comentario = ''
+    nuevoMovimiento.afectaCaja = '1'
     showNuevoMovimiento.value = false
     toast.success('Movimiento registrado')
   } catch (e) {

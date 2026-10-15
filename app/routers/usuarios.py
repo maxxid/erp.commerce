@@ -104,6 +104,8 @@ def actualizar(
             raise HTTPException(status_code=400, detail="Rol inválido")
         u.rol = data.rol
     if data.activo is not None:
+        if not data.activo:
+            _validar_desactivacion(u, current_user)
         u.activo = data.activo
     if data.password is not None:
         u.password_hash = hash_password(data.password)
@@ -111,6 +113,41 @@ def actualizar(
     db.commit()
     db.refresh(u)
     return RespuestaData(data=_usuario_to_dict(u), message=f"Usuario {u.username} actualizado")
+
+
+def _validar_desactivacion(u: Usuario, current_user: Usuario) -> None:
+    """El administrador jamás se desactiva (ni a sí mismo ni a otro admin).
+
+    Sin esta guarda, un admin que se desactiva solo queda con la única cuenta
+    capaz de reactivarlo bloqueada.
+    """
+    if u.rol == "admin":
+        raise HTTPException(status_code=400, detail="No se puede desactivar un usuario Administrador")
+    if u.id == current_user.id:
+        raise HTTPException(status_code=400, detail="No podés desactivar tu propio usuario")
+
+
+@router.patch("/{usuario_id}/toggle", response_model=RespuestaData)
+def alternar_activo(
+    usuario_id: int,
+    body: dict = None,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(require_role("admin")),
+):
+    """Activa/desactiva un usuario. El admin no puede desactivarse."""
+    u = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+    if not u:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    nuevo = not u.activo
+    if not nuevo:
+        _validar_desactivacion(u, current_user)
+    u.activo = nuevo
+    db.commit()
+    db.refresh(u)
+    return RespuestaData(
+        data=_usuario_to_dict(u),
+        message=f"Usuario {u.username} {'activado' if nuevo else 'desactivado'}",
+    )
 
 
 @router.delete("/{usuario_id}", response_model=RespuestaBase)
@@ -122,8 +159,7 @@ def desactivar(
     u = db.query(Usuario).filter(Usuario.id == usuario_id, Usuario.activo == True).first()
     if not u:
         raise HTTPException(status_code=404, detail="Usuario no encontrado o ya inactivo")
-    if u.id == current_user.id:
-        raise HTTPException(status_code=400, detail="No podés desactivar tu propio usuario")
+    _validar_desactivacion(u, current_user)
     u.activo = False
     db.commit()
     return RespuestaBase(message=f"Usuario {u.username} desactivado")

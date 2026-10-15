@@ -19,6 +19,11 @@ class MovimientoCaja(Base):
     monto = Column(Float, nullable=False)
     descripcion = Column(String(200), nullable=True)
     medio_pago = Column(String(30), nullable=True)    # efectivo | debito | credito | transferencia
+    # Un egreso puede no salir de ninguna caja del sistema (pago particular del
+    # dueño, paga patronal, giro a proveedor desde cuenta propia). Esos movimientos
+    # quedan registrados y visibles, pero no bajan el esperado de ningún medio:
+    # si lo hicieran, el cajero de turno vería una diferencia que no explica.
+    afecta_caja = Column(Boolean, nullable=False, default=True, server_default="1")
     referencia_tipo = Column(String(20), nullable=True)  # venta | compra | retiro | deposito
     referencia_id = Column(Integer, nullable=True)
     usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)

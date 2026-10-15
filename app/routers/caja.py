@@ -45,6 +45,14 @@ class MovimientoRequest(BaseModel):
     descripcion: str = ""
     sucursal_id: int = 1
     medio_pago: Optional[str] = None
+    afecta_caja: bool = Field(
+        True,
+        description=(
+            "False = el egreso no sale de ninguna caja del sistema (pago "
+            "particular, paga patronal). Queda en el historial pero no baja "
+            "el esperado de ningún medio de pago."
+        ),
+    )
 
     @field_validator("medio_pago")
     @classmethod
@@ -414,10 +422,12 @@ def egreso(
         db, data.monto, data.descripcion or "Egreso manual", user.id,
         sucursal_id=data.sucursal_id,
         medio_pago=data.medio_pago or "efectivo",
+        afecta_caja=data.afecta_caja,
     )
     auditoria_service.registrar(db, user.id, "egreso_caja", None, None,
                                {"monto": data.monto, "descripcion": data.descripcion,
                                 "medio_pago": data.medio_pago or "efectivo",
+                                "afecta_caja": data.afecta_caja,
                                 "sucursal_id": data.sucursal_id})
     return RespuestaData(data={"id": mov.id, "monto": mov.monto}, message="Egreso registrado")
 
@@ -598,7 +608,7 @@ def calendario_caja(
             mp = m.medio_pago or "efectivo"
             r["desglose"][mp] = r["desglose"].get(mp, 0) + (m.monto or 0)
             r["ingresos"] += m.monto or 0
-        elif m.tipo == "egreso":
+        elif m.tipo == "egreso" and not caja_service.es_egreso_externo(m):
             r["egresos"] += m.monto or 0
         elif m.tipo == "cierre" and not m.medio_pago:
             r["n_cierres"] += 1
@@ -729,7 +739,7 @@ def dia_caja(
             if mp in caja_service.MEDIOS_CUENTA:
                 ingresos_cuentas += m.monto or 0
                 saldos_cuentas_dia[mp] = saldos_cuentas_dia.get(mp, 0.0) + (m.monto or 0)
-        elif m.tipo == "egreso":
+        elif m.tipo == "egreso" and not caja_service.es_egreso_externo(m):
             total_egresos += m.monto or 0
             mp = m.medio_pago or "efectivo"
             if mp in caja_service.MEDIOS_CUENTA:
@@ -788,6 +798,8 @@ def movimientos(
         "id": m.id, "tipo": m.tipo, "monto": m.monto,
         "descripcion": m.descripcion, "medio_pago": m.medio_pago,
         "referencia_tipo": m.referencia_tipo, "referencia_id": m.referencia_id,
+        # False = el egreso no salió de ninguna caja del sistema (pago particular)
+        "afecta_caja": bool(m.afecta_caja),
         "usuario_id": m.usuario_id,
         "usuario_nombre": m.usuario.nombre if m.usuario else "",
         "sucursal_id": m.sucursal_id,
@@ -921,7 +933,7 @@ def reportes_caja(
                 "descripcion": mov.descripcion,
                 "fecha": mov.created_at.isoformat() if mov.created_at else None
             })
-        elif mov.tipo == "egreso" and sesion_actual:
+        elif mov.tipo == "egreso" and sesion_actual and not caja_service.es_egreso_externo(mov):
             sesion_actual["egresos"].append({
                 "id": mov.id,
                 "monto": mov.monto,

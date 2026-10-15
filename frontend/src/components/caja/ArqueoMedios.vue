@@ -230,11 +230,11 @@
       </div>
 
       <p v-if="porDejo" class="text-[10px] text-slate-500 dark:text-slate-400">
-        Con {{ fc(montoDejoIngresado) }} en el cajón quedan {{ fc(esperadoEfectivo) - montoDejoIngresado }} para llevarte.
+        Con {{ fc(montoDejoIngresado) }} en el cajón quedan {{ fc(esperadoEfectivo - montoDejoIngresado) }} para llevarte.
       </p>
 
       <div class="flex justify-end">
-        <BaseButton variant="secondary" size="sm" :loading="guardandoRetiro" :disabled="puedeExtraer" @click="extraer">
+        <BaseButton variant="secondary" size="sm" :loading="guardandoRetiro" :disabled="extraerBloqueado" @click="extraer">
           <i class="fa-solid fa-arrow-up-from-bracket"></i> Registrar extracción
         </BaseButton>
       </div>
@@ -335,7 +335,7 @@
           variant="secondary"
           size="sm"
           :loading="guardandoPago"
-          :disabled="!puedePagar"
+          :disabled="pagoBloqueado"
           @click="registrarPago"
         >
           <i class="fa-solid fa-file-invoice-dollar"></i> Registrar pago
@@ -478,7 +478,8 @@ const totalPagosProveedor = computed(() =>
   props.retiros.filter(esPagoProveedor).reduce((sum, r) => sum + (Number(r.monto) || 0), 0)
 )
 
-const puedeExtraer = computed(() => props.disabled || porExtraer.value <= 0)
+// true = no se puede extraer todavía (falta monto o la caja está bloqueada).
+const extraerBloqueado = computed(() => props.disabled || porExtraer.value <= 0)
 
 function activarPorDejo() {
   porDejo.value = true
@@ -563,7 +564,7 @@ function bloqueado(metodo) {
 }
 
 function extraer() {
-  if (puedeExtraer.value) return
+  if (extraerBloqueado.value) return
   emit('agregar-retiro', {
     monto: porExtraer.value,
     motivo: motivoRetiro.value.trim(),
@@ -604,14 +605,14 @@ const pagoNombreEfectivo = computed(() => {
 })
 const pagoIdEfectivo = computed(() => (pagoUsaLista.value ? pagoProveedorId.value : null))
 
-const puedePagar = computed(() =>
+const pagoBloqueado = computed(() =>
   props.disabled
   || !(Number(pagoMonto.value) > 0)
   || !pagoNombreEfectivo.value
 )
 
 function registrarPago() {
-  if (puedePagar.value) return
+  if (pagoBloqueado.value) return
   emit('pago-proveedor', {
     monto: Number(pagoMonto.value),
     proveedor_id: pagoIdEfectivo.value,

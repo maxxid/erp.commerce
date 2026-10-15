@@ -205,7 +205,7 @@ const showCatQuick = ref(false)
 const newCatNombre = ref('')
 const showProvQuick = ref(false)
 const newProvNombre = ref('')
-const newProvCuit = ref('')
+const newProvCelular = ref('')
 
 const defaultOfertaForm = () => ({
   producto_id: null,
@@ -780,7 +780,7 @@ async function quickCreateProveedor() {
   const nombre = newProvNombre.value.trim()
   if (!nombre) return
   try {
-    const resp = await api.post('/api/proveedores', { nombre, cuit: newProvCuit.value || undefined })
+    const resp = await api.post('/api/proveedores', { nombre, telefono: newProvCelular.value.trim() || undefined })
     if (resp && resp.id) {
       proveedores.value.push({ id: resp.id, nombre: resp.nombre })
       form.proveedor_id = resp.id
@@ -790,7 +790,7 @@ async function quickCreateProveedor() {
     toast.error(e.message || 'Error al crear proveedor')
   }
   newProvNombre.value = ''
-  newProvCuit.value = ''
+  newProvCelular.value = ''
   showProvQuick.value = false
 }
 
@@ -1380,7 +1380,7 @@ function formatFecha(fechaStr) {
         <!-- Quick-create Proveedor -->
         <div v-if="showProvQuick" class="p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/40 rounded-xl space-y-2">
           <BaseInput v-model="newProvNombre" placeholder="Nombre del proveedor" size="sm" />
-          <BaseInput v-model="newProvCuit" placeholder="CUIT (opcional)" size="sm" />
+          <BaseInput v-model="newProvCelular" placeholder="Celular (opcional)" type="tel" size="sm" />
           <div class="flex items-center gap-2">
             <BaseButton variant="primary" size="xs" @click="quickCreateProveedor">Crear Proveedor</BaseButton>
             <BaseButton variant="ghost" size="xs" @click="showProvQuick = false"><i class="fa-solid fa-xmark"></i></BaseButton>

@@ -62,43 +62,65 @@ class PosConfigRequest(BaseModel):
     showStatsPanel: bool = True
     productViewMode: str = "grilla"
     enabledPaymentMethods: list[str] = []
+    calculadoraAlcance: str = "pos-productos"
+    calculadoraHistorial: int = 5
 
 
 @router.get("/pos", response_model=RespuestaData)
 def get_pos_config(
     db: Session = Depends(get_db),
-    user: Usuario = Depends(require_role("admin", "encargado")),
+    user: Usuario = Depends(get_current_user),
 ):
-    """Obtiene la configuración de preferencias del POS."""
+    """Obtiene la configuración de preferencias del POS.
+
+    La lee cualquier usuario autenticado (incluso cajero): es la única forma de
+    que el POS muestre los mismos medios de pago que marcó el dueño en Ajustes.
+    """
     configs = db.query(Configuracion).filter(
         Configuracion.clave.in_([
             "pos_show_stats_panel",
             "pos_product_view_mode",
-            "pos_enabled_payment_methods"
+            "pos_enabled_payment_methods",
+            "pos_calculadora_alcance",
+            "pos_calculadora_historial"
         ])
     ).all()
+    # Claves en camelCase, las mismas que espera el PUT: antes devolvía
+    # snake_case y el frontend (que lee enabledPaymentMethods) nunca veía lo
+    # guardado, por eso el toggle "no hacía nada".
     data = {}
     for c in configs:
+        valor = c.valor_texto or c.valor
         if c.clave == "pos_enabled_payment_methods":
             import json
             try:
-                data[c.clave] = json.loads(c.valor_texto or c.valor or "[]")
-            except:
-                data[c.clave] = []
-        else:
-            data[c.clave] = c.valor_texto or c.valor
+                data["enabledPaymentMethods"] = json.loads(valor or "[]")
+            except (ValueError, TypeError):
+                data["enabledPaymentMethods"] = []
+        elif c.clave == "pos_show_stats_panel":
+            data["showStatsPanel"] = str(valor).lower() == "true"
+        elif c.clave == "pos_product_view_mode":
+            data["productViewMode"] = valor or "grilla"
+        elif c.clave == "pos_calculadora_alcance":
+            data["calculadoraAlcance"] = valor or "pos-productos"
+        elif c.clave == "pos_calculadora_historial":
+            try:
+                data["calculadoraHistorial"] = int(valor)
+            except (TypeError, ValueError):
+                data["calculadoraHistorial"] = 5
     # Defaults
     defaults = {
-        "pos_show_stats_panel": "true",
-        "pos_product_view_mode": "grilla",
-        "pos_enabled_payment_methods": [
+        "showStatsPanel": True,
+        "productViewMode": "grilla",
+        "enabledPaymentMethods": [
             "efectivo", "transferencia", "mercadopago_qr",
             "qr_interop", "mercadopago_pos", "smartpoint", "cta_corriente"
-        ]
+        ],
+        "calculadoraAlcance": "pos-productos",
+        "calculadoraHistorial": 5,
     }
     for k, v in defaults.items():
-        if k not in data:
-            data[k] = v
+        data.setdefault(k, v)
     return RespuestaData(data=data)
 
 
@@ -116,11 +138,17 @@ def set_pos_config(
                "Vista de productos por defecto en POS: grilla | lista")
     set_config(db, "pos_enabled_payment_methods", json.dumps(data.enabledPaymentMethods),
                "Medios de pago habilitados en POS (JSON array)")
+    set_config(db, "pos_calculadora_alcance", data.calculadoraAlcance,
+               "Dónde se muestra la calculadora flotante: global | pos-productos")
+    set_config(db, "pos_calculadora_historial", str(data.calculadoraHistorial),
+               "Cuántos cálculos guarda el historial de la calculadora flotante")
     return RespuestaData(
         data={
             "showStatsPanel": data.showStatsPanel,
             "productViewMode": data.productViewMode,
-            "enabledPaymentMethods": data.enabledPaymentMethods
+            "enabledPaymentMethods": data.enabledPaymentMethods,
+            "calculadoraAlcance": data.calculadoraAlcance,
+            "calculadoraHistorial": data.calculadoraHistorial
         },
         message="Configuración POS actualizada"
     )
