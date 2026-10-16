@@ -2,8 +2,10 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useOfflineSales } from '@/composables/useOfflineSales'
 import { useAuthStore } from '@/stores/auth'
+import { useProductosStore } from '@/stores/productos'
 
 const auth = useAuthStore()
+const productosStore = useProductosStore()
 const hayRed = ref(navigator.onLine)
 const pendingSalesCount = ref(0)
 const sincronizando = ref(false)
@@ -54,8 +56,26 @@ onUnmounted(() => {
 // locales con el wifi levantado y sin internet. Por eso el aviso también
 // mira `auth.offline`, que se pone cuando el servidor dejó de contestar.
 const isOffline = computed(() => !hayRed.value || auth.offline)
-const showIndicator = computed(() => isOffline.value || pendingSalesCount.value > 0)
+const showIndicator = computed(() =>
+  isOffline.value || productosStore.sinRed || pendingSalesCount.value > 0
+)
 const indicatorClass = computed(() => isOffline.value ? 'bg-red-600' : 'bg-amber-500')
+
+// Cuánto tiene el catálogo que se está usando. Es la pregunta que importa
+// cuando no hay red: si el precio que se cobra es el de hoy o el de ayer.
+function haceCuanto(iso) {
+  if (!iso) return null
+  const ms = Date.now() - new Date(iso).getTime()
+  if (!Number.isFinite(ms) || ms < 0) return null
+  const min = Math.round(ms / 60000)
+  if (min < 1) return 'recién actualizado'
+  if (min < 60) return `de hace ${min} min`
+  const horas = Math.round(min / 60)
+  if (horas < 24) return `de hace ${horas} h`
+  return `de hace ${Math.round(horas / 24)} d`
+}
+
+const antiguedadCatalogo = computed(() => haceCuanto(productosStore.datosDe))
 </script>
 
 <template>
@@ -71,8 +91,19 @@ const indicatorClass = computed(() => isOffline.value ? 'bg-red-600' : 'bg-amber
       <template v-if="isOffline">
         <i class="fa-solid fa-circle-exclamation mr-1.5"></i>
         Modo offline — trabajando con los datos de la última sesión.
+        <span v-if="antiguedadCatalogo" class="ml-1">
+          Catálogo {{ antiguedadCatalogo }}.
+        </span>
         <span v-if="pendingSalesCount > 0" class="ml-1">
           {{ pendingSalesCount }} venta(s) se sincronizan al volver la conexión.
+        </span>
+      </template>
+      <template v-else-if="productosStore.sinRed">
+        <i class="fa-solid fa-triangle-exclamation mr-1.5"></i>
+        No se pudo actualizar el catálogo — se vende con los datos
+        {{ antiguedadCatalogo || 'de la última sesión' }}.
+        <span v-if="pendingSalesCount > 0" class="ml-1">
+          {{ pendingSalesCount }} venta(s) pendiente(s) de sincronizar.
         </span>
       </template>
       <template v-else-if="pendingSalesCount > 0">

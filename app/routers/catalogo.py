@@ -4,10 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.auth.dependencies import require_role
+from app.auth.dependencies import get_current_user, require_role
 from app.models.usuario import Usuario
 from app.schemas.common import RespuestaBase, RespuestaData, RespuestaLista
-from app.services import catalogo_service, backup_service
+from app.services import catalogo_service, backup_service, catalogo_local
 
 router = APIRouter(prefix="/api/catalogo", tags=["Catálogo"])
 
@@ -42,6 +42,25 @@ def listar_r2(db: Session = Depends(get_db), user: Usuario = Depends(require_rol
         raise HTTPException(status_code=400, detail="R2 no está configurado")
     archivos = catalogo_service.listar_catalogos_r2(db)
     return RespuestaLista(data=archivos, total=len(archivos), message=f"{len(archivos)} archivo(s)")
+
+
+@router.get("/local", response_model=RespuestaData)
+def catalogo_local_para_el_navegador(
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """El catálogo entero para guardarlo en el navegador y poder vender sin red.
+
+    Productos, categorías y ofertas en una sola respuesta, con la fecha en que
+    se armó. Usa los mismos serializadores que los endpoints normales, así que
+    lo que se ve offline es idéntico a lo que se ve online.
+
+    Mismos roles que `GET /api/productos`: el POS lo necesita para arrancar.
+    """
+    return RespuestaData(
+        data=catalogo_local.snapshot_local(db),
+        message="Catálogo local generado",
+    )
 
 
 @router.post("/descargar", response_model=RespuestaData)
