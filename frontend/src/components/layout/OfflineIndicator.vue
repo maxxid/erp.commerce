@@ -1,6 +1,8 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue'
-import { useOfflineSales, totalDeVenta } from '@/composables/useOfflineSales'
+import { totalDeVenta } from '@/composables/useOfflineSales'
+import { useOfflineSync } from '@/composables/useOfflineSync'
+import { useOfflineCaja } from '@/composables/useOfflineCaja'
 import { useAuthStore } from '@/stores/auth'
 import { useProductosStore } from '@/stores/productos'
 import { formatCurrency as fc } from '@/composables/useUtils'
@@ -9,15 +11,17 @@ const auth = useAuthStore()
 const productosStore = useProductosStore()
 const hayRed = ref(navigator.onLine)
 const pendingSalesCount = ref(0)
+const pendingCajaCount = ref(0)
 const montoSinSubir = ref(0)
 const sincronizando = ref(false)
 
-const { syncPendingSales } = useOfflineSales()
+const { sincronizarPendientes } = useOfflineSync()
+const { pendientes: operacionesDeCajaPendientes } = useOfflineCaja()
 
 function onOnline() {
   hayRed.value = true
   // Al reconectar, sincronizar sin esperar a que abran el POS
-  syncPendingSales()
+  sincronizarPendientes()
 }
 function onOffline() { hayRed.value = false }
 
@@ -25,7 +29,7 @@ async function sincronizarAhora() {
   if (sincronizando.value) return
   sincronizando.value = true
   try {
-    await syncPendingSales()
+    await sincronizarPendientes()
   } finally {
     sincronizando.value = false
   }
@@ -43,8 +47,12 @@ function loadPendingCount() {
       (suma, s) => suma + (typeof s.total === 'number' ? s.total : totalDeVenta(s.data)),
       0
     )
+    // Una apertura o un cierre sin subir también es plata/jornada en el aire,
+    // y no tiene importe: se cuenta nomás.
+    pendingCajaCount.value = operacionesDeCajaPendientes().length
   } catch {
     pendingSalesCount.value = 0
+    pendingCajaCount.value = 0
     montoSinSubir.value = 0
   }
 }
@@ -53,6 +61,7 @@ onMounted(() => {
   window.addEventListener('online', onOnline)
   window.addEventListener('offline', onOffline)
   window.addEventListener('apex-pending-sales-updated', loadPendingCount)
+  window.addEventListener('apex-pending-caja-updated', loadPendingCount)
   loadPendingCount()
 })
 
@@ -60,6 +69,7 @@ onUnmounted(() => {
   window.removeEventListener('online', onOnline)
   window.removeEventListener('offline', onOffline)
   window.removeEventListener('apex-pending-sales-updated', loadPendingCount)
+  window.removeEventListener('apex-pending-caja-updated', loadPendingCount)
 })
 
 // `navigator.onLine` solo sabe si hay una tarjeta de red conectada: hay
@@ -68,6 +78,7 @@ onUnmounted(() => {
 const isOffline = computed(() => !hayRed.value || auth.offline)
 const showIndicator = computed(() =>
   isOffline.value || productosStore.sinRed || pendingSalesCount.value > 0
+    || pendingCajaCount.value > 0
 )
 const indicatorClass = computed(() => isOffline.value ? 'bg-red-600' : 'bg-amber-500')
 
@@ -107,6 +118,9 @@ const antiguedadCatalogo = computed(() => haceCuanto(productosStore.datosDe))
         <span v-if="pendingSalesCount > 0" class="ml-1">
           {{ pendingSalesCount }} venta(s) sin subir ({{ fc(montoSinSubir) }}): se mandan solas al volver la conexión.
         </span>
+        <span v-if="pendingCajaCount > 0" class="ml-1">
+          {{ pendingCajaCount }} movimiento(s) de caja sin subir.
+        </span>
       </template>
       <template v-else-if="productosStore.sinRed">
         <i class="fa-solid fa-triangle-exclamation mr-1.5"></i>
@@ -115,10 +129,18 @@ const antiguedadCatalogo = computed(() => haceCuanto(productosStore.datosDe))
         <span v-if="pendingSalesCount > 0" class="ml-1">
           {{ pendingSalesCount }} venta(s) sin subir: {{ fc(montoSinSubir) }}.
         </span>
+        <span v-if="pendingCajaCount > 0" class="ml-1">
+          {{ pendingCajaCount }} movimiento(s) de caja sin subir.
+        </span>
       </template>
-      <template v-else-if="pendingSalesCount > 0">
+      <template v-else-if="pendingSalesCount > 0 || pendingCajaCount > 0">
         <i class="fa-solid fa-clock-rotate-left mr-1.5"></i>
-        {{ pendingSalesCount }} venta(s) sin subir — {{ fc(montoSinSubir) }}.
+        <span v-if="pendingSalesCount > 0">
+          {{ pendingSalesCount }} venta(s) sin subir — {{ fc(montoSinSubir) }}.
+        </span>
+        <span v-else>
+          {{ pendingCajaCount }} movimiento(s) de caja sin subir.
+        </span>
         <button
           type="button"
           class="ml-1.5 underline underline-offset-2 font-semibold hover:opacity-80 disabled:opacity-50"

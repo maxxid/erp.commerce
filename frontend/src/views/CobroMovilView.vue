@@ -13,6 +13,8 @@ import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import { useBarcodeScanner } from '@/composables/useBarcodeScanner'
 import { useOfflineSales } from '@/composables/useOfflineSales'
+import { useOfflineSync } from '@/composables/useOfflineSync'
+import { useOfflineCaja } from '@/composables/useOfflineCaja'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -94,10 +96,10 @@ function descargarCatalogoCentral() {
 
 onMounted(async () => {
   cajaStore.fetchEstado()
-  // Sube las ventas que quedaron guardadas desde la última vez. Si no hay
-  // ninguna pendiente no hace ni un request, así que cuesta cero — y si las
-  // hay, es plata que estaba quieta hasta que alguien apretara "Sincronizar".
-  syncPendingSales()
+  // Sube lo que quedó guardado desde la última vez: ventas y, si las hubo,
+  // operaciones de caja. Si no hay nada pendiente no hace ni un request, así
+  // que cuesta cero.
+  sincronizarPendientes()
   descargarCatalogoCentral()
   await Promise.all([
     productosStore.fetchAll(),
@@ -351,7 +353,9 @@ const {
   },
 })
 
-const { addPendingSale, syncPendingSales } = useOfflineSales()
+const { addPendingSale } = useOfflineSales()
+const { sincronizarPendientes } = useOfflineSync()
+const { postear: postearCaja } = useOfflineCaja()
 
 // MercadoPago QR dinámico (con importe). El QR fijo ya no se usa: no trae monto
 // y solo lo paga la app de MercadoPago cuando el vendedor carga el importe.
@@ -594,9 +598,13 @@ async function toggleCaja() {
 async function cerrarCajaMovil() {
   cerrandoCaja.value = true
   try {
-    await api.post('/api/caja/cierre-total', {})
+    // Si no hay red la caja se da por cerrada acá y el cierre queda encolado:
+    // el negocio cierra igual, y el servidor se entera cuando vuelva la conexión.
+    const { encolada } = await postearCaja('/api/caja/cierre-total', {}, 'Cierre de caja')
     await cajaStore.fetchEstado()
-    toast.success('Caja cerrada correctamente')
+    toast.success(encolada
+      ? 'Caja cerrada — sin conexión, se registra sola al volver'
+      : 'Caja cerrada correctamente')
   } catch (e) {
     const msg = e?.data?.detail || e?.message || 'No se pudo cerrar la caja'
     toast.error(msg)
@@ -608,10 +616,16 @@ async function cerrarCajaMovil() {
 async function confirmarApertura() {
   abriendoCaja.value = true
   try {
-    await api.post('/api/caja/apertura', { monto_inicial: parseFloat(montoInicial.value) || 0 })
+    const { encolada } = await postearCaja(
+      '/api/caja/apertura',
+      { monto_inicial: parseFloat(montoInicial.value) || 0 },
+      'Apertura de caja'
+    )
     await cajaStore.fetchEstado()
     showApertura.value = false
-    toast.success('Caja abierta')
+    toast.success(encolada
+      ? 'Caja abierta — sin conexión, se registra sola al volver'
+      : 'Caja abierta')
   } catch (e) {
     toast.error(e.data?.detail || 'Error al abrir la caja')
   } finally {

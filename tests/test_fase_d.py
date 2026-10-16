@@ -11,10 +11,11 @@ Se arreglaron cuatro cosas:
    y 0,41 MB en cada apertura de la pantalla de cobro. Ahora se pregunta si
    cambió (~100 bytes) y solo se descarga si cambió; sin señal no se intenta
    nada.
-2. **El celular sube las ventas al abrir.** `useOfflineSales` solo sincronizaba
-   con el evento `online`, que dispara solo si antes estuvo desconectado: el
-   cajero llegaba a su casa con wifi ya encendido y la plata quedaba quieta
-   hasta que alguien apretara "Sincronizar ahora".
+2. **El celular sube las ventas al abrir.** Sincronizaba solo con el evento
+   `online`, que dispara solo si antes estuvo desconectado: el cajero llegaba a
+   su casa con wifi ya encendido y la plata quedaba quieta hasta que alguien
+   apretara "Sincronizar ahora". (Ese punto de subida hoy es `useOfflineSync`,
+   que además sube las operaciones de caja de la Fase E.)
 3. **Se ve cuánto hay en juego.** "3 ventas sin subir" no dice si son $3.000 o
    $300.000.
 4. **El poll de caja se pausa cuando la red falló.** Reintentar cada 60 s contra
@@ -36,6 +37,7 @@ POS = SRC / "views" / "POSView.vue"
 CAJA_VIEW = SRC / "views" / "CajaView.vue"
 INDICADOR = SRC / "components" / "layout" / "OfflineIndicator.vue"
 COLA = SRC / "composables" / "useOfflineSales.js"
+SINCRONIZAR = SRC / "composables" / "useOfflineSync.js"
 STORE_CAJA = SRC / "stores" / "caja.js"
 STORE_PRODUCTOS = SRC / "stores" / "productos.js"
 
@@ -65,17 +67,17 @@ class TestElCelularSubeAlAbrir:
         nada aunque haya ventas esperando."""
         cuerpo = _on_mounted(_leer(COBRO))
 
-        assert "syncPendingSales()" in cuerpo, (
+        assert "sincronizarPendientes()" in cuerpo, (
             "CobroMóvil no sube las ventas encoladas al abrir: la plata se "
             "queda quieta hasta que alguien apriete 'Sincronizar ahora'"
         )
 
     def test_sincronizar_al_abrir_no_cuesta_si_no_hay_nada(self):
         """Si no hay pendientes no se hace ni un request: es gratis."""
-        texto = _leer(COLA)
+        texto = _leer(SINCRONIZAR)
 
-        assert "if (toSync.length === 0) return" in texto
-        assert "if (syncing || !navigator.onLine) return" in texto
+        assert "eventos.length === 0) return { subidas: 0, fallidas: 0 }" in texto
+        assert "if (subiendo ||" in texto
 
 
 class TestRefrescarBarato:

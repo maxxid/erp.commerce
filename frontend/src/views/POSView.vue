@@ -1362,6 +1362,8 @@ import QuickCreateModal from '@/components/pos/QuickCreateModal.vue'
 import { useSounds } from '@/composables/useSounds'
 import { useConfetti } from '@/composables/useConfetti'
 import { useOfflineSales } from '@/composables/useOfflineSales'
+import { useOfflineSync } from '@/composables/useOfflineSync'
+import { useOfflineCaja } from '@/composables/useOfflineCaja'
 import { useBarcodeScanner } from '@/composables/useBarcodeScanner'
 
 const auth = useAuthStore()
@@ -1374,7 +1376,9 @@ const products = computed(() => productosStore.productos)
 const categories = computed(() => productosStore.categorias)
 const ofertas = computed(() => productosStore.ofertas)
 const route = useRoute()
-const { addPendingSale, syncPendingSales } = useOfflineSales()
+const { addPendingSale } = useOfflineSales()
+const { sincronizarPendientes } = useOfflineSync()
+const { postear: postearCaja } = useOfflineCaja()
 const router = useRouter()
 const { playSale, playOpenCash } = useSounds()
 const { firstSaleOfDay } = useConfetti()
@@ -1799,10 +1803,11 @@ onMounted(async () => {
   fetchPOSStats()
   fetchRecentTransactions()
   cajaStore.fetchEstado()
-  // Sync ventas offline pendientes
-  syncPendingSales().then(result => {
-    if (result.synced > 0) {
-      toast.success(`${result.synced} venta(s) sincronizada(s) exitosamente.`)
+  // Sincroniza lo que quedó sin subir: ventas y operaciones de caja, en el
+  // orden en que pasaron. Si no hay nada, no hace ni un request.
+  sincronizarPendientes().then(result => {
+    if (result.subidas > 0) {
+      toast.success(`${result.subidas} operación(es) sincronizada(s) exitosamente.`)
     }
   })
   // Cargar preferencias visuales POS
@@ -1906,18 +1911,22 @@ async function cargarSaldosCuentasSugeridosPos() {
 async function confirmarAperturaPos(payload) {
   abriendoCaja.value = true
   try {
-    await api.post('/api/caja/apertura', {
+    // Sin conexión la apertura queda encolada y el POS arranca igual: el
+    // servidor la registra cuando vuelva la red.
+    const { encolada } = await postearCaja('/api/caja/apertura', {
       monto_inicial: payload.monto_inicial,
       monto_retiro: payload.monto_retiro,
       motivo_retiro: payload.motivo_retiro,
       saldos_cuentas: payload.saldos_cuentas,
-    })
+    }, 'Apertura de caja')
     await cajaStore.fetchEstado()
     showAperturaModal.value = false
     playOpenCash()
     const nCuentas = Object.keys(payload.saldos_cuentas).length
-    let msg = `Caja abierta con ${fc(payload.fondo)}`
-    if (payload.monto_retiro > 0) msg += ` · te llevaste ${fc(payload.monto_retiro)}`
+    let msg = encolada
+      ? 'Caja abierta sin conexión — se registra sola al volver'
+      : `Caja abierta con ${fc(payload.fondo)}`
+    if (!encolada && payload.monto_retiro > 0) msg += ` · te llevaste ${fc(payload.monto_retiro)}`
     if (nCuentas) msg += ` · ${nCuentas} cuenta${nCuentas > 1 ? 's' : ''} digital${nCuentas > 1 ? 'es' : ''} a controlar`
     toast.success(msg)
     if (aperturaResolver) { aperturaResolver(true); aperturaResolver = null }

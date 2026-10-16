@@ -956,12 +956,16 @@ import { MEDIOS_CUENTA } from '@/composables/cajaCuentas'
 import ContadorTransferenciasModal from '@/components/caja/ContadorTransferenciasModal.vue'
 import ArqueoMedios from '@/components/caja/ArqueoMedios.vue'
 import { useSounds } from '@/composables/useSounds'
+import { useOfflineSync } from '@/composables/useOfflineSync'
+import { useOfflineCaja } from '@/composables/useOfflineCaja'
 
 const auth = useAuthStore()
 const toast = useToastStore()
 const cajaStore = useCajaStore()
 const carritoStore = useCarritoStore()
 const { playOpenCash, playCloseCash } = useSounds()
+const { sincronizarPendientes } = useOfflineSync()
+const { postear: postearCaja } = useOfflineCaja()
 const cajaResumen = reactive({ metodos_cerrados: [], egresos_por_medio: {}, retiros: [], total_retiros: 0 })
 
 const movements = ref([])
@@ -1554,6 +1558,9 @@ function formatFechaHora(fechaStr) {
 }
 
 onMounted(async () => {
+  // Antes de pedir el historial: si quedó una apertura o un cierre sin subir,
+  // recién subido es cuando la lista va a mostrarlos.
+  await sincronizarPendientes()
   await fetchMovimientos()
   await fetchResumen()
   await cajaStore.fetchUltimoCierre()
@@ -1658,18 +1665,20 @@ async function cargarSaldosCuentasSugeridos() {
 async function confirmarAperturaCaja(payload) {
   opening.value = true
   try {
-    await api.post('/api/caja/apertura', {
+    const { encolada } = await postearCaja('/api/caja/apertura', {
       monto_inicial: payload.monto_inicial,
       monto_retiro: payload.monto_retiro,
       motivo_retiro: payload.motivo_retiro,
       saldos_cuentas: payload.saldos_cuentas,
-    })
+    }, 'Apertura de caja')
     await cajaStore.fetchEstado()
     await fetchMovimientos()
     showAperturaModal.value = false
 
-    let msg = `Caja abierta con ${fc(payload.fondo)}`
-    if (payload.monto_retiro > 0) {
+    let msg = encolada
+      ? 'Caja abierta sin conexión — se registra sola al volver'
+      : `Caja abierta con ${fc(payload.fondo)}`
+    if (!encolada && payload.monto_retiro > 0) {
       msg += ` · te llevaste ${fc(payload.monto_retiro)}`
     }
     const nCuentas = Object.keys(payload.saldos_cuentas).length
@@ -1832,22 +1841,31 @@ async function confirmarCierreCaja() {
 
   closing.value = true
   try {
+    // Cada arqueo y el cierre pasan por el mismo camino: si la red contestó,
+    // se registran ahí mismo; si no, quedan anotados y se suben solos después.
+    // El orden se conserva (arqueos antes que cierre) y ninguno se hace dos
+    // veces: antes de reintentar se le pregunta al servidor en qué estado está.
+    let encolada = false
     for (const metodo of metodosArqueo) {
       if (metodo.cerrado) continue
       if (!metodo.montoReal || metodo.montoReal <= 0) continue
 
       const comentarioFinal = metodo.comentario || cierreComentario.value || ''
-      await api.post('/api/caja/cierre-metodo', {
+      const arqueo = await postearCaja('/api/caja/cierre-metodo', {
         medio_pago: metodo.valor,
         monto_real: metodo.montoReal,
         comentario: comentarioFinal,
-      })
+      }, `Arqueo de ${MEDIO_LABELS[metodo.valor] || metodo.valor}`)
+      encolada = encolada || arqueo.encolada
     }
 
-    await api.post('/api/caja/cierre-total', { comentario: cierreComentario.value || '' })
+    const cierre = await postearCaja('/api/caja/cierre-total', { comentario: cierreComentario.value || '' }, 'Cierre de caja')
+    encolada = encolada || cierre.encolada
     await cajaStore.fetchEstado()
     showCierreModal.value = false
-    toast.success('Jornada finalizada. Hasta luego.')
+    toast.success(encolada
+      ? 'Jornada finalizada sin conexión — el cierre se registra al volver. Hasta luego.'
+      : 'Jornada finalizada. Hasta luego.')
     playCloseCash()
     auth.logout()
     router.push('/login')
