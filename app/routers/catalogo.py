@@ -63,6 +63,27 @@ def catalogo_local_para_el_navegador(
     )
 
 
+@router.get("/version", response_model=RespuestaData)
+def version_del_catalogo_local(
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """Si el catálogo que tiene el navegador sigue vigente, en ~100 bytes.
+
+    Es lo que hace que refrescar salga barato: si esto no cambió, no se baja
+    nada y la app se queda con el catálogo que ya está guardado. Si cambió (o
+    si falló la consulta y no se pudo confirmar), se baja el completo — ante la
+    duda siempre se refresca, nunca se queda con datos viejos por ahorrar unos
+    bytes.
+
+    Mismos roles que `GET /api/productos`.
+    """
+    return RespuestaData(
+        data=catalogo_local.version_local(db),
+        message="Versión del catálogo local",
+    )
+
+
 @router.post("/descargar", response_model=RespuestaData)
 def descargar(db: Session = Depends(get_db), user: Usuario = Depends(require_role("admin", "encargado"))):
     """Descarga el catálogo central desde R2 (catalogo/{machine_id}/productos.json)."""

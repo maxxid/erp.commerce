@@ -3,12 +3,12 @@ import { ref } from 'vue'
 import api from '@/services/api'
 
 // El catálogo entero guardado en el navegador, para poder seguir vendiendo si
-// se corta la internet. Es un solo JSON con la fecha en que se bajó, así que
-// el POS puede avisar con qué antigüedad está cobrando en vez de fingir que
-// tiene datos frescos.
+// se corta la internet. Es un solo JSON con la fecha y la versión con que se
+// bajó, así que el POS puede avisar con qué antigüedad está cobrando en vez de
+// fingir que tiene datos frescos.
 //
 // Va en localStorage como el resto de la caché de la app (sesión, licencia,
-// ventas pendientes). Hoy el catálogo pesa ~0,4 MB con 567 productos y el
+// ventas pendientes). Hoy el catálogo pesa ~0,41 MB con 567 productos y el
 // límite es ~5 MB compartido: si algún día deja de caber, la escritura falla y
 // acá se avisa en vez de perder datos en silencio.
 const CLAVE_CATALOGO = 'apex-catalogo-local'
@@ -54,35 +54,42 @@ export const useProductosStore = defineStore('productos', () => {
   // mirando pantalla en blanco.
   aplicarSnapshot(leerSnapshot())
 
-  async function fetchAll(pageSize = 100000) {
-    const [prods, cats, ofs] = await Promise.all([
-      api.get(`/api/productos?page_size=${pageSize}`).catch(() => null),
-      api.get('/api/categorias').catch(() => null),
-      api.get('/api/ofertas?page_size=100000').catch(() => null)
-    ])
-
-    // Sin productos no hay con qué vender: se cae al catálogo guardado en el
-    // navegador en vez de dejar la grilla en blanco.
-    if (!Array.isArray(prods)) {
+  async function fetchAll() {
+    // Sin señal no se intenta nada: el catálogo ya está en el navegador, y un
+    // fetch que va a fallar deja la pantalla esperando y gasta batería.
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
       sinRed.value = true
       aplicarSnapshot(leerSnapshot())
       return
     }
 
-    productos.value = prods
-    if (Array.isArray(cats)) categorias.value = cats
-    if (Array.isArray(ofs)) ofertas.value = ofs
+    const snapshot = leerSnapshot()
+    if (snapshot) {
+      // Primero se pregunta si cambió (~100 bytes). Si no cambió, refrescar
+      // cuesta eso y no bajar el catálogo entero en cada apertura.
+      const version = await api.get('/api/catalogo/version').catch(() => null)
+      if (version && JSON.stringify(version) === JSON.stringify(snapshot.version)) {
+        lastSync.value = Date.now()
+        sinRed.value = false
+        return
+      }
+    }
 
-    const generado = new Date().toISOString()
+    // Ojo: si la versión no se pudo confirmar se baja igual. Ante la duda se
+    // refresca; lo que no se hace es quedarse con datos viejos por ahorrar.
+    const completo = await api.get('/api/catalogo/local').catch(() => null)
+    if (!completo || !Array.isArray(completo.productos)) {
+      // Sin catálogo no hay con qué vender: se cae al guardado en el navegador
+      // en vez de dejar la grilla en blanco.
+      sinRed.value = true
+      aplicarSnapshot(snapshot)
+      return
+    }
+
+    aplicarSnapshot(completo)
     lastSync.value = Date.now()
     sinRed.value = false
-    datosDe.value = generado
-    guardarSnapshot({
-      generado,
-      productos: prods,
-      categorias: categorias.value,
-      ofertas: ofertas.value,
-    })
+    guardarSnapshot(completo)
   }
 
   async function refreshProductos() {

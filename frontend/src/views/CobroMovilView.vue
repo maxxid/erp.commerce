@@ -77,14 +77,31 @@ const filteredProducts = computed(() => {
 
 const menuRef = ref(null)
 
+// El catálogo central de R2 solo lo pueden bajar admin y encargado: para un
+// cajero este request contestaba 403 en cada apertura de la pantalla de cobro.
+// App.vue ya lo hace con este mismo rate limit de 1 h al abrir la app, así que
+// acá solo hacía falta no duplicarlo — y sacarlo del `await`, porque frenaba el
+// momento en que el cajero ve los productos.
+function descargarCatalogoCentral() {
+  if (!auth.isEncargado) return
+  const lastSync = localStorage.getItem('catalogo_last_sync')
+  const hour = 60 * 60 * 1000
+  if (lastSync && Date.now() - Number(lastSync) < hour) return
+  api.post('/api/catalogo/descargar').then(() => {
+    localStorage.setItem('catalogo_last_sync', String(Date.now()))
+  }).catch(() => {})
+}
+
 onMounted(async () => {
   cajaStore.fetchEstado()
+  // Sube las ventas que quedaron guardadas desde la última vez. Si no hay
+  // ninguna pendiente no hace ni un request, así que cuesta cero — y si las
+  // hay, es plata que estaba quieta hasta que alguien apretara "Sincronizar".
+  syncPendingSales()
+  descargarCatalogoCentral()
   await Promise.all([
     productosStore.fetchAll(),
-    api.get('/api/config/ajustes').then(r => { ajustes.value = r || {} }).catch(() => {}),
-    api.post('/api/catalogo/descargar').then(() => {
-      localStorage.setItem('catalogo_last_sync', String(Date.now()))
-    }).catch(() => {})
+    api.get('/api/config/ajustes').then(r => { ajustes.value = r || {} }).catch(() => {})
   ])
   cargando.value = false
   document.addEventListener('click', handleClickOutside)
@@ -334,7 +351,7 @@ const {
   },
 })
 
-const { addPendingSale } = useOfflineSales()
+const { addPendingSale, syncPendingSales } = useOfflineSales()
 
 // MercadoPago QR dinámico (con importe). El QR fijo ya no se usa: no trae monto
 // y solo lo paga la app de MercadoPago cuando el vendedor carga el importe.

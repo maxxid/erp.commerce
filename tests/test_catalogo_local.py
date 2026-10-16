@@ -20,6 +20,7 @@ normales en vez de armar su propia versión "más liviana" del producto.
 """
 
 import inspect
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -116,13 +117,20 @@ def _por_id(lista):
     return sorted(lista, key=lambda p: p["id"])
 
 
+def _cuerpo_de_funcion(texto, nombre, siguiente):
+    """Lo que hay entre una función y la siguiente, para no adivinar con índices."""
+    inicio = texto.index(f"async function {nombre}(")
+    fin = texto.index(f"async function {siguiente}(", inicio)
+    return texto[inicio:fin]
+
+
 class TestContenido:
     def test_trae_las_tres_listas_con_una_sola_fecha(self, db, user):
         _producto(db, "7790001")
 
         snap = catalogo_local.snapshot_local(db)
 
-        assert set(snap) == {"generado", "productos", "categorias", "ofertas", "totales"}
+        assert set(snap) == {"version", "generado", "productos", "categorias", "ofertas", "totales"}
         assert isinstance(snap["productos"], list)
         assert isinstance(snap["categorias"], list)
         assert isinstance(snap["ofertas"], list)
@@ -199,6 +207,117 @@ class TestContenido:
         assert oferta["producto_id"] == p.id
         assert oferta["tipo"] == "porcentaje"
         assert oferta["valor"] == 10
+
+
+class TestVersion:
+    """~100 bytes para no bajar 0,41 MB cada vez que se abre el POS."""
+
+    def test_es_una_respuesta_chiquita(self, db, user):
+        _producto(db, "7790001")
+        _categoria(db, "Bebidas sin alcohol")
+        _categoria(db, "Alfajores y golosinas")
+
+        v = catalogo_local.version_local(db)
+
+        assert set(v) == {"productos", "categorias", "ofertas", "stock"}
+        # Un catálogo de verdad pesa ~400.000 bytes: si la versión no es órdenes
+        # de magnitud menor, deja de servir para no bajar el catálogo.
+        assert len(json.dumps(v)) < 1200
+
+    def test_un_renombre_de_categoria_se_detecta(self, db, user):
+        """`Categoria` no tiene `updated_at`: si no se mirara el nombre, la
+        versión diría "no cambió nada" con las categorías recién renombradas."""
+        cat = _categoria(db, "Bebidas")
+        v0 = catalogo_local.version_local(db)
+
+        cat.nombre = "Bebidas y jugos"
+        db.commit()
+
+        assert catalogo_local.version_local(db) != v0
+
+    def test_cambia_si_se_agrega_un_producto(self, db, user):
+        v0 = catalogo_local.version_local(db)
+
+        _producto(db, "7790001")
+
+        assert catalogo_local.version_local(db) != v0
+
+    def test_el_stock_de_los_lotes_cambia_la_version(self, db, user):
+        p = _producto(db, "7790001")
+
+        v0 = catalogo_local.version_local(db)
+        _lote(db, p, 10)
+        v1 = catalogo_local.version_local(db)
+
+        assert v0 != v1
+        assert v1["stock"]["unidades"] == 10
+
+    def test_un_movimiento_que_no_toca_el_producto_tambien_se_detecta(self, db, user):
+        """Lo que le pasa al POS si la versión mirara solo los productos.
+
+        Una venta mueve un lote sin tocar `productos.updated_at`. Si ese fuera
+        el único indicador, la versión diría "no cambió nada" y el POS se
+        quedaría mostrando un stock que ya no existe —que es justo el error
+        feo, porque no se nota hasta que alguien se queda sin mercadería.
+        """
+        p = _producto(db, "7790001")
+        _lote(db, p, 10)
+        lote = db.query(Lote).one()
+        v0 = catalogo_local.version_local(db)
+
+        # Se fuerza el caso en que ni el producto ni `lotes.updated_at` cambian
+        # (SQL crudo, sin `onupdate`): sólo se mueven las unidades.
+        marca = lote.updated_at
+        lote.cantidad_actual = 4
+        db.flush()
+        lote.updated_at = marca
+        db.commit()
+
+        assert catalogo_local.version_local(db) != v0
+
+    def test_un_cambio_entre_la_version_y_el_listado_no_queda_como_al_dia(self, db, monkeypatch):
+        """La versión se calcula ANTES de armar el snapshot.
+
+        Si se calculara después, una venta que llegara mientras se arma el
+        snapshot quedaría registrada como "ya está al día", y ese cambio no se
+        volvería a bajar nunca: el navegador se quedaría para siempre con el
+        catálogo anterior a la venta.
+        """
+        from app.services import producto_service
+
+        original = producto_service.listar_productos
+
+        def listar_con_un_cambio_de_mas(sess, **kwargs):
+            _producto(sess, "7798888")
+            return original(sess, **kwargs)
+
+        monkeypatch.setattr(producto_service, "listar_productos", listar_con_un_cambio_de_mas)
+
+        snapshot = catalogo_local.snapshot_local(db)
+
+        assert snapshot["version"] != catalogo_local.version_local(db), (
+            "la versión guardada quedó por delante del listado: el cambio que "
+            "ocurrió mientras se armaba el snapshot no se volvería a bajar nunca"
+        )
+
+    def test_el_snapshot_lleva_la_misma_version_que_el_endpoint(self, db, user):
+        """Si los dos dijeran cosas distintas, el navegador nunca confirmaría
+        que su catálogo está al día y bajaría el completo en cada apertura."""
+        _producto(db, "7790001")
+
+        snapshot = catalogo_local.snapshot_local(db)
+
+        assert snapshot["version"] == catalogo_local.version_local(db)
+
+    def test_esta_registrado_y_pide_token(self):
+        from app.main import app
+
+        rutas = app.openapi()["paths"]
+        assert "/api/catalogo/version" in rutas
+        assert "get" in rutas["/api/catalogo/version"]
+
+        deps = inspect.signature(catalogo.version_del_catalogo_local).parameters
+        assert deps["user"].default.dependency is get_current_user
 
 
 class TestOfflineIgualQueOnline:
@@ -298,13 +417,43 @@ class TestElNavegadorLoGuarda:
     def test_cae_al_snapshot_cuando_no_llegaron_productos(self):
         texto = self._store()
 
-        assert "if (!Array.isArray(prods))" in texto
+        assert "if (!completo || !Array.isArray(completo.productos))" in texto
         assert "sinRed.value = true" in texto
 
     def test_saca_el_aviso_cuando_vuelve_a_llegar_el_catalogo(self):
         texto = self._store()
 
         assert "sinRed.value = false" in texto
+
+    def test_antes_de_bajar_pregunta_si_cambio(self):
+        """Es el punto de la Fase D: refrescar cuesta ~100 bytes, no 0,41 MB."""
+        texto = self._store()
+
+        assert "api.get('/api/catalogo/version')" in texto
+        assert "JSON.stringify(version) === JSON.stringify(snapshot.version)" in texto
+
+    def test_si_no_pudo_confirmar_que_no_cambio_baja_igual(self):
+        """Ante la duda se refresca: lo que no se hace es quedarse con datos
+        viejos por ahorrar unos bytes."""
+        texto = self._store()
+
+        assert "si la versión no se pudo confirmar se baja igual" in texto
+
+    def test_baja_el_catalogo_en_un_solo_pedido(self):
+        """Eran tres requests por apertura; el snapshot ya trae las tres listas."""
+        texto = self._store()
+        fetch = _cuerpo_de_funcion(texto, "fetchAll", "refreshProductos")
+
+        assert "api.get('/api/catalogo/local')" in fetch
+        assert "/api/productos?" not in fetch, (
+            "fetchAll volvió a pedir las listas por separado"
+        )
+
+    def test_sin_senal_no_se_ni_siquiera_se_intenta(self):
+        """Un fetch que va a fallar deja la pantalla esperando y gasta batería."""
+        texto = self._store()
+
+        assert "if (typeof navigator !== 'undefined' && !navigator.onLine)" in texto
 
     def test_el_indicador_muestra_de_cuándo_es_el_catálogo(self):
         """El dato que importa sin red es la antigüedad de lo que se cobra."""

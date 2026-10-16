@@ -1834,7 +1834,9 @@ function startPosPeriodicSync() {
   if (posSyncInterval.value) return
   posSyncInterval.value = setInterval(async () => {
     try {
-      await cajaStore.fetchEstado()
+      // Si la red dejó de contestar esto se pausa solo: reintentar cada 60 s
+      // contra un servidor que no responde solo gasta batería.
+      await cajaStore.refrescarPeriodicamente()
     } catch { /* ignore */ }
   }, 60000)
 }

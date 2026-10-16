@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import api from '@/services/api'
+import api, { esErrorDeRed } from '@/services/api'
 import { useCarritoStore } from '@/stores/carrito'
 
 export const useCajaStore = defineStore('caja', () => {
@@ -13,10 +13,17 @@ export const useCajaStore = defineStore('caja', () => {
   const ultimoCierre = ref(null)
   const sesion_id = ref(null)
   const sesion_inicio = ref(null)
+  // Cuando la red dejó de contestar, el refresco periódico no sirve para nada:
+  // solo gasta batería e intentos. Se pausa y se reanuda solo (evento online)
+  // o cuando un pedido a mano vuelve a salir bien.
+  const sinRed = ref(false)
 
   async function fetchEstado() {
     try {
       const state = await api.get('/api/caja/estado')
+      // Si el pedido salió, la red volvió: esto desbloquea el refresco
+      // periódico aunque el navegador no llegue a disparar el evento online.
+      sinRed.value = false
       if (state) {
         abierta.value = state.abierta || false
         // saldo_actual = solo el cajón; las cuentas digitales van aparte para
@@ -32,7 +39,19 @@ export const useCajaStore = defineStore('caja', () => {
         // su reloj arranca de cero tambien.
         useCarritoStore().sincronizarSesion(state.sesion_id, state.sesion_inicio)
       }
-    } catch { /* fallback */ }
+    } catch (e) {
+      // Un error HTTP (401, 500) no significa que no haya red: eso se sigue
+      // reintentando. Se pausa solo cuando el servidor dejó de contestar.
+      if (esErrorDeRed(e)) sinRed.value = true
+    }
+  }
+
+  // Es lo que llaman los timers de60 s. A mano (`fetchEstado`) se pide igual,
+  // para que entrar a una pantalla nunca quede con datos viejos por un corte
+  // anterior que ya se superó.
+  async function refrescarPeriodicamente() {
+    if (sinRed.value) return
+    await fetchEstado()
   }
 
   async function fetchUltimoCierre() {
@@ -44,5 +63,11 @@ export const useCajaStore = defineStore('caja', () => {
     } catch { /* fallback */ }
   }
 
-  return { abierta, saldo_actual, saldos_cuentas, saldo_cuenta_total, saldo_total, metodos_cerrados, ultimoCierre, sesion_id, sesion_inicio, fetchEstado, fetchUltimoCierre }
+  // Al volver la red, el refresco periódico se habilita de nuevo; a los60 s
+  // (o al entrar a una pantalla) el estado ya queda al día.
+  if (typeof window !== 'undefined') {
+    window.addEventListener('online', () => { sinRed.value = false })
+  }
+
+  return { abierta, saldo_actual, saldos_cuentas, saldo_cuenta_total, saldo_total, metodos_cerrados, ultimoCierre, sesion_id, sesion_inicio, sinRed, fetchEstado, refrescarPeriodicamente, fetchUltimoCierre }
 })

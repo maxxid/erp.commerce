@@ -1,13 +1,15 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue'
-import { useOfflineSales } from '@/composables/useOfflineSales'
+import { useOfflineSales, totalDeVenta } from '@/composables/useOfflineSales'
 import { useAuthStore } from '@/stores/auth'
 import { useProductosStore } from '@/stores/productos'
+import { formatCurrency as fc } from '@/composables/useUtils'
 
 const auth = useAuthStore()
 const productosStore = useProductosStore()
 const hayRed = ref(navigator.onLine)
 const pendingSalesCount = ref(0)
+const montoSinSubir = ref(0)
 const sincronizando = ref(false)
 
 const { syncPendingSales } = useOfflineSales()
@@ -33,9 +35,17 @@ function loadPendingCount() {
   try {
     const stored = localStorage.getItem('apex-offline-sales')
     const sales = stored ? JSON.parse(stored) : []
-    pendingSalesCount.value = sales.filter((s) => !s.synced).length
+    const pendientes = sales.filter((s) => !s.synced)
+    pendingSalesCount.value = pendientes.length
+    // "3 ventas sin subir" no dice si son $3.000 o $300.000: es la diferencia
+    // entre un detalle y algo que hay que resolver antes de cerrar.
+    montoSinSubir.value = pendientes.reduce(
+      (suma, s) => suma + (typeof s.total === 'number' ? s.total : totalDeVenta(s.data)),
+      0
+    )
   } catch {
     pendingSalesCount.value = 0
+    montoSinSubir.value = 0
   }
 }
 
@@ -95,7 +105,7 @@ const antiguedadCatalogo = computed(() => haceCuanto(productosStore.datosDe))
           Catálogo {{ antiguedadCatalogo }}.
         </span>
         <span v-if="pendingSalesCount > 0" class="ml-1">
-          {{ pendingSalesCount }} venta(s) se sincronizan al volver la conexión.
+          {{ pendingSalesCount }} venta(s) sin subir ({{ fc(montoSinSubir) }}): se mandan solas al volver la conexión.
         </span>
       </template>
       <template v-else-if="productosStore.sinRed">
@@ -103,12 +113,12 @@ const antiguedadCatalogo = computed(() => haceCuanto(productosStore.datosDe))
         No se pudo actualizar el catálogo — se vende con los datos
         {{ antiguedadCatalogo || 'de la última sesión' }}.
         <span v-if="pendingSalesCount > 0" class="ml-1">
-          {{ pendingSalesCount }} venta(s) pendiente(s) de sincronizar.
+          {{ pendingSalesCount }} venta(s) sin subir: {{ fc(montoSinSubir) }}.
         </span>
       </template>
       <template v-else-if="pendingSalesCount > 0">
         <i class="fa-solid fa-clock-rotate-left mr-1.5"></i>
-        {{ pendingSalesCount }} venta(s) pendiente(s) de sincronizar.
+        {{ pendingSalesCount }} venta(s) sin subir — {{ fc(montoSinSubir) }}.
         <button
           type="button"
           class="ml-1.5 underline underline-offset-2 font-semibold hover:opacity-80 disabled:opacity-50"

@@ -6,6 +6,26 @@ const pendingSales = ref([])
 let syncing = false
 let onlineListenerRegistered = false
 
+/**
+ * Total de una venta guardada para sincronizar después.
+ *
+ * Si la cola no registró el importe (las ventas encoladas antes de esto), se
+ * recalcula de los items. Es un aviso para el cajero y para el dueño, no un
+ * asiento contable: un monto aproximado vale más que no mostrar nada y que
+ * nadie se entere de que hay plata sin subir.
+ */
+export function totalDeVenta(data) {
+  if (!data) return 0
+  let total = 0
+  for (const item of data.items || []) {
+    const importe = item.importe ?? (
+      Number(item.precio_unitario || 0) * Number(item.peso ?? item.cantidad ?? 0)
+    )
+    total += Number(importe) || 0
+  }
+  return Math.max(0, total - (Number(data.descuento) || 0))
+}
+
 export function useOfflineSales() {
   function loadPendingSales() {
     try {
@@ -30,6 +50,7 @@ export function useOfflineSales() {
         ? crypto.randomUUID()
         : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       data: saleData,
+      total: totalDeVenta(saleData),
       createdAt: new Date().toISOString(),
       synced: false,
       // Reanudación: si el sync anterior creó la venta pero se cortó a mitad
