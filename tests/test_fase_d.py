@@ -38,6 +38,7 @@ CAJA_VIEW = SRC / "views" / "CajaView.vue"
 INDICADOR = SRC / "components" / "layout" / "OfflineIndicator.vue"
 COLA = SRC / "composables" / "useOfflineSales.js"
 SINCRONIZAR = SRC / "composables" / "useOfflineSync.js"
+REFRESCO = SRC / "composables" / "useRefrescoPeriodico.js"
 STORE_CAJA = SRC / "stores" / "caja.js"
 STORE_PRODUCTOS = SRC / "stores" / "productos.js"
 
@@ -175,9 +176,17 @@ class TestElPollNoGastaCuandoNoHayRed:
 
         assert "window.addEventListener('online', () => { sinRed.value = false })" in texto
 
-    def test_el_pos_y_la_caja_usan_el_refresco_pausable(self):
-        for path in (POS, CAJA_VIEW):
+    def test_las_tres_pantallas_usan_el_mismo_refresco(self):
+        """Antes Caja y POS armaban su timer a mano y **CobroMóvil —la
+        pantalla que más mira el cajero— no refrescaba nada**: lo único que se
+        actualizaba era lo que se tocaba."""
+        for path in (POS, CAJA_VIEW, COBRO):
             texto = _leer(path)
-            assert "cajaStore.refrescarPeriodicamente()" in texto, (
-                f"{path.name} sigue refrescando la caja cada 60 s aunque no haya red"
+            assert "useRefrescoPeriodico()" in texto, (
+                f"{path.name} no refresca sola: hay que refrescar a mano"
             )
+            assert "cajaStore.refrescarPeriodicamente()" not in texto, (
+                f"{path.name} sigue con su timer propio: el refresco es uno solo"
+            )
+
+        assert "cajaStore.refrescarPeriodicamente()" in _leer(REFRESCO)

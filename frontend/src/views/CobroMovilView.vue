@@ -15,6 +15,7 @@ import { useBarcodeScanner } from '@/composables/useBarcodeScanner'
 import { useOfflineSales } from '@/composables/useOfflineSales'
 import { useOfflineSync } from '@/composables/useOfflineSync'
 import { useOfflineCaja } from '@/composables/useOfflineCaja'
+import { useRefrescoPeriodico } from '@/composables/useRefrescoPeriodico'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -356,6 +357,9 @@ const {
 const { addPendingSale } = useOfflineSales()
 const { sincronizarPendientes } = useOfflineSync()
 const { postear: postearCaja } = useOfflineCaja()
+// Era la única pantalla que no refrescaba nada: lo único que se actualizaba era
+// lo que se tocaba. Ahora comparte el mismo refresco de 60 s que POS y Caja.
+useRefrescoPeriodico()
 
 // MercadoPago QR dinámico (con importe). El QR fijo ya no se usa: no trae monto
 // y solo lo paga la app de MercadoPago cuando el vendedor carga el importe.

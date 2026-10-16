@@ -934,7 +934,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
 import { useCajaStore } from '@/stores/caja'
@@ -958,6 +958,7 @@ import ArqueoMedios from '@/components/caja/ArqueoMedios.vue'
 import { useSounds } from '@/composables/useSounds'
 import { useOfflineSync } from '@/composables/useOfflineSync'
 import { useOfflineCaja } from '@/composables/useOfflineCaja'
+import { useRefrescoPeriodico } from '@/composables/useRefrescoPeriodico'
 
 const auth = useAuthStore()
 const toast = useToastStore()
@@ -966,6 +967,8 @@ const carritoStore = useCarritoStore()
 const { playOpenCash, playCloseCash } = useSounds()
 const { sincronizarPendientes } = useOfflineSync()
 const { postear: postearCaja } = useOfflineCaja()
+// Antes había un timer propio acá que solo refrescaba el estado de la caja.
+useRefrescoPeriodico()
 const cajaResumen = reactive({ metodos_cerrados: [], egresos_por_medio: {}, retiros: [], total_retiros: 0 })
 
 const movements = ref([])
@@ -975,8 +978,6 @@ const opening = ref(false)
 const closing = ref(false)
 const saving = ref(false)
 const guardandoRetiroActual = ref(false)
-
-const syncInterval = ref(null)
 
 const showNuevoMovimiento = ref(false)
 const showCierreModal = ref(false)
@@ -1565,30 +1566,7 @@ onMounted(async () => {
   await fetchResumen()
   await cajaStore.fetchUltimoCierre()
   await fetchReportes()
-  startPeriodicSync()
 })
-
-onUnmounted(() => {
-  stopPeriodicSync()
-})
-
-function startPeriodicSync() {
-  if (syncInterval.value) return
-  syncInterval.value = setInterval(async () => {
-    try {
-      // Si la red dejó de contestar esto se pausa solo: reintentar cada 60 s
-      // contra un servidor que no responde solo gasta batería.
-      await cajaStore.refrescarPeriodicamente()
-    } catch { /* ignore */ }
-  }, 60000)
-}
-
-function stopPeriodicSync() {
-  if (syncInterval.value) {
-    clearInterval(syncInterval.value)
-    syncInterval.value = null
-  }
-}
 
 async function fetchMovimientos() {
   try {

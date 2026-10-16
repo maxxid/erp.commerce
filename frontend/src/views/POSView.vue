@@ -1364,6 +1364,7 @@ import { useConfetti } from '@/composables/useConfetti'
 import { useOfflineSales } from '@/composables/useOfflineSales'
 import { useOfflineSync } from '@/composables/useOfflineSync'
 import { useOfflineCaja } from '@/composables/useOfflineCaja'
+import { useRefrescoPeriodico } from '@/composables/useRefrescoPeriodico'
 import { useBarcodeScanner } from '@/composables/useBarcodeScanner'
 
 const auth = useAuthStore()
@@ -1379,6 +1380,9 @@ const route = useRoute()
 const { addPendingSale } = useOfflineSales()
 const { sincronizarPendientes } = useOfflineSync()
 const { postear: postearCaja } = useOfflineCaja()
+// Refresca caja, catálogo y subida de pendientes cada 60 s sin que nadie toque
+// nada: antes esto era un timer propio que solo refrescaba la caja.
+useRefrescoPeriodico()
 const router = useRouter()
 const { playSale, playOpenCash } = useSounds()
 const { firstSaleOfDay } = useConfetti()
@@ -1407,7 +1411,6 @@ const mpQrError = ref('')
 const mpPollingInterval = ref(null)
 const mpVentaId = ref(null)
 
-const posSyncInterval = ref(null)
 const mpOrderId = ref(null)
 
 // MercadoPago POS (Smart Point) states
@@ -1827,31 +1830,11 @@ onMounted(async () => {
     loadSaleForEditing(Number(route.query.editVentaId))
     router.replace({ query: {} })
   }
-  startPosPeriodicSync()
 })
 
 onUnmounted(() => {
-  stopPosPeriodicSync()
   if (mpPollingInterval.value) clearInterval(mpPollingInterval.value)
 })
-
-function startPosPeriodicSync() {
-  if (posSyncInterval.value) return
-  posSyncInterval.value = setInterval(async () => {
-    try {
-      // Si la red dejó de contestar esto se pausa solo: reintentar cada 60 s
-      // contra un servidor que no responde solo gasta batería.
-      await cajaStore.refrescarPeriodicamente()
-    } catch { /* ignore */ }
-  }, 60000)
-}
-
-function stopPosPeriodicSync() {
-  if (posSyncInterval.value) {
-    clearInterval(posSyncInterval.value)
-    posSyncInterval.value = null
-  }
-}
 
 async function fetchPOSStats() {
   try {
