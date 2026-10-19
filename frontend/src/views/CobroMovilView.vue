@@ -575,9 +575,18 @@ async function cancelarQrInteroperable() {
 
 // apertura de caja
 const showApertura = ref(false)
+const showCierre = ref(false)
 const montoInicial = ref('')
 const abriendoCaja = ref(false)
 const cerrandoCaja = ref(false)
+
+// El modal de cierre tiene que mostrar desde cuándo está abierta esta caja:
+// es el dato que faltaba para entender que "sigue abierta desde otro día".
+const cajaDesdeTexto = computed(() => {
+  const d = new Date(cajaStore.sesion_inicio || '')
+  if (Number.isNaN(d.getTime())) return 'sin fecha'
+  return d.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+})
 const tabActivo = ref('cobro') // cobro | control | pc
 const menuOpen = ref(false)
 
@@ -589,12 +598,15 @@ const menuItems = computed(() => [
   { label: 'POS (PC)', icon: 'fa-desktop', value: 'pc', active: tabActivo.value === 'pc', route: '/pos' },
 ])
 
-async function toggleCaja() {
+function toggleCaja() {
+  // Un toque en el chip del header no cierra (ni abre) la caja de un saque:
+  // cerrar abre un modal con los números a la vista y tiene que apretar el
+  // botón rojo, y abrir pide el monto inicial. Antes eran dos confirm() del
+  // navegador sin ningún dato — "casi sin confirmar nada", como lo vio el
+  // dueño al probarlo desde el celular.
   if (cajaStore.abierta) {
-    if (!confirm('¿Querés cerrar la caja ahora?')) return
-    await cerrarCajaMovil()
+    showCierre.value = true
   } else {
-    if (!confirm('¿Querés abrir la caja?')) return
     showApertura.value = true
   }
 }
@@ -606,6 +618,7 @@ async function cerrarCajaMovil() {
     // el negocio cierra igual, y el servidor se entera cuando vuelva la conexión.
     const { encolada } = await postearCaja('/api/caja/cierre-total', {}, 'Cierre de caja')
     await cajaStore.fetchEstado()
+    showCierre.value = false
     toast.success(encolada
       ? 'Caja cerrada — sin conexión, se registra sola al volver'
       : 'Caja cerrada correctamente')
@@ -1057,6 +1070,36 @@ function logout() {
         <div class="grid grid-cols-2 gap-2">
           <BaseButton variant="secondary" block @click="showCobro = false">Volver</BaseButton>
           <BaseButton variant="primary" block :loading="confirmando" @click="ejecutarCobro">Confirmar compra</BaseButton>
+        </div>
+      </div>
+    </BaseModal>
+
+    <!-- Modal de cierre de caja: con los números a la vista y un botón
+         explícito. Un confirm() de un toque en el header cerraba la caja casi
+         sin confirmar nada. -->
+    <BaseModal v-model="showCierre" title="Cerrar caja" :persistent="true">
+      <div class="flex flex-col gap-3">
+        <div class="text-sm text-slate-500">
+          Se cierra la caja del día. Si ahora no hay internet, el cierre queda
+          guardado en el celular y se registra solo cuando vuelva la conexión.
+        </div>
+        <div class="rounded-lg bg-slate-50 dark:bg-slate-800 text-sm divide-y divide-slate-200 dark:divide-slate-700">
+          <div class="flex justify-between px-3 py-2">
+            <span class="text-slate-500">Efectivo en cajón</span>
+            <b>{{ fc(cajaStore.saldo_actual) }}</b>
+          </div>
+          <div class="flex justify-between px-3 py-2">
+            <span class="text-slate-500">Total (efectivo + cuentas)</span>
+            <b>{{ fc(cajaStore.saldo_total) }}</b>
+          </div>
+          <div class="flex justify-between px-3 py-2">
+            <span class="text-slate-500">Abierta desde</span>
+            <b>{{ cajaDesdeTexto }}</b>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 gap-2 mt-1">
+          <BaseButton variant="danger" block :loading="cerrandoCaja" @click="cerrarCajaMovil">Sí, cerrar la caja</BaseButton>
+          <BaseButton variant="ghost" block :disabled="cerrandoCaja" @click="showCierre = false">Dejarla abierta</BaseButton>
         </div>
       </div>
     </BaseModal>

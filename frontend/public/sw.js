@@ -20,11 +20,20 @@ const CACHEABLE_API_PATTERNS = [
   /\/api\/clientes/,
   /\/api\/categorias/,
   /\/api\/catalogo\/estado/,
-  /\/api\/caja\/estado/,
   /\/api\/proveedores/,
   /\/api\/lotes/,
   /\/api\/config\/ajustes/,
 ]
+
+// El estado de la caja queda FUERA de esta lista a propósito. Sin red, el
+// service worker devuelve la última respuesta que le quedó guardada —la de
+// cuando la caja estaba cerrada—, `fetchEstado` la toma como verdad, la pisa
+// por encima del estado local (que sí sabe que la caja se abrió sin conexión),
+// la vuelve a guardar y hasta reactiva el refresco: probado el 19/10, refrescar
+// la página sin internet mostraba "CAJA CERRADA" con la caja abierta.
+// Ese estado ya vive en `apex-caja-estado` (localStorage), que además sabe de
+// cuándo es. Acá lo que tiene que pasar es que el pedido falle, el store guarde
+// lo que sabe y el refresco se pause.
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

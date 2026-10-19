@@ -44,6 +44,7 @@ COLA_CAJA = SRC / "composables" / "useOfflineCaja.js"
 SYNC = SRC / "composables" / "useOfflineSync.js"
 COLA_VENTAS = SRC / "composables" / "useOfflineSales.js"
 INDICADOR = SRC / "components" / "layout" / "OfflineIndicator.vue"
+SW = RAIZ / "frontend" / "public" / "sw.js"
 VISTAS = {
     "CajaView": SRC / "views" / "CajaView.vue",
     "POSView": SRC / "views" / "POSView.vue",
@@ -148,7 +149,12 @@ class TestLaCajaSeRecuerdaSinRed:
         texto = _leer(STORE_CAJA)
 
         assert "function esDeHoy(" in texto
-        assert "esDeHoy(guardado.sesion_inicio || guardado.guardadoEn)" in texto
+        assert "esDeHoy(guardado.sesion_inicio)" in texto
+        assert "esDeHoy(guardado.guardadoEn)" in texto, (
+            "con un solo || sobre sesion_inicio, si la hora del servidor no se "
+            "podia leer no se restauraba nada y la pantalla decia 'CAJA CERRADA' "
+            "con la caja abierta en el negocio"
+        )
 
     def test_hay_un_camino_local_para_abrir_y_para_cerrar(self):
         texto = _leer(STORE_CAJA)
@@ -301,3 +307,60 @@ class TestElAviso:
         texto = _leer(INDICADOR)
 
         assert "pendingSalesCount > 0 || pendingCajaCount > 0" in texto
+
+
+class TestRefrescarSinInternetDeciaCajaCerrada:
+    """Prueba 2 del dueño (19/10/2026): con la caja abierta y sin internet,
+    refrescar la página mostraba "CAJA CERRADA".
+
+    Causa: el service worker tenía cacheado el estado de la caja. Sin red
+    devolvía la última respuesta —la de antes de abrir—, `fetchEstado` la tomaba
+    como verdad, la pisaba por encima del estado local (que sí sabía que la caja
+    se abrió sin conexión) y la volvía a guardar. La pantalla salía cerrada y
+    además quedaba anotada así para la próxima.
+    """
+
+    def test_el_service_worker_no_cachea_el_estado_de_la_caja(self):
+        sw = _leer(SW)
+        inicio = sw.index("CACHEABLE_API_PATTERNS")
+        lista = sw[inicio:sw.index("]", inicio)]
+
+        assert "/api/caja/estado" not in lista, (
+            "sin red el SW le devuelve al store un estado viejo y lo pisa: "
+            "con la caja abierta la pantalla decia 'CAJA CERRADA'"
+        )
+
+    def test_el_estado_local_sigue_siendo_el_que_manda(self):
+        texto = _leer(STORE_CAJA)
+
+        # Sin red el pedido tiene que fallar (no devolver una respuesta vieja),
+        # para que el store guarde lo que sabe y pause el refresco.
+        assert "if (esErrorDeRed(e)) sinRed.value = true" in texto
+        assert "apex-caja-estado" in texto
+
+
+class TestCerrarLaCajaDesdeElCelular:
+    """Prueba 2 del dueño (19/10/2026): "desde el celular me permite cerrar y
+    abrir caja casi sin confirmar nada" — era un confirm() de un toque, sin
+    ningún dato, en un chip del header que se toca por error."""
+
+    def test_cerrar_pide_confirmar_con_los_numeros_a_la_vista(self):
+        texto = _leer(VISTAS["CobroMovilView"])
+
+        assert "confirm('¿Querés cerrar la caja ahora?')" not in texto
+        assert "showCierre" in texto
+        assert "Sí, cerrar la caja" in texto
+        assert "{{ fc(cajaStore.saldo_actual) }}" in texto, (
+            "cerrar sin mostrar cuánta plata hay es cerrar a ciegas"
+        )
+        assert "cajaDesdeTexto" in texto, (
+            "hacía falta ver desde cuándo estaba abierta: la caja de otro día "
+            "se veía igual que la de hoy"
+        )
+
+    def test_abrir_sigue_pidiendo_el_monto_inicial(self):
+        texto = _leer(VISTAS["CobroMovilView"])
+
+        assert "confirm('¿Querés abrir la caja?')" not in texto
+        assert 'title="Abrir caja"' in texto
+        assert 'label="Monto inicial"' in texto

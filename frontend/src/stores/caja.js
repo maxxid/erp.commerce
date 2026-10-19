@@ -74,8 +74,18 @@ export const useCajaStore = defineStore('caja', () => {
   // muestre la caja en el estado en que quedó. Salvo una: una caja de otro día,
   // porque el servidor la da por cerrada con el cambio de día — restaurarla
   // abierta dejaría el POS cobrando contra una sesión que ya no existe.
+  //
+  // La fecha se mira en dos pasos: primero la del servidor (`sesion_inicio`) y
+  // si esa no sirve, la que escribió el propio navegador (`guardadoEn`). Antes
+  // un solo `||` sobre `sesion_inicio` bastaba para quedarse sin caja en
+  // silencio: si la hora del servidor no se podía leer, no se restauraba nada y
+  // la pantalla decía "CAJA CERRADA" aunque la caja estuviera abierta.
   const guardado = leerEstado()
-  if (guardado && (!guardado.abierta || esDeHoy(guardado.sesion_inicio || guardado.guardadoEn))) {
+  if (guardado && (
+    !guardado.abierta
+    || esDeHoy(guardado.sesion_inicio)
+    || esDeHoy(guardado.guardadoEn)
+  )) {
     aplicarEstado(guardado)
   }
 
