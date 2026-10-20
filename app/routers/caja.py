@@ -182,7 +182,8 @@ def cierre_metodo_sesion(
             db, cierre_id, data.medio_pago, data.monto_real, user.id,
             data.comentario, data.sucursal_id,
         )
-        auditoria_service.registrar(db, user.id, "cierre_caja_sesion", mov.id, None, {
+        auditoria_service.registrar(db, user.id, "cierre_caja_sesion", None, None, {
+            "movimiento_id": mov.id,
             "cierre_id": cierre_id,
             "medio_pago": data.medio_pago,
             "monto_real": data.monto_real,
@@ -218,7 +219,8 @@ def retiro_cierre(
             sucursal_id=data.sucursal_id,
             medio_pago=data.medio_pago,
         )
-        auditoria_service.registrar(db, user.id, "retiro_cierre_caja", mov.id, None, {
+        auditoria_service.registrar(db, user.id, "retiro_cierre_caja", None, None, {
+            "movimiento_id": mov.id,
             "monto": data.monto,
             "motivo": data.motivo,
             "medio_pago": data.medio_pago,
@@ -242,7 +244,7 @@ def borrar_retiro_cierre(
     """Da de baja una extracción mal cargada."""
     try:
         caja_service.eliminar_retiro_cierre(db, retiro_id)
-        auditoria_service.registrar(db, user.id, "borrar_retiro_cierre_caja", retiro_id, None, {})
+        auditoria_service.registrar(db, user.id, "borrar_retiro_cierre_caja", None, None, {"retiro_id": retiro_id})
         return RespuestaData(data={"id": retiro_id}, message="Extracción anulada")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -263,7 +265,8 @@ def confirmar_cierre(
         )
         diferencia = (mov.monto_confirmado or 0) - (mov.monto_esperado or mov.monto)
         auditoria_service.registrar(
-            db, user.id, "confirmar_cierre_caja", mov.id, None, {
+            db, user.id, "confirmar_cierre_caja", None, None, {
+                "movimiento_id": mov.id,
                 "monto_confirmado": data.monto_confirmado,
                 "monto_esperado": mov.monto_esperado,
                 "diferencia": diferencia,
@@ -504,7 +507,8 @@ def pago_proveedor(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    auditoria_service.registrar(db, user.id, "pago_proveedor_caja", mov.id, None, {
+    auditoria_service.registrar(db, user.id, "pago_proveedor_caja", None, None, {
+        "movimiento_id": mov.id,
         "monto": data.monto,
         "proveedor_id": data.proveedor_id,
         "proveedor_nombre": data.proveedor_nombre,
@@ -531,7 +535,7 @@ def borrar_pago_proveedor(
         caja_service.eliminar_pago_proveedor(db, pago_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    auditoria_service.registrar(db, user.id, "borrar_pago_proveedor_caja", pago_id, None, {})
+    auditoria_service.registrar(db, user.id, "borrar_pago_proveedor_caja", None, None, {"pago_id": pago_id})
     return RespuestaData(data={"id": pago_id}, message="Pago a proveedor anulado")
 
 

@@ -26,7 +26,16 @@ def registrar(
     detalle: Optional[dict] = None,
     creado_por: Optional[int] = None,
 ):
-    """Registra un evento de auditoría."""
+    """Registra un evento de auditoría.
+
+    `venta_id` es una clave foránea hacia `ventas.id`: **solo puede llevar el id
+    de una venta**. Si se le pasa el id de un movimiento de caja (borrar una
+    extracción, arquear un medio, pagar a un proveedor), SQLite tira
+    "FOREIGN KEY constraint failed" y el endpoint responde 500 **después de que
+    la operación ya se había hecho** — producción, 20/10/2026, al borrar una
+    extracción. Esos ids van en `detalle` en su lugar; `venta_id` se usa solo
+    en `routers/ventas.py`.
+    """
     riesgo = _evaluar_riesgo(tipo, detalle)
     entry = Auditoria(
         usuario_id=usuario_id,
