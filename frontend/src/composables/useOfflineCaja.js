@@ -48,6 +48,18 @@ export function useOfflineCaja() {
     return cola.value.filter((op) => !op.subida)
   }
 
+  // Mismo criterio en los dos caminos (con red y sin ella): la pantalla tiene
+  // que quedar como quedó la caja en el negocio. Antes esto solo pasaba al
+  // encolar, así que con red la apertura quedaba guardada en el navegador
+  // recién cuando salía el pedido siguiente (`fetchEstado`): si ese no salía,
+  // la pantalla seguía viendo la caja abierta y **al refrescar aparecía
+  // "CAJA CERRADA" con la caja abierta en el negocio** (Prueba 2, 20/10).
+  function aplicarLocal(endpoint, data) {
+    const caja = useCajaStore()
+    if (endpoint === '/api/caja/apertura') caja.aplicarAperturaLocal(data)
+    if (endpoint === '/api/caja/cierre-total') caja.aplicarCierreLocal()
+  }
+
   function encolar(endpoint, data, etiqueta) {
     cola.value.push({
       id: nuevoId(),
@@ -60,9 +72,7 @@ export function useOfflineCaja() {
     guardarCola()
     // El negocio siguió andando: mientras no conteste el servidor, el navegador
     // tiene que mostrar la caja como quedó (abierta al abrir, cerrada al cerrar).
-    const caja = useCajaStore()
-    if (endpoint === '/api/caja/apertura') caja.aplicarAperturaLocal(data)
-    if (endpoint === '/api/caja/cierre-total') caja.aplicarCierreLocal()
+    aplicarLocal(endpoint, data)
     notificar()
   }
 
@@ -78,6 +88,9 @@ export function useOfflineCaja() {
     }
     try {
       const resp = await api.post(endpoint, data)
+      // El servidor ya lo registró: se deja anotado en el navegador acá mismo,
+      // sin depender del pedido que sigue (`fetchEstado`).
+      aplicarLocal(endpoint, data)
       return { resp, encolada: false }
     } catch (e) {
       if (!esErrorDeRed(e)) throw e

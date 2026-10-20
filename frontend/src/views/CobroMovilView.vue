@@ -579,14 +579,6 @@ const showCierre = ref(false)
 const montoInicial = ref('')
 const abriendoCaja = ref(false)
 const cerrandoCaja = ref(false)
-
-// El modal de cierre tiene que mostrar desde cuándo está abierta esta caja:
-// es el dato que faltaba para entender que "sigue abierta desde otro día".
-const cajaDesdeTexto = computed(() => {
-  const d = new Date(cajaStore.sesion_inicio || '')
-  if (Number.isNaN(d.getTime())) return 'sin fecha'
-  return d.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-})
 const tabActivo = ref('cobro') // cobro | control | pc
 const menuOpen = ref(false)
 
@@ -1094,7 +1086,7 @@ function logout() {
           </div>
           <div class="flex justify-between px-3 py-2">
             <span class="text-slate-500">Abierta desde</span>
-            <b>{{ cajaDesdeTexto }}</b>
+            <b>{{ cajaStore.desdeTexto || 'sin fecha' }}</b>
           </div>
         </div>
         <div class="grid grid-cols-1 gap-2 mt-1">

@@ -27,8 +27,8 @@
           <i class="fa-solid fa-user mr-1"></i>
           {{ auth.currentUser?.nombre || auth.currentUser?.username }}
         </BaseBadge>
-        <BaseBadge :variant="cajaStore.abierta ? 'success' : 'danger'" size="sm" :dot="true">
-          {{ cajaStore.abierta ? 'CAJA ABIERTA' : 'CAJA CERRADA' }}
+        <BaseBadge :variant="chipCaja.variant" size="sm" :dot="true" :title="chipCaja.titulo || undefined">
+          {{ chipCaja.texto }}
         </BaseBadge>
         <button
           v-if="carritoStore.cantidadCarritos > 1"
@@ -1370,6 +1370,29 @@ import { useBarcodeScanner } from '@/composables/useBarcodeScanner'
 const auth = useAuthStore()
 const toast = useToastStore()
 const cajaStore = useCajaStore()
+
+// Lo que dice el chip de caja. "CAJA ABIERTA" a secas no alcanzaba: hacía
+// falta saber desde cuándo, y avisar si la que se ve cerrada es la de otro día
+// (el servidor la da por cerrada con el cambio de fecha: el dueño la dejó
+// abierta y la pantalla cambiaba sola sin explicar por qué).
+const chipCaja = computed(() => {
+  if (cajaStore.abierta) {
+    const desde = cajaStore.desdeTexto
+    return {
+      variant: 'success',
+      texto: desde ? `CAJA ABIERTA · desde ${desde}` : 'CAJA ABIERTA',
+      titulo: '',
+    }
+  }
+  if (cajaStore.cerroDeOtroDia) {
+    return {
+      variant: 'warning',
+      texto: 'CAJA CERRADA (la de otro día)',
+      titulo: 'Había una caja abierta de otro día: el servidor la cierra solo con el cambio de fecha y ese cierre ya quedó registrado. Hay que abrir la de hoy.',
+    }
+  }
+  return { variant: 'danger', texto: 'CAJA CERRADA', titulo: '' }
+})
 const productosStore = useProductosStore()
 const carritoStore = useCarritoStore()
 

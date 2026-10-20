@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import api, { esErrorDeRed } from '@/services/api'
 import { useCarritoStore } from '@/stores/carrito'
 
@@ -41,9 +41,15 @@ export const useCajaStore = defineStore('caja', () => {
   // solo gasta batería e intentos. Se pausa y se reanuda solo (evento online)
   // o cuando un pedido a mano vuelve a salir bien.
   const sinRed = ref(false)
+  // Había una caja abierta guardada, pero de **otro día**: no se restaura (el
+  // servidor la da por cerrada con el cambio de fecha), pero que no quede en
+  // silencio. El dueño la dejó abierta y la pantalla decía "CAJA CERRADA" sin
+  // explicar por qué.
+  const cerroDeOtroDia = ref(false)
 
   function aplicarEstado(state) {
     abierta.value = Boolean(state.abierta)
+    if (state.abierta) cerroDeOtroDia.value = false
     // saldo_actual = solo el cajón; las cuentas digitales van aparte para
     // que el efectivo y el saldo de la app se cuadren por separado.
     saldo_actual.value = state.saldo_efectivo ?? state.saldo_actual ?? 0
@@ -81,13 +87,28 @@ export const useCajaStore = defineStore('caja', () => {
   // silencio: si la hora del servidor no se podía leer, no se restauraba nada y
   // la pantalla decía "CAJA CERRADA" aunque la caja estuviera abierta.
   const guardado = leerEstado()
-  if (guardado && (
-    !guardado.abierta
-    || esDeHoy(guardado.sesion_inicio)
-    || esDeHoy(guardado.guardadoEn)
-  )) {
+  const deOtroDia = Boolean(
+    guardado && guardado.abierta
+    && !esDeHoy(guardado.sesion_inicio)
+    && !esDeHoy(guardado.guardadoEn)
+  )
+  if (guardado && !deOtroDia) {
     aplicarEstado(guardado)
+  } else if (deOtroDia) {
+    cerroDeOtroDia.value = true
   }
+
+  // "hoy 08:15" / "el 19/10 18:20": lo que hay que mirar para saber si la caja
+  // que dice abierta es la de hoy o la que quedó de otro día.
+  const desdeTexto = computed(() => {
+    const iso = sesion_inicio.value
+    if (!iso) return ''
+    const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return ''
+    const hora = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+    if (d.toDateString() === new Date().toDateString()) return `hoy ${hora}`
+    return `el ${d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })} ${hora}`
+  })
 
   async function fetchEstado() {
     try {
@@ -156,5 +177,5 @@ export const useCajaStore = defineStore('caja', () => {
     window.addEventListener('online', () => { sinRed.value = false })
   }
 
-  return { abierta, saldo_actual, saldos_cuentas, saldo_cuenta_total, saldo_total, metodos_cerrados, ultimoCierre, sesion_id, sesion_inicio, sinRed, fetchEstado, refrescarPeriodicamente, fetchUltimoCierre, aplicarAperturaLocal, aplicarCierreLocal }
+  return { abierta, saldo_actual, saldos_cuentas, saldo_cuenta_total, saldo_total, metodos_cerrados, ultimoCierre, sesion_id, sesion_inicio, sinRed, cerroDeOtroDia, desdeTexto, fetchEstado, refrescarPeriodicamente, fetchUltimoCierre, aplicarAperturaLocal, aplicarCierreLocal }
 })

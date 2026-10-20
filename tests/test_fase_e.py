@@ -353,7 +353,7 @@ class TestCerrarLaCajaDesdeElCelular:
         assert "{{ fc(cajaStore.saldo_actual) }}" in texto, (
             "cerrar sin mostrar cuánta plata hay es cerrar a ciegas"
         )
-        assert "cajaDesdeTexto" in texto, (
+        assert "cajaStore.desdeTexto" in texto, (
             "hacía falta ver desde cuándo estaba abierta: la caja de otro día "
             "se veía igual que la de hoy"
         )
@@ -364,3 +364,43 @@ class TestCerrarLaCajaDesdeElCelular:
         assert "confirm('¿Querés abrir la caja?')" not in texto
         assert 'title="Abrir caja"' in texto
         assert 'label="Monto inicial"' in texto
+
+
+class TestLaCajaQueSeVeEsLaDeHoy:
+    """Prueba 2 del dueño (20/10/2026): "en la PC tenía la caja abierta,
+    entré sin internet y me salía la cerrada".
+
+    Tres cosas podían dejar la pantalla diciendo "CAJA CERRADA" con la caja
+    abierta: la caché del service worker (arreglada el 19/10), una apertura
+    con red que no llegaba a guardarse porque **el pedido que seguía** no
+    salía, y una caja dejada abierta de otro día — que se cierra sola con el
+    cambio de fecha y ahora lo dice en pantalla en vez de cambiar sola."""
+
+    def test_abrir_con_red_tambien_lo_deja_anotado_en_el_navegador(self):
+        texto = _leer(COLA_CAJA)
+        cuerpo = texto[texto.index("async function postear("):]
+
+        assert "aplicarLocal(endpoint, data)" in cuerpo, (
+            "con red la apertura solo quedaba guardada si salia el fetchEstado "
+            "que seguia: si ese fallaba, la pantalla seguia abierta y al "
+            "refrescar salia 'CAJA CERRADA'"
+        )
+        # Los tres usos son: la declaracion, el camino sin red (encolar) y el
+        # camino con red (postear). Un cuarto significaria dos aplicaciones.
+        assert texto.count("aplicarLocal(endpoint, data)") == 3
+
+    def test_el_store_deja_constancia_de_la_caja_de_otro_dia(self):
+        texto = _leer(STORE_CAJA)
+
+        assert "cerroDeOtroDia" in texto, (
+            "que la caja de otro dia no se restaure esta bien, pero en silencio "
+            "se lea como un bug"
+        )
+        assert "desdeTexto" in texto
+
+    def test_el_pos_avisa_por_que_esta_cerrada(self):
+        texto = _leer(VISTAS["POSView"])
+
+        assert "chipCaja" in texto
+        assert "la de otro día" in texto
+        assert "CAJA ABIERTA · desde " in texto
