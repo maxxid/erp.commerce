@@ -33,6 +33,11 @@ class Venta(Base):
     notas = Column(Text, nullable=True)
     comprador_cuit = Column(String(20), nullable=True)
 
+    # Última vez que se corrigió algo de la venta ya cobrada (hoy: el medio de
+    # pago). NULL = nunca se tocó. Es la bandera que se ve en la lista de
+    # ventas; el detalle de qué cambió y quién lo hizo vive en auditoría.
+    modificada_en = Column(DateTime, nullable=True)
+
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relaciones

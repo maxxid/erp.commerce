@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.models.venta import Venta, VentaItem, VentaItemLote
 from app.models.producto import Producto
 from app.models.cliente import Cliente
+from app.models.movimiento_caja import MovimientoCaja
 from app.services import stock_service, caja_service, oferta_service, lote_service, recarga_service
 
 
@@ -374,6 +375,121 @@ def anular_venta(
     recarga_service.anular_recargas(db, venta, uid)
 
     venta.estado = "anulada"
+    db.commit()
+    db.refresh(venta)
+    return venta
+
+
+# Medios con los que una venta puede cobrarse. MEDIOS_INGRESO son los que
+# dejan plata en caja (o en una cuenta digital); a eso se le suma la cuenta
+# corriente, que es deuda con el cliente y no genera ingreso.
+MEDIOS_VENTA = set(caja_service.MEDIOS_INGRESO) | {"cta_corriente"}
+
+
+def cambiar_medio_pago(
+    db: Session,
+    venta: Venta,
+    medio_pago: str,
+    usuario_id: Optional[int] = None,
+) -> Venta:
+    """Corrige el medio de pago de una venta ya cobrada.
+
+    Caso real (20/10/2026): la cliente dijo que pagaba con SmartPoint, no pudo
+    y terminó en transferencia; el cajero ya había registrado la venta porque
+    había más gente esperando y no había manera de corregirla.
+
+    Cambiar sólo `Venta.medio_pago` no alcanzaría: la plata ya quedó anotada en
+    caja bajo el medio viejo y el arqueo seguiría mostrándola ahí. Por eso los
+    ingresos que dejó esa venta pasan al medio nuevo y `modificada_en` queda
+    marcada, que es la bandera que se ve en la lista de ventas (el detalle de
+    qué cambió y quién lo hizo queda en auditoría).
+
+    Lo que NO toca: la parte pagada en efectivo de una venta mixta (esa plata
+    está en el cajón y nadie la tocó), el stock, las recargas digitales ni las
+    facturas ya emitidas.
+
+    Raises:
+        ValueError: si no es una venta confirmada, si el medio no existe o es
+            el que ya tiene, si la caja está cerrada, o si la venta es de otra
+            jornada (corregirla reescribiría el arqueo de un día cerrado).
+    """
+    if venta.estado != "confirmada":
+        raise ValueError("Sólo se corrigen ventas ya cobradas")
+    if medio_pago not in MEDIOS_VENTA:
+        raise ValueError("Medio de pago inválido")
+    if medio_pago == venta.medio_pago:
+        raise ValueError("Esa venta ya tiene ese medio de pago")
+    if medio_pago == "cta_corriente" and not venta.cliente_id:
+        raise ValueError("Esa venta no tiene cliente: no se puede pasar a cuenta corriente")
+
+    if not caja_service.caja_abierta(db, venta.sucursal_id):
+        raise ValueError("La caja está cerrada: abrila para corregir una venta")
+
+    # Los ingresos que dejó la venta en caja (uno solo, o dos si fue mixta:
+    # una parte en efectivo y el resto en el medio que se eligió).
+    movimientos = (
+        db.query(MovimientoCaja)
+        .filter(
+            MovimientoCaja.tipo == "ingreso",
+            MovimientoCaja.referencia_tipo == "venta",
+            MovimientoCaja.referencia_id == venta.id,
+        )
+        .all()
+    )
+
+    # Tiene que ser de la jornada abierta: los ingresos de un día ya cerrado
+    # informan el arqueo de ese día y moverlos reescribiría la historia.
+    apertura = caja_service._apertura_sesion_actual(db, venta.sucursal_id)
+    if apertura is None:
+        raise ValueError("La caja está cerrada: abrila para corregir una venta")
+    de_esta_jornada = (
+        all(m.created_at >= apertura.created_at for m in movimientos)
+        if movimientos
+        else venta.created_at >= apertura.created_at
+    )
+    if not de_esta_jornada:
+        raise ValueError("Esa venta es de otra jornada: no se puede corregir en esta caja")
+
+    uid = usuario_id or venta.usuario_id
+    anterior = venta.medio_pago
+
+    if anterior == "cta_corriente":
+        # Nunca entró plata en caja (sólo se le anotó al cliente): ahora sí
+        # entra, en el medio nuevo.
+        if venta.cliente_id:
+            cliente = db.query(Cliente).filter(Cliente.id == venta.cliente_id).first()
+            if cliente:
+                cliente.saldo_cta_corriente -= venta.total
+        caja_service.registrar_ingreso(
+            db,
+            monto=venta.total,
+            descripcion=f"Venta {venta.numero}",
+            usuario_id=uid,
+            referencia_tipo="venta",
+            referencia_id=venta.id,
+            sucursal_id=venta.sucursal_id,
+            medio_pago=medio_pago,
+        )
+    elif medio_pago == "cta_corriente":
+        # La plata no va a entrar: pasa a ser deuda con el cliente.
+        for m in movimientos:
+            db.delete(m)
+        cliente = db.query(Cliente).filter(Cliente.id == venta.cliente_id).first()
+        if cliente:
+            cliente.saldo_cta_corriente += venta.total
+    else:
+        # Sólo se mueve el renglón del medio que estaba mal: si la venta era
+        # mixta, la parte en efectivo sigue en efectivo.
+        movidos = 0
+        for m in movimientos:
+            if m.medio_pago == anterior:
+                m.medio_pago = medio_pago
+                movidos += 1
+        if movimientos and not movidos:
+            raise ValueError("Los ingresos de esa venta no coinciden con su medio de pago")
+
+    venta.medio_pago = medio_pago
+    venta.modificada_en = datetime.now(timezone.utc)
     db.commit()
     db.refresh(venta)
     return venta

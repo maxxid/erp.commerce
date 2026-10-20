@@ -145,6 +145,16 @@
                 <div class="text-slate-400 dark:text-slate-500">{{ row.medio_pago }}</div>
               </div>
             </template>
+            <template v-else-if="row.event === 'medio_pago_corregido'">
+              <div class="space-y-0.5">
+                <div>
+                  <span class="line-through text-slate-400 dark:text-slate-500">{{ row.medio_pago_antes }}</span>
+                  <span class="mx-1 text-slate-400">&rarr;</span>
+                  <span class="font-semibold text-amber-700 dark:text-amber-400">{{ row.medio_pago }}</span>
+                </div>
+                <div class="text-slate-400 dark:text-slate-500 font-mono-data">{{ formatCurrency(row.total) }}</div>
+              </div>
+            </template>
             <template v-else>
               <span class="truncate block" :title="row.description">{{ row.description }}</span>
             </template>
@@ -323,6 +333,7 @@ function eventEmoji(event) {
     venta_anulada: '\u2298',
     venta_editada: '\u270F\uFE0F',
     venta_confirmada: '\u2713',
+    medio_pago_corregido: '\u21C4',
   }
   return map[event] || ''
 }
@@ -335,6 +346,7 @@ function eventLabel(log) {
     venta_editada: 'Venta editada',
     carrito_creado: 'Carrito creado',
     venta_confirmada: 'Venta confirmada',
+    medio_pago_corregido: 'Medio de pago corregido',
   }
   return map[log.event] || log.type
 }
@@ -347,6 +359,7 @@ function eventBadgeClass(log) {
     venta_editada: 'bg-amber-100 text-amber-800',
     carrito_creado: 'bg-slate-100 text-slate-700',
     venta_confirmada: 'bg-emerald-100 text-emerald-800',
+    medio_pago_corregido: 'bg-amber-100 text-amber-800',
   }
   if (map[log.event]) return map[log.event]
   const typeMap = {
@@ -389,6 +402,7 @@ async function refreshLogs() {
         // venta
         total: e.detalle?.total || e.detalle?.subtotal || 0,
         medio_pago: e.detalle?.medio_pago || '',
+        medio_pago_antes: e.detalle?.medio_pago_antes || '',
         total_anulado: e.detalle?.total_anulado || 0,
         // item quitado
         producto: e.detalle?.producto || '',

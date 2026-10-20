@@ -1,6 +1,5 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
 import api from '@/services/api'
@@ -16,7 +15,6 @@ import FacturaDetalleModal from '@/components/layout/FacturaDetalleModal.vue'
 
 const auth = useAuthStore()
 const toast = useToastStore()
-const router = useRouter()
 
 const filtroFecha = ref('')
 const filtroFechaHasta = ref('')
@@ -31,6 +29,11 @@ const confirmingId = ref(null)
 const loading = ref(true)
 const anularTarget = ref(null)
 const confirmTarget = ref(null)
+// Corrección del medio de pago de una venta ya cobrada: qué venta se está
+// corrigiendo, cuál es el medio propuesto y si está viajando el pedido.
+const correccionTarget = ref(null)
+const medioPropuesto = ref('')
+const corrigiendo = ref(false)
 const showTicket = ref(false)
 const ticketData = ref({ items: [], numero: '', fecha: '', total: 0, descuento: 0, medio_pago: '', cliente: '', sucursal: '' })
 
@@ -61,13 +64,24 @@ const estadoOptions = [
   { value: 'anulada', label: 'Anuladas' },
 ]
 
-const medioPagoOptions = [
-  { value: '', label: 'Todos' },
+// Los mismos medios que el backend acepta para una venta, cuenta digital
+// incluida. Sirve para el filtro de la lista y para corregir el medio de pago
+// de una venta ya cobrada (los digitales no estaban ni en el filtro).
+const MEDIOS_CORRECCION = [
   { value: 'efectivo', label: 'Efectivo' },
   { value: 'debito', label: 'Débito' },
   { value: 'credito', label: 'Crédito' },
   { value: 'transferencia', label: 'Transferencia' },
-  { value: 'cta_corriente', label: 'Cta. Cte.' },
+  { value: 'mercadopago_qr', label: 'MercadoPago QR' },
+  { value: 'qr_interop', label: 'QR BCRA' },
+  { value: 'mercadopago_pos', label: 'MercadoPago POS' },
+  { value: 'smartpoint', label: 'SmartPoint' },
+  { value: 'cta_corriente', label: 'Cuenta Corriente' },
+]
+
+const medioPagoOptions = [
+  { value: '', label: 'Todos' },
+  ...MEDIOS_CORRECCION,
 ]
 
 const facturaOptions = [
@@ -256,13 +270,11 @@ function toggleRow(id) {
 }
 
 function estadoVariant(estado) {
+  // El backend devuelve `confirmada | pendiente | anulada`.
   const map = {
-    'Completada': 'success',
-    'Pendiente': 'warning',
-    'Anulada': 'danger',
-    'confirmada': 'success',
-    'pendiente': 'warning',
-    'anulada': 'danger'
+    confirmada: 'success',
+    pendiente: 'warning',
+    anulada: 'danger'
   }
   return map[estado] || 'default'
 }
@@ -275,12 +287,42 @@ async function executeAnular() {
   if (!anularTarget.value) return
   anullingId.value = anularTarget.value.id
   try {
+    const res = await api.put(`/api/ventas/${anularTarget.value.id}/anular`, {})
     const sale = sales.value.find(s => s.id === anularTarget.value.id)
-    if (sale) sale.estado = 'Anulada'
+    if (sale) sale.estado = res?.estado || 'anulada'
     toast.info(`Venta #${anularTarget.value.id} anulada`)
+    await fetchVentas()
+  } catch (e) {
+    toast.error(e?.response?.data?.detail || e?.message || 'No se pudo anular la venta')
   } finally {
     anullingId.value = null
     anularTarget.value = null
+  }
+}
+
+// Corregir el medio de pago de una venta que ya se cobró (la cliente dijo
+// SmartPoint, no pudo y terminó en transferencia). El backend mueve los
+// ingresos que esa venta dejó en caja al medio nuevo, marca la venta con
+// `modificada_en` y deja el evento en pendientes de Auditoría.
+function abrirCorreccion(row) {
+  correccionTarget.value = row
+  medioPropuesto.value = ''
+}
+
+async function ejecutarCorreccion() {
+  const venta = correccionTarget.value
+  if (!venta || !medioPropuesto.value) return
+  corrigiendo.value = true
+  try {
+    await api.put(`/api/ventas/${venta.id}/medio-pago`, { medio_pago: medioPropuesto.value })
+    const nuevo = MEDIOS_CORRECCION.find(m => m.value === medioPropuesto.value)
+    toast.success(`Venta #${venta.id}: medio de pago corregido a ${nuevo?.label || medioPropuesto.value}`)
+    correccionTarget.value = null
+    await fetchVentas()
+  } catch (e) {
+    toast.error(e?.response?.data?.detail || e?.message || 'No se pudo corregir el medio de pago')
+  } finally {
+    corrigiendo.value = false
   }
 }
 
@@ -419,6 +461,13 @@ async function executeConfirm() {
         </template>
         <template #medio_pago="{ row }">
           <span class="text-xs text-slate-600 dark:text-slate-300 capitalize">{{ row.medio_pago || '—' }}</span>
+          <span
+            v-if="row.modificada_en"
+            class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+            title="Medio de pago corregido después de cobrada. Quién lo hizo y cuándo: Auditoría."
+          >
+            corregida
+          </span>
         </template>
         <template #descuento="{ row }">
           <span class="text-xs font-mono-data text-red-500">{{ row.descuento > 0 ? fc(row.descuento) : '—' }}</span>
@@ -442,7 +491,7 @@ async function executeConfirm() {
             </button>
           </div>
           <button
-            v-else-if="row.estado === 'Completada'"
+            v-else-if="row.estado === 'confirmada'"
             type="button"
             :disabled="facturandoId === row.id"
             class="px-2 py-1 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-lg text-[10px] font-bold transition disabled:opacity-50"
@@ -456,7 +505,7 @@ async function executeConfirm() {
         <template #acciones="{ row }">
           <div class="flex items-center justify-end gap-1">
             <button
-              v-if="row.estado === 'Completada' && !facturasMap[row.id]"
+              v-if="row.estado === 'confirmada' && !facturasMap[row.id]"
               type="button"
               :disabled="facturandoId === row.id"
               class="px-2 py-1 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-lg text-[10px] font-bold transition disabled:opacity-50"
@@ -489,16 +538,23 @@ async function executeConfirm() {
             >
               <i class="fa-solid fa-receipt mr-1"></i> Ticket
             </button>
+            <!-- Corregir el medio de pago de una venta cobrada: es el caso de
+                 la cliente que dijo SmartPoint y terminó en transferencia.
+                 Deja la marca "corregida" en la fila. -->
             <button
-              v-if="row.estado === 'Completada'"
+              v-if="row.estado === 'confirmada'"
               type="button"
-              class="px-2 py-1 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-lg text-[10px] font-bold transition"
-              @click.stop="router.push({ name: 'pos', query: { editVentaId: row.id } })"
+              class="px-2 py-1 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-[10px] font-bold transition"
+              @click.stop="abrirCorreccion(row)"
             >
-              <i class="fa-solid fa-pen mr-1"></i> Editar
+              <i class="fa-solid fa-money-bill-transfer mr-1"></i> Corregir medio
             </button>
+            <!-- Sin botón "Editar" (volver a cargar los ítems y rehacer la
+                 venta) a propósito: su flujo anula la venta en cuanto se abre
+                 y eso es el ítem B de PENDIENTES (cambio de mercadería), que el
+                 dueño decidió dejar planificado. -->
             <button
-              v-if="row.estado === 'Completada'"
+              v-if="row.estado === 'confirmada'"
               type="button"
               :disabled="anullingId === row.id"
               class="px-2 py-1 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 dark:text-red-300 rounded-lg text-[10px] font-bold transition disabled:opacity-50"
@@ -586,6 +642,56 @@ async function executeConfirm() {
           <BaseButton variant="secondary" class="flex-1" @click="confirmTarget = null">Cancelar</BaseButton>
           <BaseButton variant="primary" :loading="confirmingId === confirmTarget?.id" class="flex-1" @click="executeConfirm">
             <i class="fa-solid fa-check"></i> Confirmar
+          </BaseButton>
+        </div>
+      </div>
+    </BaseModal>
+
+    <BaseModal v-model="correccionTarget" title="Corregir medio de pago" size="sm">
+      <div v-if="correccionTarget">
+        <div class="flex items-center gap-3 mb-5">
+          <div class="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-300 shrink-0">
+            <i class="fa-solid fa-money-bill-transfer"></i>
+          </div>
+          <div class="text-xs text-slate-600 dark:text-slate-300 leading-5">
+            Venta <strong class="text-slate-900 dark:text-white">#{{ correccionTarget.id }}</strong>
+            · {{ fc(correccionTarget.total) }}<br />
+            Pagó con <strong class="capitalize text-slate-900 dark:text-white">{{ correccionTarget.medio_pago }}</strong>
+          </div>
+        </div>
+
+        <p class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-2">Pasó a pagar con</p>
+        <div class="grid grid-cols-3 gap-2 mb-4">
+          <button
+            v-for="medio in MEDIOS_CORRECCION"
+            :key="medio.value"
+            type="button"
+            class="px-2 py-2 rounded-lg text-xs font-semibold transition border"
+            :class="medioPropuesto === medio.value
+              ? 'bg-blue-600 border-blue-600 text-white'
+              : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-blue-400'"
+            @click="medioPropuesto = medio.value"
+          >
+            {{ medio.label }}
+          </button>
+        </div>
+
+        <p class="text-[11px] text-slate-500 dark:text-slate-400 mb-5">
+          El dinero queda anotado en caja bajo ese medio y la venta se marca como
+          corregida. El cambio queda en <strong>Auditoría</strong> como pendiente
+          de revisión. No se toca la mercadería ni el stock.
+        </p>
+
+        <div class="flex gap-3">
+          <BaseButton variant="secondary" class="flex-1" @click="correccionTarget = null">Cancelar</BaseButton>
+          <BaseButton
+            variant="primary"
+            class="flex-1"
+            :disabled="!medioPropuesto"
+            :loading="corrigiendo"
+            @click="ejecutarCorreccion"
+          >
+            <i class="fa-solid fa-check"></i> Corregir
           </BaseButton>
         </div>
       </div>

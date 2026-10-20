@@ -118,6 +118,10 @@ def _evaluar_riesgo(tipo: str, detalle: Optional[dict] = None, medio_pago: str =
         "modo_entrenamiento_produccion", "cajon_abierto_fuera_venta",
         "venta_pausada", "multiples_cancelaciones_turno",
         "venta_modificada_post_tarjeta", "abono_cliente",
+        # Corregir el medio de pago de una venta ya cobrada: puede ser la
+        # cola apurada de siempre, o puede ser alguien tapando un faltante.
+        # Por eso queda en pendientes en Auditoría.
+        "medio_pago_corregido",
     ]
 
     if tipo in riesgo_alto:

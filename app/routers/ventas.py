@@ -32,6 +32,7 @@ def _venta_to_dict(v: Venta) -> dict:
         "total": v.total,
         "medio_pago": v.medio_pago,
         "estado": v.estado,
+        "modificada_en": v.modificada_en.isoformat() if v.modificada_en else None,
         "notas": v.notas,
         "items": [
             {
@@ -80,6 +81,16 @@ class VentaConfirmar(BaseModel):
     descuento_tipo: Optional[str] = Field(None, description="Tipo de descuento: 'manual' o 'automatico'")
     cliente_id: Optional[int] = None
     comprador_cuit: Optional[str] = None
+
+
+class CambiarMedioPago(BaseModel):
+    medio_pago: str = Field(
+        ...,
+        description=(
+            "Medio de pago nuevo: efectivo, debito, credito, transferencia, "
+            "mercadopago_qr, qr_interop, mercadopago_pos, smartpoint o cta_corriente"
+        ),
+    )
 
 
 @router.get("", response_model=RespuestaLista)
@@ -277,5 +288,39 @@ def anular(
         auditoria_service.registrar(db, user.id, evento, venta.id, venta.numero,
                                      {"total_anulado": venta.total, "medio_pago": venta.medio_pago, "edit": edit})
         return RespuestaData(data=_venta_to_dict(venta), message=f"Venta {venta.numero} anulada")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.put("/{venta_id}/medio-pago", response_model=RespuestaData)
+def cambiar_medio_pago(
+    venta_id: int,
+    data: CambiarMedioPago,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "encargado", "cajero", permiso="anular_ventas")),
+):
+    """Corrige el medio de pago de una venta ya cobrada.
+
+    No anula ni rehace nada: cambia el medio y los ingresos que esa venta dejó
+    en caja, marca la venta con `modificada_en` y deja un evento de auditoría
+    en "pendientes" para que el administrador lo revise. Existe porque ya pasó
+    dos veces: el cliente terminó pagando de otra forma y la venta ya estaba
+    registrada para no hacer esperar a la cola.
+    """
+    venta = venta_service.obtener_venta(db, venta_id)
+    if not venta:
+        raise HTTPException(status_code=404, detail="Venta no encontrada")
+    try:
+        anterior = venta.medio_pago
+        venta = venta_service.cambiar_medio_pago(db, venta, data.medio_pago, user.id)
+        auditoria_service.registrar(
+            db, user.id, "medio_pago_corregido", venta.id, venta.numero,
+            {"medio_pago_antes": anterior, "medio_pago": data.medio_pago,
+             "total": venta.total, "hora": datetime.now().strftime("%H:%M")},
+        )
+        return RespuestaData(
+            data=_venta_to_dict(venta),
+            message=f"Venta {venta.numero}: {anterior} → {data.medio_pago}. Quedó marcada para revisión.",
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

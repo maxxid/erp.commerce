@@ -343,6 +343,12 @@ def _migrate_new_columns():
         if "medio_pago_carga" not in existentes_vi:
             conn.execute(sa.text("ALTER TABLE venta_items ADD COLUMN medio_pago_carga VARCHAR(30)"))
             conn.commit()
+        # ventas: bandera de que la venta se corrigió después de cobrada
+        # (cambio de medio de pago). NULL = nunca se tocó.
+        existentes_ventas = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(ventas)"))]
+        if "modificada_en" not in existentes_ventas:
+            conn.execute(sa.text("ALTER TABLE ventas ADD COLUMN modificada_en DATETIME"))
+            conn.commit()
         # recargas: genera_egreso (si la recarga generó egreso real en caja)
         existentes_rc = [row[1] for row in conn.execute(sa.text("PRAGMA table_info(recargas)"))]
         if "genera_egreso" not in existentes_rc:
