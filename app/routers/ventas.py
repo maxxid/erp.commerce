@@ -1,6 +1,6 @@
 """Router de Ventas: crear, items, confirmar, anular, listar."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -14,6 +14,35 @@ from app.models.usuario import Usuario
 from app.models.venta import Venta
 
 router = APIRouter(prefix="/api/ventas", tags=["Ventas"])
+
+# Los filtros de fecha llegan como día argentino (YYYY-MM-DD) y la base guarda
+# UTC: el día argentino corre de 00:00 a 03:00 UTC, así que un mismo día local
+# cae en dos días UTC distintos. Sin este corrimiento, pedir "hoy" dejaba afuera
+# la madrugada de hoy (00-03 AR = 03-06 UTC de hoy) y metía la noche anterior.
+_OFFSET_LOCAL = timedelta(hours=3)
+
+
+def _rango_de_dias(
+    fecha_desde: Optional[str], fecha_hasta: Optional[str]
+) -> tuple[Optional[datetime], Optional[datetime]]:
+    """Día argentino (YYYY-MM-DD) → rango [desde, hasta) en UTC naive.
+
+    `fecha_hasta` es el último día **incluido**, así que el límite superior se
+    corre al día siguiente.
+    """
+    def _inicio(dia: str) -> datetime:
+        try:
+            d = datetime.strptime(dia, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Fecha inválida: '{dia}'. Usar el formato YYYY-MM-DD",
+            )
+        return d.replace(hour=0, minute=0, second=0, microsecond=0) + _OFFSET_LOCAL
+
+    desde = _inicio(fecha_desde) if fecha_desde else None
+    hasta = _inicio(fecha_hasta) + timedelta(days=1) if fecha_hasta else None
+    return desde, hasta
 
 
 def _venta_to_dict(v: Venta) -> dict:
@@ -97,14 +126,26 @@ class CambiarMedioPago(BaseModel):
 def listar(
     estado: Optional[str] = Query(None),
     cliente_id: Optional[int] = Query(None),
+    fecha_desde: Optional[str] = Query(
+        None, description="Primer día a listar (YYYY-MM-DD, hora Argentina)"
+    ),
+    fecha_hasta: Optional[str] = Query(
+        None, description="Último día a listar, incluido (YYYY-MM-DD, hora Argentina)"
+    ),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
     user: Usuario = Depends(get_current_user),
 ):
-    """Lista ventas con filtros."""
+    """Lista ventas con filtros.
+
+    `fecha_desde`/`fecha_hasta` son días en hora Argentina (el negocio): el POS
+    los usa para mostrar "Últimas transacciones" sólo del día de hoy.
+    """
+    desde, hasta = _rango_de_dias(fecha_desde, fecha_hasta)
     ventas, total = venta_service.listar_ventas(
-        db, estado=estado, cliente_id=cliente_id, page=page, page_size=page_size
+        db, estado=estado, cliente_id=cliente_id,
+        desde=desde, hasta=hasta, page=page, page_size=page_size,
     )
     return RespuestaLista(
         data=[_venta_to_dict(v) for v in ventas],

@@ -1343,7 +1343,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
 import { useProductosStore } from '@/stores/productos'
-import { formatCurrency as fc, formatTimeShort } from '@/composables/useUtils'
+import { formatCurrency as fc, formatTimeShort, fechaLocalAR } from '@/composables/useUtils'
 import { MEDIOS_CUENTA } from '@/composables/cajaCuentas'
 import api from '@/services/api'
 import { useCajaStore } from '@/stores/caja'
@@ -1965,7 +1965,14 @@ async function fetchRecentTransactions() {
     // lista vacía y el panel se quedaba en "Sin transacciones hoy" cada vez
     // que se recargaba la página; solo se veía algo cuando la venta recién
     // hecha se agregaba a mano en memoria.
-    const ventas = await api.get('/api/ventas?page_size=5&estado=confirmada').catch(() => null)
+    //
+    // Pide sólo las del día, como pidió el dueño: `fecha_desde` es el día de
+    // hoy en hora del negocio (el backend lo interpreta en Argentina), así que
+    // el panel no se llena con lo de ayer ni se queda corto la madrugada.
+    const hoy = fechaLocalAR(new Date())
+    const ventas = await api.get(
+      `/api/ventas?page_size=5&estado=confirmada&fecha_desde=${hoy}`
+    ).catch(() => null)
     const items = ventas?.data || ventas || []
     if (Array.isArray(items)) {
       recentTransactions.value = items.map(v => ({

@@ -501,14 +501,26 @@ def listar_ventas(
     cliente_id: Optional[int] = None,
     page: int = 1,
     page_size: int = 50,
+    desde: Optional[datetime] = None,
+    hasta: Optional[datetime] = None,
 ) -> Tuple[List[Venta], int]:
-    """Lista ventas con filtros y paginación."""
+    """Lista ventas con filtros y paginación.
+
+    `desde` y `hasta` recortan por `Venta.fecha` (la fecha en que se creó la
+    venta, UTC naive como la guarda SQLite): `desde` entra y `hasta` queda
+    fuera. El rango de un día argentino lo arma el router, porque un mismo
+    día local cae en dos días UTC distintos.
+    """
     query = db.query(Venta)
 
     if estado:
         query = query.filter(Venta.estado == estado)
     if cliente_id:
         query = query.filter(Venta.cliente_id == cliente_id)
+    if desde is not None:
+        query = query.filter(Venta.fecha >= desde)
+    if hasta is not None:
+        query = query.filter(Venta.fecha < hasta)
 
     total = query.count()
     ventas = (
