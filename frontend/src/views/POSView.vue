@@ -722,9 +722,9 @@
           <div ref="pagoSection" tabindex="0" @keydown="handlePagoKeydown">
             <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase block mb-2">
               Medio de Pago
-              <span class="text-slate-300 dark:text-slate-600 ml-2 font-normal">Atajos: 1-7, ←→, Enter</span>
+              <span class="text-slate-300 dark:text-slate-600 ml-2 font-normal">Atajos: 1-{{ mediosPago.length }}, ←→, Enter</span>
             </label>
-            <div class="grid grid-cols-3 sm:grid-cols-7 gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
+            <div class="grid gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl" :class="columnasMediosPago">
               <button
                 v-for="(medio, idx) in mediosPago"
                 :key="medio.value"
@@ -1359,6 +1359,7 @@ import BaseModal from '@/components/ui/BaseModal.vue'
 import KpiCard from '@/components/ui/KpiCard.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import QuickCreateModal from '@/components/pos/QuickCreateModal.vue'
+import AperturaCajaModal from '@/components/caja/AperturaCajaModal.vue'
 import { useSounds } from '@/composables/useSounds'
 import { useConfetti } from '@/composables/useConfetti'
 import { useOfflineSales } from '@/composables/useOfflineSales'
@@ -1670,6 +1671,20 @@ const mediosPago = computed(() =>
   mediosPagoAll.filter(m => posPrefs.isPaymentMethodEnabled(m.value))
 )
 
+// Las columnas se arman según cuántos medios quedaron habilitados en Ajustes.
+// Con `grid-cols-7` fijo, al deshabilitar la mayoría los que quedaban se
+// achicaban y sobraba la fila entera. En el celular el tope sigue en 3 para
+// que los botones no queden de a dos píxeles.
+const columnasMediosPago = computed(() => {
+  const n = Math.min(Math.max(mediosPago.value.length, 1), 7)
+  const movil = { 1: 'grid-cols-1', 2: 'grid-cols-2', 3: 'grid-cols-3' }[Math.min(n, 3)]
+  const escritorio = {
+    1: 'sm:grid-cols-1', 2: 'sm:grid-cols-2', 3: 'sm:grid-cols-3',
+    4: 'sm:grid-cols-4', 5: 'sm:grid-cols-5', 6: 'sm:grid-cols-6', 7: 'sm:grid-cols-7',
+  }[n]
+  return `${movil} ${escritorio}`
+})
+
 // El carrito solia ser un reactive() local de este componente, y por eso se
 // perdia al navegar a otra tab: Vue destruia el componente y el carrito con el.
 // Ahora vive en un store, asi que sobrevive al route change.
@@ -1945,7 +1960,12 @@ async function confirmarAperturaPos(payload) {
 
 async function fetchRecentTransactions() {
   try {
-    const ventas = await api.get('/api/ventas?page_size=5&estado=completada').catch(() => null)
+    // `estado` filtra contra los valores reales de la venta (pendiente |
+    // confirmada | anulada). Pidiendo "completada" —que no existe— volvía la
+    // lista vacía y el panel se quedaba en "Sin transacciones hoy" cada vez
+    // que se recargaba la página; solo se veía algo cuando la venta recién
+    // hecha se agregaba a mano en memoria.
+    const ventas = await api.get('/api/ventas?page_size=5&estado=confirmada').catch(() => null)
     const items = ventas?.data || ventas || []
     if (Array.isArray(items)) {
       recentTransactions.value = items.map(v => ({
@@ -2446,8 +2466,13 @@ function handlePagoKeydown(event) {
   const pagos = mediosPago.map(m => m.value)
   const key = event.key
   if (key >= '1' && key <= '7') {
-    event.preventDefault()
-    cart.medio_pago = pagos[parseInt(key) - 1]
+    // El atajo va hasta cuántos medios hay hoy: con menos de 7 habilitados,
+    // la tecla que sobraba dejaba `medio_pago` en undefined.
+    const idxAtajo = parseInt(key, 10) - 1
+    if (idxAtajo < pagos.length) {
+      event.preventDefault()
+      cart.medio_pago = pagos[idxAtajo]
+    }
   } else if (key === 'ArrowLeft') {
     event.preventDefault()
     const idx = pagos.indexOf(cart.medio_pago)
