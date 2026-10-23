@@ -107,6 +107,7 @@ def crear_app() -> FastAPI:
         _seed_producto_recarga()
         _start_backup_scheduler()
         _start_avisos_scheduler()
+        _start_salud_scheduler()
 
     return app
 
@@ -597,6 +598,34 @@ def _start_avisos_scheduler():
         print("[Avisos] APScheduler no disponible. Instalá: pip install apscheduler")
     except Exception as e:
         print(f"[Avisos] Error al iniciar scheduler: {e}")
+
+
+def _start_salud_scheduler():
+    """Chequea cada 30 minutos que los respaldos existan y abran.
+
+    Si algo falla (sin respaldo fresco, copia dañada, R2 sin subir) manda un
+    aviso por Telegram con guarda de 12 h. Cuando todo anda bien manda el
+    resumen del día a la noche: sirve para saber que el canal de avisos vive,
+    no sólo para enterarse cuando se rompe.
+
+    La primera vuelta sale a los 3 minutos del arranque, así una máquina que
+    volvió de una caída larga avisa apenas levanta.
+    """
+    from datetime import datetime, timedelta, timezone
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        from app.services.salud_service import chequear_salud, CHEQUEO_CADA_MIN
+        scheduler = BackgroundScheduler()
+        scheduler.add_job(
+            chequear_salud, "interval", minutes=CHEQUEO_CADA_MIN, id="salud_respaldos",
+            next_run_time=datetime.now(timezone.utc) + timedelta(minutes=3),
+        )
+        scheduler.start()
+        print(f"[Salud] Scheduler iniciado: chequeo de respaldos cada {CHEQUEO_CADA_MIN} minuto(s)")
+    except ImportError:
+        print("[Salud] APScheduler no disponible. Instalá: pip install apscheduler")
+    except Exception as e:
+        print(f"[Salud] Error al iniciar scheduler: {e}")
 
 
 if __name__ == "__main__":

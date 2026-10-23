@@ -59,8 +59,10 @@ class Settings:
     AFIP_PTO_VTA: int = int(os.getenv("AFIP_PTO_VTA", "1"))
     AFIP_MODE: str = os.getenv("AFIP_MODE", "testing")   # testing | production
 
-    # Backup automático (minutos, 0 = deshabilitado)
-    BACKUP_INTERVAL_MIN: int = int(os.getenv("BACKUP_INTERVAL_MIN", "0"))
+    # Backup automático (minutos, 0 = deshabilitado). Prendido por defecto:
+    # un respaldo que no se hace no se recupera, y la verificación de
+    # salud_service (cada 30 min) avisa por Telegram si algo falla.
+    BACKUP_INTERVAL_MIN: int = int(os.getenv("BACKUP_INTERVAL_MIN", "15"))
     BACKUP_KEEP_LOCAL: int = int(os.getenv("BACKUP_KEEP_LOCAL", "5"))  # backups locales a conservar
 
     # IA / LLM — la key interna (SaaS) vive SOLO en entorno y nunca en la DB,

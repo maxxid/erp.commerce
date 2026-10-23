@@ -51,6 +51,19 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 
 ## ✅ Completados recientemente
 
+### Respaldos automáticos y alertas de salud — 23/10/2026
+
+El dueño avisó que Oracle Cloud free tier se cae, y al mirar el servidor apareció lo gordo: **los respaldos automáticos estaban apagados**. El sistema ya existía (`backup_service` + scheduler + subida a Cloudflare R2, y R2 ya estaba configurado en la base), pero `BACKUP_INTERVAL_MIN` estaba en 0 — o sea que **nunca corrió**. En `/opt/erp-comercio/backups` había **dos archivos manuales**, del 28/6 y del 9/10. Si Oracle no devolvía la máquina, el último dato serio tenía cuatro días.
+
+Lo que se hizo:
+
+- **El respaldo automático está prendido por defecto: cada 15 minutos** (`BACKUP_INTERVAL_MIN`, se puede apagar con la variable de entorno). Local + subida a R2 si está configurado. La base pesa 2,2 MB, así que el costo es nulo
+- **Nuevo `services/salud_service.py`**: cada 30 minutos (y a los 3 minutos de arrancar) chequea que **haya respaldo de menos de 24 h**, que **el .gz abra** —lo descomprime y le pasa `PRAGMA integrity_check`, porque un respaldo que no se puede abrir no es un respaldo— y que **R2** (si está configurado) tenga los frescos. Si algo falla manda un aviso por Telegram con **guarda de 12 h por tipo**, para no repetir el mismo reclamo cada vuelta
+- **Resumen diario "todo bien"** a las 21:00 (hora del negocio) con el último respaldo, el peso y si la base abre: es la única manera de saber que el canal de avisos anda — si no llega ese mensaje, tampoco va a llegar la alerta de una caída. Se apaga desde Ajustes → Avisos (toggle nuevo)
+- **La pantalla de respaldos muestra la hora bien**: `listar_backups_locales` devolvía la hora *naive* de la máquina (3 h corridas en Argentina); ahora es UTC con zona
+- **Tests:** `tests/test_salud_backup.py` (11). Suite: **932 passed**
+- **Queda pendiente del lado del dueño**: crear el bot con @BotFather y poner token + chat ID en Ajustes → Avisos (la UI ya existía), y abrir una cuenta en **UptimeRobot** para el "se cayó Oracle" — ese aviso es externo por definición: una máquina no puede avisar que ella misma se cayó. Después: DNS a Cloudflare free (hoy TTL de 4 h con Hostinger) y el standby (servidor local en el negocio o segunda máquina en otra nube)
+
 ### Fase E — abrir, cobrar y cerrar sin red — 16/10/2026
 
 Con la Fase D la pantalla ya dejaba de morir al desconectar y las ventas ya se encolaban. Lo que faltaba era **el día entero sin conexión**: la caja se abría, se cobraba… y a la hora de cerrar no había forma. Cuatro piezas, todas en el navegador (el backend no cambió):

@@ -107,7 +107,9 @@ def listar_backups_locales() -> List[dict]:
     for f in files:
         nombre = os.path.basename(f)
         size = os.path.getsize(f)
-        mtime = datetime.fromtimestamp(os.path.getmtime(f))
+        # UTC aware: sin la zona, la pantalla de respaldos mostraba la hora
+        # de la máquina como si fuera UTC (3 h corridas en Argentina).
+        mtime = datetime.fromtimestamp(os.path.getmtime(f), timezone.utc)
         resultados.append({"nombre": nombre, "size": size, "fecha": mtime.isoformat(), "ubicacion": "local"})
     return resultados
 

@@ -388,6 +388,7 @@ const config = ref({
   stock_aviso_hora: '09:00',
   telegram_bot_token: '',
   telegram_chat_id: '',
+  alerta_resumen_diario: 'true',
 })
 
 const facturaAuto = ref({
@@ -477,6 +478,7 @@ const descs = {
   stock_aviso_hora: 'Hora (Argentina) a la que se manda el aviso de stock bajo por Telegram',
   telegram_bot_token: 'Token del bot de Telegram (lo da @BotFather, va después de "bot")',
   telegram_chat_id: 'Chat ID o ID del canal donde se manda el aviso (lo da @userinfobot)',
+  alerta_resumen_diario: 'Manda todos los días a la noche un "todo bien" con el estado de los respaldos. Es la prueba de que las alertas andan',
   empresa_nombre: 'Razón Social para facturas electrónicas',
   empresa_domicilio: 'Domicilio comercial para facturas',
   empresa_condicion_iva: 'Condición frente al IVA: responsable_inscripto, monotributista, exento',
@@ -2206,6 +2208,8 @@ onMounted(async () => {
         mínimo con el proveedor de la última compra y los precios. Para armarlo: creá un bot
         con <span class="font-semibold">@BotFather</span> (te da el token) y pasale el bot a
         tu canal; el chat ID del canal lo da <span class="font-semibold">@userinfobot</span>.
+        El mismo bot avisa si los respaldos se rompen o se dejan de hacer, y manda el resumen
+        diario de respaldos.
       </p>
 
       <div class="mt-4 grid gap-4 sm:grid-cols-2 max-w-2xl">
@@ -2234,6 +2238,14 @@ onMounted(async () => {
           placeholder="-1001234567890"
           hint="Empieza con -100 para los canales"
         />
+        <BaseSelect
+          v-model="config.alerta_resumen_diario"
+          label="Resumen diario de respaldos"
+          :options="[
+            { value: 'true', label: 'Encendido' },
+            { value: 'false', label: 'Apagado' },
+          ]"
+        />
       </div>
 
       <div class="mt-4 flex flex-wrap items-center justify-end gap-2">
@@ -2247,7 +2259,7 @@ onMounted(async () => {
         <BaseButton
           variant="primary"
           :loading="saving"
-          @click="saveConfig(['avisos_lectura', 'avisos_granularidad', 'stock_aviso_enabled', 'stock_aviso_hora', 'telegram_bot_token', 'telegram_chat_id'])"
+          @click="saveConfig(['avisos_lectura', 'avisos_granularidad', 'stock_aviso_enabled', 'stock_aviso_hora', 'telegram_bot_token', 'telegram_chat_id', 'alerta_resumen_diario'])"
         >
           Guardar
         </BaseButton>
