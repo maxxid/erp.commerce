@@ -208,3 +208,54 @@ def test_el_servicio_arranca_el_chequeo_y_las_ui_saben_de_el():
     with open(AJUSTES, encoding="utf-8") as f:
         ajustes = f.read()
     assert "alerta_resumen_diario" in ajustes
+
+
+def test_la_lista_de_la_nube_pagina_hasta_ver_los_respaldos_nuevos(db, backups_dir, monkeypatch):
+    """S3 devuelve de a 100 objetos por llamada y con una sola se veían los 50
+    **más viejos** (los nombres ordenan por fecha): el chequeo de salud juraba
+    que la nube no tenía nada fresco mientras afuera subían los nuevos. En
+    producción había 144 respaldos y sólo se miraban los primeros 50.
+    """
+    from app.services import licencia_service
+
+    class _Cliente:
+        def __init__(self):
+            self.llamadas = []
+
+        def list_objects_v2(self, **params):
+            self.llamadas.append(params)
+            viejos = [
+                {
+                    "Key": f"backups/m/erp_comercio_2026{i:04d}_120000.db.gz",
+                    "Size": 1,
+                    "LastModified": datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(days=i),
+                }
+                for i in range(50)
+            ]
+            nuevos = [
+                {
+                    "Key": f"backups/m/erp_comercio_2026102{i}_120000.db.gz",
+                    "Size": 1,
+                    "LastModified": datetime(2026, 10, 20 + i, 12, tzinfo=timezone.utc),
+                }
+                for i in range(10)
+            ]
+            if len(self.llamadas) == 1:
+                return {"Contents": viejos, "IsTruncated": True, "NextContinuationToken": "paso2"}
+            return {"Contents": nuevos, "IsTruncated": False}
+
+    cliente = _Cliente()
+    monkeypatch.setattr(backup_service, "_get_r2_config", lambda s: {"bucket": "b"})
+    monkeypatch.setattr(backup_service, "_make_r2_client", lambda cfg: cliente)
+    monkeypatch.setattr(licencia_service, "obtener_machine_id", lambda: "m")
+
+    lista = backup_service.listar_backups_r2(db)
+
+    assert len(lista) == 60, "Tendría que traer las dos páginas, no sólo la primera"
+    assert cliente.llamadas[1].get("ContinuationToken") == "paso2"
+    assert lista[0]["fecha"].startswith("2026-10-29"), "Lo más nuevo tiene que quedar primero"
+
+    # Y con eso el chequeo deja de mandar la alerta falsa.
+    _respaldo("erp_comercio_20261024_120000.db.gz")
+    assert ss.problemas_de_respaldo(db, datetime.now(timezone.utc)) == []
+

@@ -30,6 +30,11 @@ BACKUP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file
 # ventas del cajero es la cola offline, no los respaldos.
 SUBIR_A_R2_CADA_MIN = 60
 
+# Tope de archivos de la nube que se listan (paginados de a 100). Alcanza para
+# más de un año de respaldos por hora; sirve de red de seguridad por si algún
+# día se cae la rotación de R2 y el bucket crece sin control.
+LIMITE_OBJETOS_R2 = 1000
+
 def _db_path() -> str:
     """Extrae la ruta del archivo SQLite desde settings.DATABASE_URL."""
     raw = settings.DATABASE_URL
@@ -168,9 +173,24 @@ def listar_backups_r2(db: Session) -> List[dict]:
         from app.services.licencia_service import obtener_machine_id
         mid = obtener_machine_id()
         client = _make_r2_client(cfg)
-        resp = client.list_objects_v2(Bucket=cfg["bucket"], Prefix=f"backups/{mid}/", MaxKeys=50)
+        # S3 devuelve 100 objetos por llamada y, si hay más, hay que volver a
+        # pedir con la continuation token. Con una sola llamada se veían los
+        # primeros 50, que son los más VIEJOS (los nombres ordenan por fecha),
+        # y el chequeo de salud concluía "la nube no tiene respaldos frescos"
+        # mientras afuera estaban subiendo los nuevos: alerta falsa.
+        objetos = []
+        token = None
+        while True:
+            params = {"Bucket": cfg["bucket"], "Prefix": f"backups/{mid}/", "MaxKeys": 100}
+            if token:
+                params["ContinuationToken"] = token
+            resp = client.list_objects_v2(**params)
+            objetos.extend(resp.get("Contents", []))
+            if not resp.get("IsTruncated") or len(objetos) >= LIMITE_OBJETOS_R2:
+                break
+            token = resp.get("NextContinuationToken")
         resultados = []
-        for obj in resp.get("Contents", []):
+        for obj in objetos:
             resultados.append({
                 "nombre": obj["Key"].split("/")[-1],
                 "key": obj["Key"],

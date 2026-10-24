@@ -63,9 +63,10 @@ Lo que se hizo:
 - **La subida a la nube queda cada hora** (`SUBIR_A_R2_CADA_MIN = 60`) en vez de cada 15 minutos: ~33 MB/día (≈ 1 GB/mes) contra ~3 MB/día por el hotspot. Lo local sigue saliendo cada 15 minutos: cuesta un archivo rotado (máximo 5) y no toca la red
 - **Si la subida falla, el próximo respaldo reintenta** — la marca de hora de la última subida *buena* no se anota
 - **El snapshot salió consistente**: por el backup API de SQLite (`Connection.backup`) y no copiando el archivo a mano, que con el POS vendiendo en ese instante puede agarrar la base a mitad de una escritura y dejar un .gz que no abre
+- **Bug que apareció al verificar en el servidor**: la lista de respaldos de R2 traía sólo la primera página (50 archivos = los **más viejos**, porque los nombres ordenan por fecha). Con 144 objetos en la nube, el chequeo de salud iba a jurar "la nube no tiene respaldos frescos" mientras afuera subían los nuevos: **alerta falsa**. Ahora pagina con la continuation token (hasta 1000 objetos). Verificado en producción: las dos páginas se traen y lo más nuevo queda primero
 - Queda anotado como pendiente menor: R2 no tiene rotación (con una subida por hora tardaría años en llenar los 10 GB del tier gratis, pero conviene ponerle fecha de vencimiento)
 
-Tests: `tests/test_backups_eficientes.py` (6).
+Tests: `tests/test_backups_eficientes.py` (6) y uno más en `tests/test_salud_backup.py` (12 en total).
 
 ### Mini dashboard del POS cerrado por defecto — 24/10/2026
 
@@ -998,6 +999,7 @@ Además, dos guards defensivos: `_clean_name` y `_map_categoria` reventaban con 
   - **A)** App separada que lee backups de R2 de todos los machine_id
   - **B)** El admin del ERP actual puede "importar" backups de otros (endpoint `GET /api/admin/backups/todos` + drill-down)
 - **`auditoria.venta_id` histórico de los eventos de caja** — las 6 acciones de caja que le metían un id de movimiento a `venta_id` (arregladas el 20/10/2026) dejaron filas apuntando a una venta que no les corresponde. **No se ve en ninguna pantalla** —Auditoría muestra `venta_numero`, que en esos eventos es `NULL`— así que es cosmético: un solo `UPDATE` que lo deja en `NULL` y lo mueve a `detalle`
+- **Rotación de respaldos en R2** — el bucket acumula todo lo que sube (144 objetos al 24/10/2026). Con una subida por hora son ~8 por día ≈ 2,8 MB, así que el tier gratis de 10 GB dura años, pero conviene ponerle vencimiento (borrar los de más de 30 días desde `backup_automatico`, o una regla de vida del bucket desde la consola de Cloudflare)
 
 ---
 
