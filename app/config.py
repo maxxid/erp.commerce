@@ -65,6 +65,13 @@ class Settings:
     BACKUP_INTERVAL_MIN: int = int(os.getenv("BACKUP_INTERVAL_MIN", "15"))
     BACKUP_KEEP_LOCAL: int = int(os.getenv("BACKUP_KEEP_LOCAL", "5"))  # backups locales a conservar
 
+    # Datos de demostración (4 productos falsos, proveedor y compra) en una base
+    # recién creada. **Apagado por defecto**: un negocio real no quiere arrancar
+    # con "Coca Cola 2.25L" cargado como si fuera de él — encima bloquea el
+    # código de barras cuando alguien lo borra (ver Fase H). Se prende con
+    # SEED_DEMO=true sólo para armar demos.
+    SEED_DEMO: bool = os.getenv("SEED_DEMO", "false").lower() in ("1", "true", "yes", "on")
+
     # IA / LLM — la key interna (SaaS) vive SOLO en entorno y nunca en la DB,
     # asi no se filtra por GET /api/config/ajustes. La key del cliente (BYOK)
     # si va en DB y tiene prioridad sobre esta.

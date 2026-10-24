@@ -594,11 +594,17 @@ def crear(
     user: Usuario = Depends(require_role("admin", "encargado")),
 ):
     """Crea un producto manualmente."""
+    # Sólo un producto **activo** puede bloquear el alta. Si el código lo tiene
+    # un borrado, `crear_producto` le cambia el código al borrado y el nuevo
+    # entra con el real (ver `liberar_codigo_de_borrados`).
     existente = producto_service.obtener_por_barcode(db, data.codigo_barras)
     if existente:
         raise HTTPException(
             status_code=400,
-            detail=f"Ya existe un producto con código {data.codigo_barras}"
+            detail=(
+                f"Ya existe un producto activo con el código {data.codigo_barras}: "
+                f"{existente.nombre}. Buscalo en la lista para editarlo."
+            ),
         )
     try:
         producto = producto_service.crear_producto(db, data.model_dump())
@@ -684,6 +690,11 @@ def lookup(
     """
     barcode = data.barcode.strip()
 
+    # Sólo los activos: si el código lo tenía un borrado, el formulario se
+    # completaba con un producto que no aparece en ninguna lista del sistema y
+    # marcaba "origen: demo" (le pasó al dueño con el 7790895000997). Un
+    # borrado se saltea y se sigue buscando en el catálogo central y en las
+    # fuentes externas.
     local = producto_service.obtener_por_barcode(db, barcode)
     if local:
         stock_real = producto_service._suma_lotes_activos(db, local.id)

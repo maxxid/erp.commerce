@@ -51,6 +51,23 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 
 ## ✅ Completados recientemente
 
+### Fase H — Un producto borrado no te bloquea el código — 24/10/2026
+
+**El reporte**: el dueño no podía cargar el `7790895000997`. No aparecía ni en el buscador de productos ni en el POS; al crearlo respondía "ya existe"; y el lookup le completaba el formulario con "origen: demo" sin que ese producto estuviera en ninguna lista.
+
+**Causa**: al arrancar con la base vacía se sembraron 4 productos de demo con `fuente="demo"` (uno era ese código: "Coca Cola 2.25L"). Al "eliminar" un producto sólo se pone `activo = false`: **la fila sigue ahí con su código de barras, que es UNIQUE**. El listado, el catálogo del POS y `/api/productos` no lo muestran, pero `obtener_por_barcode` sí lo devolvía — un producto invisible que bloqueaba el alta y confundía el lookup.
+
+Lo que se hizo:
+
+- **`liberar_codigo_de_borrados()`**: al crear un producto, si el código lo tiene un borrado, **el borrado pierde el código** (`codigo-borrado-id`, único y con rastro de cuál tenía) y el nuevo se queda con el real. Vale para los tres caminos de alta: alta manual, `guardar_desde_lookup` y la creación al vuelo desde Compras
+- **El alta sólo se frena con un producto activo**, y el mensaje dice cuál es el que lo tiene
+- **El lookup saltea los borrados**: se acabó el "origen: demo"
+- **Compras ya no le suma stock a un producto borrado** (antes la mercadería se iba a una fila que nadie ve)
+- **Grilla de Productos: botón "Borrados"** → `GET /api/productos?solo_activos=false` con badge rojo "Borrado" y el mismo menú de acciones. Es la única pantalla desde la que se puede ver un producto borrado
+- **Los datos de demo ya no se cargan solos**: `SEED_DEMO` (apagado por defecto) y el bloque mudado a `app/services/demo_service.py`. Un negocio real no tiene que arrancar con cuatro productos falsos adentro
+
+Tests: `tests/test_producto_borrado.py` (8). Suite: 950 en verde.
+
 ### Respaldos livianos para un hotspot limitado — 24/10/2026
 
 El dueño: *"no sé si hacer respaldos continuamente me sea eficiente, ya que yo no necesito el último estado de hace 15 minutos para funcionar, necesito que al final del día cuando vuelva oracle, las ventas se unan y poder conciliar el día"*. Hay que separar dos cosas que el pedido mezcla:

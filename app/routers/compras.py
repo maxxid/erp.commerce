@@ -109,10 +109,18 @@ def crear(
 
         producto_id = None
         prod = None
+        # Sólo activos: pegar la mercadería a un producto borrado la manda a una
+        # fila que no aparece en ninguna pantalla. Si no hay activo con ese
+        # código se crea uno nuevo, y `crear_producto` le libera el código al
+        # borrado que lo estuviera ocupando.
         if codigo:
-            prod = db.query(Producto).filter(Producto.codigo_barras == codigo).first()
+            prod = db.query(Producto).filter(
+                Producto.codigo_barras == codigo, Producto.activo == True
+            ).first()
         if not prod and nombre_prod:
-            prod = db.query(Producto).filter(Producto.nombre.ilike(nombre_prod)).first()
+            prod = db.query(Producto).filter(
+                Producto.nombre.ilike(nombre_prod), Producto.activo == True
+            ).first()
 
         if not prod:
             # Producto nuevo: se crea al vuelo con la categoría elegida (o General)

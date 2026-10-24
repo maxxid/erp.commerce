@@ -26,7 +26,13 @@ const route = useRoute()
 const router = useRouter()
 const productosStore = useProductosStore()
 
-const products = computed(() => productosStore.productos)
+// "Mostrar borrados": en vez de la grilla normal se lista la de productos con
+// `activo = false`, que es la que no aparece en ninguna pantalla del sistema.
+// Sirve para recuperar uno, o para ver qué producto estaba reteniendo un
+// código de barras que no dejaba cargar uno nuevo.
+const mostrarBorrados = ref(false)
+const borrados = ref([])
+const products = computed(() => (mostrarBorrados.value ? borrados.value : productosStore.productos))
 const categories = computed(() => productosStore.categorias)
 const ofertas = computed(() => productosStore.ofertas)
 
@@ -47,6 +53,22 @@ const saving = ref(false)
 const deleting = ref(false)
 const lookingUp = ref(false)
 const loading = ref(true)
+
+// Los borrados no viven en el catálogo que usa el POS (ahí sólo entran los
+// activos), así que se piden aparte, y sólo cuando se los pide: no hay que
+// bajar 600 filas nadie las mira.
+watch(mostrarBorrados, async (encendido) => {
+  if (!encendido) return
+  loading.value = true
+  try {
+    const data = await api.get('/api/productos?solo_activos=false&page_size=100000')
+    borrados.value = Array.isArray(data?.data) ? data.data : []
+  } catch {
+    borrados.value = []
+    toast.error('No se pudieron cargar los productos borrados')
+  }
+  loading.value = false
+})
 
 const showModal = ref(false)
 const editingProduct = ref(null)
@@ -1011,6 +1033,22 @@ function formatFecha(fechaStr) {
       </button>
 
       <button
+        type="button"
+        class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 border flex items-center gap-1.5"
+        :class="mostrarBorrados
+          ? 'bg-rose-600 text-white border-rose-600 shadow-sm shadow-rose-500/20'
+          : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'"
+        title="Muestra los productos que borraste: no aparecen en el POS ni en ninguna lista. Sirve para recuperarlos o para ver cuál retenía un código de barras"
+        @click="mostrarBorrados = !mostrarBorrados"
+      >
+        <i class="fa-solid fa-trash"></i> Borrados
+        <span
+          v-if="mostrarBorrados && borrados.length"
+          class="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-white/20 text-white"
+        >{{ borrados.length }}</span>
+      </button>
+
+      <button
         v-if="activeFilterCount > 0 || hasSearch"
         type="button"
         class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 flex items-center gap-1.5 text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 ml-auto"
@@ -1041,7 +1079,14 @@ function formatFecha(fechaStr) {
         </div>
       </template>
       <template #nombre="{ row }">
-        <p class="text-xs font-bold text-slate-900 dark:text-white truncate max-w-[180px]">{{ row.nombre }}</p>
+        <div class="flex items-center gap-1.5 min-w-0">
+          <p class="text-xs font-bold text-slate-900 dark:text-white truncate max-w-[180px]">{{ row.nombre }}</p>
+          <span
+            v-if="row.activo === false"
+            class="shrink-0 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide rounded bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-300"
+            title="Producto borrado: no aparece en el POS ni en ninguna lista"
+          >Borrado</span>
+        </div>
       </template>
       <template #codigo_barras="{ row }">
         <span class="text-xs font-mono-data text-slate-500 dark:text-slate-400">{{ row.codigo_barras }}</span>

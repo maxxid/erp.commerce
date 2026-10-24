@@ -74,13 +74,43 @@ def obtener_producto(db: Session, producto_id: int) -> Optional[Producto]:
     return db.query(Producto).filter(Producto.id == producto_id).first()
 
 
-def obtener_por_barcode(db: Session, codigo_barras: str) -> Optional[Producto]:
-    """Obtiene un producto por código de barras."""
-    return (
+def obtener_por_barcode(db: Session, codigo_barras: str, solo_activos: bool = True) -> Optional[Producto]:
+    """Obtiene un producto por código de barras.
+
+    Por defecto sólo los activos: un producto borrado no se ve en ninguna
+    pantalla, y si el lookup lo devolvía igual, el dueño terminaba viendo
+    "origen: demo" sobre un producto que ni aparecía en su lista.
+    """
+    query = db.query(Producto).filter(Producto.codigo_barras == codigo_barras)
+    if solo_activos:
+        query = query.filter(Producto.activo == True)
+    return query.first()
+
+
+def liberar_codigo_de_borrados(db: Session, codigo_barras: str) -> Optional[Producto]:
+    """Le saca el código de barras a un producto borrado para que lo use uno nuevo.
+
+    Al "eliminar" un producto sólo se pone `activo = False`: la fila sigue ahí
+    con su historial (lotes, compras, ventas) y **con el código de barras, que
+    es UNIQUE**. Resultado: nadie lo ve en ninguna pantalla, pero tampoco se
+    puede crear otro producto con ese código — que es exactamente lo que le
+    pasó al dueño con el `7790895000997` (un dato demo cargado en el arranque
+    y borrado después, que igual le bloqueaba la carga).
+
+    Acá el borrado pierde el código (queda `codigo-borrado-id`: único y deja el
+    rastro de cuál tenía) y el producto nuevo se queda con el real.
+    """
+    viejo = (
         db.query(Producto)
-        .filter(Producto.codigo_barras == codigo_barras)
+        .filter(Producto.codigo_barras == codigo_barras, Producto.activo == False)
         .first()
     )
+    if not viejo:
+        return None
+    sufijo = f"-borrado-{viejo.id}"
+    viejo.codigo_barras = codigo_barras[:50 - len(sufijo)] + sufijo
+    db.flush()
+    return viejo
 
 
 def _generar_codigo_barras(db: Session) -> str:
@@ -107,6 +137,10 @@ def crear_producto(db: Session, data: dict) -> Producto:
 
     if not data.get("codigo_barras"):
         data["codigo_barras"] = _generar_codigo_barras(db)
+
+    # Un producto borrado puede estar ocupando ese código (es UNIQUE): lo libera
+    # antes del INSERT para que el alta no revierta con un 409 que nadie entiende.
+    liberar_codigo_de_borrados(db, data["codigo_barras"])
 
     normalizar_producto_campos(data)
 
@@ -206,6 +240,8 @@ def guardar_desde_lookup(db: Session, data: dict) -> Producto:
         if data.get("categoria"):
             cat = _obtener_o_crear_categoria(db, data["categoria"])
             cat_id = cat.id
+        # Mismo caso que en crear_producto: un borrado puede retener el código.
+        liberar_codigo_de_borrados(db, data["codigo_barras"])
         producto = Producto(
             codigo_barras=data["codigo_barras"],
             nombre=data.get("nombre", ""),
