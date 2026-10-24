@@ -51,6 +51,22 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 
 ## ✅ Completados recientemente
 
+### Respaldos livianos para un hotspot limitado — 24/10/2026
+
+El dueño: *"no sé si hacer respaldos continuamente me sea eficiente, ya que yo no necesito el último estado de hace 15 minutos para funcionar, necesito que al final del día cuando vuelva oracle, las ventas se unan y poder conciliar el día"*. Hay que separar dos cosas que el pedido mezcla:
+
+- **La cola offline** —las ventas del cajero que se suben apenas hay red— es la que hace que el día se concilie cuando vuelve el servidor. No depende de los respaldos, no cambió y sigue subiendo cada venta sola apenas puede.
+- **El respaldo** sólo sirve ante la catástrofe de que la máquina entera no vuelva (o de que la base se corrompa). Ahí sí importa cuánto se pierde.
+
+Lo que se hizo:
+
+- **La subida a la nube queda cada hora** (`SUBIR_A_R2_CADA_MIN = 60`) en vez de cada 15 minutos: ~33 MB/día (≈ 1 GB/mes) contra ~3 MB/día por el hotspot. Lo local sigue saliendo cada 15 minutos: cuesta un archivo rotado (máximo 5) y no toca la red
+- **Si la subida falla, el próximo respaldo reintenta** — la marca de hora de la última subida *buena* no se anota
+- **El snapshot salió consistente**: por el backup API de SQLite (`Connection.backup`) y no copiando el archivo a mano, que con el POS vendiendo en ese instante puede agarrar la base a mitad de una escritura y dejar un .gz que no abre
+- Queda anotado como pendiente menor: R2 no tiene rotación (con una subida por hora tardaría años en llenar los 10 GB del tier gratis, pero conviene ponerle fecha de vencimiento)
+
+Tests: `tests/test_backups_eficientes.py` (6).
+
 ### Mini dashboard del POS cerrado por defecto — 24/10/2026
 
 El dueño: *"un cajero ni cuenta se daría del cambio, salvo que tenga el mini dashboard del pos de ventas desplegado, podemos dejarlo por defecto minimizado?"*. El panel de la derecha del POS tiene los KPIs del día (ventas, efectivo, cajón, cuentas digitales) y las últimas transacciones: **si el servidor se cae o se pasa a otra máquina, esa pantalla es la única que delata el cambio** (números viejos o vacíos en plena jornada).
@@ -969,6 +985,10 @@ Además, dos guards defensivos: `_clean_name` y `_map_categoria` reventaban con 
 - **Agrupar el bajo stock por lugar de compra** — en la campana y en el detalle del Dashboard, juntar los productos bajo mínimo por el proveedor de su última compra ("Carrefour: 7 productos") para salir a comprar o armar la compra online de una
 - **`productos.stock_actual` desincronizado de los lotes** — en producción 169 de 549 productos que controlan stock tienen `stock_actual` distinto de la suma de sus lotes activos (167 con la columna **por encima**, máximo 22 unidades; 2 al revés). Como la columna es la que ven el Dashboard, el POS y el chip de Productos, esos 167 se ven con más stock del que dice FEFO; entre los 18 bajo mínimo, 1 ("Pipas Gigantes 50G": columna 0, lotes 10) está marcado por eso. **Solución propuesta:** `scripts/sincronizar_stock.py` con dry-run por defecto y `--aplicar`, recalculando sólo los productos que tienen lotes (los 10 que no tienen ninguno ya están en 0)
 - **Compras: producto similar o discontinuo** — al recibir, poder reemplazar un producto pedido por otro similar; marcar ítems como "no enviado / discontinuo"; registrar qué se recibió en lugar de qué se pidió
+- **Disponibilidad: el plan de contingencia contra las caídas de Oracle Cloud** (23-24/10/2026, discutido con el dueño). **Hecho**: respaldos automáticos cada 15 min + subida a la nube cada hora + alertas de salud por Telegram (ver Completados 23 y 24/10). Lo que falta, en el orden acordado:
+  1. **Servidor temporal en el negocio** si Oracle no vuelve: instalar el repo + Python + uvicorn en la PC del dueño y **restaurar el respaldo más fresco de R2**. Regla de oro: **una sola base a la vez** — no se vuelve a apuntar nada a Oracle hasta terminar de volcar lo que quedó en esa PC. Dentro del negocio se entra por la IP local; para el dueño desde su casa, Tailscale (gratis) y no port forwarding (el CGNAT lo frena). Si la caída es de pocas horas no hace falta nada: la cola offline sube sola al volver
+  2. **UptimeRobot (gratis) + DNS en Cloudflare free** con TTL de 5 minutos (hoy el de Hostinger está en 4 h, lo que anula cualquier cambio de servidor) + página de mantenimiento con un Worker
+  3. Recién ahí una **segunda nube** para falla de región: **GCP free tier** (e2-micro perpetuo, sólo 3 regiones US, 1 GB de egreso/mes, tarjeta obligatoria) en vez de una segunda Oracle — dos cuentas de Oracle arriesga los ToS y dos SQLite con DNS round-robin divergirían
 
 ### Baja prioridad
 - **Multi-sucursal** — modelos `Sucursal` ya existen; falta que cada caja/usuario vea solo su sucursal

@@ -11,13 +11,24 @@ import os
 import shutil
 import gzip
 import glob
+import sqlite3
 from datetime import datetime, timezone
 from typing import Optional, List, Dict
 from urllib.parse import urlparse
 from sqlalchemy.orm import Session
 from app.config import settings
+from app.database import SessionLocal
+from app.services import config_service
 
 BACKUP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "backups")
+
+# Cada cuánto sube un respaldo a la nube. Lo local sale cada 15 minutos (cuesta
+# un archivo rotado, sin red), pero lo que sale por el hotspot sí se dosifica:
+# subir cada 15 minutos serían ~33 MB por día, y este negocio tiene internet
+# limitado. Con una hora se pierde a lo sumo una hora de datos ante una
+# catástrofe de máquina — el día a día no depende de esto, lo que sube las
+# ventas del cajero es la cola offline, no los respaldos.
+SUBIR_A_R2_CADA_MIN = 60
 
 def _db_path() -> str:
     """Extrae la ruta del archivo SQLite desde settings.DATABASE_URL."""
@@ -87,14 +98,31 @@ def _guardar_r2_config(db: Session, claves: dict):
 
 
 def crear_backup_local() -> str:
-    """Crea un backup comprimido (.gz). Retorna el nombre del archivo."""
+    """Crea un snapshot consistente de la base, comprimido (.gz)."""
     _ensure_backup_dir()
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     filename = f"erp_comercio_{ts}.db.gz"
     filepath = os.path.join(BACKUP_DIR, filename)
+    temporal = filepath + ".part"
 
-    with open(_db_path(), "rb") as src, gzip.open(filepath, "wb") as dst:
-        shutil.copyfileobj(src, dst)
+    # Snapshot por el backup API de SQLite y no copiando el archivo a mano:
+    # con el POS vendiendo en ese instante, copiar a tientas puede agarrar la
+    # base en medio de una escritura y dejar una copia que no abre (o peor,
+    # que abre y no tiene la última venta).
+    origen = sqlite3.connect(_db_path())
+    destino = sqlite3.connect(temporal)
+    try:
+        origen.backup(destino)
+    finally:
+        destino.close()
+        origen.close()
+
+    try:
+        with open(temporal, "rb") as src, gzip.open(filepath, "wb") as dst:
+            shutil.copyfileobj(src, dst)
+    finally:
+        if os.path.exists(temporal):
+            os.remove(temporal)
 
     _limpiar_backups_locales()
     return filename
@@ -204,14 +232,37 @@ def _limpiar_backups_locales():
         os.remove(files.pop(0))
 
 
+def _debe_subirse_a_r2(db: Session) -> bool:
+    """¿Pasó una hora desde la última subida buena? (o no se subió nunca)."""
+    ultimo = config_service.get_config(db, "backup_ultimo_upload_r2")
+    if not ultimo:
+        return True
+    try:
+        cuando = datetime.fromisoformat(ultimo)
+    except ValueError:
+        return True
+    if cuando.tzinfo is None:
+        cuando = cuando.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - cuando).total_seconds() >= SUBIR_A_R2_CADA_MIN * 60
+
+
 def backup_automatico():
-    """Crea backup local y sube a R2 si está configurado."""
-    from app.database import SessionLocal
+    """Respaldo local en cada vuelta; a la nube, una hora por vez.
+
+    Lo local es gratis (archivo rotado, sin red): sirve para "borré algo" o
+    "la base se corrompió". Lo que consume el hotspot es la subida, y esa
+    queda cada `SUBIR_A_R2_CADA_MIN`; si la subida falla, la marca de hora no
+    se anota y el próximo respaldo reintenta a los 15 minutos.
+    """
     try:
         nombre = crear_backup_local()
         db = SessionLocal()
         try:
-            subir_a_r2(nombre, db)
+            if _debe_subirse_a_r2(db) and subir_a_r2(nombre, db):
+                config_service.set_config(
+                    db, "backup_ultimo_upload_r2", datetime.now(timezone.utc).isoformat(),
+                    "Última vez que un respaldo subió a la nube (R2)",
+                )
         finally:
             db.close()
     except Exception:
