@@ -1455,7 +1455,7 @@ const qiConfirmando = ref(false)
 let qiVentaId = null
 let qiVentaNumero = ''
 
-const showStatsPanel = ref(true)
+const showStatsPanel = ref(false)
 const ticketData = reactive({ items: [], numero: '', fecha: '', total: 0, descuento: 0, medio_pago: '', cliente: '', sucursal: '', venta_id: null })
 
 // Selector de carrito: los carritos nombrados son la unidad de trabajo. "Mesa 1"
@@ -1837,6 +1837,12 @@ onMounted(async () => {
     // Ajustes): se copian a las prefs locales para que el POS no muestre otros.
     if (posCfg && Array.isArray(posCfg.enabledPaymentMethods)) {
       posPrefs.setEnabledPaymentMethods(posCfg.enabledPaymentMethods)
+    }
+    // El default del panel lateral (mini dashboard) viene de Ajustes: se aplica
+    // sólo si el usuario nunca lo tocó a mano, así no se le cierra en cada
+    // recarga el panel que abrió a propósito.
+    if (posCfg && typeof posCfg.showStatsPanel === 'boolean') {
+      posPrefs.aplicarDefaultPanel(posCfg.showStatsPanel)
     }
   } catch { /* sin datos */ }
 

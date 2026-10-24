@@ -108,9 +108,10 @@ def get_pos_config(
                 data["calculadoraHistorial"] = int(valor)
             except (TypeError, ValueError):
                 data["calculadoraHistorial"] = 5
-    # Defaults
+    # Defaults. El panel lateral arranca **cerrado** (decisión del dueño:
+    # un KPI viejo o vacío en el POS se lee como "algo se rompió").
     defaults = {
-        "showStatsPanel": True,
+        "showStatsPanel": False,
         "productViewMode": "grilla",
         "enabledPaymentMethods": [
             "efectivo", "transferencia", "mercadopago_qr",

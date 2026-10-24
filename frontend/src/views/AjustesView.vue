@@ -157,7 +157,7 @@ const MEDIOS_PAGO_POS = [
 ]
 
 const posConfig = ref({
-  showStatsPanel: true,
+  showStatsPanel: false,
   productViewMode: 'grilla',
   enabledPaymentMethods: MEDIOS_PAGO_POS.map(m => m.value),
   calculadoraAlcance: 'pos-productos', // 'global' | 'pos-productos'
@@ -168,7 +168,7 @@ async function loadPosConfig() {
   try {
     const data = await api.get('/api/config/pos')
     if (data) {
-      posConfig.value.showStatsPanel = data.showStatsPanel ?? true
+      posConfig.value.showStatsPanel = data.showStatsPanel ?? false
       posConfig.value.productViewMode = data.productViewMode || 'grilla'
       if (Array.isArray(data.enabledPaymentMethods)) {
         posConfig.value.enabledPaymentMethods = data.enabledPaymentMethods
@@ -1917,7 +1917,7 @@ onMounted(async () => {
           <BaseToggle
             v-model="posConfig.showStatsPanel"
             label="Panel lateral derecho (mini dashboard)"
-            description="Muestra el panel de estadísticas a la derecha al abrir el POS"
+            description="Muestra el panel de estadísticas a la derecha al abrir el POS. Por defecto viene cerrado"
             size="sm"
           />
 

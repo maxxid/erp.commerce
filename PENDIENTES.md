@@ -51,6 +51,17 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 
 ## ✅ Completados recientemente
 
+### Mini dashboard del POS cerrado por defecto — 24/10/2026
+
+El dueño: *"un cajero ni cuenta se daría del cambio, salvo que tenga el mini dashboard del pos de ventas desplegado, podemos dejarlo por defecto minimizado?"*. El panel de la derecha del POS tiene los KPIs del día (ventas, efectivo, cajón, cuentas digitales) y las últimas transacciones: **si el servidor se cae o se pasa a otra máquina, esa pantalla es la única que delata el cambio** (números viejos o vacíos en plena jornada).
+
+- **El panel arranca cerrado**: default `false` en las preferencias del navegador, en el POS, en Ajustes y en el endpoint de config
+- **El default de Ajustes ya no le pisa la elección al cajero**: `showStatsPanelTocado` sólo se prende cuando el usuario lo cambia a mano. Sin eso, como las preferencias se guardan enteras cada vez que se sincronizan los medios de pago, no había manera de distinguir "nunca lo toqué" de "lo abrí yo" — y el cajero se quedaba con el panel abierto en cada carga
+- Queda el botón de chevron para abrirlo cuando se lo necesite
+- En el servidor hay que apagar la fila `pos_show_stats_panel` (queda en el paso de deploy)
+
+Tests: `tests/test_pos_panel_cerrado.py` (3).
+
 ### Respaldos automáticos y alertas de salud — 23/10/2026
 
 El dueño avisó que Oracle Cloud free tier se cae, y al mirar el servidor apareció lo gordo: **los respaldos automáticos estaban apagados**. El sistema ya existía (`backup_service` + scheduler + subida a Cloudflare R2, y R2 ya estaba configurado en la base), pero `BACKUP_INTERVAL_MIN` estaba en 0 — o sea que **nunca corrió**. En `/opt/erp-comercio/backups` había **dos archivos manuales**, del 28/6 y del 9/10. Si Oracle no devolvía la máquina, el último dato serio tenía cuatro días.
