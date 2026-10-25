@@ -7,4 +7,5 @@
 - Las acciones destructivas requieren confirmación inline antes de ejecutarse. Confidence: 0.75
 - Prefiere implementar todas las funcionalidades solicitadas en una sola fase/pass en lugar de despliegues incrementales. Confidence: 0.7
 - Valora y acepta sugerencias proactivas de nuevas funcionalidades y mejoras. Confidence: 0.7
-- Prefiere alertas/notificaciones proactivas ante problemas operativos (caja abierta tarde, lotes vencidos). Confidence: 0.65
+- Prefiere alertas/notificaciones proactivas solo para eventos relevantes (p. ej. stock agotado en el día, vencimientos próximos), evitando exceso de alertas y con toggle para desactivarlas. Confidence: 0.7
+- Prefiere que las funcionalidades y alertas sean configurables mediante toggles en Ajustes, desactivadas por defecto si pueden generar ruido. Confidence: 0.75

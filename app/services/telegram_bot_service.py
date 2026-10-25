@@ -683,29 +683,59 @@ def _h_lotes_vencidos(db: Session) -> str:
 
 def _h_vencimientos(db: Session, arg: str = "") -> str:
     arg = (arg or "").strip()
-    dias = 30
+    max_dias = 21
     if arg.isdigit():
-        dias = max(1, min(365, int(arg)))
+        max_dias = max(1, min(90, int(arg)))
     from app.services import lote_service
-    por_vencer = lote_service.lotes_por_vencer(db, dias)
+    por_vencer = lote_service.lotes_por_vencer(db, max_dias)
     vencidos = lote_service.lotes_vencidos(db)
+
+    # Agrupar por tier
+    tier1, tier2, tier3 = [], [], []
+    ahora = datetime.now(timezone.utc).replace(tzinfo=None)
+    for l in por_vencer:
+        if l.fecha_vencimiento is None:
+            continue
+        dias = (l.fecha_vencimiento - ahora).days
+        if dias <= 7:
+            tier1.append((l, dias))
+        elif dias <= 14:
+            tier2.append((l, dias))
+        else:
+            tier3.append((l, dias))
+
     lineas = []
     if vencidos:
-        lineas.append(f"⛔ <b>Vencidos</b> ({len(vencidos)})")
+        lineas.append(f"⛔ <b>VENCIDOS</b> ({len(vencidos)})")
         for l in vencidos[:15]:
             prod = db.query(Producto).filter(Producto.id == l.producto_id).first()
             nombre = prod.nombre if prod else f"#{l.producto_id}"
-            lineas.append(f"  • {_html.escape(nombre)} — {l.cantidad_actual:g} (venció {l.fecha_vencimiento.strftime('%d/%m/%Y')})")
+            marca = f" ({prod.marca})" if prod and prod.marca else ""
+            lineas.append(f"  • {_html.escape(nombre)}{marca}")
+            lineas.append(f"    Cant: {l.cantidad_actual:g} | Costo: {_fmt_money(prod.precio_costo if prod else 0)} | Venta: {_fmt_money(prod.precio_venta if prod else 0)}")
         lineas.append("")
-    if por_vencer:
-        lineas.append(f"📅 <b>Por vencer ({dias} días)</b> ({len(por_vencer)})")
-        for l in por_vencer[:20]:
+
+    def _tier(titulo, items, emoji):
+        if not items:
+            return
+        lineas.append(f"{emoji} <b>{titulo}</b> ({len(items)})")
+        for l, dias in items[:15]:
             prod = db.query(Producto).filter(Producto.id == l.producto_id).first()
             nombre = prod.nombre if prod else f"#{l.producto_id}"
-            lineas.append(f"  • {_html.escape(nombre)} — {l.cantidad_actual:g} (vence {l.fecha_vencimiento.strftime('%d/%m/%Y')})")
-    if not (vencidos or por_vencer):
+            marca = f" ({prod.marca})" if prod and prod.marca else ""
+            lineas.append(f"  • {_html.escape(nombre)}{marca}")
+            lineas.append(f"    Cant: {l.cantidad_actual:g} | Costo: {_fmt_money(prod.precio_costo if prod else 0)} | Venta: {_fmt_money(prod.precio_venta if prod else 0)} | vence en {dias}d")
+        if len(items) > 15:
+            lineas.append(f"  … y {len(items) - 15} más.")
+        lineas.append("")
+
+    _tier("URGENTE (≤7 días)", tier1, "🔴")
+    _tier("Próximos 8-14 días", tier2, "🟠")
+    _tier("15-21 días", tier3, "🟡")
+
+    if not (vencidos or tier1 or tier2 or tier3):
         lineas.append("✅ Sin vencimientos próximos.")
-    return "\n".join(lineas)
+    return "\n".join(lineas).strip()
 
 
 def _h_alertas(db: Session) -> str:
