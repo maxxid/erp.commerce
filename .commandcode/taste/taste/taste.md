@@ -11,4 +11,6 @@
 - Prefiere que las funcionalidades y alertas sean configurables mediante toggles en Ajustes, desactivadas por defecto si pueden generar ruido. Confidence: 0.75
 - En el reporte de vencimientos del bot, prefiere agrupar por urgencia en tres tramos de 7 días: urgentes (≤7 días), 8-14 días y 15-21 días. Confidence: 0.75
 - En reportes comerciales del bot (p. ej. vencimientos), prefiere mostrar cantidad, precio de costo y precio de venta para decidir ofertas/acciones. Confidence: 0.7
-- Prefiere poder crear ofertas/promociones directamente desde el bot de Telegram. Confidence: 0.7
+- Prefiere poder crear ofertas/promociones directamente desde el bot de Telegram, partiendo de productos con vencimiento próximo (lotes) para liquidar stock antes de que venza. Confidence: 0.8
+- El stock se gestiona por lotes (vencimiento); las funcionalidades de stock y ofertas deben considerar lotes y vencimiento. Confidence: 0.85
+- Primero terminar/completar bien una funcionalidad en Telegram antes de portarla a la versión web. Confidence: 0.8
