@@ -389,6 +389,7 @@ const config = ref({
   telegram_bot_token: '',
   telegram_chat_id: '',
   telegram_bot_interactivo: 'false',
+  telegram_alertas_proactivas: 'false',
   alerta_resumen_diario: 'true',
 })
 
@@ -2248,6 +2249,14 @@ onMounted(async () => {
           ]"
         />
         <BaseSelect
+          v-model="config.telegram_alertas_proactivas"
+          label="Alertas proactivas (Telegram)"
+          :options="[
+            { value: 'false', label: 'Apagadas' },
+            { value: 'true', label: 'Encendidas' },
+          ]"
+        />
+        <BaseSelect
           v-model="config.alerta_resumen_diario"
           label="Resumen diario de respaldos"
           :options="[
@@ -2268,7 +2277,7 @@ onMounted(async () => {
         <BaseButton
           variant="primary"
           :loading="saving"
-          @click="saveConfig(['avisos_lectura', 'avisos_granularidad', 'stock_aviso_enabled', 'stock_aviso_hora', 'telegram_bot_token', 'telegram_chat_id', 'telegram_bot_interactivo', 'alerta_resumen_diario'])"
+          @click="saveConfig(['avisos_lectura', 'avisos_granularidad', 'stock_aviso_enabled', 'stock_aviso_hora', 'telegram_bot_token', 'telegram_chat_id', 'telegram_bot_interactivo', 'telegram_alertas_proactivas', 'alerta_resumen_diario'])"
         >
           Guardar
         </BaseButton>

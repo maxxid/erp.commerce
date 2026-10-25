@@ -151,6 +151,7 @@ def _h_start() -> str:
         "/clientes — clientes con deuda\n"
         "/compraspendientes — OC pendientes de recibir\n"
         "/lotesvencidos — lotes vencidos y por vencer\n"
+        "/vencimientos [dias] — vencimientos próximos (default 30)\n"
         "/alertas — resumen de alertas\n"
         "/backup — último respaldo y salud\n"
         "/anular <venta> — anular una venta (con confirmación)\n"
@@ -434,6 +435,9 @@ def chequear_alertas_proactivas() -> None:
         cfg = _cfg(db)
         if not cfg["interactivo"] or not cfg["token"] or not cfg["chat_id"]:
             return
+        # Alertas proactivas desactivadas por defecto (toggle en Ajustes).
+        if (config_service.get_config(db, "telegram_alertas_proactivas") or "").lower() != "true":
+            return
         ahora = datetime.now(TZ_AR)
         hoy = ahora.strftime("%Y-%m-%d")
         # 1) Caja abierta pasadas las 21:00
@@ -677,6 +681,33 @@ def _h_lotes_vencidos(db: Session) -> str:
     return "\n".join(lineas)
 
 
+def _h_vencimientos(db: Session, arg: str = "") -> str:
+    arg = (arg or "").strip()
+    dias = 30
+    if arg.isdigit():
+        dias = max(1, min(365, int(arg)))
+    from app.services import lote_service
+    por_vencer = lote_service.lotes_por_vencer(db, dias)
+    vencidos = lote_service.lotes_vencidos(db)
+    lineas = []
+    if vencidos:
+        lineas.append(f"⛔ <b>Vencidos</b> ({len(vencidos)})")
+        for l in vencidos[:15]:
+            prod = db.query(Producto).filter(Producto.id == l.producto_id).first()
+            nombre = prod.nombre if prod else f"#{l.producto_id}"
+            lineas.append(f"  • {_html.escape(nombre)} — {l.cantidad_actual:g} (venció {l.fecha_vencimiento.strftime('%d/%m/%Y')})")
+        lineas.append("")
+    if por_vencer:
+        lineas.append(f"📅 <b>Por vencer ({dias} días)</b> ({len(por_vencer)})")
+        for l in por_vencer[:20]:
+            prod = db.query(Producto).filter(Producto.id == l.producto_id).first()
+            nombre = prod.nombre if prod else f"#{l.producto_id}"
+            lineas.append(f"  • {_html.escape(nombre)} — {l.cantidad_actual:g} (vence {l.fecha_vencimiento.strftime('%d/%m/%Y')})")
+    if not (vencidos or por_vencer):
+        lineas.append("✅ Sin vencimientos próximos.")
+    return "\n".join(lineas)
+
+
 def _h_alertas(db: Session) -> str:
     bajos = stock_service.productos_stock_bajo(db)
     from app.services import lote_service
@@ -903,6 +934,8 @@ def procesar_update(db: Session, token: str, update: dict) -> None:
         _send(token, chat_id, _h_compras_pendientes(db))
     elif cmd in ("/lotesvencidos", "lotesvencidos"):
         _send(token, chat_id, _h_lotes_vencidos(db))
+    elif cmd in ("/vencimientos", "vencimientos"):
+        _send(token, chat_id, _h_vencimientos(db, args))
     elif cmd in ("/alertas", "alertas"):
         _send(token, chat_id, _h_alertas(db))
     elif cmd in ("/dashboard", "dashboard"):

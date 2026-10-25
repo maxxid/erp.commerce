@@ -1539,6 +1539,15 @@ def registrar_baseline_stock_bajo(db: Session, sucursal_id: int = 1) -> None:
     ids = ",".join(str(p.id) for p in bajos)
     config_service.set_config(db, "stock_bajo_baseline_ids", ids, "IDs de productos bajo mínimo al abrir la caja")
     config_service.set_config(db, "stock_bajo_baseline_fecha", hoy, "Fecha del baseline de stock bajo")
+    # Baseline de productos con stock > 0 (para detectar los que se agotaron en el día)
+    try:
+        from app.models.producto import Producto as _P
+        positivos = [p.id for p in db.query(_P).filter(_P.activo == True, _P.stock_actual > 0).all()]
+        config_service.set_config(db, "stock_positivo_baseline_ids", ",".join(str(x) for x in positivos),
+                                 "IDs de productos con stock > 0 al abrir la caja")
+        config_service.set_config(db, "stock_positivo_baseline_fecha", hoy, "Fecha del baseline de stock positivo")
+    except Exception:
+        pass
 
 
 def generar_resumen_diario(db: Session, cierre_movimiento=None, sucursal_id: int = 1) -> None:
@@ -1636,6 +1645,32 @@ def generar_resumen_diario(db: Session, cierre_movimiento=None, sucursal_id: int
             lineas.append(f"  … y {len(nuevos) - 20} más.")
     else:
         lineas.append("✅ Sin productos nuevos en stock bajo hoy.")
+
+    # Productos que se agotaron en el día
+    try:
+        from app.models.producto import Producto as _P
+        baseline_fecha_pos = config_service.get_config(db, "stock_positivo_baseline_fecha")
+        baseline_pos_raw = config_service.get_config(db, "stock_positivo_baseline_ids") or ""
+        baseline_pos = set(x for x in baseline_pos_raw.split(",") if x.strip())
+        if baseline_fecha_pos == hoy and baseline_pos:
+            agotados_hoy = []
+            for pid_str in baseline_pos:
+                try:
+                    pid = int(pid_str)
+                except ValueError:
+                    continue
+                prod = db.query(_P).filter(_P.id == pid).first()
+                if prod is not None and (prod.stock_actual or 0) <= 0:
+                    agotados_hoy.append(prod)
+            if agotados_hoy:
+                lineas.append("")
+                lineas.append(f"⛔ <b>Se agotaron en el día</b> ({len(agotados_hoy)}):")
+                for p in agotados_hoy[:20]:
+                    lineas.append(f"  • {_html_escape(p.nombre)}")
+                if len(agotados_hoy) > 20:
+                    lineas.append(f"  … y {len(agotados_hoy) - 20} más.")
+    except Exception:
+        pass
 
     texto = "\n".join(lineas)
     from app.services import avisos_service
