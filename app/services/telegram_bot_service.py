@@ -553,7 +553,7 @@ def _h_oferta_sel(db: Session, token: str, chat_id: str, prod_id: int, lot_id: O
         [{"text": "2x1", "callback_data": "oferta_tipo:2x1"}],
         [{"text": "❌ Cancelar", "callback_data": "oferta_cancel"}],
     ]}
-    _send(token, chat_id, f"🏷️ <b>Oferta para:</b> {_html.escape(p.nombre)}\nPrecio actual: {_fmt_money(p.precio_venta)}{extra}\n\n¿Tipo de oferta?", reply_markup=kb)
+    _send(token, chat_id, f"🏷️ <b>Oferta para:</b> {_html.escape(p.nombre)}\nPrecio actual: {_fmt_money(p.precio_venta)} | Costo: {_fmt_money(p.precio_costo)}{extra}\n\n¿Tipo de oferta?", reply_markup=kb)
 
 
 def _h_oferta_tipo(db: Session, token: str, chat_id: str, tipo: str) -> None:
@@ -610,7 +610,7 @@ def _h_oferta_pct(db: Session, token: str, chat_id: str, pct: int) -> None:
          {"text": "30 días", "callback_data": "oferta_dias:30"}],
         [{"text": "❌ Cancelar", "callback_data": "oferta_cancel"}],
     ]}
-    _send(token, chat_id, f"🏷️ {_html.escape(p.nombre if p else '')} — {pct}% OFF\n\n¿Por cuántos días?", reply_markup=kb)
+    _send(token, chat_id, f"🏷️ {_html.escape(p.nombre if p else '')} — {pct}% OFF\nCosto: {_fmt_money(p.precio_costo if p else 0)}\n\n¿Por cuántos días?", reply_markup=kb)
 
 
 def _h_oferta_dias(db: Session, token: str, chat_id: str, dias: int) -> None:
@@ -692,8 +692,9 @@ def _mostrar_preview_oferta(db: Session, token: str, chat_id: str, st: dict) -> 
     _send(token, chat_id,
           f"🏷️ <b>Vista previa</b>\n"
           f"Producto: {_html.escape(p.nombre)}\n"
-          f"Tipo: {tipo} — {descuento_txt}\n"
-          f"Precio oferta: {_fmt_money(precio_oferta)} (era {_fmt_money(p.precio_venta)})\n"
+          f"Descuento: {descuento_txt}\n"
+          f"Precio original: {_fmt_money(p.precio_venta)} | Costo: {_fmt_money(p.precio_costo)}\n"
+          f"Precio oferta: {_fmt_money(precio_oferta)}\n"
           f"Vigencia: {dias} días (hasta {fin.strftime('%d/%m/%Y')}){extra}{cant_txt}\n\n¿Confirmar?",
           reply_markup=kb)
     st["step"] = "preview"
