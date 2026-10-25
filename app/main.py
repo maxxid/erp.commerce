@@ -109,6 +109,7 @@ def crear_app() -> FastAPI:
         _start_avisos_scheduler()
         _start_salud_scheduler()
         _start_telegram_bot_scheduler()
+        _start_telegram_alertas_scheduler()
 
     return app
 
@@ -604,6 +605,22 @@ def _start_telegram_bot_scheduler():
         print("[TelegramBot] APScheduler no disponible. Instalá: pip install apscheduler")
     except Exception as e:
         print(f"[TelegramBot] Error al iniciar scheduler: {e}")
+
+
+def _start_telegram_alertas_scheduler():
+    """Alertas proactivas de Telegram cada 30 min."""
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        from datetime import timedelta
+        from app.services.telegram_bot_service import chequear_alertas_proactivas
+        scheduler = BackgroundScheduler()
+        scheduler.add_job(chequear_alertas_proactivas, "interval", minutes=30, id="telegram_alertas")
+        scheduler.start()
+        print("[TelegramAlertas] Scheduler iniciado: cada 30 min")
+    except ImportError:
+        print("[TelegramAlertas] APScheduler no disponible.")
+    except Exception as e:
+        print(f"[TelegramAlertas] Error: {e}")
 
 
 if __name__ == "__main__":

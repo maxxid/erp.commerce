@@ -136,13 +136,24 @@ def _h_start() -> str:
     return (
         "👋 <b>ApexERP — Bot del negocio</b>\n\n"
         "Comandos disponibles:\n"
-        "/stockbajo — productos bajo mínimo (elige categoría)\n"
+        "/stockbajo — productos bajo mínimo (por categoría o proveedor)\n"
         "/stock — resumen de stock\n"
-        "/ventas — ventas de hoy\n"
-        "/ventas YYYY-MM-DD — ventas de un día\n"
+        "/stockproducto <codigo> — stock y lotes de un producto\n"
+        "/buscar <texto> — buscar producto\n"
+        "/ventas — ventas de hoy (Hoy/Ayer/Semana)\n"
+        "/egresos — egresos del día\n"
+        "/ingresos — ingresos manuales\n"
+        "/movimientos — últimos movimientos de caja\n"
+        "/detalle <venta> — detalle de una venta\n"
         "/caja — estado de caja\n"
+        "/dashboard — KPIs del día\n"
         "/top — top 5 productos del mes\n"
         "/clientes — clientes con deuda\n"
+        "/compraspendientes — OC pendientes de recibir\n"
+        "/lotesvencidos — lotes vencidos y por vencer\n"
+        "/alertas — resumen de alertas\n"
+        "/backup — último respaldo y salud\n"
+        "/anular <venta> — anular una venta (con confirmación)\n"
         "/resumen — resumen del día\n"
         "/help — esta ayuda"
     )
@@ -280,11 +291,30 @@ def _nombre_categoria(db: Session, cat_id: int) -> str:
 
 
 def _h_ventas(db: Session, fecha_arg: str = "") -> str:
-    fecha_local = _parse_fecha(fecha_arg)
-    if fecha_local is None:
+    arg = (fecha_arg or "").strip().lower()
+    if arg in ("ayer",):
+        fecha_local = (datetime.now(TZ_AR) - timedelta(days=1)).date()
+    elif arg in ("semana", "semanal"):
+        # total de la semana actual
+        hoy = datetime.now(TZ_AR).date()
+        lunes = hoy - timedelta(days=hoy.weekday())
+        desde = _inicio_dia_utc(lunes)
+        hasta = _inicio_dia_utc(hoy) + timedelta(days=1)
+        return _resumen_ventas_rango(db, desde, hasta, "Semana")
+    elif arg in ("", "hoy"):
         fecha_local = datetime.now(TZ_AR).date()
+    else:
+        parsed = _parse_fecha(arg)
+        if parsed is None:
+            fecha_local = datetime.now(TZ_AR).date()
+        else:
+            fecha_local = parsed
     desde = _inicio_dia_utc(fecha_local)
     hasta = desde + timedelta(days=1)
+    return _resumen_ventas_rango(db, desde, hasta, fecha_local.strftime("%d/%m/%Y"))
+
+
+def _resumen_ventas_rango(db: Session, desde: datetime, hasta: datetime, titulo: str) -> str:
     ventas = db.query(Venta).filter(
         Venta.estado == "confirmada",
         Venta.fecha >= desde,
@@ -293,12 +323,11 @@ def _h_ventas(db: Session, fecha_arg: str = "") -> str:
     total = sum(v.total or 0 for v in ventas)
     tickets = len(ventas)
     promedio = (total / tickets) if tickets else 0
-    # desglose por medio
     por_medio: Dict[str, float] = {}
     for v in ventas:
         por_medio[v.medio_pago or "efectivo"] = por_medio.get(v.medio_pago or "efectivo", 0) + (v.total or 0)
     lineas = [
-        f"💰 <b>Ventas — {fecha_local.strftime('%d/%m/%Y')}</b>",
+        f"💰 <b>Ventas — {titulo}</b>",
         f"Total: {_fmt_money(total)}",
         f"Tickets: {tickets}",
         f"Ticket promedio: {_fmt_money(promedio)}",
@@ -396,7 +425,378 @@ def _h_resumen(db: Session) -> str:
     return f"{ventas_txt}\n\n{caja_txt}\n\n📉 Productos bajo mínimo: {len(bajos)}"
 
 
-# ---------- procesamiento ----------
+# ---------- alertas proactivas ----------
+
+def chequear_alertas_proactivas() -> None:
+    """Job del scheduler: avisa proactivamente al dueño si algo requiere atención."""
+    db = SessionLocal()
+    try:
+        cfg = _cfg(db)
+        if not cfg["interactivo"] or not cfg["token"] or not cfg["chat_id"]:
+            return
+        ahora = datetime.now(TZ_AR)
+        hoy = ahora.strftime("%Y-%m-%d")
+        # 1) Caja abierta pasadas las 21:00
+        if ahora.hour >= 21:
+            try:
+                from app.services import caja_service
+                if caja_service.caja_abierta(db):
+                    key = "alerta_caja_abierta_ultimo"
+                    if config_service.get_config(db, key) != hoy:
+                        _send(cfg["token"], cfg["chat_id"],
+                              "⚠️ <b>Caja sigue abierta</b> a las " + ahora.strftime("%H:%M") +
+                              ". Recordá cerrarla antes de irte.")
+                        config_service.set_config(db, key, hoy, "Último día en que se alertó caja abierta")
+            except Exception:
+                pass
+        # 2) Lotes vencidos (una vez por día)
+        try:
+            from app.services import lote_service
+            vencidos = lote_service.lotes_vencidos(db)
+            if vencidos:
+                key = "alerta_lotes_vencidos_ultimo"
+                if config_service.get_config(db, key) != hoy:
+                    _send(cfg["token"], cfg["chat_id"],
+                          f"⛔ <b>{len(vencidos)} lote(s) vencido(s)</b> con stock. Revisá /lotesvencidos")
+                    config_service.set_config(db, key, hoy, "Último día en que se alertó lotes vencidos")
+        except Exception:
+            pass
+    finally:
+        db.close()
+
+# ---------- nuevos comandos (fase 2) ----------
+
+def _admin_user_id(db: Session) -> Optional[int]:
+    from app.models.usuario import Usuario
+    u = db.query(Usuario).filter(Usuario.rol == "admin", Usuario.activo == True).first()
+    return u.id if u else None
+
+
+def _h_egresos(db: Session, fecha_arg: str = "") -> str:
+    arg = (fecha_arg or "").strip().lower()
+    if arg in ("semana", "semanal"):
+        hoy = datetime.now(TZ_AR).date()
+        lunes = hoy - timedelta(days=hoy.weekday())
+        desde = _inicio_dia_utc(lunes)
+        hasta = _inicio_dia_utc(hoy) + timedelta(days=1)
+        titulo = "Semana"
+    elif arg in ("ayer",):
+        fecha_local = (datetime.now(TZ_AR) - timedelta(days=1)).date()
+        desde = _inicio_dia_utc(fecha_local)
+        hasta = desde + timedelta(days=1)
+        titulo = fecha_local.strftime("%d/%m/%Y")
+    elif arg in ("", "hoy"):
+        fecha_local = datetime.now(TZ_AR).date()
+        desde = _inicio_dia_utc(fecha_local)
+        hasta = desde + timedelta(days=1)
+        titulo = fecha_local.strftime("%d/%m/%Y")
+    elif arg not in ("semana", "semanal"):
+        parsed = _parse_fecha(arg)
+        if parsed is None:
+            fecha_local = datetime.now(TZ_AR).date()
+            desde = _inicio_dia_utc(fecha_local)
+            hasta = desde + timedelta(days=1)
+            titulo = fecha_local.strftime("%d/%m/%Y")
+        else:
+            desde = _inicio_dia_utc(parsed)
+            hasta = desde + timedelta(days=1)
+            titulo = parsed.strftime("%d/%m/%Y")
+
+    movs_q = db.query(MovimientoCaja).filter(MovimientoCaja.tipo == "egreso")
+    if arg not in ("semana", "semanal"):
+        movs_q = movs_q.filter(
+            MovimientoCaja.created_at >= desde,
+            MovimientoCaja.created_at < hasta,
+        )
+    movs = movs_q.order_by(MovimientoCaja.id.desc()).limit(50).all()
+    total = sum(m.monto or 0 for m in movs)
+    lineas = [f"💸 <b>Egresos — {titulo}</b>", f"Total: {_fmt_money(total)} ({len(movs)} mov.)", ""]
+    for m in movs[:20]:
+        hora = ""
+        if getattr(m, "created_at", None):
+            try:
+                hora = m.created_at.strftime("%H:%M")
+            except Exception:
+                hora = ""
+        desc = _html.escape(str(m.descripcion or m.referencia_tipo or "egreso"))
+        lineas.append(f"• {_fmt_money(m.monto)} — {desc} ({m.medio_pago or 'efectivo'}) {hora}")
+    if len(movs) > 20:
+        lineas.append(f"… y {len(movs) - 20} más.")
+    if not movs:
+        lineas.append("Sin egresos.")
+    return "\n".join(lineas)
+
+
+def _h_ingresos(db: Session) -> str:
+    movs = db.query(MovimientoCaja).filter(
+        MovimientoCaja.tipo == "ingreso",
+    ).order_by(MovimientoCaja.id.desc()).limit(20).all()
+    total = sum(m.monto or 0 for m in movs)
+    lineas = [f"💵 <b>Ingresos manuales</b> — {_fmt_money(total)}", ""]
+    for m in movs:
+        hora = m.created_at.strftime("%H:%M") if getattr(m, "created_at", None) else ""
+        lineas.append(f"• {_fmt_money(m.monto)} — {_html.escape(str(m.descripcion or 'ingreso'))} {hora}")
+    if not movs:
+        lineas.append("Sin ingresos manuales.")
+    return "\n".join(lineas)
+
+
+def _h_movimientos(db: Session) -> str:
+    movs = db.query(MovimientoCaja).order_by(MovimientoCaja.id.desc()).limit(15).all()
+    lineas = ["📜 <b>Últimos movimientos</b>", ""]
+    for m in movs:
+        hora = m.created_at.strftime("%H:%M") if getattr(m, "created_at", None) else ""
+        tipo = (m.tipo or "").upper()
+        lineas.append(f"• {hora} {tipo} {_fmt_money(m.monto)} — {_html.escape(str(m.descripcion or '')[:40])}")
+    if not movs:
+        lineas.append("Sin movimientos.")
+    return "\n".join(lineas)
+
+
+def _h_detalle_venta(db: Session, arg: str) -> str:
+    arg = (arg or "").strip()
+    if not arg:
+        return "Uso: /detalle V-000123  (o /detalle 123)"
+    venta = None
+    if arg.isdigit():
+        venta = db.query(Venta).filter(Venta.id == int(arg)).first()
+    else:
+        venta = db.query(Venta).filter(Venta.numero == arg).first()
+    if not venta:
+        # try by numero partial
+        venta = db.query(Venta).filter(Venta.numero.ilike(f"%{arg}%")).first()
+    if not venta:
+        return f"❌ Venta no encontrada: {arg}"
+    cliente = None
+    if venta.cliente_id:
+        cliente = db.query(Cliente).filter(Cliente.id == venta.cliente_id).first()
+    lineas = [
+        f"🧾 <b>{venta.numero}</b> — {venta.estado}",
+        f"Fecha: {venta.fecha.strftime('%d/%m/%Y %H:%M') if venta.fecha else '—'}",
+        f"Cliente: {_html.escape(cliente.nombre if cliente else 'Consumidor Final')}",
+        f"Medio: {venta.medio_pago}",
+        f"Subtotal: {_fmt_money(venta.subtotal)}  Desc: {_fmt_money(venta.descuento)}",
+        f"Total: {_fmt_money(venta.total)}",
+        "",
+        "Items:",
+    ]
+    for it in (venta.items or []):
+        lineas.append(f"  • {_html.escape(str(it.producto_nombre or it.producto_id))} x{it.cantidad:g} @ {_fmt_money(it.precio_unitario)} = {_fmt_money(it.subtotal)}")
+    return "\n".join(lineas)
+
+
+def _h_buscar(db: Session, arg: str) -> str:
+    arg = (arg or "").strip()
+    if not arg:
+        return "Uso: /buscar <nombre o codigo>"
+    from sqlalchemy import or_
+    q = db.query(Producto).filter(Producto.activo == True).filter(
+        or_(Producto.nombre.ilike(f"%{arg}%"),
+            Producto.codigo_barras.ilike(f"%{arg}%"),
+            Producto.marca.ilike(f"%{arg}%"))
+    ).limit(8).all()
+    if not q:
+        return f"❌ Sin resultados para: {arg}"
+    lineas = [f"🔍 <b>Búsqueda: {arg}</b> ({len(q)})", ""]
+    for p in q:
+        cat = ""
+        if p.categoria_id:
+            from app.models.categoria import Categoria
+            c = db.query(Categoria).filter(Categoria.id == p.categoria_id).first()
+            if c:
+                cat = c.nombre
+        lineas.append(f"📦 <b>{_html.escape(p.nombre)}</b>" + (f" ({_html.escape(p.marca)})" if p.marca else ""))
+        lineas.append(f"   Stock: {p.stock_actual:g} / Mín: {p.stock_minimo:g}  |  Venta: {_fmt_money(p.precio_venta)}")
+        if cat:
+            lineas.append(f"   Categoría: {cat}")
+        lineas.append("")
+    return "\n".join(lineas).strip()
+
+
+def _h_stockproducto(db: Session, arg: str) -> str:
+    arg = (arg or "").strip()
+    if not arg:
+        return "Uso: /stockproducto <codigo de barras>"
+    p = db.query(Producto).filter(Producto.codigo_barras == arg).first()
+    if not p:
+        p = db.query(Producto).filter(Producto.codigo_barras.ilike(f"%{arg}%")).first()
+    if not p:
+        return f"❌ Producto no encontrado: {arg}"
+    from app.services import lote_service
+    try:
+        lotes, _ = lote_service.listar_lotes(db, producto_id=p.id, solo_con_stock=True)
+    except Exception:
+        lotes = []
+    lineas = [
+        f"📦 <b>{_html.escape(p.nombre)}</b>" + (f" ({_html.escape(p.marca)})" if p.marca else ""),
+        f"Stock actual: {p.stock_actual:g}  (mín: {p.stock_minimo:g})",
+        f"Precio venta: {_fmt_money(p.precio_venta)}  |  costo: {_fmt_money(p.precio_costo)}",
+    ]
+    if lotes:
+        lineas.append("")
+        lineas.append("Lotes:")
+        for l in lotes[:10]:
+            venc = l.fecha_vencimiento.strftime("%d/%m/%Y") if getattr(l, "fecha_vencimiento", None) else "s/venc"
+            lineas.append(f"  • {l.codigo or 'lote'}: {l.cantidad_actual:g} — vence {venc}")
+    return "\n".join(lineas)
+
+
+def _h_compras_pendientes(db: Session) -> str:
+    from app.models.compra import Compra
+    compras = db.query(Compra).filter(Compra.estado.in_(["pendiente", "parcial"])).order_by(Compra.id.desc()).limit(15).all()
+    if not compras:
+        return "✅ No hay compras pendientes de recibir."
+    lineas = [f"🛒 <b>Compras pendientes</b> ({len(compras)})", ""]
+    for c in compras:
+        prov = c.proveedor.nombre if getattr(c, "proveedor", None) else f"#{c.proveedor_id}"
+        lineas.append(f"• {c.numero} — {_html.escape(str(prov))}")
+        lineas.append(f"   Estado: {c.estado}  |  Total: {_fmt_money(c.total)}")
+    return "\n".join(lineas)
+
+
+def _h_lotes_vencidos(db: Session) -> str:
+    from app.services import lote_service
+    vencidos = lote_service.lotes_vencidos(db)
+    por_vencer = lote_service.lotes_por_vencer(db, 7)
+    lineas = []
+    if vencidos:
+        lineas.append(f"⛔ <b>Lotes vencidos</b> ({len(vencidos)})")
+        for l in vencidos[:15]:
+            prod = db.query(Producto).filter(Producto.id == l.producto_id).first()
+            nombre = prod.nombre if prod else f"#{l.producto_id}"
+            lineas.append(f"  • {_html.escape(nombre)} — {l.cantidad_actual:g} (venció {l.fecha_vencimiento.strftime('%d/%m/%Y')})")
+        lineas.append("")
+    if por_vencer:
+        lineas.append(f"⚠️ <b>Por vencer (7 días)</b> ({len(por_vencer)})")
+        for l in por_vencer[:15]:
+            prod = db.query(Producto).filter(Producto.id == l.producto_id).first()
+            nombre = prod.nombre if prod else f"#{l.producto_id}"
+            lineas.append(f"  • {_html.escape(nombre)} — {l.cantidad_actual:g} (vence {l.fecha_vencimiento.strftime('%d/%m/%Y')})")
+    if not lineas:
+        lineas.append("✅ Sin lotes vencidos ni por vencer.")
+    return "\n".join(lineas)
+
+
+def _h_alertas(db: Session) -> str:
+    bajos = stock_service.productos_stock_bajo(db)
+    from app.services import lote_service
+    vencidos = lote_service.lotes_vencidos(db)
+    por_vencer = lote_service.lotes_por_vencer(db, 7)
+    # licencia
+    from app.models.licencia import Licencia
+    lic = db.query(Licencia).filter(Licencia.activo == True).order_by(Licencia.fecha_vencimiento.asc()).first()
+    lic_txt = ""
+    if lic and lic.fecha_vencimiento:
+        dias = (lic.fecha_vencimiento - datetime.now(timezone.utc)).days
+        if dias <= 30:
+            lic_txt = f"\n🔐 Licencia vence en {dias} días"
+    # caja
+    try:
+        from app.services import caja_service
+        caja_abierta = caja_service.caja_abierta(db)
+    except Exception:
+        caja_abierta = False
+    lineas = ["🔔 <b>Alertas</b>", ""]
+    lineas.append(f"📉 Stock bajo: {len(bajos)}")
+    lineas.append(f"⛔ Lotes vencidos: {len(vencidos)}")
+    lineas.append(f"⚠️ Lotes por vencer (7d): {len(por_vencer)}")
+    lineas.append(f"💼 Caja: {'abierta' if caja_abierta else 'cerrada'}")
+    if lic_txt:
+        lineas.append(lic_txt.strip())
+    if not (bajos or vencidos or por_vencer or lic_txt):
+        lineas.append("\n✅ Todo en orden.")
+    return "\n".join(lineas)
+
+
+def _h_dashboard(db: Session) -> str:
+    from app.models.venta import Venta
+    hoy = datetime.now(TZ_AR).date()
+    desde = _inicio_dia_utc(hoy)
+    hasta = desde + timedelta(days=1)
+    ventas = db.query(Venta).filter(Venta.estado == "confirmada", Venta.fecha >= desde, Venta.fecha < hasta).all()
+    total = sum(v.total or 0 for v in ventas)
+    tickets = len(ventas)
+    promedio = (total / tickets) if tickets else 0
+    efectivo = sum(v.total or 0 for v in ventas if v.medio_pago == "efectivo")
+    bajos = stock_service.productos_stock_bajo(db)
+    try:
+        from app.services import caja_service
+        caja_abierta = caja_service.caja_abierta(db)
+    except Exception:
+        caja_abierta = False
+    lineas = [
+        f"📊 <b>Dashboard — {hoy.strftime('%d/%m/%Y')}</b>",
+        f"Ventas: {_fmt_money(total)} ({tickets} tickets)",
+        f"Ticket promedio: {_fmt_money(promedio)}",
+        f"Efectivo: {_fmt_money(efectivo)}",
+        f"Caja: {'abierta' if caja_abierta else 'cerrada'}",
+        f"Stock crítico: {len(bajos)}",
+    ]
+    return "\n".join(lineas)
+
+
+def _h_backup(db: Session) -> str:
+    from app.services import backup_service, salud_service
+    locales = backup_service.listar_backups_locales()
+    ultimo = locales[0] if locales else None
+    lineas = ["💾 <b>Backups</b>"]
+    if ultimo:
+        lineas.append(f"Último local: {ultimo.get('nombre')} ({_fmt_money(ultimo.get('size', 0)/1024)} KB)")
+        lineas.append(f"Fecha: {ultimo.get('fecha')}")
+    else:
+        lineas.append("Sin backups locales.")
+    try:
+        problemas = salud_service.problemas_de_replica(db)
+        if problemas:
+            lineas.append("")
+            lineas.append("⚠️ Problemas de réplica:")
+            for p in problemas:
+                lineas.append(f"  • {p}")
+        else:
+            lineas.append("Réplica: OK")
+    except Exception:
+        pass
+    return "\n".join(lineas)
+
+
+def _h_anular(db: Session, token: str, chat_id: str, arg: str) -> None:
+    arg = (arg or "").strip()
+    if not arg:
+        _send(token, chat_id, "Uso: /anular V-000123  (o /anular 123)\nSe pedirá confirmación.")
+        return
+    venta = None
+    if arg.isdigit():
+        venta = db.query(Venta).filter(Venta.id == int(arg)).first()
+    else:
+        venta = db.query(Venta).filter(Venta.numero == arg).first()
+    if not venta:
+        venta = db.query(Venta).filter(Venta.numero.ilike(f"%{arg}%")).first()
+    if not venta:
+        _send(token, chat_id, f"❌ Venta no encontrada: {arg}")
+        return
+    if venta.estado != "confirmada":
+        _send(token, chat_id, f"❌ Solo se anulan ventas confirmadas (estado: {venta.estado}).")
+        return
+    kb = {"inline_keyboard": [[
+        {"text": "✅ Confirmar anulación", "callback_data": f"anular:{venta.id}"},
+        {"text": "❌ Cancelar", "callback_data": f"anularcancel:{venta.id}"},
+    ]]}
+    _send(token, chat_id, f"⚠️ ¿Anular {venta.numero} por {_fmt_money(venta.total)}?", reply_markup=kb)
+
+
+def _do_anular(db: Session, venta_id: int) -> str:
+    from app.services import venta_service
+    venta = db.query(Venta).filter(Venta.id == venta_id).first()
+    if not venta:
+        return "❌ Venta no encontrada."
+    if venta.estado != "confirmada":
+        return f"❌ Estado actual: {venta.estado}."
+    uid = _admin_user_id(db)
+    try:
+        venta_service.anular_venta(db, venta, uid)
+    except Exception as e:
+        return f"❌ Error: {e}"
+    return f"✅ Venta {venta.numero} anulada. Stock y caja revertidos."
 
 def _es_autorizado(chat_id: str, cfg: dict) -> bool:
     return str(chat_id) == str(cfg.get("chat_id", "")).strip()
@@ -437,6 +837,16 @@ def procesar_update(db: Session, token: str, update: dict) -> None:
                 _edit_message(token, chat_id, msg_id, texto)
             else:
                 _send(token, chat_id, texto)
+        elif data.startswith("ventas:"):
+            suf = data[7:]
+            _send(token, chat_id, _h_ventas(db, suf))
+        elif data.startswith("anular:"):
+            vid = int(data[7:]) if data[7:].isdigit() else None
+            if vid:
+                res = _do_anular(db, vid)
+                _send(token, chat_id, res)
+        elif data.startswith("anularcancel:"):
+            _send(token, chat_id, "Cancelado.")
         else:
             _send(token, chat_id, _h_start())
         _answer_callback(token, cb_id)
@@ -471,6 +881,36 @@ def procesar_update(db: Session, token: str, update: dict) -> None:
         _send(token, chat_id, _h_stock(db))
     elif cmd in ("/ventas", "ventas"):
         _send(token, chat_id, _h_ventas(db, args))
+        kb = {"inline_keyboard": [[
+            {"text": "Hoy", "callback_data": "ventas:hoy"},
+            {"text": "Ayer", "callback_data": "ventas:ayer"},
+            {"text": "Semana", "callback_data": "ventas:semana"},
+        ]]}
+        _send(token, chat_id, "Filtrar por:", reply_markup=kb)
+    elif cmd in ("/egresos", "egresos"):
+        _send(token, chat_id, _h_egresos(db, args))
+    elif cmd in ("/ingresos", "ingresos"):
+        _send(token, chat_id, _h_ingresos(db))
+    elif cmd in ("/movimientos", "movimientos"):
+        _send(token, chat_id, _h_movimientos(db))
+    elif cmd in ("/detalle", "detalle"):
+        _send(token, chat_id, _h_detalle_venta(db, args))
+    elif cmd in ("/buscar", "buscar"):
+        _send(token, chat_id, _h_buscar(db, args))
+    elif cmd in ("/stockproducto", "stockproducto"):
+        _send(token, chat_id, _h_stockproducto(db, args))
+    elif cmd in ("/compraspendientes", "compraspendientes"):
+        _send(token, chat_id, _h_compras_pendientes(db))
+    elif cmd in ("/lotesvencidos", "lotesvencidos"):
+        _send(token, chat_id, _h_lotes_vencidos(db))
+    elif cmd in ("/alertas", "alertas"):
+        _send(token, chat_id, _h_alertas(db))
+    elif cmd in ("/dashboard", "dashboard"):
+        _send(token, chat_id, _h_dashboard(db))
+    elif cmd in ("/backup", "backup"):
+        _send(token, chat_id, _h_backup(db))
+    elif cmd in ("/anular", "anular"):
+        _h_anular(db, token, chat_id, args)
     elif cmd in ("/caja", "caja"):
         _send(token, chat_id, _h_caja(db))
     elif cmd in ("/top", "top"):
