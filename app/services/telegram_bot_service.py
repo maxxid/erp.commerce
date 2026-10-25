@@ -223,13 +223,11 @@ def _fmt_producto_bajo(db: Session, p: Producto, detalle: dict, por_proveedor: b
     marca = _html.escape(str(p.marca or "—"))
     pc = fila.get("precio_compra")
     pv = fila.get("precio_venta", p.precio_venta)
-    lineas = [f"📦 <b>{nombre}</b>"]
+    lineas = [f"📦 <b>{nombre}</b>" + (f"  <i>({marca})</i>" if marca and marca != "—" else "")]
     if desc and desc != nombre:
         lineas.append(f"   {desc}")
     lineas.append(f"   Stock: {p.stock_actual:g} / Mín: {p.stock_minimo:g}")
-    if por_proveedor:
-        lineas.append(f"   Marca: {marca}")
-    else:
+    if not por_proveedor:
         lineas.append(f"   Proveedor: {prov}")
     lineas.append(f"   Compra: {_fmt_money(pc)} / Venta: {_fmt_money(pv)}")
     return "\n".join(lineas)
