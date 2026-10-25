@@ -148,7 +148,6 @@ def _h_start() -> str:
         "📦 <b>Stock</b>\n"
         "/stock — resumen de stock\n"
         "/stockbajo — bajo mínimo (por categoría o proveedor)\n"
-        "/stockproducto (codigo) — stock y lotes de un producto\n"
         "/buscar (texto) — buscar producto\n"
         "/vencimientos (dias) — vencimientos próximos (default 30)\n"
         "/lotesvencidos — lotes vencidos y por vencer\n\n"
@@ -1318,8 +1317,6 @@ def procesar_update(db: Session, token: str, update: dict) -> None:
         _send(token, chat_id, _h_detalle_venta(db, args))
     elif cmd in ("/buscar", "buscar"):
         _send(token, chat_id, _h_buscar(db, args))
-    elif cmd in ("/stockproducto", "stockproducto"):
-        _send(token, chat_id, _h_stockproducto(db, args))
     elif cmd in ("/compraspendientes", "compraspendientes"):
         _send(token, chat_id, _h_compras_pendientes(db))
     elif cmd in ("/lotesvencidos", "lotesvencidos"):
