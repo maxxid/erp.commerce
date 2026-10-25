@@ -546,7 +546,7 @@ def _h_oferta_sel(db: Session, token: str, chat_id: str, prod_id: int, lot_id: O
         from app.models.lote import Lote
         lote = db.query(Lote).filter(Lote.id == lid).first()
         if lote and lote.fecha_vencimiento:
-            extra = f"\nLote: {lote.codigo or 'lote'} — vence {lote.fecha_vencimiento.strftime('%d/%m/%Y')} ({lote.cantidad_actual:g} u.)"
+            extra = f"\nLote: {lote.codigo_lote or 'lote'} — vence {lote.fecha_vencimiento.strftime('%d/%m/%Y')} ({lote.cantidad_actual:g} u.)"
     kb = {"inline_keyboard": [
         [{"text": "% Porcentaje", "callback_data": "oferta_tipo:pct"},
          {"text": "$ Importe fijo", "callback_data": "oferta_tipo:imp"}],
@@ -683,7 +683,7 @@ def _mostrar_preview_oferta(db: Session, token: str, chat_id: str, st: dict) -> 
         from app.models.lote import Lote
         lote = db.query(Lote).filter(Lote.id == lid).first()
         if lote and lote.fecha_vencimiento:
-            extra = f"\nLote: {lote.codigo or 'lote'} — vence {lote.fecha_vencimiento.strftime('%d/%m/%Y')} ({lote.cantidad_actual:g} u.)"
+            extra = f"\nLote: {lote.codigo_lote or 'lote'} — vence {lote.fecha_vencimiento.strftime('%d/%m/%Y')} ({lote.cantidad_actual:g} u.)"
     cant_txt = f"\nCantidad (max_unidades): {cantidad}" if cantidad else ""
     kb = {"inline_keyboard": [[
         {"text": "✅ Crear oferta", "callback_data": "oferta_ok"},
@@ -723,7 +723,7 @@ def _h_oferta_crear_estado(db: Session, token: str, chat_id: str) -> None:
         from app.models.lote import Lote
         lote = db.query(Lote).filter(Lote.id == lid).first()
         if lote:
-            desc_extra = f" (lote {lote.codigo or lid}, vence {lote.fecha_vencimiento.strftime('%d/%m/%Y') if lote.fecha_vencimiento else 's/venc'})"
+            desc_extra = f" (lote {lote.codigo_lote or lid}, vence {lote.fecha_vencimiento.strftime('%d/%m/%Y') if lote.fecha_vencimiento else 's/venc'})"
     data = {
         "producto_id": p.id,
         "tipo": tipo,
@@ -916,7 +916,7 @@ def _h_stockproducto(db: Session, arg: str) -> str:
         lineas.append("Lotes:")
         for l in lotes[:10]:
             venc = l.fecha_vencimiento.strftime("%d/%m/%Y") if getattr(l, "fecha_vencimiento", None) else "s/venc"
-            lineas.append(f"  • {l.codigo or 'lote'}: {l.cantidad_actual:g} — vence {venc}")
+            lineas.append(f"  • {l.codigo_lote or 'lote'}: {l.cantidad_actual:g} — vence {venc}")
     return "\n".join(lineas)
 
 
