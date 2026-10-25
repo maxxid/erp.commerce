@@ -26,6 +26,7 @@ TZ_AR = timezone(timedelta(hours=-3))
 TG_API = "https://api.telegram.org/bot{token}"
 MAX_MSG = 4000
 _OFERTA_LOTE_SELECCIONADO: dict = {}
+_OFERTA_ESTADO: dict = {}
 CHEQUEO_CADA_SEG = 3
 
 
@@ -486,7 +487,6 @@ def _buscar_producto_oferta(db: Session, arg: str):
 def _h_oferta_inicio(db: Session, token: str, chat_id: str, arg: str) -> None:
     arg = (arg or "").strip()
     if not arg:
-        # Mostrar lotes próximos a vencer/vencidos (oferta por lote)
         from app.services import lote_service
         por_vencer = lote_service.lotes_por_vencer(db, 30)
         vencidos = lote_service.lotes_vencidos(db)
@@ -494,25 +494,28 @@ def _h_oferta_inicio(db: Session, token: str, chat_id: str, arg: str) -> None:
         if not lotes:
             _send(token, chat_id, "✅ No hay lotes con vencimiento próximo.\nUsá /oferta <nombre> para buscar un producto.")
             return
-        # botones: 1 por fila (nombre + dias + cant)
+        seen = set()
         filas = []
         for l in lotes[:12]:
+            if l.producto_id in seen:
+                continue
+            seen.add(l.producto_id)
             p = db.query(Producto).filter(Producto.id == l.producto_id).first()
             if not p:
                 continue
             dias = 0
             if l.fecha_vencimiento:
                 dias = (l.fecha_vencimiento - datetime.now(timezone.utc).replace(tzinfo=None)).days
-            etiqueta = f"{p.nombre[:18]} ({dias}d, {l.cantidad_actual:g}u)"
+            etiqueta = f"{p.nombre[:20]} ({dias}d, {l.cantidad_actual:g}u)"
             filas.append([{"text": etiqueta, "callback_data": f"oferta_sel:{p.id}:{l.id}"}])
         kb = {"inline_keyboard": filas}
-        _send(token, chat_id, "🏷️ <b>Crear oferta</b> — elegí un lote con vencimiento próximo:", reply_markup=kb)
+        _send(token, chat_id, "🏷️ <b>Crear oferta</b> — elegí un producto con vencimiento próximo:", reply_markup=kb)
         return
     p = _buscar_producto_oferta(db, arg)
     if not p:
         _send(token, chat_id, "Uso: /oferta <producto>\nEj: /oferta coca\nO /oferta sin argumentos para ver vencimientos próximos.")
         return
-    _h_oferta_sel(db, token, chat_id, p.id)
+    _h_oferta_sel(db, token, chat_id, p.id, None)
 
 
 def _h_oferta_sel(db: Session, token: str, chat_id: str, prod_id: int, lot_id: Optional[int] = None) -> None:
@@ -524,13 +527,7 @@ def _h_oferta_sel(db: Session, token: str, chat_id: str, prod_id: int, lot_id: O
         _OFERTA_LOTE_SELECCIONADO[str(chat_id)] = lot_id
     else:
         _OFERTA_LOTE_SELECCIONADO.pop(str(chat_id), None)
-    kb = {"inline_keyboard": [
-        [{"text": "10%", "callback_data": f"oferta_pct:{p.id}:10"},
-         {"text": "20%", "callback_data": f"oferta_pct:{p.id}:20"},
-         {"text": "30%", "callback_data": f"oferta_pct:{p.id}:30"},
-         {"text": "50%", "callback_data": f"oferta_pct:{p.id}:50"}],
-        [{"text": "❌ Cancelar", "callback_data": "oferta_cancel"}],
-    ]}
+    _OFERTA_ESTADO[str(chat_id)] = {"step": "tipo", "prod_id": prod_id, "lot_id": lot_id}
     extra = ""
     lid = _OFERTA_LOTE_SELECCIONADO.get(str(chat_id))
     if lid:
@@ -538,59 +535,177 @@ def _h_oferta_sel(db: Session, token: str, chat_id: str, prod_id: int, lot_id: O
         lote = db.query(Lote).filter(Lote.id == lid).first()
         if lote and lote.fecha_vencimiento:
             extra = f"\nLote: {lote.codigo or 'lote'} — vence {lote.fecha_vencimiento.strftime('%d/%m/%Y')} ({lote.cantidad_actual:g} u.)"
-    _send(token, chat_id, f"🏷️ <b>Oferta para:</b> {_html.escape(p.nombre)}\nPrecio actual: {_fmt_money(p.precio_venta)}{extra}\n\n¿Qué descuento?", reply_markup=kb)
-
-
-def _h_oferta_pct(db: Session, token: str, chat_id: str, prod_id: int, pct: int) -> None:
-    p = db.query(Producto).filter(Producto.id == prod_id).first()
-    if not p:
-        _send(token, chat_id, "❌ Producto no encontrado.")
-        return
     kb = {"inline_keyboard": [
-        [{"text": "7 días", "callback_data": f"oferta_dias:{prod_id}:{pct}:7"},
-         {"text": "14 días", "callback_data": f"oferta_dias:{prod_id}:{pct}:14"},
-         {"text": "30 días", "callback_data": f"oferta_dias:{prod_id}:{pct}:30"}],
+        [{"text": "% Porcentaje", "callback_data": "oferta_tipo:pct"},
+         {"text": "$ Importe fijo", "callback_data": "oferta_tipo:imp"}],
+        [{"text": "2x1", "callback_data": "oferta_tipo:2x1"}],
         [{"text": "❌ Cancelar", "callback_data": "oferta_cancel"}],
     ]}
-    _send(token, chat_id, f"🏷️ {_html.escape(p.nombre)} — {pct}% OFF\n\n¿Por cuántos días?", reply_markup=kb)
+    _send(token, chat_id, f"🏷️ <b>Oferta para:</b> {_html.escape(p.nombre)}\nPrecio actual: {_fmt_money(p.precio_venta)}{extra}\n\n¿Tipo de oferta?", reply_markup=kb)
 
 
-def _h_oferta_preview(db: Session, token: str, chat_id: str, prod_id: int, pct: int, dias: int) -> None:
+def _h_oferta_tipo(db: Session, token: str, chat_id: str, tipo: str) -> None:
+    st = _OFERTA_ESTADO.get(str(chat_id))
+    if not st:
+        _send(token, chat_id, "Sesión expirada. Usá /oferta de nuevo.")
+        return
+    prod_id = st["prod_id"]
     p = db.query(Producto).filter(Producto.id == prod_id).first()
     if not p:
         _send(token, chat_id, "❌ Producto no encontrado.")
+        _OFERTA_ESTADO.pop(str(chat_id), None)
         return
-    precio_oferta = (p.precio_venta or 0) * (1 - pct / 100.0)
+    if tipo == "pct":
+        st["tipo"] = "porcentaje"
+        st["step"] = "pct"
+        kb = {"inline_keyboard": [
+            [{"text": "10%", "callback_data": "oferta_pct:10"},
+             {"text": "20%", "callback_data": "oferta_pct:20"},
+             {"text": "30%", "callback_data": "oferta_pct:30"},
+             {"text": "50%", "callback_data": "oferta_pct:50"}],
+            [{"text": "❌ Cancelar", "callback_data": "oferta_cancel"}],
+        ]}
+        _send(token, chat_id, f"🏷️ {_html.escape(p.nombre)} — ¿Qué descuento?", reply_markup=kb)
+    elif tipo == "imp":
+        st["tipo"] = "monto_fijo"
+        st["step"] = "monto"
+        _send(token, chat_id, f"🏷️ {_html.escape(p.nombre)} — escribí el monto fijo de descuento (en $):")
+    elif tipo == "2x1":
+        st["tipo"] = "2x1"
+        st["valor"] = 0
+        st["step"] = "dias"
+        kb = {"inline_keyboard": [
+            [{"text": "7 días", "callback_data": "oferta_dias:7"},
+             {"text": "14 días", "callback_data": "oferta_dias:14"},
+             {"text": "30 días", "callback_data": "oferta_dias:30"}],
+            [{"text": "❌ Cancelar", "callback_data": "oferta_cancel"}],
+        ]}
+        _send(token, chat_id, f"🏷️ {_html.escape(p.nombre)} — 2x1\n¿Por cuántos días?", reply_markup=kb)
+
+
+def _h_oferta_pct(db: Session, token: str, chat_id: str, pct: int) -> None:
+    st = _OFERTA_ESTADO.get(str(chat_id))
+    if not st:
+        _send(token, chat_id, "Sesión expirada. Usá /oferta de nuevo.")
+        return
+    st["valor"] = float(pct)
+    st["step"] = "dias"
+    prod_id = st["prod_id"]
+    p = db.query(Producto).filter(Producto.id == prod_id).first()
+    kb = {"inline_keyboard": [
+        [{"text": "7 días", "callback_data": "oferta_dias:7"},
+         {"text": "14 días", "callback_data": "oferta_dias:14"},
+         {"text": "30 días", "callback_data": "oferta_dias:30"}],
+        [{"text": "❌ Cancelar", "callback_data": "oferta_cancel"}],
+    ]}
+    _send(token, chat_id, f"🏷️ {_html.escape(p.nombre if p else '')} — {pct}% OFF\n\n¿Por cuántos días?", reply_markup=kb)
+
+
+def _h_oferta_dias(db: Session, token: str, chat_id: str, dias: int) -> None:
+    st = _OFERTA_ESTADO.get(str(chat_id))
+    if not st:
+        _send(token, chat_id, "Sesión expirada. Usá /oferta de nuevo.")
+        return
+    st["dias"] = dias
+    st["step"] = "cantidad"
+    prod_id = st["prod_id"]
+    p = db.query(Producto).filter(Producto.id == prod_id).first()
+    lid = st.get("lot_id")
+    cant_lote = 0
+    if lid:
+        from app.models.lote import Lote
+        lote = db.query(Lote).filter(Lote.id == lid).first()
+        if lote:
+            cant_lote = int(lote.cantidad_actual or 0)
+    kb = {"inline_keyboard": []}
+    fila = []
+    if cant_lote > 0:
+        fila.append({"text": f"Cantidad del lote ({cant_lote})", "callback_data": "oferta_cant:lote"})
+    fila.append({"text": "Otra cantidad", "callback_data": "oferta_cant:otra"})
+    kb["inline_keyboard"].append(fila)
+    kb["inline_keyboard"].append([{"text": "❌ Cancelar", "callback_data": "oferta_cancel"}])
+    _send(token, chat_id, f"🏷️ {_html.escape(p.nombre if p else '')}\n\n¿Cantidad de unidades para la oferta?", reply_markup=kb)
+
+
+def _h_oferta_cantidad_lote(db: Session, token: str, chat_id: str) -> None:
+    st = _OFERTA_ESTADO.get(str(chat_id))
+    if not st:
+        _send(token, chat_id, "Sesión expirada. Usá /oferta de nuevo.")
+        return
+    lid = st.get("lot_id")
+    cant = 0
+    if lid:
+        from app.models.lote import Lote
+        lote = db.query(Lote).filter(Lote.id == lid).first()
+        if lote:
+            cant = int(lote.cantidad_actual or 0)
+    st["cantidad"] = cant if cant > 0 else None
+    st["step"] = "preview"
+    _mostrar_preview_oferta(db, token, chat_id, st)
+
+
+def _mostrar_preview_oferta(db: Session, token: str, chat_id: str, st: dict) -> None:
+    prod_id = st["prod_id"]
+    p = db.query(Producto).filter(Producto.id == prod_id).first()
+    if not p:
+        _send(token, chat_id, "❌ Producto no encontrado.")
+        _OFERTA_ESTADO.pop(str(chat_id), None)
+        return
+    tipo = st.get("tipo", "porcentaje")
+    valor = st.get("valor", 0)
+    dias = st.get("dias", 7)
+    cantidad = st.get("cantidad")
+    if tipo == "porcentaje":
+        precio_oferta = (p.precio_venta or 0) * (1 - valor / 100.0)
+        descuento_txt = f"{valor:g}%"
+    elif tipo == "monto_fijo":
+        precio_oferta = (p.precio_venta or 0) - valor
+        descuento_txt = f"${valor:g}"
+    else:
+        precio_oferta = (p.precio_venta or 0) / 2
+        descuento_txt = "2x1"
     fin = datetime.now(TZ_AR) + timedelta(days=dias)
-    lid = _OFERTA_LOTE_SELECCIONADO.get(str(chat_id))
+    lid = st.get("lot_id")
     extra = ""
     if lid:
         from app.models.lote import Lote
         lote = db.query(Lote).filter(Lote.id == lid).first()
         if lote and lote.fecha_vencimiento:
             extra = f"\nLote: {lote.codigo or 'lote'} — vence {lote.fecha_vencimiento.strftime('%d/%m/%Y')} ({lote.cantidad_actual:g} u.)"
+    cant_txt = f"\nCantidad (max_unidades): {cantidad}" if cantidad else ""
     kb = {"inline_keyboard": [[
-        {"text": "✅ Crear oferta", "callback_data": f"oferta_ok:{prod_id}:{pct}:{dias}"},
+        {"text": "✅ Crear oferta", "callback_data": "oferta_ok"},
         {"text": "❌ Cancelar", "callback_data": "oferta_cancel"},
     ]]}
     _send(token, chat_id,
           f"🏷️ <b>Vista previa</b>\n"
           f"Producto: {_html.escape(p.nombre)}\n"
-          f"Descuento: {pct}%\n"
+          f"Tipo: {tipo} — {descuento_txt}\n"
           f"Precio oferta: {_fmt_money(precio_oferta)} (era {_fmt_money(p.precio_venta)})\n"
-          f"Vigencia: {dias} días (hasta {fin.strftime('%d/%m/%Y')}){extra}\n\n¿Confirmar?",
+          f"Vigencia: {dias} días (hasta {fin.strftime('%d/%m/%Y')}){extra}{cant_txt}\n\n¿Confirmar?",
           reply_markup=kb)
+    st["step"] = "preview"
 
 
-def _h_oferta_crear(db: Session, token: str, chat_id: str, prod_id: int, pct: int, dias: int) -> None:
+def _h_oferta_crear_estado(db: Session, token: str, chat_id: str) -> None:
+    st = _OFERTA_ESTADO.get(str(chat_id))
+    if not st:
+        _send(token, chat_id, "Sesión expirada. Usá /oferta de nuevo.")
+        return
+    prod_id = st["prod_id"]
     p = db.query(Producto).filter(Producto.id == prod_id).first()
     if not p:
         _send(token, chat_id, "❌ Producto no encontrado.")
+        _OFERTA_ESTADO.pop(str(chat_id), None)
         return
     from app.services import oferta_service
     ahora = datetime.now(timezone.utc)
+    dias = st.get("dias", 7)
     fin = ahora + timedelta(days=dias)
-    lid = _OFERTA_LOTE_SELECCIONADO.get(str(chat_id))
+    tipo = st.get("tipo", "porcentaje")
+    valor = st.get("valor", 0)
+    cantidad = st.get("cantidad")
+    lid = st.get("lot_id")
     desc_extra = ""
     if lid:
         from app.models.lote import Lote
@@ -599,19 +714,21 @@ def _h_oferta_crear(db: Session, token: str, chat_id: str, prod_id: int, pct: in
             desc_extra = f" (lote {lote.codigo or lid}, vence {lote.fecha_vencimiento.strftime('%d/%m/%Y') if lote.fecha_vencimiento else 's/venc'})"
     data = {
         "producto_id": p.id,
-        "tipo": "porcentaje",
-        "valor": float(pct),
-        "requiere_cantidad": 1,
+        "tipo": tipo,
+        "valor": float(valor),
+        "requiere_cantidad": 2 if tipo == "2x1" else 1,
         "fecha_inicio": ahora,
         "fecha_fin": fin,
-        "descripcion": f"Oferta {pct}% creada desde Telegram{desc_extra}",
+        "max_unidades": cantidad,
+        "descripcion": f"Oferta creada desde Telegram{desc_extra}",
     }
     try:
         oferta = oferta_service.crear_oferta(db, data)
-        _send(token, chat_id, f"✅ Oferta creada (id {oferta.id}): {pct}% OFF en {_html.escape(p.nombre)} por {dias} días.")
+        _send(token, chat_id, f"✅ Oferta creada (id {oferta.id}) en {_html.escape(p.nombre)}.")
     except Exception as e:
         _send(token, chat_id, f"❌ Error al crear oferta: {e}")
     finally:
+        _OFERTA_ESTADO.pop(str(chat_id), None)
         _OFERTA_LOTE_SELECCIONADO.pop(str(chat_id), None)
 
 # ---------- nuevos comandos (fase 2) ----------
@@ -1054,25 +1171,33 @@ def procesar_update(db: Session, token: str, update: dict) -> None:
                 _send(token, chat_id, res)
         elif data.startswith("anularcancel:"):
             _send(token, chat_id, "Cancelado.")
+        elif data == "oferta:venc":
+            _h_oferta_inicio(db, token, chat_id, "")
         elif data.startswith("oferta_sel:"):
             parts = data.split(":")
             pid = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
             lid = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else None
             if pid:
                 _h_oferta_sel(db, token, chat_id, pid, lid)
+        elif data.startswith("oferta_tipo:"):
+            _h_oferta_tipo(db, token, chat_id, data.split(":", 1)[1])
         elif data.startswith("oferta_pct:"):
-            parts = data.split(":")
-            if len(parts) == 3:
-                _h_oferta_pct(db, token, chat_id, int(parts[1]), int(parts[2]))
+            pct = int(data.split(":", 1)[1]) if data.split(":", 1)[1].isdigit() else 0
+            _h_oferta_pct(db, token, chat_id, pct)
         elif data.startswith("oferta_dias:"):
-            parts = data.split(":")
-            if len(parts) == 4:
-                _h_oferta_preview(db, token, chat_id, int(parts[1]), int(parts[2]), int(parts[3]))
-        elif data.startswith("oferta_ok:"):
-            parts = data.split(":")
-            if len(parts) == 4:
-                _h_oferta_crear(db, token, chat_id, int(parts[1]), int(parts[2]), int(parts[3]))
+            dias = int(data.split(":", 1)[1]) if data.split(":", 1)[1].isdigit() else 7
+            _h_oferta_dias(db, token, chat_id, dias)
+        elif data == "oferta_cant:lote":
+            _h_oferta_cantidad_lote(db, token, chat_id)
+        elif data == "oferta_cant:otra":
+            st = _OFERTA_ESTADO.get(str(chat_id))
+            if st:
+                st["step"] = "cantidad_texto"
+                _send(token, chat_id, "Escribí la cantidad de unidades:")
+        elif data == "oferta_ok":
+            _h_oferta_crear_estado(db, token, chat_id)
         elif data == "oferta_cancel":
+            _OFERTA_ESTADO.pop(str(chat_id), None)
             _OFERTA_LOTE_SELECCIONADO.pop(str(chat_id), None)
             _send(token, chat_id, "Cancelado.")
         else:
@@ -1095,7 +1220,37 @@ def procesar_update(db: Session, token: str, update: dict) -> None:
         return
 
     # normalizar comando
-    cmd = texto.split()[0].lower()
+    cmd = texto.split()[0].lower() if texto else ""
+    # Manejo de entrada de texto pendiente (monto / cantidad)
+    st = _OFERTA_ESTADO.get(str(chat_id))
+    if st and st.get("step") in ("monto", "cantidad_texto") and not texto.startswith("/"):
+        if st["step"] == "monto":
+            try:
+                val = float(texto.replace(",", "."))
+            except ValueError:
+                _send(token, chat_id, "❌ Número inválido. Escribí el monto (ej: 500):")
+                return
+            st["valor"] = val
+            st["step"] = "dias"
+            p = db.query(Producto).filter(Producto.id == st["prod_id"]).first()
+            kb = {"inline_keyboard": [
+                [{"text": "7 días", "callback_data": "oferta_dias:7"},
+                 {"text": "14 días", "callback_data": "oferta_dias:14"},
+                 {"text": "30 días", "callback_data": "oferta_dias:30"}],
+                [{"text": "❌ Cancelar", "callback_data": "oferta_cancel"}],
+            ]}
+            _send(token, chat_id, f"🏷️ {_html.escape(p.nombre if p else '')}\n\n¿Por cuántos días?", reply_markup=kb)
+            return
+        elif st["step"] == "cantidad_texto":
+            try:
+                val = int(float(texto.replace(",", ".")))
+            except ValueError:
+                _send(token, chat_id, "❌ Número inválido. Escribí la cantidad (ej: 10):")
+                return
+            st["cantidad"] = val
+            st["step"] = "preview"
+            _mostrar_preview_oferta(db, token, chat_id, st)
+            return
     # quitar @botname
     if "@" in cmd:
         cmd = cmd.split("@")[0]
@@ -1132,7 +1287,12 @@ def procesar_update(db: Session, token: str, update: dict) -> None:
     elif cmd in ("/lotesvencidos", "lotesvencidos"):
         _send(token, chat_id, _h_lotes_vencidos(db))
     elif cmd in ("/vencimientos", "vencimientos"):
-        _send(token, chat_id, _h_vencimientos(db, args))
+        texto = _h_vencimientos(db, args)
+        kb = {"inline_keyboard": [[
+            {"text": "🏷️ Crear oferta", "callback_data": "oferta:venc"},
+            {"text": "❌ Cerrar", "callback_data": "oferta_cancel"},
+        ]]}
+        _send(token, chat_id, texto, reply_markup=kb)
     elif cmd in ("/alertas", "alertas"):
         _send(token, chat_id, _h_alertas(db))
     elif cmd in ("/dashboard", "dashboard"):
