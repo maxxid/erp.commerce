@@ -763,24 +763,6 @@ def _h_oferta_crear_estado(db: Session, token: str, chat_id: str) -> None:
         lineas_tg.append("")
         lineas_tg.append("Reenviá este mensaje al cajero para que lo aplique en el POS.")
         _send(token, chat_id, "\n".join(lineas_tg))
-        # Versión para copiar a WhatsApp (sin HTML, con formato WhatsApp)
-        lineas_wa = [
-            "📣 *OFERTA*",
-            "",
-            f"*{p.nombre}*" + (f" ({p.marca})" if p.marca else ""),
-            f"Código: {p.codigo_barras or '—'}",
-            f"Precio: {_fmt_money(p.precio_venta)} → *{_fmt_money(precio_oferta)}* ({desc_txt} OFF)",
-            f"Vigencia: {dias} días (hasta {fin.strftime('%d/%m/%Y')})",
-        ]
-        if lid:
-            from app.models.lote import Lote
-            lote = db.query(Lote).filter(Lote.id == lid).first()
-            if lote:
-                lineas_wa.append(f"Lote: {lote.codigo_lote or lote.id} — vence {lote.fecha_vencimiento.strftime('%d/%m/%Y') if lote.fecha_vencimiento else 's/venc'} ({lote.cantidad_actual:g} u.)")
-        lineas_wa.append(f"Margen: {_fmt_money(margen)} ({margen_pct}%)")
-        lineas_wa.append("")
-        lineas_wa.append("Copiá este texto y mandalo por WhatsApp al cajero.")
-        _send(token, chat_id, "\n".join(lineas_wa))
     except Exception as e:
         _send(token, chat_id, f"❌ Error al crear oferta: {e}")
     finally:
