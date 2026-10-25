@@ -27,6 +27,7 @@ TG_API = "https://api.telegram.org/bot{token}"
 MAX_MSG = 4000
 _OFERTA_LOTE_SELECCIONADO: dict = {}
 _OFERTA_ESTADO: dict = {}
+_WEBHOOK_DELETED = False
 CHEQUEO_CADA_SEG = 3
 
 
@@ -1221,6 +1222,7 @@ def procesar_update(db: Session, token: str, update: dict) -> None:
 
     # normalizar comando
     cmd = texto.split()[0].lower() if texto else ""
+    print(f"[TelegramBot] chat={chat_id} texto={texto!r} cmd={cmd!r}", flush=True)
     # Manejo de entrada de texto pendiente (monto / cantidad)
     st = _OFERTA_ESTADO.get(str(chat_id))
     if st and st.get("step") in ("monto", "cantidad_texto") and not texto.startswith("/"):
@@ -1320,6 +1322,13 @@ def chequear_mensajes() -> None:
         cfg = _cfg(db)
         if not cfg["interactivo"] or not cfg["token"] or not cfg["chat_id"]:
             return
+        global _WEBHOOK_DELETED
+        if not _WEBHOOK_DELETED:
+            try:
+                requests.post(f"{TG_API.format(token=cfg['token'])}/deleteWebhook", json={"drop_pending_updates": False}, timeout=10)
+            except Exception:
+                pass
+            _WEBHOOK_DELETED = True
         offset = _offset(db)
         try:
             r = requests.get(

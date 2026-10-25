@@ -13,4 +13,6 @@
 - En reportes comerciales del bot (p. ej. vencimientos), prefiere mostrar cantidad, precio de costo y precio de venta para decidir ofertas/acciones. Confidence: 0.7
 - Prefiere crear ofertas/promociones desde el reporte de vencimientos del bot con flujo ágil y botones: listar vencimientos y ofrecer botón "Crear oferta" (junto con "Cerrar"); al elegirlo, mostrar listado de productos con lotes por vencer (días y cantidad), elegir producto, luego elegir tipo de oferta (% o importe fijo) y cantidad de unidades con default la del lote más próximo a vencer; mantener la misma secuencia al portarlo a la web. Confidence: 0.9
 - El stock se gestiona por lotes (vencimiento); las funcionalidades de stock y ofertas deben considerar lotes y vencimiento. Confidence: 0.85
-- Primero terminar/completar bien una funcionalidad en Telegram antes de portarla a la versión web. Confidence: 0.8
+- Primero terminar/completar bien una funcionalidad en Telegram antes de portarla a la versión web. Confidence: 0.9
+
+antes de portarla a la versión web. Confidence: 0.8

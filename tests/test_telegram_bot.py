@@ -125,8 +125,14 @@ def test_chequear_mensajes_persiste_offset(db, cfg, monkeypatch):
         ok = True
         def json(self):
             return {"ok": True, "result": [{"update_id": 5, "message": {"chat": {"id": 42}, "text": "/stock"}}]}
+    class RespPost:
+        ok = True
+        def json(self):
+            return {"ok": True, "result": True}
     monkeypatch.setattr("requests.get", lambda *a, **k: Resp())
+    monkeypatch.setattr("requests.post", lambda *a, **k: RespPost())
     monkeypatch.setattr(tbs, "SessionLocal", lambda: db)
+    monkeypatch.setattr(tbs, "_WEBHOOK_DELETED", False)
     enviados = []
     monkeypatch.setattr(tbs, "_send", lambda token, chat_id, texto, reply_markup=None: enviados.append(texto))
     tbs.chequear_mensajes()
