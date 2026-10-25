@@ -76,9 +76,16 @@ def _send(token: str, chat_id: str, texto: str, reply_markup: Optional[dict] = N
         if reply_markup is not None and i == len(chunks) - 1:
             payload["reply_markup"] = reply_markup
         try:
-            requests.post(f"{TG_API.format(token=token)}/sendMessage", json=payload, timeout=20)
-        except requests.RequestException:
-            pass
+            resp = requests.post(f"{TG_API.format(token=token)}/sendMessage", json=payload, timeout=20)
+            try:
+                rj = resp.json()
+                if not (resp.ok and rj.get("ok")):
+                    print(f"[TelegramBot] sendMessage FAIL chat={chat_id}: {rj.get('description') or resp.status_code}", flush=True)
+            except Exception:
+                if not resp.ok:
+                    print(f"[TelegramBot] sendMessage FAIL chat={chat_id}: HTTP {resp.status_code}", flush=True)
+        except requests.RequestException as e:
+            print(f"[TelegramBot] sendMessage EXC chat={chat_id}: {e}", flush=True)
 
 
 def _answer_callback(token: str, cb_id: str, text: Optional[str] = None) -> None:
