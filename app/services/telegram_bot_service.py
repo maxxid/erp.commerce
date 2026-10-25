@@ -736,7 +736,50 @@ def _h_oferta_crear_estado(db: Session, token: str, chat_id: str) -> None:
     }
     try:
         oferta = oferta_service.crear_oferta(db, data)
-        _send(token, chat_id, f"✅ Oferta creada (id {oferta.id}) en {_html.escape(p.nombre)}.")
+        _send(token, chat_id, f"✅ Oferta creada (id {oferta.id}): {st.get('tipo')} en {_html.escape(p.nombre)} por {dias} días.")
+        # Ficha detallada para reenviar al cajero (Telegram)
+        precio_oferta = (p.precio_venta or 0) * (1 - (st.get('valor',0) or 0) / 100.0) if st.get('tipo') == 'porcentaje' else (p.precio_venta or 0) - (st.get('valor',0) or 0)
+        margen = precio_oferta - (p.precio_costo or 0)
+        margen_pct = round((margen / precio_oferta * 100) if precio_oferta else 0)
+        desc_txt = "2x1" if st.get('tipo') == '2x1' else f"{st.get('valor',0)}{'%' if st.get('tipo')=='porcentaje' else '$'}"
+        lineas_tg = [
+            "📣 <b>OFERTA PARA COMPARTIR</b>",
+            "",
+            f"Producto: <b>{_html.escape(p.nombre)}</b>" + (f" ({_html.escape(p.marca)})" if p.marca else ""),
+            f"Código: {p.codigo_barras or '—'}",
+            f"Precio original: {_fmt_money(p.precio_venta)}",
+            f"Descuento: {desc_txt}",
+            f"Precio de oferta: <b>{_fmt_money(precio_oferta)}</b>",
+            f"Vigencia: {dias} días (hasta {fin.strftime('%d/%m/%Y')})",
+        ]
+        lid = st.get("lot_id")
+        if lid:
+            from app.models.lote import Lote
+            lote = db.query(Lote).filter(Lote.id == lid).first()
+            if lote:
+                lineas_tg.append(f"Lote: {lote.codigo_lote or lote.id} — vence {lote.fecha_vencimiento.strftime('%d/%m/%Y') if lote.fecha_vencimiento else 's/venc'} ({lote.cantidad_actual:g} u.)")
+        lineas_tg.append(f"Margen: {_fmt_money(margen)} ({margen_pct}%)")
+        lineas_tg.append("")
+        lineas_tg.append("Reenviá este mensaje al cajero para que lo aplique en el POS.")
+        _send(token, chat_id, "\n".join(lineas_tg))
+        # Versión para copiar a WhatsApp (sin HTML, con formato WhatsApp)
+        lineas_wa = [
+            "📣 *OFERTA*",
+            "",
+            f"*{p.nombre}*" + (f" ({p.marca})" if p.marca else ""),
+            f"Código: {p.codigo_barras or '—'}",
+            f"Precio: {_fmt_money(p.precio_venta)} → *{_fmt_money(precio_oferta)}* ({desc_txt} OFF)",
+            f"Vigencia: {dias} días (hasta {fin.strftime('%d/%m/%Y')})",
+        ]
+        if lid:
+            from app.models.lote import Lote
+            lote = db.query(Lote).filter(Lote.id == lid).first()
+            if lote:
+                lineas_wa.append(f"Lote: {lote.codigo_lote or lote.id} — vence {lote.fecha_vencimiento.strftime('%d/%m/%Y') if lote.fecha_vencimiento else 's/venc'} ({lote.cantidad_actual:g} u.)")
+        lineas_wa.append(f"Margen: {_fmt_money(margen)} ({margen_pct}%)")
+        lineas_wa.append("")
+        lineas_wa.append("Copiá este texto y mandalo por WhatsApp al cajero.")
+        _send(token, chat_id, "\n".join(lineas_wa))
     except Exception as e:
         _send(token, chat_id, f"❌ Error al crear oferta: {e}")
     finally:
