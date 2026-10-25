@@ -163,9 +163,16 @@ def _h_stock(db: Session) -> str:
     )
 
 
-def _h_stockbajo_menu(db: Session, token: str, chat_id: str) -> None:
+def _h_stockbajo_menu_principal(token: str, chat_id: str) -> None:
+    kb = {"inline_keyboard": [
+        [{"text": "📂 Por categoría", "callback_data": "sb:catmenu"},
+         {"text": "🏭 Por proveedor", "callback_data": "sb:provmenu"}],
+    ]}
+    _send(token, chat_id, "📉 <b>Stock bajo</b> — ¿cómo querés verlo?", reply_markup=kb)
+
+
+def _h_stockbajo_menu_categorias(db: Session, token: str, chat_id: str) -> None:
     cats = db.query(Categoria).filter(Categoria.activo == True).order_by(Categoria.nombre).all()
-    # botones: 2 por fila
     filas = []
     fila = [{"text": "📋 Todos", "callback_data": "sb:all"}]
     for c in cats:
@@ -176,7 +183,52 @@ def _h_stockbajo_menu(db: Session, token: str, chat_id: str) -> None:
     if fila:
         filas.append(fila)
     kb = {"inline_keyboard": filas} if filas else None
-    _send(token, chat_id, "📉 <b>Stock bajo</b> — elegí una categoría:", reply_markup=kb)
+    _send(token, chat_id, "📉 <b>Stock bajo por categoría</b> — elegí:", reply_markup=kb)
+
+
+def _proveedores_con_bajos(db: Session) -> List[tuple]:
+    """Lista de (nombre_proveedor, [productos]) con stock bajo, ordenados por nombre."""
+    bajos = stock_service.productos_stock_bajo(db)
+    if not bajos:
+        return []
+    detalle = stock_service.detalle_reposicion(db, bajos)
+    grupos: Dict[str, List[Producto]] = {}
+    for p in bajos:
+        fila = (detalle or {}).get(p.id, {})
+        prov = (fila.get("proveedor") or "Sin proveedor").strip() or "Sin proveedor"
+        grupos.setdefault(prov, []).append(p)
+    return sorted(grupos.items(), key=lambda x: x[0].lower())
+
+
+def _h_stockbajo_menu_proveedores(db: Session, token: str, chat_id: str) -> None:
+    grupos = _proveedores_con_bajos(db)
+    if not grupos:
+        _send(token, chat_id, "✅ No hay productos bajo mínimo.")
+        return
+    filas = [[{"text": "📋 Todos", "callback_data": "sbp:all"}]]
+    for nombre, prods in grupos:
+        cb = f"sbp:{nombre}"
+        if len(cb.encode("utf-8")) > 64:
+            cb = "sbp:all"
+        filas.append([{"text": f"{nombre} ({len(prods)})", "callback_data": cb}])
+    kb = {"inline_keyboard": filas}
+    _send(token, chat_id, "📉 <b>Stock bajo por proveedor</b> — elegí:", reply_markup=kb)
+
+
+def _fmt_producto_bajo(db: Session, p: Producto, detalle: dict) -> str:
+    fila = (detalle or {}).get(p.id, {})
+    nombre = _html.escape(str(p.nombre or ""))
+    desc = _html.escape(str(p.descripcion or "").strip())
+    prov = _html.escape(str(fila.get("proveedor") or "—"))
+    pc = fila.get("precio_compra")
+    pv = fila.get("precio_venta", p.precio_venta)
+    lineas = [f"📦 <b>{nombre}</b>"]
+    if desc and desc != nombre:
+        lineas.append(f"   {desc}")
+    lineas.append(f"   Stock: {p.stock_actual:g} / Mín: {p.stock_minimo:g}")
+    lineas.append(f"   Proveedor: {prov}")
+    lineas.append(f"   Compra: {_fmt_money(pc)} / Venta: {_fmt_money(pv)}")
+    return "\n".join(lineas)
 
 
 def _h_stockbajo_categoria(db: Session, cat_id: Optional[int]) -> str:
@@ -189,13 +241,35 @@ def _h_stockbajo_categoria(db: Session, cat_id: Optional[int]) -> str:
     detalle = stock_service.detalle_reposicion(db, bajos)
     cat_nombre = "Todos" if cat_id in (None, 0) else _nombre_categoria(db, cat_id)
     lineas = [f"📉 <b>Stock bajo — {cat_nombre}</b> ({len(bajos)})", ""]
-    for p in bajos[:30]:
-        fila = fila_producto(p, detalle)
-        lineas.append(f"• {_html.escape(str(fila['nombre']))}")
-        lineas.append(f"  {_html.escape(mensaje_bajo(fila))}")
-    if len(bajos) > 30:
-        lineas.append(f"\n… y {len(bajos) - 30} más.")
-    return "\n".join(lineas)
+    for p in bajos[:25]:
+        lineas.append(_fmt_producto_bajo(db, p, detalle))
+        lineas.append("")
+    if len(bajos) > 25:
+        lineas.append(f"… y {len(bajos) - 25} más.")
+    return "\n".join(lineas).strip()
+
+
+def _h_stockbajo_proveedor(db: Session, prov_nombre: str) -> str:
+    bajos = stock_service.productos_stock_bajo(db)
+    if prov_nombre and prov_nombre.lower() != "all":
+        detalle = stock_service.detalle_reposicion(db, bajos)
+        filtrados = []
+        for p in bajos:
+            fila = (detalle or {}).get(p.id, {})
+            if (fila.get("proveedor") or "").strip().lower() == prov_nombre.strip().lower():
+                filtrados.append(p)
+        bajos = filtrados
+    if not bajos:
+        return "✅ Sin productos bajo mínimo para ese proveedor."
+    detalle = stock_service.detalle_reposicion(db, bajos)
+    titulo = "Todos los proveedores" if prov_nombre.lower() == "all" else prov_nombre
+    lineas = [f"📉 <b>Stock bajo — {titulo}</b> ({len(bajos)})", ""]
+    for p in bajos[:25]:
+        lineas.append(_fmt_producto_bajo(db, p, detalle))
+        lineas.append("")
+    if len(bajos) > 25:
+        lineas.append(f"… y {len(bajos) - 25} más.")
+    return "\n".join(lineas).strip()
 
 
 def _nombre_categoria(db: Session, cat_id: int) -> str:
@@ -340,15 +414,29 @@ def procesar_update(db: Session, token: str, update: dict) -> None:
             _answer_callback(token, cb_id, "No autorizado")
             return
         data = cb.get("data") or ""
-        if data.startswith("sb:"):
+        msg_id = msg.get("message_id")
+        if data == "sb:catmenu":
+            _h_stockbajo_menu_categorias(db, token, chat_id)
+        elif data == "sb:provmenu":
+            _h_stockbajo_menu_proveedores(db, token, chat_id)
+        elif data.startswith("sb:"):
             sufijo = data[3:]
             cat_id = None if sufijo == "all" else int(sufijo) if sufijo.isdigit() else None
             texto = _h_stockbajo_categoria(db, cat_id)
-            msg_id = msg.get("message_id")
             if msg_id:
                 _edit_message(token, chat_id, msg_id, texto)
             else:
                 _send(token, chat_id, texto)
+        elif data.startswith("sbp:"):
+            sufijo = data[4:]
+            prov = "all" if sufijo == "all" else sufijo
+            texto = _h_stockbajo_proveedor(db, prov)
+            if msg_id:
+                _edit_message(token, chat_id, msg_id, texto)
+            else:
+                _send(token, chat_id, texto)
+        else:
+            _send(token, chat_id, _h_start())
         _answer_callback(token, cb_id)
         return
 
@@ -376,7 +464,7 @@ def procesar_update(db: Session, token: str, update: dict) -> None:
     if cmd in ("/start", "/help", "help", "ayuda", "hola"):
         _send(token, chat_id, _h_start())
     elif cmd in ("/stockbajo", "stockbajo", "stock bajo"):
-        _h_stockbajo_menu(db, token, chat_id)
+        _h_stockbajo_menu_principal(token, chat_id)
     elif cmd in ("/stock", "stock"):
         _send(token, chat_id, _h_stock(db))
     elif cmd in ("/ventas", "ventas"):
