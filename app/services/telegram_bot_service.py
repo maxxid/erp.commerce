@@ -145,28 +145,32 @@ def _parse_fecha(arg: str) -> Optional[datetime]:
 def _h_start() -> str:
     return (
         "👋 <b>ApexERP — Bot del negocio</b>\n\n"
-        "Comandos disponibles:\n"
-        "/stockbajo — productos bajo mínimo (por categoría o proveedor)\n"
+        "📦 <b>Stock</b>\n"
         "/stock — resumen de stock\n"
+        "/stockbajo — bajo mínimo (por categoría o proveedor)\n"
         "/stockproducto (codigo) — stock y lotes de un producto\n"
         "/buscar (texto) — buscar producto\n"
+        "/vencimientos (dias) — vencimientos próximos (default 30)\n"
+        "/lotesvencidos — lotes vencidos y por vencer\n\n"
+        "💰 <b>Ventas</b>\n"
         "/ventas — ventas de hoy (Hoy/Ayer/Semana)\n"
+        "/detalle (venta) — detalle de una venta\n"
+        "/anular (venta) — anular una venta (con confirmación)\n"
+        "/top — top 5 productos del mes\n\n"
+        "💼 <b>Caja</b>\n"
+        "/caja — estado de caja\n"
         "/egresos — egresos del día\n"
         "/ingresos — ingresos manuales\n"
-        "/movimientos — últimos movimientos de caja\n"
-        "/detalle (venta) — detalle de una venta\n"
-        "/caja — estado de caja\n"
-        "/dashboard — KPIs del día\n"
-        "/top — top 5 productos del mes\n"
+        "/movimientos — últimos movimientos\n\n"
+        "👥 <b>Clientes y compras</b>\n"
         "/clientes — clientes con deuda\n"
-        "/compraspendientes — OC pendientes de recibir\n"
-        "/lotesvencidos — lotes vencidos y por vencer\n"
-        "/vencimientos [dias] — vencimientos próximos (default 30)\n"
+        "/compraspendientes — OC pendientes de recibir\n\n"
+        "🔔 <b>Alertas y sistema</b>\n"
         "/alertas — resumen de alertas\n"
+        "/dashboard — KPIs del día\n"
         "/backup — último respaldo y salud\n"
-        "/oferta (producto) — crear oferta (guiado)\n"
-        "/anular (venta) — anular una venta (con confirmación)\n"
         "/resumen — resumen del día\n"
+        "/oferta (producto) — crear oferta (guiado)\n\n"
         "/help — esta ayuda"
     )
 
@@ -1229,7 +1233,6 @@ def procesar_update(db: Session, token: str, update: dict) -> None:
 
     # normalizar comando
     cmd = texto.split()[0].lower() if texto else ""
-    print(f"[TelegramBot] chat={chat_id} texto={texto!r} cmd={cmd!r}", flush=True)
     # Manejo de entrada de texto pendiente (monto / cantidad)
     st = _OFERTA_ESTADO.get(str(chat_id))
     if st and st.get("step") in ("monto", "cantidad_texto") and not texto.startswith("/"):

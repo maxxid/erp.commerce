@@ -16,3 +16,4 @@
 - Primero terminar/completar bien una funcionalidad en Telegram antes de portarla a la versión web. Confidence: 0.9
 
 antes de portarla a la versión web. Confidence: 0.8
+- En mensajes del bot de Telegram con parseo HTML, evitar placeholders entre ángulos (<...>) porque Telegram los interpreta como tags; usar paréntesis o texto plano. Confidence: 0.7
