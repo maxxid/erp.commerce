@@ -154,6 +154,7 @@ def _h_start() -> str:
         "/vencimientos [dias] — vencimientos próximos (default 30)\n"
         "/alertas — resumen de alertas\n"
         "/backup — último respaldo y salud\n"
+        "/oferta <producto> — crear oferta (guiado)\n"
         "/anular <venta> — anular una venta (con confirmación)\n"
         "/resumen — resumen del día\n"
         "/help — esta ayuda"
@@ -467,6 +468,91 @@ def chequear_alertas_proactivas() -> None:
             pass
     finally:
         db.close()
+
+
+# ---------- oferta desde Telegram ----------
+
+def _buscar_producto_oferta(db: Session, arg: str):
+    arg = (arg or "").strip()
+    if not arg:
+        return None
+    p = db.query(Producto).filter(Producto.activo == True, Producto.codigo_barras == arg).first()
+    if not p:
+        p = db.query(Producto).filter(Producto.activo == True, Producto.nombre.ilike(f"%{arg}%")).first()
+    return p
+
+
+def _h_oferta_inicio(db: Session, token: str, chat_id: str, arg: str) -> None:
+    p = _buscar_producto_oferta(db, arg)
+    if not p:
+        _send(token, chat_id, "Uso: /oferta <producto>\nEj: /oferta coca")
+        return
+    kb = {"inline_keyboard": [
+        [{"text": "10%", "callback_data": f"oferta_pct:{p.id}:10"},
+         {"text": "20%", "callback_data": f"oferta_pct:{p.id}:20"},
+         {"text": "30%", "callback_data": f"oferta_pct:{p.id}:30"},
+         {"text": "50%", "callback_data": f"oferta_pct:{p.id}:50"}],
+        [{"text": "❌ Cancelar", "callback_data": "oferta_cancel"}],
+    ]}
+    _send(token, chat_id, f"🏷️ <b>Oferta para:</b> {_html.escape(p.nombre)}\nPrecio actual: {_fmt_money(p.precio_venta)}\n\n¿Qué descuento?", reply_markup=kb)
+
+
+def _h_oferta_pct(db: Session, token: str, chat_id: str, prod_id: int, pct: int) -> None:
+    p = db.query(Producto).filter(Producto.id == prod_id).first()
+    if not p:
+        _send(token, chat_id, "❌ Producto no encontrado.")
+        return
+    kb = {"inline_keyboard": [
+        [{"text": "7 días", "callback_data": f"oferta_dias:{prod_id}:{pct}:7"},
+         {"text": "14 días", "callback_data": f"oferta_dias:{prod_id}:{pct}:14"},
+         {"text": "30 días", "callback_data": f"oferta_dias:{prod_id}:{pct}:30"}],
+        [{"text": "❌ Cancelar", "callback_data": "oferta_cancel"}],
+    ]}
+    _send(token, chat_id, f"🏷️ {_html.escape(p.nombre)} — {pct}% OFF\n\n¿Por cuántos días?", reply_markup=kb)
+
+
+def _h_oferta_preview(db: Session, token: str, chat_id: str, prod_id: int, pct: int, dias: int) -> None:
+    p = db.query(Producto).filter(Producto.id == prod_id).first()
+    if not p:
+        _send(token, chat_id, "❌ Producto no encontrado.")
+        return
+    precio_oferta = (p.precio_venta or 0) * (1 - pct / 100.0)
+    fin = datetime.now(TZ_AR) + timedelta(days=dias)
+    kb = {"inline_keyboard": [[
+        {"text": "✅ Crear oferta", "callback_data": f"oferta_ok:{prod_id}:{pct}:{dias}"},
+        {"text": "❌ Cancelar", "callback_data": "oferta_cancel"},
+    ]]}
+    _send(token, chat_id,
+          f"🏷️ <b>Vista previa</b>\n"
+          f"Producto: {_html.escape(p.nombre)}\n"
+          f"Descuento: {pct}%\n"
+          f"Precio oferta: {_fmt_money(precio_oferta)} (era {_fmt_money(p.precio_venta)})\n"
+          f"Vigencia: {dias} días (hasta {fin.strftime('%d/%m/%Y')})\n\n¿Confirmar?",
+          reply_markup=kb)
+
+
+def _h_oferta_crear(db: Session, token: str, chat_id: str, prod_id: int, pct: int, dias: int) -> None:
+    p = db.query(Producto).filter(Producto.id == prod_id).first()
+    if not p:
+        _send(token, chat_id, "❌ Producto no encontrado.")
+        return
+    from app.services import oferta_service
+    ahora = datetime.now(timezone.utc)
+    fin = ahora + timedelta(days=dias)
+    data = {
+        "producto_id": p.id,
+        "tipo": "porcentaje",
+        "valor": float(pct),
+        "requiere_cantidad": 1,
+        "fecha_inicio": ahora,
+        "fecha_fin": fin,
+        "descripcion": f"Oferta {pct}% creada desde Telegram",
+    }
+    try:
+        oferta = oferta_service.crear_oferta(db, data)
+        _send(token, chat_id, f"✅ Oferta creada (id {oferta.id}): {pct}% OFF en {_html.escape(p.nombre)} por {dias} días.")
+    except Exception as e:
+        _send(token, chat_id, f"❌ Error al crear oferta: {e}")
 
 # ---------- nuevos comandos (fase 2) ----------
 
@@ -908,6 +994,20 @@ def procesar_update(db: Session, token: str, update: dict) -> None:
                 _send(token, chat_id, res)
         elif data.startswith("anularcancel:"):
             _send(token, chat_id, "Cancelado.")
+        elif data.startswith("oferta_pct:"):
+            parts = data.split(":")
+            if len(parts) == 3:
+                _h_oferta_pct(db, token, chat_id, int(parts[1]), int(parts[2]))
+        elif data.startswith("oferta_dias:"):
+            parts = data.split(":")
+            if len(parts) == 4:
+                _h_oferta_preview(db, token, chat_id, int(parts[1]), int(parts[2]), int(parts[3]))
+        elif data.startswith("oferta_ok:"):
+            parts = data.split(":")
+            if len(parts) == 4:
+                _h_oferta_crear(db, token, chat_id, int(parts[1]), int(parts[2]), int(parts[3]))
+        elif data == "oferta_cancel":
+            _send(token, chat_id, "Cancelado.")
         else:
             _send(token, chat_id, _h_start())
         _answer_callback(token, cb_id)
@@ -980,8 +1080,8 @@ def procesar_update(db: Session, token: str, update: dict) -> None:
         _send(token, chat_id, _h_top(db))
     elif cmd in ("/clientes", "clientes"):
         _send(token, chat_id, _h_clientes(db))
-    elif cmd in ("/resumen", "resumen"):
-        _send(token, chat_id, _h_resumen(db))
+    elif cmd in ("/oferta", "oferta"):
+        _h_oferta_inicio(db, token, chat_id, args)
     else:
         _send(token, chat_id, "❓ Comando no reconocido.\n" + _h_start())
 
