@@ -413,6 +413,21 @@ def chequear_mensajes() -> None:
             data = r.json()
         except ValueError:
             return
+        # Conflicto por webhook activo: lo borramos y reintentamos una vez.
+        if not r.ok and "webhook" in (data.get("description") or "").lower():
+            try:
+                requests.post(f"{TG_API.format(token=cfg['token'])}/deleteWebhook", json={"drop_pending_updates": False}, timeout=10)
+            except requests.RequestException:
+                pass
+            try:
+                r = requests.get(
+                    f"{TG_API.format(token=cfg['token'])}/getUpdates",
+                    params={"offset": offset, "timeout": 2, "allowed_updates": ["message", "callback_query", "edited_message"]},
+                    timeout=10,
+                )
+                data = r.json()
+            except (requests.RequestException, ValueError):
+                return
         if not r.ok or not data.get("ok"):
             return
         updates = data.get("result") or []

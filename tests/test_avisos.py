@@ -214,7 +214,9 @@ class TestRutas:
     def test_las_rutas_estan_registradas(self):
         rutas = {r.path for r in router.router.routes}
         assert "/api/avisos/probar" in rutas
-        assert all(r.methods == {"POST"} for r in router.router.routes)
+        assert "/api/avisos/bot/estado" in rutas
+        post_routes = [r for r in router.router.routes if r.methods == {"POST"}]
+        assert any(r.path == "/api/avisos/probar" for r in post_routes)
 
     def test_probar_es_admin(self):
         nombres = [d.name for d in router.router.routes[0].dependant.dependencies]
