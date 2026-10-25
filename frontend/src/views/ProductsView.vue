@@ -813,6 +813,10 @@ function ofertaTipoLabel(tipo) {
   return { '2x1': '2x1', porcentaje: '%', monto_fijo: '$' }[tipo] || tipo
 }
 
+function ofertaTipoColor(tipo) {
+  return { '2x1': 'warning', porcentaje: 'success', monto_fijo: 'info' }[tipo] || 'default'
+}
+
 const ofertaMargen = computed(() => {
   const p = products.value.find(x => x.id === ofertaForm.producto_id)
   if (!p) return null
@@ -1237,6 +1241,15 @@ function formatFecha(fechaStr) {
             class="w-7 h-7 rounded-lg text-amber-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 flex items-center justify-center transition"
             title="Crear oferta para liquidar este producto por vencimiento"
             @click="openOfertaDesdeVencimiento(row)"
+          >
+            <i class="fa-solid fa-tag text-[10px]"></i>
+          </button>
+          <button
+            v-if="row._oferta"
+            type="button"
+            aria-label="Editar oferta"
+            class="w-7 h-7 rounded-lg text-orange-400 hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20 flex items-center justify-center transition"
+            @click="openEditOfertaModal(row._oferta)"
           >
             <i class="fa-solid fa-tag text-[10px]"></i>
           </button>
