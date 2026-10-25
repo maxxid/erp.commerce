@@ -215,18 +215,22 @@ def _h_stockbajo_menu_proveedores(db: Session, token: str, chat_id: str) -> None
     _send(token, chat_id, "📉 <b>Stock bajo por proveedor</b> — elegí:", reply_markup=kb)
 
 
-def _fmt_producto_bajo(db: Session, p: Producto, detalle: dict) -> str:
+def _fmt_producto_bajo(db: Session, p: Producto, detalle: dict, por_proveedor: bool = False) -> str:
     fila = (detalle or {}).get(p.id, {})
     nombre = _html.escape(str(p.nombre or ""))
     desc = _html.escape(str(p.descripcion or "").strip())
     prov = _html.escape(str(fila.get("proveedor") or "—"))
+    marca = _html.escape(str(p.marca or "—"))
     pc = fila.get("precio_compra")
     pv = fila.get("precio_venta", p.precio_venta)
     lineas = [f"📦 <b>{nombre}</b>"]
     if desc and desc != nombre:
         lineas.append(f"   {desc}")
     lineas.append(f"   Stock: {p.stock_actual:g} / Mín: {p.stock_minimo:g}")
-    lineas.append(f"   Proveedor: {prov}")
+    if por_proveedor:
+        lineas.append(f"   Marca: {marca}")
+    else:
+        lineas.append(f"   Proveedor: {prov}")
     lineas.append(f"   Compra: {_fmt_money(pc)} / Venta: {_fmt_money(pv)}")
     return "\n".join(lineas)
 
@@ -265,7 +269,7 @@ def _h_stockbajo_proveedor(db: Session, prov_nombre: str) -> str:
     titulo = "Todos los proveedores" if prov_nombre.lower() == "all" else prov_nombre
     lineas = [f"📉 <b>Stock bajo — {titulo}</b> ({len(bajos)})", ""]
     for p in bajos[:25]:
-        lineas.append(_fmt_producto_bajo(db, p, detalle))
+        lineas.append(_fmt_producto_bajo(db, p, detalle, por_proveedor=True))
         lineas.append("")
     if len(bajos) > 25:
         lineas.append(f"… y {len(bajos) - 25} más.")
