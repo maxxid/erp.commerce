@@ -483,9 +483,53 @@ def _buscar_producto_oferta(db: Session, arg: str):
 
 
 def _h_oferta_inicio(db: Session, token: str, chat_id: str, arg: str) -> None:
+    arg = (arg or "").strip()
+    if not arg:
+        # Mostrar productos con lotes próximos a vencer (para ofertas de liquidación)
+        from app.services import lote_service
+        por_vencer = lote_service.lotes_por_vencer(db, 30)
+        vencidos = lote_service.lotes_vencidos(db)
+        # agrupar por producto
+        prod_ids = []
+        seen = set()
+        for l in (vencidos + por_vencer):
+            if l.producto_id not in seen:
+                seen.add(l.producto_id)
+                prod_ids.append(l.producto_id)
+        if not prod_ids:
+            _send(token, chat_id, "✅ No hay productos con vencimiento próximo.\nUsá /oferta <nombre> para buscar uno.")
+            return
+        # botones: hasta 2 por fila
+        filas = []
+        fila = []
+        for pid in prod_ids[:12]:
+            p = db.query(Producto).filter(Producto.id == pid).first()
+            if not p:
+                continue
+            # dias al vencimiento más próximo
+            lotes_prod = [l for l in (vencidos + por_vencer) if l.producto_id == pid]
+            dias = min(( (l.fecha_vencimiento - datetime.now(timezone.utc).replace(tzinfo=None)).days for l in lotes_prod if l.fecha_vencimiento), default=0)
+            etiqueta = f"{p.nombre[:22]} ({dias}d)"
+            fila.append({"text": etiqueta, "callback_data": f"oferta_sel:{p.id}"})
+            if len(fila) >= 2:
+                filas.append(fila)
+                fila = []
+        if fila:
+            filas.append(fila)
+        kb = {"inline_keyboard": filas}
+        _send(token, chat_id, "🏷️ <b>Crear oferta</b> — elegí un producto con vencimiento próximo:", reply_markup=kb)
+        return
     p = _buscar_producto_oferta(db, arg)
     if not p:
-        _send(token, chat_id, "Uso: /oferta <producto>\nEj: /oferta coca")
+        _send(token, chat_id, "Uso: /oferta <producto>\nEj: /oferta coca\nO /oferta sin argumentos para ver vencimientos próximos.")
+        return
+    _h_oferta_sel(db, token, chat_id, p.id)
+
+
+def _h_oferta_sel(db: Session, token: str, chat_id: str, prod_id: int) -> None:
+    p = db.query(Producto).filter(Producto.id == prod_id).first()
+    if not p:
+        _send(token, chat_id, "❌ Producto no encontrado.")
         return
     kb = {"inline_keyboard": [
         [{"text": "10%", "callback_data": f"oferta_pct:{p.id}:10"},
@@ -994,6 +1038,10 @@ def procesar_update(db: Session, token: str, update: dict) -> None:
                 _send(token, chat_id, res)
         elif data.startswith("anularcancel:"):
             _send(token, chat_id, "Cancelado.")
+        elif data.startswith("oferta_sel:"):
+            pid = int(data[11:]) if data[11:].isdigit() else None
+            if pid:
+                _h_oferta_sel(db, token, chat_id, pid)
         elif data.startswith("oferta_pct:"):
             parts = data.split(":")
             if len(parts) == 3:
