@@ -1,5 +1,7 @@
 # Pendientes — ApexERP
 
+> **Instrucción para el Agente:** Estado actual, roadmap y changelog del proyecto. Leer al inicio de sesión para saber qué retomar; actualizar al cerrar un hito. Es largo: leer solo secciones relevantes (En curso / Completados recientes).
+
 > Estado actual del proyecto. **Actualizar al final de cada sesión relevante** (en el commit que cierra la jornada o cuando arranca la siguiente).
 
 ---

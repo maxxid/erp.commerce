@@ -1,5 +1,7 @@
 # ERP Comercio — Deploy en Oracle Cloud Free Tier
 
+> **Instrucción para el Agente:** Setup inicial de la VM Oracle Cloud. Leer solo si se aprovisiona o migra de hosting. No leer por defecto.
+
 ## Resumen
 Oracle Cloud ofrece una VM ARM **gratis de por vida** con:
 - 4 cores, 24 GB RAM, 200 GB disco

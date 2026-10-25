@@ -1,5 +1,7 @@
 # ERP Comercio — Documento Maestro Funcional
 
+> **Instrucción para el Agente:** Documento maestro funcional (pantallas, flujos, reglas, atajos). Leer antes de tocar código que afecte features existentes; verificar contra él para no romper. Es largo (~2000 líneas): leer solo las secciones relevantes.
+
 > Documento organizado por pantallas (tabs del sidebar), botones y flujos funcionales.
 > Versión actual del sistema con todas las funcionalidades desarrolladas.
 

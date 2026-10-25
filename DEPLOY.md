@@ -1,5 +1,7 @@
 # Deploy & Mantenimiento
 
+> **Instrucción para el Agente:** Guía de deploy, migraciones y troubleshooting del servidor. Leer solo cuando se despliega, se migra la DB o se diagnostica un 502. No leer por defecto.
+
 ## Deploy & Mantenimiento
 
 ## Cómo funciona (IMPORTANTE - leído con sangre)

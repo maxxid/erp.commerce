@@ -291,7 +291,12 @@ def abrir_caja(
         )
         db.add(egreso)
         db.commit()
-    
+
+    try:
+        registrar_baseline_stock_bajo(db, sucursal_id)
+    except Exception:
+        pass
+
     return movimiento
 
 
@@ -948,6 +953,10 @@ def cerrar_todo(
     db.add(movimiento)
     db.commit()
     db.refresh(movimiento)
+    try:
+        generar_resumen_diario(db, movimiento, sucursal_id)
+    except Exception:
+        pass
     return movimiento, desglose
 
 
@@ -1508,3 +1517,137 @@ def obtener_detalle_medio_sesion(
         "esperado": round(fila["esperado"], 2),
         "movimientos": filas,
     }
+
+
+# ---------- Baseline de stock bajo y resumen diario (Telegram) ----------
+
+def registrar_baseline_stock_bajo(db: Session, sucursal_id: int = 1) -> None:
+    """Captura el set de productos ya bajo mínimo al abrir la caja.
+
+    Se guarda en config (`stock_bajo_baseline_ids` + fecha) para que el resumen
+    de cierre solo reporte los que entraron a stock bajo durante la jornada.
+    Si ya hay baseline del mismo día, no se sobrescribe.
+    """
+    from datetime import datetime, timedelta, timezone
+    TZ_AR = timezone(timedelta(hours=-3))
+    hoy = datetime.now(TZ_AR).strftime("%Y-%m-%d")
+    fecha_guardada = config_service.get_config(db, "stock_bajo_baseline_fecha")
+    if fecha_guardada == hoy:
+        return
+    from app.services import stock_service
+    bajos = stock_service.productos_stock_bajo(db)
+    ids = ",".join(str(p.id) for p in bajos)
+    config_service.set_config(db, "stock_bajo_baseline_ids", ids, "IDs de productos bajo mínimo al abrir la caja")
+    config_service.set_config(db, "stock_bajo_baseline_fecha", hoy, "Fecha del baseline de stock bajo")
+
+
+def generar_resumen_diario(db: Session, cierre_movimiento=None, sucursal_id: int = 1) -> None:
+    """Arma y envía el resumen del día por Telegram (si está habilitado).
+
+    Incluye apertura, cierre (totales + conciliación + obs) y productos que
+    entraron a stock bajo durante la jornada.
+    """
+    from datetime import datetime, timedelta, timezone
+    TZ_AR = timezone(timedelta(hours=-3))
+    cfg_token = config_service.get_config(db, "telegram_bot_token")
+    cfg_chat = config_service.get_config(db, "telegram_chat_id")
+    if not cfg_token or not cfg_chat:
+        return
+    habilitado = (config_service.get_config(db, "stock_aviso_enabled") or
+                  config_service.get_config(db, "resumen_diario_enabled") or "").lower() == "true"
+    bot_on = (config_service.get_config(db, "telegram_bot_interactivo") or "").lower() == "true"
+    if not habilitado and not bot_on:
+        return
+
+    hoy = datetime.now(TZ_AR).strftime("%Y-%m-%d")
+    ultimo = config_service.get_config(db, "resumen_diario_ultimo_envio") or config_service.get_config(db, "stock_aviso_ultimo_envio")
+    if ultimo == hoy:
+        return
+
+    # Apertura: buscar la apertura de hoy
+    from app.models.movimiento_caja import MovimientoCaja
+    apertura = (
+        db.query(MovimientoCaja)
+        .filter(MovimientoCaja.sucursal_id == sucursal_id, MovimientoCaja.tipo == "apertura",
+                MovimientoCaja.medio_pago.is_(None))
+        .order_by(MovimientoCaja.id.desc())
+        .first()
+    )
+    if apertura is None and cierre_movimiento is None:
+        return
+    # Cierre
+    cierre = cierre_movimiento
+    if cierre is None:
+        cierre = (
+            db.query(MovimientoCaja)
+            .filter(MovimientoCaja.sucursal_id == sucursal_id, MovimientoCaja.tipo == "cierre",
+                    MovimientoCaja.medio_pago.is_(None))
+            .order_by(MovimientoCaja.id.desc())
+            .first()
+        )
+
+    def _fmt(v):
+        try:
+            return f"${float(v or 0):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        except (ValueError, TypeError):
+            return "$0,00"
+
+    lineas = [f"📋 <b>Resumen del día — {hoy}</b>", ""]
+
+    # Apertura
+    if apertura:
+        lineas.append(f"🔓 Apertura: {_fmt(apertura.monto)} ({apertura.created_at.strftime('%H:%M') if apertura.created_at else ''})")
+    else:
+        lineas.append("🔓 Apertura: (sin datos)")
+
+    # Cierre
+    if cierre:
+        lineas.append(f"🔒 Cierre: {_fmt(cierre.monto)} ({cierre.created_at.strftime('%H:%M') if cierre.created_at else ''})")
+        if getattr(cierre, "descripcion", None):
+            lineas.append(f"   Obs: {_html_escape(cierre.descripcion)}")
+        try:
+            desglose = obtener_resumen_por_medio_pago(db, sucursal_id)
+            if isinstance(desglose, dict):
+                for k in ("efectivo", "debito", "credito", "transferencia"):
+                    v = desglose.get(k)
+                    if v is not None:
+                        lineas.append(f"   {k}: {_fmt(v)}")
+        except Exception:
+            pass
+    else:
+        lineas.append("🔒 Cierre: (pendiente)")
+
+    # Nuevos bajos
+    from app.services import stock_service
+    baseline_fecha = config_service.get_config(db, "stock_bajo_baseline_fecha")
+    baseline_ids_raw = config_service.get_config(db, "stock_bajo_baseline_ids") or ""
+    baseline_ids = set(x for x in baseline_ids_raw.split(",") if x.strip())
+    bajos_actuales = stock_service.productos_stock_bajo(db)
+    if baseline_fecha == hoy:
+        nuevos = [p for p in bajos_actuales if str(p.id) not in baseline_ids]
+    else:
+        nuevos = bajos_actuales
+    lineas.append("")
+    if nuevos:
+        lineas.append(f"📉 Nuevos en stock bajo ({len(nuevos)}):")
+        for p in nuevos[:20]:
+            lineas.append(f"  • {_html_escape(p.nombre)} — stock {p.stock_actual:g}/{p.stock_minimo:g}")
+        if len(nuevos) > 20:
+            lineas.append(f"  … y {len(nuevos) - 20} más.")
+    else:
+        lineas.append("✅ Sin productos nuevos en stock bajo hoy.")
+
+    texto = "\n".join(lineas)
+    from app.services import avisos_service
+    ok, _ = avisos_service.enviar_a_telegram(cfg_token, cfg_chat, texto)
+    if ok:
+        config_service.set_config(db, "resumen_diario_ultimo_envio", hoy, "Último día en que se envió el resumen diario")
+        try:
+            config_service.set_config(db, "stock_aviso_ultimo_envio", hoy, "Último día en que se envió el resumen diario")
+        except Exception:
+            pass
+
+
+def _html_escape(s) -> str:
+    import html as _h
+    return _h.escape(str(s or ""))

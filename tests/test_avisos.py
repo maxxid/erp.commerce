@@ -131,6 +131,11 @@ class TestChequeoDiario:
         ahora = datetime.now(TZ_AR)
         configurar(db, stock_aviso_enabled="true", stock_aviso_hora="00:00",
                    telegram_bot_token="123:abc", telegram_chat_id="-1001")
+        # Caja cerrada del día (apertura + cierre) para que el resumen se envíe
+        from app.models.movimiento_caja import MovimientoCaja
+        db.add(MovimientoCaja(tipo="apertura", monto=1000, usuario_id=1, sucursal_id=1))
+        db.add(MovimientoCaja(tipo="cierre", monto=1000, usuario_id=1, sucursal_id=1, medio_pago=None))
+        db.commit()
         mandados = []
         self._mandador(monkeypatch, db, mandados)
 

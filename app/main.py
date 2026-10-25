@@ -108,6 +108,7 @@ def crear_app() -> FastAPI:
         _start_backup_scheduler()
         _start_avisos_scheduler()
         _start_salud_scheduler()
+        _start_telegram_bot_scheduler()
 
     return app
 
@@ -586,6 +587,23 @@ def _start_salud_scheduler():
         print("[Salud] APScheduler no disponible. Instalá: pip install apscheduler")
     except Exception as e:
         print(f"[Salud] Error al iniciar scheduler: {e}")
+
+
+def _start_telegram_bot_scheduler():
+    """Bot interactivo de Telegram: polling cada 3 s si está habilitado."""
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        from app.services.telegram_bot_service import chequear_mensajes, CHEQUEO_CADA_SEG
+        scheduler = BackgroundScheduler()
+        scheduler.add_job(
+            chequear_mensajes, "interval", seconds=CHEQUEO_CADA_SEG, id="telegram_bot_polling",
+        )
+        scheduler.start()
+        print(f"[TelegramBot] Scheduler iniciado: polling cada {CHEQUEO_CADA_SEG} s")
+    except ImportError:
+        print("[TelegramBot] APScheduler no disponible. Instalá: pip install apscheduler")
+    except Exception as e:
+        print(f"[TelegramBot] Error al iniciar scheduler: {e}")
 
 
 if __name__ == "__main__":

@@ -1,5 +1,7 @@
 # Contexto — ApexERP
 
+> **Instrucción para el Agente:** Lee este documento al inicio de cada sesión para entender el contexto global del proyecto, la ubicación de sus módulos y las restricciones de ejecución. No leas otros archivos de documentación a menos que sea explícitamente necesario para la tarea asignada.
+
 > Snapshot del proyecto para retomar sesiones rápido. **Actualizar al cambiar de contexto o al cerrar un hito importante.**
 
 ---
@@ -14,6 +16,48 @@
 | **Local** | `E:/erp.commerce` (Windows) |
 | **Stack** | Python FastAPI + SQLAlchemy + SQLite · Vue 3 (Composition API) + Vite 5 + Tailwind · Pinia |
 | **Última release funcional** | commit `3a494b7` (10/08/2026) |
+
+---
+
+## 📌 TL;DR para empezar una sesión
+
+1. `git pull` y leer este archivo
+2. Leer `PENDIENTES.md` → sección "En curso" para saber qué retomar
+3. Si vas a codear: leer `MAESTRO.md` + `.opencode/instructions.md` + skill `arquitecto-programador`
+4. Al cerrar la sesión, actualizar `PENDIENTES.md` con lo hecho
+
+---
+
+## 🗺️ Mapa de arquitectura (Context Index)
+
+Usar este índice para localizar rápidamente el archivo o módulo relevante según la consulta, evitando escaneos completos del repositorio.
+
+| Módulo / Dominio | Archivos Clave | Descripción / Responsabilidad |
+| :--- | :--- | :--- |
+| **Autenticación** | `app/auth/*` | JWT, dependencias, hashing |
+| **API & Rutas** | `app/routers/*`, `app/main.py` | Endpoints REST por dominio |
+| **Lógica de Negocio** | `app/services/*` | Reglas de negocio e integraciones de servicios |
+| **Base de Datos** | `app/models/*`, `app/database.py` | Modelos SQLAlchemy, engine, Base |
+| **Schemas** | `app/schemas/*` | Pydantic (incl. `producto_proveedor.py`) |
+| **Configuración** | `app/config.py`, `.env*` | Configs y variables de entorno |
+| **Migraciones** | `migrations/*`, `app/main.py:_migrate_new_columns` | SQL histórico + auto-migración al arrancar |
+| **UI / Vistas** | `frontend/src/views/*` | Pantallas: POS, Caja, Products, Ajustes, Facturación |
+| **UI / Componentes** | `frontend/src/components/*` | BaseButton, BaseModal, layout, etc. |
+| **Stores / Composables** | `frontend/src/stores/*`, `frontend/src/composables/*` | Pinia (auth, caja) y hooks |
+| **API client** | `frontend/src/services/api.js` | Wrapper axios/fetch con `RespuestaData { data, message }` |
+| **Documentación** | `MAESTRO.md`, `PENDIENTES.md`, `API_DOCUMENTACION.md`, `MERCADOPAGO.md`, `DEPLOY.md`, `HOSTING.md`, `MULTITENANT.md`, `FASE_G_CONTINUIDAD.md` | Docs de referencia (leer solo si la tarea lo requiere) |
+
+---
+
+## ⚡ Reglas de eficiencia & consumo de tokens (para el Agente)
+
+Para minimizar el consumo innecesario de créditos y optimizar el tiempo de respuesta:
+
+1. **Lectura selectiva:** consulta únicamente los archivos directamente relacionados con la tarea. Apóyate en el *Mapa de arquitectura* y en *Estructura clave*.
+2. **Ignorar archivos pesados:** nunca analices archivos dentro de `node_modules/`, `dist/`, `.next/`, `build/`, `package-lock.json`, ni logs masivos.
+3. **Pausar tras 2 intentos fallidos:** si un comando de prueba, build o refactorización falla 2 veces consecutivas, detente, explica brevemente el bloqueo y pide confirmación al usuario antes de reintentar.
+4. **Respuestas concisas:** límitate a aplicar los cambios requeridos y dar una explicación breve. Evita resúmenes largos no solicitados.
+5. **No leer otros `.md`** (MAESTRO, PENDIENTES, etc.) a menos que la tarea lo requiera explícitamente.
 
 ---
 
@@ -208,9 +252,13 @@ git push origin master # publica el revert
 
 ---
 
-## 📌 TL;DR para empezar una sesión
+## 📋 Reglas de código & estilo (Project Taste)
 
-1. `git pull` y leer este archivo
-2. Leer `PENDIENTES.md` → sección "En curso" para saber qué retomar
-3. Si vas a codear: leer `MAESTRO.md` + `.opencode/instructions.md` + skill `arquitecto-programador`
-4. Al cerrar la sesión, actualizar `PENDIENTES.md` con lo hecho
+1. **Arquitectura:** mantener separación estricta de responsabilidades entre rutas, controladores y servicios.
+2. **Manejo de errores:** retornar errores tipados; evitar bloques `try/catch` vacíos o genéricos sin logging.
+3. **Librerías:** no agregar nuevas dependencias externas sin confirmación previa del usuario.
+4. **Patrones preferidos:** funciones puras, composición sobre herencia, manejo explícito de tipos.
+
+---
+
+*Generado/actualizado a partir de la estructura de `PROJECT_GUIDELINES.md` para optimizar tokens y navegación.*

@@ -93,39 +93,32 @@ def _hora_objetivo(ahora: datetime, hora_cfg: str):
 
 
 def chequear_aviso_diario():
-    """El job del scheduler: manda el aviso si ya pasó la hora y todavía no se mandó hoy."""
+    """El job del scheduler: envía el resumen diario si la caja ya está cerrada."""
     db = SessionLocal()
     try:
         cfg = config_aviso(db)
         if not cfg["habilitado"] or not cfg["token"] or not cfg["chat_id"]:
-            return
+            # igual intentar si el bot interactivo está activo
+            bot_on = (config_service.get_config(db, "telegram_bot_interactivo") or "").lower() == "true"
+            if not bot_on:
+                return
         ahora = datetime.now(TZ_AR)
-        objetivo = _hora_objetivo(ahora, cfg["hora"])
+        objetivo = _hora_objetivo(ahora, cfg.get("hora", "21:00") or "21:00")
         if objetivo is None or ahora < objetivo:
             return
-        if config_service.get_config(db, "stock_aviso_ultimo_envio") == ahora.strftime("%Y-%m-%d"):
-            return
-        texto = mensaje_stock_bajo(db)
-        if not texto:
-            # Nada bajo mínimo: no se anota como enviado, así si algo se
-            # cae a cero más tarde el aviso sale igual hoy.
-            return
-        ok, detalle = enviar_a_telegram(cfg["token"], cfg["chat_id"], texto)
-        if ok:
-            config_service.set_config(
-                db, "stock_aviso_ultimo_envio", ahora.strftime("%Y-%m-%d"),
-                "Último día en que se mandó el aviso de stock bajo por Telegram",
-            )
-            # Auditoría pide usuario: se firma con el admin del sistema.
-            admin = db.query(Usuario.id).filter(Usuario.rol == "admin").first()
-            if admin:
-                auditoria_service.registrar(
-                    db, admin.id, "aviso_stock_telegram", None, None,
-                    {"resultado": "enviado", "hora": ahora.strftime("%H:%M")},
-                )
-        else:
-            # Se reintenta en el próximo chequeo (cada 10 minutos).
-            print(f"[Avisos] Telegram rechazó el aviso: {detalle}")
+        # Solo si la caja está cerrada (sesión terminada)
+        try:
+            from app.services import caja_service
+            if caja_service.caja_abierta(db):
+                return
+        except Exception:
+            pass
+        # Delegar en generar_resumen_diario (idempotente por fecha)
+        try:
+            from app.services import caja_service
+            caja_service.generar_resumen_diario(db)
+        except Exception as e:
+            print(f"[Avisos] Error generando resumen diario: {e}")
     finally:
         db.close()
 

@@ -5,6 +5,11 @@ URL Base: http://localhost:8000
 Swagger interactivo: http://localhost:8000/docs
 Autenticación: JWT Bearer Token
 
+> **Instrucción para el Agente:** Referencia de endpoints REST. Leer solo si la tarea toca un endpoint específico; preferir Swagger en /docs para detalles. Es largo (~1100 líneas): usar el índice para saltar a la sección.
+
+## Índice rápido
+1. Formato general de respuesta · 2. Autenticación · 3. Productos · 4. Categorías · 5. Caja · 6. Ventas · 7. Compras · 8. Proveedores · 9. Clientes · 10. Dashboard · 11. Flujos principales · 12. Notas para el frontend
+
 
 ═══════════════════════════════════════════════════════════════
 1. FORMATO GENERAL DE RESPUESTA

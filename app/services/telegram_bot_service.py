@@ -1,0 +1,431 @@
+"""Bot de Telegram interactivo: el dueño consulta el negocio desde el celular.
+
+Polling con getUpdates (offset persistido). Solo responde al chat_id configurado.
+Comandos: /start /help, /stockbajo (menú por categoría), /stock, /ventas [fecha],
+/caja, /top, /clientes, /resumen.
+"""
+from __future__ import annotations
+
+import html as _html
+from datetime import datetime, timedelta, timezone
+from typing import Optional, List, Dict, Any
+
+import requests
+from sqlalchemy.orm import Session
+
+from app.database import SessionLocal
+from app.models.categoria import Categoria
+from app.models.cliente import Cliente
+from app.models.producto import Producto
+from app.models.venta import Venta, VentaItem
+from app.models.movimiento_caja import MovimientoCaja
+from app.services import avisos_service, config_service, stock_service
+from app.services.notificaciones_service import fila_producto, mensaje_bajo
+
+TZ_AR = timezone(timedelta(hours=-3))
+TG_API = "https://api.telegram.org/bot{token}"
+MAX_MSG = 4000
+CHEQUEO_CADA_SEG = 3
+
+
+# ---------- helpers de config ----------
+
+def _cfg(db: Session) -> dict:
+    c = avisos_service.config_aviso(db)
+    c["interactivo"] = (config_service.get_config(db, "telegram_bot_interactivo") or "").lower() == "true"
+    return c
+
+
+def _offset(db: Session) -> int:
+    v = config_service.get_config(db, "telegram_bot_offset")
+    try:
+        return int(v) if v else 0
+    except (ValueError, TypeError):
+        return 0
+
+
+def _set_offset(db: Session, value: int) -> None:
+    config_service.set_config(db, "telegram_bot_offset", str(value), "Último update_id procesado por el bot de Telegram")
+
+
+# ---------- helpers de envío ----------
+
+def _send(token: str, chat_id: str, texto: str, reply_markup: Optional[dict] = None) -> None:
+    """Envía (partiendo si es largo) y soporta reply_markup en el último chunk."""
+    chunks = []
+    if len(texto) <= MAX_MSG:
+        chunks = [texto]
+    else:
+        # partir por líneas
+        acc = ""
+        for linea in texto.split("\n"):
+            if len(acc) + len(linea) + 1 > MAX_MSG:
+                if acc:
+                    chunks.append(acc)
+                acc = linea
+            else:
+                acc = (acc + "\n" + linea) if acc else linea
+        if acc:
+            chunks.append(acc)
+    for i, ch in enumerate(chunks):
+        payload = {"chat_id": chat_id, "text": ch, "parse_mode": "HTML",
+                   "disable_web_page_preview": True}
+        if reply_markup is not None and i == len(chunks) - 1:
+            payload["reply_markup"] = reply_markup
+        try:
+            requests.post(f"{TG_API.format(token=token)}/sendMessage", json=payload, timeout=20)
+        except requests.RequestException:
+            pass
+
+
+def _answer_callback(token: str, cb_id: str, text: Optional[str] = None) -> None:
+    try:
+        payload = {"callback_query_id": cb_id}
+        if text:
+            payload["text"] = text
+        requests.post(f"{TG_API.format(token=token)}/answerCallbackQuery", json=payload, timeout=10)
+    except requests.RequestException:
+        pass
+
+
+def _edit_message(token: str, chat_id: str, message_id: int, texto: str) -> None:
+    try:
+        requests.post(f"{TG_API.format(token=token)}/editMessageText",
+                      json={"chat_id": chat_id, "message_id": message_id, "text": texto,
+                            "parse_mode": "HTML", "disable_web_page_preview": True},
+                      timeout=20)
+    except requests.RequestException:
+        pass
+
+
+# ---------- helpers de datos ----------
+
+def _fmt_money(v) -> str:
+    try:
+        return f"${float(v or 0):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    except (ValueError, TypeError):
+        return "$0,00"
+
+
+def _inicio_dia_utc(fecha_local_date) -> datetime:
+    """Medianoche AR de una fecha → UTC."""
+    local = datetime(fecha_local_date.year, fecha_local_date.month, fecha_local_date.day,
+                     0, 0, 0, tzinfo=TZ_AR)
+    return local.astimezone(timezone.utc)
+
+
+def _parse_fecha(arg: str) -> Optional[datetime]:
+    """Devuelve la fecha local (date) o None si no se pudo parsear."""
+    arg = (arg or "").strip()
+    if not arg:
+        return None
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d/%m", "%d-%m-%Y"):
+        try:
+            d = datetime.strptime(arg, fmt)
+            if "%Y" not in fmt and "%y" not in fmt:
+                d = d.replace(year=datetime.now(TZ_AR).year)
+            return d.date()
+        except ValueError:
+            continue
+    return None
+
+
+# ---------- handlers ----------
+
+def _h_start() -> str:
+    return (
+        "👋 <b>ApexERP — Bot del negocio</b>\n\n"
+        "Comandos disponibles:\n"
+        "/stockbajo — productos bajo mínimo (elige categoría)\n"
+        "/stock — resumen de stock\n"
+        "/ventas — ventas de hoy\n"
+        "/ventas YYYY-MM-DD — ventas de un día\n"
+        "/caja — estado de caja\n"
+        "/top — top 5 productos del mes\n"
+        "/clientes — clientes con deuda\n"
+        "/resumen — resumen del día\n"
+        "/help — esta ayuda"
+    )
+
+
+def _h_stock(db: Session) -> str:
+    total = db.query(Producto).filter(Producto.activo == True).count()
+    bajos = stock_service.productos_stock_bajo(db)
+    agotados = stock_service.filtro_agotado(db.query(Producto)).count()
+    valor = db.query(Producto).filter(Producto.activo == True).all()
+    valor_stock = sum((p.precio_venta or 0) * (p.stock_actual or 0) for p in valor)
+    return (
+        f"📦 <b>Stock</b>\n"
+        f"Productos activos: {total}\n"
+        f"Bajo mínimo: {len(bajos)}\n"
+        f"Agotados: {agotados}\n"
+        f"Valor de stock: {_fmt_money(valor_stock)}"
+    )
+
+
+def _h_stockbajo_menu(db: Session, token: str, chat_id: str) -> None:
+    cats = db.query(Categoria).filter(Categoria.activo == True).order_by(Categoria.nombre).all()
+    # botones: 2 por fila
+    filas = []
+    fila = [{"text": "📋 Todos", "callback_data": "sb:all"}]
+    for c in cats:
+        fila.append({"text": c.nombre, "callback_data": f"sb:{c.id}"})
+        if len(fila) >= 2:
+            filas.append(fila)
+            fila = []
+    if fila:
+        filas.append(fila)
+    kb = {"inline_keyboard": filas} if filas else None
+    _send(token, chat_id, "📉 <b>Stock bajo</b> — elegí una categoría:", reply_markup=kb)
+
+
+def _h_stockbajo_categoria(db: Session, cat_id: Optional[int]) -> str:
+    bajos = stock_service.productos_stock_bajo(db)
+    if cat_id is not None and cat_id != 0:
+        bajos = [p for p in bajos if p.categoria_id == cat_id]
+    if not bajos:
+        nombre = "Todos" if cat_id in (None, 0) else _nombre_categoria(db, cat_id)
+        return f"✅ Sin productos bajo mínimo en: {nombre}."
+    detalle = stock_service.detalle_reposicion(db, bajos)
+    cat_nombre = "Todos" if cat_id in (None, 0) else _nombre_categoria(db, cat_id)
+    lineas = [f"📉 <b>Stock bajo — {cat_nombre}</b> ({len(bajos)})", ""]
+    for p in bajos[:30]:
+        fila = fila_producto(p, detalle)
+        lineas.append(f"• {_html.escape(str(fila['nombre']))}")
+        lineas.append(f"  {_html.escape(mensaje_bajo(fila))}")
+    if len(bajos) > 30:
+        lineas.append(f"\n… y {len(bajos) - 30} más.")
+    return "\n".join(lineas)
+
+
+def _nombre_categoria(db: Session, cat_id: int) -> str:
+    c = db.query(Categoria).filter(Categoria.id == cat_id).first()
+    return c.nombre if c else f"#{cat_id}"
+
+
+def _h_ventas(db: Session, fecha_arg: str = "") -> str:
+    fecha_local = _parse_fecha(fecha_arg)
+    if fecha_local is None:
+        fecha_local = datetime.now(TZ_AR).date()
+    desde = _inicio_dia_utc(fecha_local)
+    hasta = desde + timedelta(days=1)
+    ventas = db.query(Venta).filter(
+        Venta.estado == "confirmada",
+        Venta.fecha >= desde,
+        Venta.fecha < hasta,
+    ).all()
+    total = sum(v.total or 0 for v in ventas)
+    tickets = len(ventas)
+    promedio = (total / tickets) if tickets else 0
+    # desglose por medio
+    por_medio: Dict[str, float] = {}
+    for v in ventas:
+        por_medio[v.medio_pago or "efectivo"] = por_medio.get(v.medio_pago or "efectivo", 0) + (v.total or 0)
+    lineas = [
+        f"💰 <b>Ventas — {fecha_local.strftime('%d/%m/%Y')}</b>",
+        f"Total: {_fmt_money(total)}",
+        f"Tickets: {tickets}",
+        f"Ticket promedio: {_fmt_money(promedio)}",
+    ]
+    if por_medio:
+        lineas.append("")
+        lineas.append("Por medio:")
+        for m, v in sorted(por_medio.items(), key=lambda x: -x[1]):
+            lineas.append(f"  • {m}: {_fmt_money(v)}")
+    return "\n".join(lineas)
+
+
+def _h_caja(db: Session) -> str:
+    abierta = False
+    try:
+        from app.services import caja_service
+        abierta = caja_service.caja_abierta(db)
+    except Exception:
+        abierta = False
+    if not abierta:
+        return "💼 <b>Caja</b>: cerrada."
+    try:
+        from app.services import caja_service
+        resumen = caja_service.obtener_resumen_por_medio_pago(db)
+    except Exception:
+        resumen = {}
+    lineas = ["💼 <b>Caja: abierta</b>"]
+    if isinstance(resumen, dict):
+        efectivo = resumen.get("saldo_efectivo")
+        cuenta_total = resumen.get("saldo_cuenta_total")
+        total = resumen.get("saldo_total")
+        if efectivo is not None:
+            lineas.append(f"Cajón: {_fmt_money(efectivo)}")
+        if cuenta_total is not None:
+            lineas.append(f"Cuentas digitales: {_fmt_money(cuenta_total)}")
+        if total is not None:
+            lineas.append(f"Total: {_fmt_money(total)}")
+        ingresos = resumen.get("total_ingresos")
+        if ingresos is not None:
+            lineas.append(f"Ingresos del día: {_fmt_money(ingresos)}")
+    return "\n".join(lineas)
+
+
+def _h_top(db: Session) -> str:
+    from sqlalchemy import func
+    inicio_mes = _inicio_dia_utc(datetime.now(TZ_AR).replace(day=1).date())
+    filas = (
+        db.query(VentaItem.producto_id,
+                 func.sum(VentaItem.cantidad),
+                 func.sum(VentaItem.subtotal))
+        .join(Venta, Venta.id == VentaItem.venta_id)
+        .filter(Venta.estado == "confirmada", Venta.fecha >= inicio_mes)
+        .group_by(VentaItem.producto_id)
+        .order_by(func.sum(VentaItem.cantidad).desc())
+        .limit(5)
+        .all()
+    )
+    ids = [r[0] for r in filas]
+    nombres = {}
+    if ids:
+        for p in db.query(Producto).filter(Producto.id.in_(ids)).all():
+            nombres[p.id] = p.nombre
+    lineas = ["🏆 <b>Top 5 del mes</b>"]
+    if not filas:
+        lineas.append("Sin ventas este mes.")
+        return "\n".join(lineas)
+    for r in filas:
+        clave = r[0]
+        nombre = nombres.get(clave, str(clave))
+        cant = r[1] or 0
+        imp = r[2] or 0
+        lineas.append(f"• {_html.escape(str(nombre))}: {cant:g} u. ({_fmt_money(imp)})")
+    return "\n".join(lineas)
+
+
+def _h_clientes(db: Session) -> str:
+    clientes = db.query(Cliente).filter(
+        Cliente.activo == True,
+        Cliente.saldo_cta_corriente > 0,
+    ).order_by(Cliente.saldo_cta_corriente.desc()).limit(10).all()
+    if not clientes:
+        return "👥 Sin clientes con deuda."
+    lineas = [f"👥 <b>Clientes con deuda</b> ({len(clientes)})"]
+    for c in clientes:
+        lineas.append(f"• {_html.escape(c.nombre)}: {_fmt_money(c.saldo_cta_corriente)}")
+    total = sum(c.saldo_cta_corriente or 0 for c in clientes)
+    lineas.append(f"\nTotal: {_fmt_money(total)}")
+    return "\n".join(lineas)
+
+
+def _h_resumen(db: Session) -> str:
+    ventas_txt = _h_ventas(db, "")
+    caja_txt = _h_caja(db)
+    bajos = stock_service.productos_stock_bajo(db)
+    return f"{ventas_txt}\n\n{caja_txt}\n\n📉 Productos bajo mínimo: {len(bajos)}"
+
+
+# ---------- procesamiento ----------
+
+def _es_autorizado(chat_id: str, cfg: dict) -> bool:
+    return str(chat_id) == str(cfg.get("chat_id", "")).strip()
+
+
+def procesar_update(db: Session, token: str, update: dict) -> None:
+    """Procesa un update (message o callback_query)."""
+    # callback_query
+    cb = update.get("callback_query")
+    if cb:
+        cb_id = cb.get("id")
+        msg = cb.get("message") or {}
+        chat = (msg.get("chat") or {})
+        chat_id = str(chat.get("id"))
+        cfg = _cfg(db)
+        if not _es_autorizado(chat_id, cfg):
+            _answer_callback(token, cb_id, "No autorizado")
+            return
+        data = cb.get("data") or ""
+        if data.startswith("sb:"):
+            sufijo = data[3:]
+            cat_id = None if sufijo == "all" else int(sufijo) if sufijo.isdigit() else None
+            texto = _h_stockbajo_categoria(db, cat_id)
+            msg_id = msg.get("message_id")
+            if msg_id:
+                _edit_message(token, chat_id, msg_id, texto)
+            else:
+                _send(token, chat_id, texto)
+        _answer_callback(token, cb_id)
+        return
+
+    message = update.get("message") or update.get("edited_message")
+    if not message:
+        return
+    chat = message.get("chat") or {}
+    chat_id = str(chat.get("id"))
+    texto = (message.get("text") or "").strip()
+    cfg = _cfg(db)
+    if not _es_autorizado(chat_id, cfg):
+        if texto:
+            _send(token, chat_id, "⛔ No autorizado para consultar este negocio.")
+        return
+    if not texto:
+        return
+
+    # normalizar comando
+    cmd = texto.split()[0].lower()
+    # quitar @botname
+    if "@" in cmd:
+        cmd = cmd.split("@")[0]
+    args = texto[len(texto.split()[0]):].strip() if " " in texto else ""
+
+    if cmd in ("/start", "/help", "help", "ayuda", "hola"):
+        _send(token, chat_id, _h_start())
+    elif cmd in ("/stockbajo", "stockbajo", "stock bajo"):
+        _h_stockbajo_menu(db, token, chat_id)
+    elif cmd in ("/stock", "stock"):
+        _send(token, chat_id, _h_stock(db))
+    elif cmd in ("/ventas", "ventas"):
+        _send(token, chat_id, _h_ventas(db, args))
+    elif cmd in ("/caja", "caja"):
+        _send(token, chat_id, _h_caja(db))
+    elif cmd in ("/top", "top"):
+        _send(token, chat_id, _h_top(db))
+    elif cmd in ("/clientes", "clientes"):
+        _send(token, chat_id, _h_clientes(db))
+    elif cmd in ("/resumen", "resumen"):
+        _send(token, chat_id, _h_resumen(db))
+    else:
+        _send(token, chat_id, "❓ Comando no reconocido.\n" + _h_start())
+
+
+def chequear_mensajes() -> None:
+    """Job del scheduler: trae updates nuevos y los procesa."""
+    db = SessionLocal()
+    try:
+        cfg = _cfg(db)
+        if not cfg["interactivo"] or not cfg["token"] or not cfg["chat_id"]:
+            return
+        offset = _offset(db)
+        try:
+            r = requests.get(
+                f"{TG_API.format(token=cfg['token'])}/getUpdates",
+                params={"offset": offset, "timeout": 2, "allowed_updates": ["message", "callback_query", "edited_message"]},
+                timeout=10,
+            )
+        except requests.RequestException:
+            return
+        try:
+            data = r.json()
+        except ValueError:
+            return
+        if not r.ok or not data.get("ok"):
+            return
+        updates = data.get("result") or []
+        nuevo_offset = offset
+        for u in updates:
+            uid = u.get("update_id", 0)
+            if uid >= nuevo_offset:
+                nuevo_offset = uid + 1
+            try:
+                procesar_update(db, cfg["token"], u)
+            except Exception as e:
+                print(f"[TelegramBot] error procesando update {uid}: {e}")
+        if nuevo_offset != offset:
+            _set_offset(db, nuevo_offset)
+    finally:
+        db.close()

@@ -1,5 +1,7 @@
 # Fase G — Continuidad automática (principal → secundaria → retorno)
 
+> **Instrucción para el Agente:** Plan de continuidad (failover). Leer solo si se trabaja en Fase G o en réplica/backup. No leer por defecto.
+
 > **Para qué está este archivo**: para arrancar la Fase G en un chat nuevo sin perder el contexto.
 > Todo lo que sigue ya está **diseñado y acordado con el dueño** (24/10/2026), pero **todavía no se implementó nada**.
 > El estado real del proyecto (qué está hecho, qué no) está en `PENDIENTES.md`; el flujo de deploy está en `DEPLOY.md`.

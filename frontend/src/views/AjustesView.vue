@@ -388,6 +388,7 @@ const config = ref({
   stock_aviso_hora: '09:00',
   telegram_bot_token: '',
   telegram_chat_id: '',
+  telegram_bot_interactivo: 'false',
   alerta_resumen_diario: 'true',
 })
 
@@ -2239,6 +2240,14 @@ onMounted(async () => {
           hint="Empieza con -100 para los canales"
         />
         <BaseSelect
+          v-model="config.telegram_bot_interactivo"
+          label="Bot interactivo (Telegram)"
+          :options="[
+            { value: 'false', label: 'Apagado' },
+            { value: 'true', label: 'Encendido' },
+          ]"
+        />
+        <BaseSelect
           v-model="config.alerta_resumen_diario"
           label="Resumen diario de respaldos"
           :options="[
@@ -2259,7 +2268,7 @@ onMounted(async () => {
         <BaseButton
           variant="primary"
           :loading="saving"
-          @click="saveConfig(['avisos_lectura', 'avisos_granularidad', 'stock_aviso_enabled', 'stock_aviso_hora', 'telegram_bot_token', 'telegram_chat_id', 'alerta_resumen_diario'])"
+          @click="saveConfig(['avisos_lectura', 'avisos_granularidad', 'stock_aviso_enabled', 'stock_aviso_hora', 'telegram_bot_token', 'telegram_chat_id', 'telegram_bot_interactivo', 'alerta_resumen_diario'])"
         >
           Guardar
         </BaseButton>

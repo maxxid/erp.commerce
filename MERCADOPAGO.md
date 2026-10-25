@@ -1,5 +1,7 @@
 # MercadoPago QR - Integración
 
+> **Instrucción para el Agente:** Referencia de setup, flujo y troubleshooting de MercadoPago QR. Leer solo si la tarea toca pagos MP, webhooks o configuración de sucursal/caja. No leer por defecto.
+
 ## Estado Actual (Jul 2026)
 
 **Funcionando:**

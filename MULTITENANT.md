@@ -1,5 +1,7 @@
 # Estrategia Multi-Tenant para ERP-Commerce
 
+> **Instrucción para el Agente:** Estrategia futura multi-cliente (Docker + schema-per-client). Leer solo si la tarea toca multi-tenant, Docker o onboarding de clientes. No leer por defecto.
+
 > Arquitectura decided on: **Docker multi-instance** (short-term) → **PostgreSQL schema-per-client** (long-term)
 > Date: 2026-07-01
 
