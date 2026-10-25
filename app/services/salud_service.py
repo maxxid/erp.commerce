@@ -7,6 +7,8 @@ por Telegram (el mismo bot del aviso de stock bajo de Ajustes):
 
 - ¿hay respaldo local de menos de 24 h? ¿y el último abre?
 - ¿R2 (si está configurado) tiene los respaldos frescos?
+- ¿la réplica en vivo de la Fase G (Litestream) sigue avanzando? Si se frena,
+  el día que se caiga la principal la secundaria restauraría datos viejos
 - y todos los días manda un "todo bien" con el último respaldo: es la única
   manera de saber que el canal de avisos anda, no sólo cuando algo falla.
 
@@ -24,6 +26,7 @@ from datetime import datetime, timedelta, timezone
 from html import escape
 from typing import List, Optional
 
+from app.config import settings
 from app.database import SessionLocal
 from app.services import avisos_service, backup_service, config_service
 
@@ -32,6 +35,12 @@ MAX_H_SIN_BACKUP = 24
 CHEQUEO_CADA_MIN = 30
 HORA_RESUMEN = 21        # hora Argentina del resumen diario "todo bien"
 COOLDOWN_AVISO_H = 12
+
+# Cuánto puede estar quieta la réplica en vivo antes de considerarla rota
+# (Fase G). Litestream sube archivos cada pocos segundos mientras la base
+# cambia y un snapshot cada 15 minutos aunque no cambie nada: 45 minutos de
+# silencio ya no es "está tranquila la noche", es "se cayó el servicio".
+MAX_MIN_SIN_REPLICA = 45
 
 
 def _a_utc(texto: str) -> datetime:
@@ -104,6 +113,46 @@ def problemas_de_respaldo(db, ahora: Optional[datetime] = None) -> List[str]:
     return fallos
 
 
+def problemas_de_replica(db, ahora: Optional[datetime] = None) -> List[str]:
+    """Chequea la réplica en vivo de la Fase G (Litestream → R2).
+
+    Si dejó de avanzar, el día que se caiga la principal la secundaria va a
+    restaurar una foto vieja: es mucho mejor enterarse ahora, con un aviso,
+    que en el momento del salto. Sólo se chequea si el servidor tiene la
+    réplica prendida (`LITESTREAM_HABILITADO`).
+    """
+    if not settings.LITESTREAM_HABILITADO:
+        return []
+    if not backup_service._get_r2_config(db):
+        return ["La réplica en vivo no puede andar: la nube (R2) no está configurada."]
+    objetos = backup_service.listar_replica_r2(db)
+    if not objetos:
+        return ["La réplica en vivo (Litestream) no tiene ningún archivo en la nube."]
+    ahora = ahora or datetime.now(timezone.utc)
+    edad_min = (ahora - _a_utc(objetos[0]["fecha"])).total_seconds() / 60
+    if edad_min > MAX_MIN_SIN_REPLICA:
+        return [
+            f"La réplica en vivo lleva {edad_min:.0f} min sin avanzar "
+            f"(debería moverse cada pocos segundos)."
+        ]
+    return []
+
+
+def minutos_de_replica(db, ahora: Optional[datetime] = None) -> Optional[float]:
+    """Minutos desde el último movimiento de la réplica en vivo.
+
+    `None` = no corresponde chequear (este servidor no tiene la réplica
+    prendida o no hay R2); para el resumen diario simplemente no se menciona.
+    """
+    if not settings.LITESTREAM_HABILITADO or not backup_service._get_r2_config(db):
+        return None
+    objetos = backup_service.listar_replica_r2(db)
+    if not objetos:
+        return None
+    ahora = ahora or datetime.now(timezone.utc)
+    return (ahora - _a_utc(objetos[0]["fecha"])).total_seconds() / 60
+
+
 def _etiqueta(dt_utc: datetime) -> str:
     """'hoy 20:45' / 'ayer 04:10' / '22/10 04:10' en hora del negocio."""
     d = dt_utc.astimezone(TZ_AR)
@@ -150,6 +199,10 @@ def mensaje_resumen(db, ahora: datetime) -> str:
     else:
         lineas.append("• En la nube (R2): sin configurar (el respaldo vive sólo en este servidor)")
 
+    minutos = minutos_de_replica(db, ahora)
+    if minutos is not None:
+        lineas.append(f"• Réplica en vivo (continuidad): al día, hace {minutos:.0f} min")
+
     sano = bool(locales) and respaldo_sano(locales[0]["nombre"])
     lineas.append(f"• Base de datos legible: {'sí' if sano else 'no la pude abrir'}")
     return "\n".join(lineas)
@@ -195,7 +248,7 @@ def chequear_salud(ahora: Optional[datetime] = None):
     db = SessionLocal()
     try:
         ahora = ahora or datetime.now(timezone.utc)
-        fallos = problemas_de_respaldo(db, ahora)
+        fallos = problemas_de_respaldo(db, ahora) + problemas_de_replica(db, ahora)
         if fallos:
             _avisar_si_hace_falta(db, "respaldo", mensaje_de_alerta(fallos, ahora), ahora)
             return

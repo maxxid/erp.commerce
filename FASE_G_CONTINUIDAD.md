@@ -101,16 +101,13 @@ Cada paso = un commit + deploy con la suite en verde (regla del proyecto). Orden
 - *Nota*: antes de tocar el DNS, dejar **UptimeRobot** (free) mirando `https://erp.imprenta.store/app/` como
   segunda red de alerta, por si el vigilante automático no llega a existir todavía.
 
-### G2 — Litestream: réplica continua principal → R2
-- Instalar `litestream` en la principal (binario, no entra en `requirements.txt`).
-- Config: replica `/data/erp/erp_comercio.db` a `s3://<bucket>/replica/<machine_id>/` (las credenciales R2
-  ya existen para los respaldos; ver `app/services/backup_service.py`).
-- Generación/reten: por ejemplo una generación cada 10 min con retención de 24 h (ocupan poco: ~2 MB por base).
-- **Ojo con SQLite**: Litestream necesita WAL. Confirmar que el motor de la app trabaja en WAL (si no, ponerlo
-  antes de todo: `PRAGMA journal_mode=WAL` en la conexión, y verificar que no rompa los respaldos actuales).
-- Un cron/systemd que **verifique que la réplica avanza** y lo agregue al `salud_service` (que ya manda
-  Telegram): si la réplica tiene >15 min de antigüedad → alerta.
-- *Validación*: apagar el litestream y ver que llega la alerta por Telegram.
+### G2 — Litestream: réplica continua principal → R2 ✅ **HECHO (25/10/2026)**
+- **Hecho**: `litestream 0.5.17` instalado en `/usr/local/bin/litestream` (binario verificado contra `checksums.txt` de GitHub), **`/etc/litestream.yml`** generado leyendo las credenciales R2 de la base (queda `root:erp` 640, sin secretos en el repo) y **`litestream.service`** (systemd, corre como `erp`, `Restart=always`) replicando `/data/erp/erp_comercio.db` → `s3://<bucket>/replica/<machine_id>/`.
+- **Base en WAL**: era `delete`; se pasó a `wal` y `app/database.py` lo fija en cada conexión (si no, una base nueva no podría replicarse). Verificado: `PRAGMA journal_mode` → `wal`, `/docs` 200 después del cambio.
+- **Snapshots cada 15 min con retención de 24 h**: Litestream sube un archivo aunque nadie venda, así que el chequeo de salud no miente de noche. Ocupa ~200 MB en el bucket (R2 free: 10 GB).
+- **Chequeo de salud**: `salud_service.problemas_de_replica()` mira que haya archivos en `replica/<machine_id>/` y que el último no tenga más de 45 min (`MAX_MIN_SIN_REPLICA`); entra en el mismo aviso de Telegram de los respaldos y se muestra en el resumen diario ("Réplica en vivo: al día, hace X min"). Se prende por servidor con **`LITESTREAM_HABILITADO=true`** en el unit file de `erp-comercio`, así una máquina sin litestream no manda alertas falsas.
+- Verificación en prod: `litestream status` → `ok`, objetos en R2 con segundos de antigüedad. Tests: `tests/test_replica_salud.py` (10).
+- Quedan G1, G3, G4, G5, G6, G7.
 
 ### G3 — La secundaria: rol, restauración y banner
 - Provisionar la **2da micro e2.micro always free en Santiago** (misma cuenta), con el mismo repo y servicio.

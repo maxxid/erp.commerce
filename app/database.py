@@ -28,6 +28,13 @@ if "sqlite" in settings.DATABASE_URL:
     def _set_sqlite_pragma(dbapi_connection, connection_record):
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
+        # WAL: lo necesita Litestream para replicar la base en vivo (Fase G,
+        # ver FASE_G_CONTINUIDAD.md) y además deja a los lectores sin esperar
+        # al que escribe, que en un mostrador con varias cajas es lo que importa.
+        # Es persistente: queda grabado en la base, la línea sólo asegura que
+        # una base nueva también arranque así.
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.fetchone()
         cursor.close()
 
 

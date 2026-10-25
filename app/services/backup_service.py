@@ -35,6 +35,16 @@ SUBIR_A_R2_CADA_MIN = 60
 # día se cae la rotación de R2 y el bucket crece sin control.
 LIMITE_OBJETOS_R2 = 1000
 
+# Réplica en vivo (Litestream — Fase G, ver FASE_G_CONTINUIDAD.md). Va subiendo
+# archivos a este prefijo cada pocos segundos mientras la base cambia, y un
+# snapshot por hora aunque no cambie nada: con saber cuándo se tocó el último
+# alcanza para saber si la replicación sigue viva.
+PREFIJO_REPLICA = "replica"
+
+# Tope de archivos de la réplica que se listan (paginados de a 1000). Con
+# retención de 24 h y snapshot cada hora el orden de magnitud es ~3.500.
+LIMITE_OBJETOS_REPLICA = 5000
+
 def _db_path() -> str:
     """Extrae la ruta del archivo SQLite desde settings.DATABASE_URL."""
     raw = settings.DATABASE_URL
@@ -198,6 +208,42 @@ def listar_backups_r2(db: Session) -> List[dict]:
                 "fecha": obj["LastModified"].isoformat(),
                 "ubicacion": "r2",
             })
+        resultados.sort(key=lambda x: x["fecha"], reverse=True)
+        return resultados
+    except Exception:
+        return []
+
+
+def listar_replica_r2(db: Session) -> List[dict]:
+    """Archivos de la réplica en vivo (Litestream) en la nube.
+
+    Ordenados del más nuevo al más viejo (`fecha` en ISO). La lista viene
+    paginada igual que los respaldos: con una sola llamada S3 devuelve 1000
+    objetos de una página y no necesariamente los más nuevos, y un chequeo
+    de salud que mira sólo la primera página puede dar una alerta falsa.
+    """
+    cfg = _get_r2_config(db)
+    if not cfg:
+        return []
+    try:
+        from app.services.licencia_service import obtener_machine_id
+        mid = obtener_machine_id()
+        client = _make_r2_client(cfg)
+        objetos = []
+        token = None
+        while True:
+            params = {"Bucket": cfg["bucket"], "Prefix": f"{PREFIJO_REPLICA}/{mid}/", "MaxKeys": 1000}
+            if token:
+                params["ContinuationToken"] = token
+            resp = client.list_objects_v2(**params)
+            objetos.extend(resp.get("Contents", []))
+            if not resp.get("IsTruncated") or len(objetos) >= LIMITE_OBJETOS_REPLICA:
+                break
+            token = resp.get("NextContinuationToken")
+        resultados = [
+            {"clave": obj["Key"], "fecha": obj["LastModified"].isoformat()}
+            for obj in objetos
+        ]
         resultados.sort(key=lambda x: x["fecha"], reverse=True)
         return resultados
     except Exception:

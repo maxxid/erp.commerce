@@ -1,5 +1,7 @@
 # Deploy & Mantenimiento
 
+## Deploy & Mantenimiento
+
 ## Cómo funciona (IMPORTANTE - leído con sangre)
 
 - **NO hay Vercel ni Supabase vinculados a este proyecto.** El frontend NO se despliega con git push hacia una plataforma externa.
@@ -125,3 +127,26 @@ Si localmente se corrió `npm install <paquete>` (ej: `qrcode`), el `package.jso
 **Importante:** MercadoPago ya no usa `api.sandbox.mercadopago.com`. El sandbox ahora usa el mismo dominio `api.mercadopago.com` - el ambiente se determina por el access token: `TEST-...` = pruebas/prueba, `APP_USR-...` = producción (cobros reales).
 
 Si falla `crear-sucursal` o `crear-caja` con error DNS, verificar que `_get_api_base()` en `mercadopago_service.py` use solo `https://api.mercadopago.com`.
+
+## Litestream — réplica en vivo (Fase G)
+
+Corre **aparte** de la app: es un servicio de systemd propio que va subiendo la
+base a R2 en vivo para que la secundaria pueda restaurarla (ver
+`FASE_G_CONTINUIDAD.md`).
+
+```bash
+sudo systemctl status litestream --no-pager      # tiene que decir "active (running)"
+sudo /usr/local/bin/litestream status -config /etc/litestream.yml
+sudo journalctl -u litestream -n 30 --no-pager
+sudo systemctl restart litestream
+```
+
+- Config en `/etc/litestream.yml` (generada desde las credenciales R2 que viven
+  en la base; `root:erp` 640 — **no commitearla ni volcarla en el chat**).
+- La app sólo monitorea la réplica si el unit file de `erp-comercio` tiene
+  `Environment=LITESTREAM_HABILITADO=true`. Si alguien lo saca, el chequeo de
+  salud deja de mirarla en silencio (los respaldos siguen igual).
+- **Ojo con `git pull`**: no toca `/etc/` ni los services, un deploy normal no
+  lo apaga.
+- La base está en **WAL** por ahora; `app/database.py` la mantiene así. No
+  cambiarla a `delete`: Litestream sólo puede replicar en WAL.

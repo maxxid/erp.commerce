@@ -72,6 +72,13 @@ class Settings:
     # SEED_DEMO=true sólo para armar demos.
     SEED_DEMO: bool = os.getenv("SEED_DEMO", "false").lower() in ("1", "true", "yes", "on")
 
+    # Continuidad (Fase G): réplica en vivo de la base con Litestream hacia R2.
+    # Se prende por servidor, con LITESTREAM_HABILITADO=true en el unit file,
+    # recién después de instalar el servicio litestream. Sin eso, el chequeo de
+    # salud no mira nada de la réplica: una máquina sin litestream (desarrollo,
+    # una segunda PC) no tiene por qué mandar una alerta falsa.
+    LITESTREAM_HABILITADO: bool = os.getenv("LITESTREAM_HABILITADO", "false").lower() in ("1", "true", "yes", "on")
+
     # IA / LLM — la key interna (SaaS) vive SOLO en entorno y nunca en la DB,
     # asi no se filtra por GET /api/config/ajustes. La key del cliente (BYOK)
     # si va en DB y tiene prioridad sobre esta.

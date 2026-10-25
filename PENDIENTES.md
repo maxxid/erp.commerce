@@ -51,6 +51,20 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 
 ## ✅ Completados recientemente
 
+### Fase G2 — Réplica en vivo de la base con Litestream — 25/10/2026
+
+**Qué es**: el primer escalón de la continuidad (ver `FASE_G_CONTINUIDAD.md`). Litestream va subiendo la base a R2 **en vivo** —cada pocos segundos mientras hay ventas y un snapshot cada 15 minutos aunque no haya—, para que el día que se caiga la principal la secundaria restaure la última foto y siga cobrando.
+
+Lo que se hizo:
+
+- **Litestream 0.5.17** en la principal: binario descargado de GitHub y verificado contra su `checksums.txt`, config en `/etc/litestream.yml` (lee las credenciales R2 de la base, queda `root:erp` 640 — **sin secretos en el repo**) y `litestream.service` con `Restart=always`. Réplica en `s3://<bucket>/replica/<machine_id>/`
+- **La base pasó a WAL**: era `delete` y Litestream sólo puede replicar en WAL; además los lectores dejan de esperar al que escribe. `app/database.py` lo fija en cada conexión para que una base nueva también arranque así. Verificado: `PRAGMA journal_mode` → `wal`, `/docs` 200 después del cambio
+- **Snapshots cada 15 min con retención de 24 h** (~200 MB en el bucket de 10 GB): siempre hay un archivo fresco aunque de noche nadie venda
+- **Chequeo de salud de la réplica**: `salud_service.problemas_de_replica()` entra en el mismo aviso de Telegram de los respaldos (avisa si no hay archivos, si R2 no está configurada o si lleva más de 45 min quieta) y aparece en el resumen diario ("Réplica en vivo: al día, hace X min"). Se prende por servidor con **`LITESTREAM_HABILITADO=true`** en el unit file, así una máquina sin litestream no manda alertas falsas
+- **Verificación en prod**: `litestream status` → `ok`, objetos en R2 con segundos de antigüedad, journal sin errores
+
+Tests: `tests/test_replica_salud.py` (10). Suite: **960 en verde**.
+
 ### Fase H — Un producto borrado no te bloquea el código — 24/10/2026
 
 **El reporte**: el dueño no podía cargar el `7790895000997`. No aparecía ni en el buscador de productos ni en el POS; al crearlo respondía "ya existe"; y el lookup le completaba el formulario con "origen: demo" sin que ese producto estuviera en ninguna lista.
@@ -1005,7 +1019,7 @@ Además, dos guards defensivos: `_clean_name` y `_map_categoria` reventaban con 
 - **Compras: producto similar o discontinuo** — al recibir, poder reemplazar un producto pedido por otro similar; marcar ítems como "no enviado / discontinuo"; registrar qué se recibió en lugar de qué se pidió
 - **Disponibilidad: continuidad automática (Fase G)** (23-24/10/2026, discutido con el dueño). **Hecho**: respaldos automáticos cada 15 min + subida a la nube cada hora + alertas de salud por Telegram (ver Completados 23 y 24/10). **El plan completo, con los datos del entorno, los criterios de aceptación y las preguntas abiertas, está en `FASE_G_CONTINUIDAD.md`** — ese es el archivo con el que se arranca en un chat nuevo. En resumen, en este orden:
   1. **G1 — Cloudflare free**: DNS con TTL de 5 min (hoy el de Hostinger está en 4 h, lo que anula cualquier cambio de servidor) + Worker de mantenimiento. Antes de tocar el DNS, UptimeRobot (gratis) como segunda red de alerta
-  2. **G2 — Litestream**: réplica continua del SQLite de la principal hacia R2, con chequeo de frescura agregado al `salud_service`
+  2. **G2 — Litestream — ✅ HECHA (25/10/2026)**: réplica continua del SQLite de la principal hacia R2, con chequeo de frescura agregado al `salud_service` (ver Completados y `FASE_G_CONTINUIDAD.md`)
   3. **G3 — La secundaria**: 2da micro always free **en Santiago y en la misma cuenta** (las 2 micros gratis sólo existen en la home region; **2 cuentas de Oracle descartada** por riesgo de ToS y cierre en cascada), `ROL_SERVIDOR=principal|secundaria` (**si no es principal, no cobra**) y banner "mantenimiento programado" en el POS
   4. **G4 — Vigilante + salto automático**: desde la secundaria, 3 min sin respuesta de la principal → restaura la réplica, asume el rol, cambia el DNS por la API de Cloudflare (segundos) y manda aviso por Telegram
   5. **G5 — Retorno a las 06:00 AR**: foto de la base de la secundaria → la principal la restaura por encima de la suya → `integrity_check` y conteo de ventas → vuelve el DNS → aviso. **Si la verificación falla no devuelve el DNS y alerta**
