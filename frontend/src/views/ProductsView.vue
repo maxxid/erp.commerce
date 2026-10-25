@@ -707,6 +707,42 @@ function openCreateOfertaModal(productoId = null) {
   showOfertaModal.value = true
 }
 
+// Crea una oferta sugerida para un producto con lote próximo a vencer.
+// Pre-carga descuento y vigencia según los días al vencimiento, y la cantidad
+// máxima con el stock del lote. Muestra el margen resultante para no vender
+// a pérdida.
+function openOfertaDesdeVencimiento(row) {
+  if (!row) return
+  const vto = row._vto
+  const dias = vto?.vencido ? 0 : (vto?.dias ?? 30)
+  let pct = 10
+  if (vto?.vencido || dias <= 0) pct = 50
+  else if (dias <= 7) pct = 40
+  else if (dias <= 14) pct = 25
+  else if (dias <= 21) pct = 15
+  else pct = 10
+
+  editingOferta.value = null
+  Object.assign(ofertaForm, defaultOfertaForm())
+  ofertaForm.producto_id = row.id
+  ofertaForm.tipo = 'porcentaje'
+  ofertaForm.valor = pct
+  ofertaForm.requiere_cantidad = 1
+  if (vto?.fecha) {
+    try {
+      const d = new Date(vto.fecha)
+      // fecha_fin = vencimiento del lote (fin del día)
+      const yyyy = d.getFullYear()
+      const mm = String(d.getMonth() + 1).padStart(2, '0')
+      const dd = String(d.getDate()).padStart(2, '0')
+      ofertaForm.fecha_fin = `${yyyy}-${mm}-${dd}T23:59`
+    } catch { /* ignore */ }
+  }
+  if (vto?.cantidad) ofertaForm.max_unidades = Math.max(1, Math.round(Number(vto.cantidad)))
+  showOfertaModal.value = true
+  toast.info(`Sugerencia: ${pct}% OFF (ajustá si querés)`)
+}
+
 function openEditOfertaModal(oferta) {
   editingOferta.value = oferta
   Object.assign(ofertaForm, {
@@ -777,9 +813,19 @@ function ofertaTipoLabel(tipo) {
   return { '2x1': '2x1', porcentaje: '%', monto_fijo: '$' }[tipo] || tipo
 }
 
-function ofertaTipoColor(tipo) {
-  return { '2x1': 'warning', porcentaje: 'success', monto_fijo: 'info' }[tipo] || 'default'
-}
+const ofertaMargen = computed(() => {
+  const p = products.value.find(x => x.id === ofertaForm.producto_id)
+  if (!p) return null
+  const precioVenta = Number(p.precio_venta) || 0
+  const costo = Number(p.precio_costo) || 0
+  let precioOferta = precioVenta
+  if (ofertaForm.tipo === 'porcentaje') precioOferta = precioVenta * (1 - (Number(ofertaForm.valor) || 0) / 100)
+  else if (ofertaForm.tipo === 'monto_fijo') precioOferta = precioVenta - (Number(ofertaForm.valor) || 0)
+  else if (ofertaForm.tipo === '2x1') precioOferta = precioVenta / 2
+  const margen = precioOferta - costo
+  const margenPct = precioOferta > 0 ? Math.round((margen / precioOferta) * 100) : 0
+  return { precioOferta, costo, margen, margenPct, ok: margen >= 0 }
+})
 
 async function quickCreateCategoria() {
   const nombre = newCatNombre.value.trim()
@@ -1185,11 +1231,12 @@ function formatFecha(fechaStr) {
             <i class="fa-solid fa-flag text-[10px]"></i>
           </button>
           <button
-            v-if="row._oferta"
+            v-if="row._vto"
             type="button"
-            aria-label="Editar oferta"
-            class="w-7 h-7 rounded-lg text-orange-400 hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20 flex items-center justify-center transition"
-            @click="openEditOfertaModal(row._oferta)"
+            aria-label="Crear oferta por vencimiento"
+            class="w-7 h-7 rounded-lg text-amber-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 flex items-center justify-center transition"
+            title="Crear oferta para liquidar este producto por vencimiento"
+            @click="openOfertaDesdeVencimiento(row)"
           >
             <i class="fa-solid fa-tag text-[10px]"></i>
           </button>
@@ -1594,6 +1641,28 @@ function formatFecha(fechaStr) {
           label="Descripción (opcional)"
           placeholder="Ej: Liquidación de stock, Promoción especial..."
         />
+
+        <!-- Preview de margen (ayuda a no vender a pérdida) -->
+        <div v-if="ofertaMargen" class="p-3 rounded-xl border text-xs space-y-1"
+             :class="ofertaMargen.ok ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800/40' : 'bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800/40'">
+          <div class="flex justify-between">
+            <span class="text-slate-500 dark:text-slate-400">Precio oferta</span>
+            <span class="font-mono-data font-bold" :class="ofertaMargen.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'">{{ fc(ofertaMargen.precioOferta) }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-500 dark:text-slate-400">Costo</span>
+            <span class="font-mono-data">{{ fc(ofertaMargen.costo) }}</span>
+          </div>
+          <div class="flex justify-between font-semibold">
+            <span>Margen</span>
+            <span class="font-mono-data" :class="ofertaMargen.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'">
+              {{ ofertaMargen.margen >= 0 ? '+' : '' }}{{ fc(ofertaMargen.margen) }} ({{ ofertaMargen.margenPct }}%)
+            </span>
+          </div>
+          <p v-if="!ofertaMargen.ok" class="text-rose-600 dark:text-rose-400 font-semibold mt-1">
+            ⚠️ La oferta queda por debajo del costo.
+          </p>
+        </div>
       </form>
 
       <template #footer>
