@@ -19,3 +19,4 @@
 
 antes de portarla a la versión web. Confidence: 0.8
 - En mensajes del bot de Telegram con parseo HTML, evitar placeholders entre ángulos (<...>) porque Telegram los interpreta como tags; usar paréntesis o texto plano. Confidence: 0.7
+- En el bot de Telegram, preferir la búsqueda por texto (/buscar) sobre comandos que exijan código de barras exacto (p. ej. /stockproducto) para consultar productos, porque tipear el código es propenso a errores; quitar esos comandos redundantes del menú. Confidence: 0.75

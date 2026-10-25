@@ -1293,7 +1293,7 @@ def procesar_update(db: Session, token: str, update: dict) -> None:
         cmd = cmd.split("@")[0]
     args = texto[len(texto.split()[0]):].strip() if " " in texto else ""
 
-    if cmd in ("/start", "/help", "help", "ayuda", "hola"):
+    if cmd in ("/start", "/help", "/menu", "help", "ayuda", "hola", "menu"):
         _send(token, chat_id, _h_start())
     elif cmd in ("/stockbajo", "stockbajo", "stock bajo"):
         _h_stockbajo_menu_principal(token, chat_id)
