@@ -302,7 +302,7 @@ Cada instancia configura lo suyo; no se comparte nada entre clientes.
 - [x] Diseño y documento (`MULTITENANT.md`) — 26/10/2026
 - [x] Parametrización por entorno: `MACHINE_ID`, `BACKUP_DIR`, `LICENCIA_SECRET`, `LICENCIA_AUTO`, `LICENCIA_GESTION_LOCAL`, `ADMIN_PASSWORD_INICIAL` — 26/10/2026
 - [x] `/health` público — 26/10/2026
-- [ ] `.dockerignore` + `Dockerfile` endurecido (`curl`, `openssl`, usuario no-root)
+- [x] `.dockerignore` + `Dockerfile` endurecido (`curl`, `openssl`, usuario no-root) — 26/10/2026 (build y smoke pendientes en el servidor: acá no hay Docker)
 - [ ] `scripts/seed_licencia_cliente.py`
 - [ ] `deploy/clientes/` (plantillas + alta + renovación + actualización)
 - [ ] Ensayo con `cliente-demo`: aislamiento, backup y restauración
