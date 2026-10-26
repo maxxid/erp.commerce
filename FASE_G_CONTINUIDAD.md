@@ -189,6 +189,7 @@ Cada paso = un commit + deploy con la suite en verde (regla del proyecto). Orden
 | Telegram | **Funcionando**: el dueño configuró su bot y su `/start` responde; avisos de salud y resumen diario activos |
 | Zona horaria | Servidor en UTC probablemente; **hora de negocio = UTC-3 (AR)** → la ventana de retorno 06:00 AR = 09:00 UTC |
 | Suite | `python -m pytest -p no:cacheprovider` → **950 passed** (red bloqueada por `tests/conftest.py`) |
+| Health | `GET /health` (público, sin auth) — implementado en la Fase 1 multi-cliente (`MULTITENANT.md`) |
 | Build | `npm run build` en `frontend/` **antes** de commitear (el `sw.js` queda un commit atrás por diseño del stamp) |
 | Deploy | `DEPLOY.md` (pull + `pip install -r requirements.txt` + restart) |
 | ssh desde PowerShell | Las comillas dobles **se borran**: no usarlas. Para SQL o Python remoto: **base64** (`$b64=[Convert]::ToBase64String(...)`, `echo $b64 | base64 -d > /tmp/q.sql`, y ejecutar leyendo de archivo: `sqlite3 db < /tmp/q.sql`) |

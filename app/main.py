@@ -5,7 +5,7 @@ FastAPI + SQLAlchemy + JWT.
 Arranca con: uvicorn app.main:app --reload
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from app.config import settings
@@ -31,6 +31,18 @@ def crear_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Salud de la instancia (sin auth): la usan el healthcheck de Docker, el
+    # alta de clientes y el vigilante de la Fase G.
+    @app.get("/health")
+    def health():
+        from sqlalchemy import text
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+        except Exception:
+            raise HTTPException(status_code=503, detail="Base de datos no disponible")
+        return {"status": "ok", "version": settings.APP_VERSION}
 
     # Routers
     app.include_router(auth.router)
@@ -133,7 +145,7 @@ def _seed_database():
         if not db.query(Usuario).first():
             db.add(Usuario(
                 username="admin",
-                password_hash=hash_password("admin"),
+                password_hash=hash_password(settings.ADMIN_PASSWORD_INICIAL),
                 nombre="Administrador",
                 rol="admin",
             ))
@@ -155,40 +167,44 @@ def _seed_database():
         from app.services.demo_service import sembrar_si_corresponde
         sembrar_si_corresponde(db)
 
-        if not db.query(Licencia).first():
-            try:
-                from app.services.licencia_service import generar_clave, obtener_machine_id
-                mid = obtener_machine_id()
-                exp_demo = datetime.now(timezone.utc) + timedelta(days=30)
-                db.add(Licencia(
-                    clave=generar_clave("DEMO", mid, exp_demo),
-                    cliente="DEMO - Licencia de prueba",
-                    machine_id=mid,
-                    plan="pro",
-                    fecha_expiracion=exp_demo,
-                    activa=True,
-                ))
-                db.commit()
-            except Exception as e:
-                print(f"[Licencia] Error al crear licencia demo: {e}")
-        else:
-            try:
-                from app.services.licencia_service import licencia_valida, obtener_machine_id, generar_clave
-                if not licencia_valida(db):
+        # En una instalación vendida a un cliente (LICENCIA_AUTO=false) la
+        # licencia la siembra el alta: sin esto el arranque crearía una demo
+        # pro de 30 días y la renovaría sola, así que nunca habría que pagar.
+        if settings.LICENCIA_AUTO:
+            if not db.query(Licencia).first():
+                try:
+                    from app.services.licencia_service import generar_clave, obtener_machine_id
                     mid = obtener_machine_id()
                     exp_demo = datetime.now(timezone.utc) + timedelta(days=30)
-                    nueva = Licencia(
-                        clave=generar_clave("DEMO-TRIAL", mid, exp_demo),
-                        cliente="DEMO-TRIAL - 30 dias de prueba",
+                    db.add(Licencia(
+                        clave=generar_clave("DEMO", mid, exp_demo),
+                        cliente="DEMO - Licencia de prueba",
                         machine_id=mid,
                         plan="pro",
                         fecha_expiracion=exp_demo,
                         activa=True,
-                    )
-                    db.add(nueva)
+                    ))
                     db.commit()
-            except Exception as e:
-                print(f"[Licencia] Error al renovar licencia demo: {e}")
+                except Exception as e:
+                    print(f"[Licencia] Error al crear licencia demo: {e}")
+            else:
+                try:
+                    from app.services.licencia_service import licencia_valida, obtener_machine_id, generar_clave
+                    if not licencia_valida(db):
+                        mid = obtener_machine_id()
+                        exp_demo = datetime.now(timezone.utc) + timedelta(days=30)
+                        nueva = Licencia(
+                            clave=generar_clave("DEMO-TRIAL", mid, exp_demo),
+                            cliente="DEMO-TRIAL - 30 dias de prueba",
+                            machine_id=mid,
+                            plan="pro",
+                            fecha_expiracion=exp_demo,
+                            activa=True,
+                        )
+                        db.add(nueva)
+                        db.commit()
+                except Exception as e:
+                    print(f"[Licencia] Error al renovar licencia demo: {e}")
 
     finally:
         db.close()

@@ -21,6 +21,22 @@ class Settings:
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = int(os.getenv("JWT_EXPIRE_MINUTES", "1200"))  # 20 horas (jornada + cierre caja)
 
+    # Multi-cliente (Docker multi-instance, ver MULTITENANT.md)
+    # Cada instancia/cliente fija su MACHINE_ID (el slug) porque en Docker el
+    # hostname y la MAC cambian al recrear el contenedor y la licencia se ataría
+    # a un ID distinto en cada arranque.
+    MACHINE_ID: str = os.getenv("MACHINE_ID", "")
+    # Secreto maestro para firmar claves de licencia. Si está vacío se usa el
+    # JWT_SECRET de la instancia (comportamiento viejo, válido para desarrollo).
+    LICENCIA_SECRET: str = os.getenv("LICENCIA_SECRET", "")
+    # En clientes se apaga: evita que el arranque cree/renueve una licencia
+    # demo pro de 30 días y que el cliente nunca necesite pagar.
+    LICENCIA_AUTO: bool = os.getenv("LICENCIA_AUTO", "true").lower() in ("1", "true", "yes", "on")
+    # En clientes se apaga: el admin del cliente no puede emitir ni renovar
+    # claves desde la UI.
+    LICENCIA_GESTION_LOCAL: bool = os.getenv("LICENCIA_GESTION_LOCAL", "true").lower() in ("1", "true", "yes", "on")
+    ADMIN_PASSWORD_INICIAL: str = os.getenv("ADMIN_PASSWORD_INICIAL", "admin")
+
     # CORS
     CORS_ORIGINS: list = ["*"]  # En producción, restringir al dominio real
 
@@ -64,6 +80,9 @@ class Settings:
     # salud_service (cada 30 min) avisa por Telegram si algo falla.
     BACKUP_INTERVAL_MIN: int = int(os.getenv("BACKUP_INTERVAL_MIN", "15"))
     BACKUP_KEEP_LOCAL: int = int(os.getenv("BACKUP_KEEP_LOCAL", "5"))  # backups locales a conservar
+    # En Docker el repo es de sólo lectura/efímero: los respaldos van a un
+    # volumen propio (/data/backups). Vacío = carpeta histórica del repo.
+    BACKUP_DIR: str = os.getenv("BACKUP_DIR", "")
 
     # Datos de demostración (4 productos falsos, proveedor y compra) en una base
     # recién creada. **Apagado por defecto**: un negocio real no quiere arrancar

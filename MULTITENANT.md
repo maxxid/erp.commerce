@@ -300,8 +300,8 @@ Cada instancia configura lo suyo; no se comparte nada entre clientes.
 ## 13. Estado de implementación (Fase 1)
 
 - [x] Diseño y documento (`MULTITENANT.md`) — 26/10/2026
-- [ ] Parametrización por entorno: `MACHINE_ID`, `BACKUP_DIR`, `LICENCIA_SECRET`, `LICENCIA_AUTO`, `LICENCIA_GESTION_LOCAL`, `ADMIN_PASSWORD_INICIAL`
-- [ ] `/health` público
+- [x] Parametrización por entorno: `MACHINE_ID`, `BACKUP_DIR`, `LICENCIA_SECRET`, `LICENCIA_AUTO`, `LICENCIA_GESTION_LOCAL`, `ADMIN_PASSWORD_INICIAL` — 26/10/2026
+- [x] `/health` público — 26/10/2026
 - [ ] `.dockerignore` + `Dockerfile` endurecido (`curl`, `openssl`, usuario no-root)
 - [ ] `scripts/seed_licencia_cliente.py`
 - [ ] `deploy/clientes/` (plantillas + alta + renovación + actualización)

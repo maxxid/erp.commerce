@@ -4,7 +4,7 @@
       <div>
         <p class="text-sm text-slate-500 dark:text-slate-400">Gestión de licencias del sistema</p>
       </div>
-      <BaseButton variant="primary" @click="openGenerateModal">
+      <BaseButton v-if="gestionLocal" variant="primary" @click="openGenerateModal">
         <i class="fa-solid fa-key text-sm"></i>
         Generar licencia
       </BaseButton>
@@ -18,16 +18,7 @@
 
     <BaseCard padding="none">
       <BaseTable
-        :columns="[
-          { key: 'clave', label: 'Clave' },
-          { key: 'client', label: 'Cliente' },
-          { key: 'plan', label: 'Plan' },
-          { key: 'machineId', label: 'ID Máquina' },
-          { key: 'expirationDate', label: 'Vencimiento' },
-          { key: 'daysUntilExpiry', label: 'Días restantes', align: 'right' },
-          { key: 'active', label: 'Estado', align: 'center' },
-          { key: 'actions', label: 'Acciones', align: 'center' }
-        ]"
+        :columns="columnas"
         :rows="licenses"
         :row-class="row => row.daysUntilExpiry <= 7 && row.active ? 'bg-rose-50/30 dark:bg-rose-900/20' : ''"
         empty-icon="fa-key"
@@ -160,7 +151,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import api from '@/services/api'
 import { useToastStore } from '@/stores/toasts'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -188,6 +179,21 @@ const generating = ref(false)
 const generatedKey = ref('')
 const activatingId = ref(null)
 const toggling = ref({})
+const gestionLocal = ref(true)
+
+const columnas = computed(() => {
+  const base = [
+    { key: 'clave', label: 'Clave' },
+    { key: 'client', label: 'Cliente' },
+    { key: 'plan', label: 'Plan' },
+    { key: 'machineId', label: 'ID Máquina' },
+    { key: 'expirationDate', label: 'Vencimiento' },
+    { key: 'daysUntilExpiry', label: 'Días restantes', align: 'right' },
+    { key: 'active', label: 'Estado', align: 'center' },
+  ]
+  if (gestionLocal.value) base.push({ key: 'actions', label: 'Acciones', align: 'center' })
+  return base
+})
 
 const genForm = reactive({
   client: '',
@@ -297,6 +303,7 @@ async function loadPlanes() {
   try {
     const estado = await api.get('/api/licencia/estado')
     if (estado?.planes?.length) planes.value = estado.planes
+    if (typeof estado?.gestion_local === 'boolean') gestionLocal.value = estado.gestion_local
   } catch { /* fallback al catálogo mínimo */ }
 }
 

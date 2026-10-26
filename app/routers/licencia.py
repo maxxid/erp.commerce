@@ -8,6 +8,7 @@ from typing import Optional
 from datetime import datetime, timezone
 from app.database import get_db
 from app.auth.dependencies import require_role
+from app.config import settings
 from app.models.licencia import Licencia
 from app.models.usuario import Usuario
 from app.schemas.common import RespuestaBase, RespuestaData, RespuestaLista
@@ -48,6 +49,15 @@ def _licencia_to_dict(l: Licencia) -> dict:
     }
 
 
+def _exigir_gestion_local() -> None:
+    """En una instancia vendida a un cliente, el admin no emite licencias."""
+    if not settings.LICENCIA_GESTION_LOCAL:
+        raise HTTPException(
+            status_code=403,
+            detail="La gestión de licencias está deshabilitada en esta instalación",
+        )
+
+
 @router.get("/machine-id", response_model=RespuestaData)
 def machine_id():
     """Devuelve el ID único de esta máquina."""
@@ -77,6 +87,7 @@ def estado(db: Session = Depends(get_db)):
         "plan": plan,
         "planes": planes_service.catalogo(),
         "features": features,
+        "gestion_local": settings.LICENCIA_GESTION_LOCAL,
         "ia_disponible": bool(features.get("ia")) and cfg_ia["habilitada"],
         "ia_configurada": cfg_ia["habilitada"],
         "ia_uso": {
@@ -131,6 +142,7 @@ def activar(data: ActivarRequest, db: Session = Depends(get_db)):
 @router.post("/generar", response_model=RespuestaData)
 def generar(data: GenerarRequest, db: Session = Depends(get_db), user: Usuario = Depends(require_role("admin"))):
     """Genera una nueva clave de licencia (solo admin)."""
+    _exigir_gestion_local()
     resultado = licencia_service.crear_licencia(
         db, data.cliente, data.machine_id, data.dias, plan=data.plan
     )
@@ -196,6 +208,7 @@ def alternar_activa(
     `catch` se tragaba el 404 y la tabla mostraba "Inactiva" mientras en la base
     seguía activa.
     """
+    _exigir_gestion_local()
     lic = db.query(Licencia).filter(Licencia.id == licencia_id).first()
     if not lic:
         raise HTTPException(status_code=404, detail="Licencia no encontrada")

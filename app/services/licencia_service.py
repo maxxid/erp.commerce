@@ -14,14 +14,20 @@ from app.config import settings
 
 def _hmac_sign(message: str) -> str:
     return hmac.new(
-        settings.JWT_SECRET.encode(),
+        (settings.LICENCIA_SECRET or settings.JWT_SECRET).encode(),
         message.encode(),
         hashlib.sha256,
     ).hexdigest()[:12]
 
 
 def obtener_machine_id() -> str:
-    """Genera un ID único para esta máquina basado en hardware."""
+    """Genera un ID único para esta máquina basado en hardware.
+
+    En Docker se fija con MACHINE_ID (el slug del cliente): hostname y MAC
+    cambian al recrear el contenedor y la licencia dejaría de validar.
+    """
+    if settings.MACHINE_ID:
+        return settings.MACHINE_ID
     hostname = platform.node() or "unknown"
     disco = ""
 

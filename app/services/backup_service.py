@@ -20,7 +20,7 @@ from app.config import settings
 from app.database import SessionLocal
 from app.services import config_service
 
-BACKUP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "backups")
+BACKUP_DIR = settings.BACKUP_DIR or os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "backups")
 
 # Cada cuánto sube un respaldo a la nube. Lo local sale cada 15 minutos (cuesta
 # un archivo rotado, sin red), pero lo que sale por el hotspot sí se dosifica:
