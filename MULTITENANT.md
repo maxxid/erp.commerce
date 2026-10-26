@@ -2,13 +2,15 @@
 
 > **Instrucción para el Agente:** Estrategia de multi-cliente, aislamiento, licencias y runbooks de alta/baja/actualización. Leer solo si la tarea toca multi-cliente, Docker, onboarding de clientes o licencias. No leer por defecto.
 
-> **Estado:** diseño aprobado el **26/10/2026**. La Fase 1 está **en implementación** (ver checklist al final). El ERP del dueño **no** se migra a Docker en esta fase.
+> **Estado:** diseño aprobado y **ensayado el 26/10/2026** (imagen, alta, aislamiento y renovación). La Fase 1 quedó implementada; **falta definir la VM definitiva de clientes**: la VM actual es una `VM.Standard.E2.1.Micro` de 1 GB y **no alcanza para producción** (ver §9 y §13). El ERP del dueño **no** se migra a Docker.
 
 ---
 
 ## 1. Resumen en una frase
 
-Un **contenedor por cliente** en la misma VM Oracle, con **su propia base SQLite**, **su subdominio** y **su licencia**. Sin `tenant_id` y sin reescribir el código.
+Un **contenedor por cliente** en una **VM dedicada a clientes**, con **su propia base SQLite**, **su subdominio** y **su licencia**. Sin `tenant_id` y sin reescribir el código.
+
+La VM actual del ERP es una `VM.Standard.E2.1.Micro` (2 vCPU, **1 GB**) y no tiene lugar para clientes: el ensayo del 26/10/2026 corrió **un** contenedor de 256 MB y dejó al ERP con ~420 MB disponibles. Para vender clientes hace falta una VM aparte (ver §9).
 
 Para el cliente es "su ERP en `clienteN.erp.imprenta.store`". Para nosotros es un servicio de Docker Compose más, con su carpeta de datos y su backup.
 
@@ -21,7 +23,7 @@ Para el cliente es "su ERP en `clienteN.erp.imprenta.store`". Para nosotros es u
 | Estrategia | **Docker multi-instance** (una instancia + una SQLite por cliente) | Mínimo cambio de código; aislamiento real; se puede empezar con 2-3 clientes |
 | Multi-tenant real (`tenant_id` en todas las tablas) | **Descartado** | Rewrite grande y riesgo de filtrar datos entre clientes |
 | Base de datos | **SQLite por cliente**, en un volumen propio | Es lo que el ERP ya usa y alcanza para 1-3 cajas |
-| Hosting | **Misma VM Oracle A1** del ERP propio | Sin costo extra; el ERP del dueño sigue en systemd `:8000` |
+| Hosting | **VM aparte para clientes** (la actual es `VM.Standard.E2.1.Micro`, 1 GB: no alcanza) | Verificado el 26/10/2026. El ERP del dueño sigue en su VM y en systemd `:8000`; no se toca |
 | Acceso | **Subdominios** `clienteN.erp.imprenta.store` | Un certificado wildcard cubre a todos; DNS simple |
 | Licencia | **Una por cliente**, `machine_id = slug` | Cada cliente tiene su plan y su vencimiento |
 | Imagen | **Una sola** `erp-comercio:<git-sha>` para todos | Un build, muchos contenedores |
@@ -49,8 +51,10 @@ Para el cliente es "su ERP en `clienteN.erp.imprenta.store`". Para nosotros es u
 ```
 
 - El **ERP del dueño queda fuera de Docker** en la Fase 1: así no se toca el unit `erp-comercio`, ni Litestream, ni la continuidad de `FASE_G_CONTINUIDAD.md`.
+- **Los clientes necesitan su propia VM.** La actual (`VM.Standard.E2.1.Micro`, 2 vCPU, 1 GB) es la del ERP y no tiene RAM para más: el ensayo con un contenedor de 256 MB dejó ~420 MB libres, y un cliente real puede necesitar 128-256 MB. No prometer 4-6 clientes en esta máquina.
 - Cada cliente escucha **solo en loopback** (`127.0.0.1:51xx`). Nginx es la única puerta.
 - Todos los contenedores usan la **misma imagen**; cambia el `.env`, no el código. (Si algún día un cliente necesita una versión distinta, se le cambia el tag.)
+- La imagen construida en la VM actual es **amd64**. Si la VM de clientes es A1 (ARM), hay que construirla para `linux/arm64` o multi-arch.
 
 ### Layout en el servidor
 
@@ -215,9 +219,9 @@ docker compose up -d
 
 | Recurso | Valor inicial | Nota |
 |---|---|---|
-| RAM por cliente | `512m` | Medir con `docker stats`; ajustar según uso real |
-| CPU por cliente | `0.5` | Suficiente para 1-3 cajas |
-| Clientes por VM | 4-6 con holgura | Empezar con 2-3 y medir |
+| RAM por cliente | `512m` (usar `256m` en una VM de 1 GB) | Medido: 129 MB reales en reposo con la app completa |
+| CPU por cliente | `0.5` | Medido: 0,34 % en reposo |
+| Clientes por VM | 4-6 solo con **≥8 GB** | En la `E2.1.Micro` actual: **0 para producción** (el ensayo usó 1 y se detuvo) |
 
 ### Monitoreo
 
@@ -240,13 +244,14 @@ docker compose up -d
 
 | Recurso | Costo | Nota |
 |---|---|---|
-| VM Oracle A1 (misma del dueño) | $0 | Verificar el shape real y la capacidad libre en OCI |
-| Almacenamiento | Incluido en el disco de la VM | Cada base arranca en pocos MB |
+| VM del ERP (`VM.Standard.E2.1.Micro`) | $0 | **No sirve para clientes**: 1 GB, compartida con el POS |
+| VM de clientes | $0 si hay A1.Flex free, o ~USD 15/mes | A1.Flex (ARM) 4 OCPU/24 GB si hay capacidad en la cuenta; si no, una VM paga |
+| Almacenamiento | Incluido en el disco de la VM de clientes | Cada base arranca en ~0,4 MB |
 | R2 | $0 hasta 10 GB | Los respaldos de todos comparten bucket, separados por slug |
 | Cloudflare / TLS | $0 | Wildcard cuando G1 mueva el DNS |
-| **Total extra** | **$0** | Mientras entren en la misma VM |
+| **Total extra** | **$0 a ~USD 15/mes** | Depende de si hay capacidad A1 free |
 
-> El número de OCPU/RAM de la VM se verifica en la consola de OCI antes de comprometer capacidad. `HOSTING.md` y este documento deben decir lo mismo.
+> La VM actual se verificó el 26/10/2026: `VM.Standard.E2.1.Micro`, x86_64, 2 vCPU, 956 MB, sin swap (se le agregó 2 GB). `HOSTING.md` y este documento deben decir lo mismo.
 
 ---
 
@@ -288,8 +293,9 @@ Cada instancia configura lo suyo; no se comparte nada entre clientes.
 
 ## 12. Riesgos conocidos
 
-- **Un solo servidor para todos.** Si la VM se cae, se caen el ERP del dueño y todos los clientes. La red de seguridad son los respaldos (local + R2), no una segunda máquina.
-- **Secretos maestros en el servidor.** `LICENCIA_SECRET` y las credenciales de R2 permiten emitir licencias y leer respaldos de todos: tratarlos como llaves maestras.
+- **Un solo servidor para todos.** Si la VM de clientes se cae, se caen todos los clientes. La red de seguridad son los respaldos (local + R2), no una segunda máquina.
+- **Secretos maestros en el servidor.** `LICENCIA_SECRET` y las credenciales de R2 permiten emitir licencias y leer respaldos de todos: tratarlos como llaves maestras. En el servidor del ERP, el `JWT_SECRET` del unit file está como literal `$(openssl rand -hex 32)` (systemd no ejecuta comandos): hay que corregirlo con un secreto real.
+- **Arquitectura de la imagen.** La construida en la VM x86_64 es `amd64`; una A1 es `arm64`. Construir multi-arch antes de mudar clientes.
 - **Configuración duplicada.** Cada cliente repite AFIP, MP, Telegram e IA; conviene un checklist de alta y otro de baja.
 - **Sin panel central.** El estado se mira en `clientes.json`, `docker ps` y los logs.
 - **Fase G no aplica.** No prometer continuidad automática a los clientes hasta que exista un plan específico.
@@ -302,11 +308,20 @@ Cada instancia configura lo suyo; no se comparte nada entre clientes.
 - [x] Diseño y documento (`MULTITENANT.md`) — 26/10/2026
 - [x] Parametrización por entorno: `MACHINE_ID`, `BACKUP_DIR`, `LICENCIA_SECRET`, `LICENCIA_AUTO`, `LICENCIA_GESTION_LOCAL`, `ADMIN_PASSWORD_INICIAL` — 26/10/2026
 - [x] `/health` público — 26/10/2026
-- [x] `.dockerignore` + `Dockerfile` endurecido (`curl`, `openssl`, usuario no-root) — 26/10/2026 (build y smoke pendientes en el servidor: acá no hay Docker)
+- [x] `.dockerignore` + `Dockerfile` endurecido (`curl`, `openssl`, usuario no-root) — 26/10/2026
 - [x] `scripts/seed_licencia_cliente.py` — 26/10/2026
 - [x] `deploy/clientes/` (plantillas + alta + renovación + actualización) — 26/10/2026
-- [ ] Ensayo con `cliente-demo`: aislamiento, backup y restauración
-- [ ] Primer cliente real
+- [x] **Ensayo en la VM (26/10/2026):** imagen `erp-comercio:3dfa92d` (474 MB), `cliente-demo` en 5101 con 256 MB, `/health` y `/app` 200, 129 MB de RAM, 0,34 % CPU, bases aisladas (demo 1 producto vs. dueño 624), `machine-id = cliente-demo`, licencia `trial` renovada a `pro` hasta 2027-10-26, y el ERP del dueño siempre en 200. Demo detenido y Docker deshabilitado al terminar; datos en `/srv/erp-clientes/cliente-demo`.
+- [ ] **Definir la VM definitiva de clientes** (A1.Flex free si hay capacidad, o paga). La `E2.1.Micro` actual no alcanza.
+- [ ] Build multi-arch si la VM es ARM.
+- [ ] Primer cliente real.
+
+### Lo que dejó el ensayo en el servidor
+
+- **Swap:** 2 GB en `/swapfile` (activo y en `/etc/fstab`). Es lo que permitió construir sin tumbar el ERP.
+- **Docker:** instalado (29.9.2 + Compose v5.6.1) pero **detenido y deshabilitado** para devolver RAM al POS. Para repetir el ensayo: `sudo systemctl start docker` y después `cd /srv/erp-clientes/cliente-demo && sudo docker compose up -d`.
+- **Imagen y datos del demo:** quedan en disco; no se borraron.
+- **R2 del demo:** sin credenciales en el entorno, los respaldos fueron sólo locales.
 
 ---
 

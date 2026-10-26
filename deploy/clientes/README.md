@@ -1,7 +1,9 @@
 # Clientes en Docker (multi-instance)
 
-Un contenedor + una SQLite + un subdominio + una licencia **por cliente**, en la
-misma VM Oracle. El ERP del dueño sigue en systemd (`:8000`) y **no** se toca.
+Un contenedor + una SQLite + un subdominio + una licencia **por cliente**, en una
+**VM dedicada a clientes**. La VM actual del ERP es una `E2.1.Micro` de 1 GB y
+**no alcanza** para producción; el ERP del dueño sigue en systemd (`:8000`) y
+**no** se toca.
 
 El diseño completo, las decisiones y los límites están en **`MULTITENANT.md`**.
 Acá está sólo el uso de los scripts.

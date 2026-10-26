@@ -155,10 +155,17 @@ sudo systemctl restart litestream
 
 ## Clientes en Docker (multi-cliente — Fase 1)
 
+> **La VM actual es `VM.Standard.E2.1.Micro` (2 vCPU, 1 GB)** y comparte RAM con
+> el POS. El 26/10/2026 se ensayó con **un** `cliente-demo` de 256 MB y se detuvo;
+> Docker quedó instalado pero **deshabilitado**. Para clientes reales hace falta
+> una VM aparte (A1.Flex free o paga, ver `MULTITENANT.md` §9).
+>
+> Para repetir el ensayo: `sudo systemctl start docker` y después
+> `cd /srv/erp-clientes/cliente-demo && sudo docker compose up -d`.
+
 El ERP del dueño sigue en systemd como siempre. Los clientes son **contenedores
-aparte** en la misma VM, cada uno con su SQLite, su subdominio y su licencia. El
-diseño completo y los runbooks están en **`MULTITENANT.md`**; acá va sólo lo
-operativo.
+aparte**, cada uno con su SQLite, su subdominio y su licencia. El diseño completo
+y los runbooks están en **`MULTITENANT.md`**; acá va sólo lo operativo.
 
 ### Construir la imagen
 

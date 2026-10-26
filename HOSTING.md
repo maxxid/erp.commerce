@@ -3,12 +3,9 @@
 > **Instrucción para el Agente:** Setup inicial de la VM Oracle Cloud. Leer solo si se aprovisiona o migra de hosting. No leer por defecto.
 
 ## Resumen
-Oracle Cloud ofrece una VM ARM **gratis de por vida** con:
-- 4 cores, 24 GB RAM, 200 GB disco
-- IP pública estática
-- Sin límite de tráfico
+La instancia **actual** (`erp-comercio`, región Santiago) es una **`VM.Standard.E2.1.Micro`**: x86_64, 2 vCPU, **1 GB de RAM**, 45 GB de disco y **sin swap** (se le agregaron 2 GB el 26/10/2026). Alcanza para el ERP solo; **no para clientes multi-instance** (ver `MULTITENANT.md` §9).
 
-> El total **Always Free** de A1.Flex es 4 OCPU + 24 GB **en toda la cuenta**, repartido entre las instancias A1 que tengas. Antes de sumar clientes, verificá en la consola de OCI el shape real de `erp-comercio` y cuánto queda libre. Los clientes multi-instancia viven en **esta misma VM** (ver `MULTITENANT.md`).
+> El plan de abajo describe cómo crear una **VM nueva**. Oracle Cloud ofrece una A1.Flex ARM gratis de 4 OCPU/24 GB **en total por cuenta**, pero esta cuenta hoy tiene una E2.1.Micro. Antes de sumar clientes, verificar en la consola de OCI qué shape es la instancia real y cuánta capacidad A1 queda libre.
 
 ## Paso a paso
 
@@ -74,7 +71,7 @@ API Docs: `https://erp.tudominio.com/docs`
 systemctl restart erp-comercio   # Reiniciar
 systemctl stop erp-comercio      # Detener
 journalctl -u erp-comercio -f    # Ver logs
-tail -f /data/erp/erp_comercio.db  # DB está en /data/erp/
+ls -lh /data/erp/                # DB está en /data/erp/
 ```
 
 ## Actualizar desde GitHub
@@ -87,6 +84,11 @@ systemctl restart erp-comercio
 ---
 
 ## Docker para clientes (multi-cliente)
+
+> **Ojo:** la VM actual es de **1 GB** y comparte RAM con el POS. El 26/10/2026 se
+> hizo un ensayo con **un** `cliente-demo` de 256 MB y se detuvo; Docker quedó
+> instalado pero **deshabilitado**. Para clientes reales hace falta una VM aparte
+> (A1.Flex free o paga, ver `MULTITENANT.md` §9).
 
 El ERP del dueño sigue en systemd (`:8000`). Docker se usa **solo** para los
 clientes, que escuchan en `127.0.0.1:5101+` detrás de nginx. No reemplaza al
