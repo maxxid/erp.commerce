@@ -1,18 +1,18 @@
 services:
   erp:
-    image: {{IMAGEN}}
-    container_name: erp-{{SLUG}}
-    hostname: {{SLUG}}
+    image: ${IMAGEN}
+    container_name: erp-${SLUG}
+    hostname: ${SLUG}
     restart: unless-stopped
     env_file: .env
     environment:
-      MACHINE_ID: "{{SLUG}}"
+      MACHINE_ID: "${SLUG}"
       DATABASE_URL: sqlite:////data/erp_comercio.db
       BACKUP_DIR: /data/backups
       LICENCIA_AUTO: "false"
       LICENCIA_GESTION_LOCAL: "false"
     ports:
-      - "127.0.0.1:{{PUERTO}}:8000"
+      - "127.0.0.1:${PUERTO}:8000"
     volumes:
       - ./data:/data
     mem_limit: 512m

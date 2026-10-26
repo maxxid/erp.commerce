@@ -257,8 +257,7 @@ def main():
     }
     _escribir_env(cliente_dir / ".env", env)
     (cliente_dir / "docker-compose.yml").write_text(
-        _render("docker-compose.template.yml",
-                {"IMAGEN": args.imagen, "SLUG": args.slug, "PUERTO": puerto}),
+        (BASE / "docker-compose.template.yml").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
     _chown_cliente(cliente_dir)
