@@ -311,7 +311,9 @@ Cada instancia configura lo suyo; no se comparte nada entre clientes.
 - [x] `.dockerignore` + `Dockerfile` endurecido (`curl`, `openssl`, usuario no-root) — 26/10/2026
 - [x] `scripts/seed_licencia_cliente.py` — 26/10/2026
 - [x] `deploy/clientes/` (plantillas + alta + renovación + actualización) — 26/10/2026
-- [x] **Ensayo en la VM (26/10/2026):** imagen `erp-comercio:3dfa92d` (474 MB), `cliente-demo` en 5101 con 256 MB, `/health` y `/app` 200, 129 MB de RAM, 0,34 % CPU, bases aisladas (demo 1 producto vs. dueño 624), `machine-id = cliente-demo`, licencia `trial` renovada a `pro` hasta 2027-10-26, y el ERP del dueño siempre en 200. Demo detenido y Docker deshabilitado al terminar; datos en `/srv/erp-clientes/cliente-demo`.
+- [x] **Ensayo en la VM (26/10/2026):** imagen `erp-comercio:3dfa92d` (474 MB), `cliente-demo` en 5101 con 256 MB, `/health` y `/app` 200, 129 MB de RAM, 0,34 % CPU, bases aisladas (demo 1 producto vs. dueño 624), `machine-id = cliente-demo`, licencia `trial` renovada a `pro` hasta 2027-10-26, respaldo del demo de 8,5 KB con `PRAGMA integrity_check=ok` y 1 producto restaurado, y el ERP del dueño siempre en 200. Demo detenido y Docker deshabilitado al terminar; datos en `/srv/erp-clientes/cliente-demo`.
+- [ ] **Probar nginx + certbot** (el ensayo usó `--sin-nginx`).
+- [ ] **Probar la subida a R2 de un cliente** (el demo fue sólo local).
 - [ ] **Definir la VM definitiva de clientes** (A1.Flex free si hay capacidad, o paga). La `E2.1.Micro` actual no alcanza.
 - [ ] Build multi-arch si la VM es ARM.
 - [ ] Primer cliente real.
