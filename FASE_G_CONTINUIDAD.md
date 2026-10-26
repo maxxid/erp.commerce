@@ -188,7 +188,7 @@ Cada paso = un commit + deploy con la suite en verde (regla del proyecto). Orden
 | Réplica (a crear) | Litestream → el mismo bucket de R2 |
 | Telegram | **Funcionando**: el dueño configuró su bot y su `/start` responde; avisos de salud y resumen diario activos |
 | Zona horaria | Servidor en UTC probablemente; **hora de negocio = UTC-3 (AR)** → la ventana de retorno 06:00 AR = 09:00 UTC |
-| Suite | `python -m pytest -p no:cacheprovider` → **950 passed** (red bloqueada por `tests/conftest.py`) |
+| Suite | `python -m pytest -p no:cacheprovider` → **980 passed** (red bloqueada por `tests/conftest.py`) |
 | Health | `GET /health` (público, sin auth) — implementado en la Fase 1 multi-cliente (`MULTITENANT.md`) |
 | Build | `npm run build` en `frontend/` **antes** de commitear (el `sw.js` queda un commit atrás por diseño del stamp) |
 | Deploy | `DEPLOY.md` (pull + `pip install -r requirements.txt` + restart) |

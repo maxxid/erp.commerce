@@ -1,0 +1,30 @@
+services:
+  erp:
+    image: {{IMAGEN}}
+    container_name: erp-{{SLUG}}
+    hostname: {{SLUG}}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MACHINE_ID: "{{SLUG}}"
+      DATABASE_URL: sqlite:////data/erp_comercio.db
+      BACKUP_DIR: /data/backups
+      LICENCIA_AUTO: "false"
+      LICENCIA_GESTION_LOCAL: "false"
+    ports:
+      - "127.0.0.1:{{PUERTO}}:8000"
+    volumes:
+      - ./data:/data
+    mem_limit: 512m
+    cpus: 0.5
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 25s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
