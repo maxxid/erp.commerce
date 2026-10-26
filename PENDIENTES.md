@@ -1009,6 +1009,7 @@ Además, dos guards defensivos: `_clean_name` y `_map_categoria` reventaban con 
 - **Seguridad clave privada AFIP** — la clave se guarda encriptada en la DB con una key hardcodeada (`"erp-afip-key-encryption-v1"`). Si alguien accede a DB + código fuente puede descifrarla. **Solución propuesta:** no guardar clave privada en DB — solo descargar (botón "Descargar .key" ya existe) y que el usuario la guarde localmente. Alternativa: secrets manager (AWS Secrets Manager, etc.). Requiere re-flujo de setup de AFIP.
 
 ### Media prioridad
+- **Multi-cliente / venta del ERP a terceros (Fase 1 — Docker multi-instance)** — diseño cerrado el **26/10/2026**, en implementación. Un contenedor + una SQLite + un subdominio + una licencia **por cliente**, en la misma VM Oracle. El ERP del dueño **queda en systemd y fuera de Docker** para no tocar Litestream ni la Fase G. Diseño, arquitectura, licencias y runbooks en **`MULTITENANT.md`**. Pendiente de código: parametrización por entorno (`MACHINE_ID`, `BACKUP_DIR`, `LICENCIA_SECRET`, `LICENCIA_AUTO`, `LICENCIA_GESTION_LOCAL`, `ADMIN_PASSWORD_INICIAL`), `/health`, `.dockerignore` + Dockerfile endurecido, `scripts/seed_licencia_cliente.py`, `deploy/clientes/` y ensayo con `cliente-demo`. **Ojo:** hoy `_seed_database` auto-renueva una licencia demo `pro` cada vez que vence; en clientes eso se apaga con `LICENCIA_AUTO=false`.
 - **Impresión de tickets** — `TicketModal.vue` ya tiene preview 80/58mm; falta:
   - PDF descargable (no solo ventana de impresión)
   - Impresora térmica (ESC/POS o similar)
@@ -1030,7 +1031,7 @@ Además, dos guards defensivos: `_clean_name` y `_map_categoria` reventaban con 
 
 ### Baja prioridad
 - **Multi-sucursal** — modelos `Sucursal` ya existen; falta que cada caja/usuario vea solo su sucursal
-- **Migración PostgreSQL + Alembic** — para cuando haya >5 usuarios concurrentes o acceso remoto multi-sucursal
+- **Migración PostgreSQL + Alembic** — **no se hace hoy**: la Fase 1 multi-cliente usa SQLite por cliente. Los disparadores y la corrección técnica (base por cliente antes que schema; `schema_translate_map` en vez de `SET search_path` sobre un pool; MySQL HeatWave no es PostgreSQL) están en `MULTITENANT.md` §10. Alembic es prerrequisito si algún día se comparte una base.
 - **Instalador Windows (.exe)** — NSIS o Inno Setup, empaqueta Python + deps + app
 - **Dashboard multi-negocio (admin central)** — dueño con varios `machine_id` necesita vista global. Dos opciones:
   - **A)** App separada que lee backups de R2 de todos los machine_id

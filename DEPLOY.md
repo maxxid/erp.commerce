@@ -152,3 +152,60 @@ sudo systemctl restart litestream
   lo apaga.
 - La base está en **WAL** por ahora; `app/database.py` la mantiene así. No
   cambiarla a `delete`: Litestream sólo puede replicar en WAL.
+
+## Clientes en Docker (multi-cliente — Fase 1)
+
+El ERP del dueño sigue en systemd como siempre. Los clientes son **contenedores
+aparte** en la misma VM, cada uno con su SQLite, su subdominio y su licencia. El
+diseño completo y los runbooks están en **`MULTITENANT.md`**; acá va sólo lo
+operativo.
+
+### Construir la imagen
+
+```bash
+cd /opt/erp-comercio
+git pull origin master
+docker build -t erp-comercio:$(git rev-parse --short HEAD) .
+```
+
+`frontend/dist` viaja commiteado: no hay que compilar en el servidor. La imagen
+lleva `curl` y `openssl` porque AFIP los usa por subprocess.
+
+### Alta de un cliente
+
+```bash
+python3 deploy/clientes/alta_cliente.py \
+  --slug cliente1 \
+  --nombre "Almacén Don José" \
+  --dominio cliente1.erp.imprenta.store \
+  --plan trial --dias 30
+```
+
+El script crea `/srv/erp-clientes/<slug>/`, genera los secretos, siembra la
+licencia, levanta el contenedor, arma el vhost de nginx y hace smoke test. El
+registro queda en `/srv/erp-clientes/clientes.json`.
+
+### Actualizar todos los clientes
+
+```bash
+deploy/clientes/actualizar_clientes.sh <git-sha>
+```
+
+### Comandos por cliente
+
+```bash
+cd /srv/erp-clientes/cliente1
+docker compose ps
+docker compose logs -f --tail=100
+docker compose restart
+docker compose stop     # no borra datos
+```
+
+### Reglas que no se rompen
+
+- **No tocar** el unit `erp-comercio` ni `litestream` desde acá: son del ERP del
+  dueño y de la Fase G.
+- El `MACHINE_ID` del cliente **es su slug** y no se cambia: la licencia está
+  atada a él. Tampoco cambiar el `hostname` del contenedor.
+- Los respaldos del cliente van a `backups/<slug>/` en R2, no se mezclan.
+- La restauración es manual y está en `MULTITENANT.md` §6.
