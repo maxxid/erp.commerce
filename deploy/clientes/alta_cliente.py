@@ -52,7 +52,7 @@ def _correr(cmd, cwd=None, obligatorio=True):
 
 
 def _render(nombre, valores):
-    texto = (BASE / nombre).read_text(encoding="utf-8")
+    texto = (BASE / nombre).read_text(encoding="utf-8").replace("\r\n", "\n")
     for clave, valor in valores.items():
         texto = texto.replace("{{" + clave + "}}", str(valor))
     return texto
@@ -257,7 +257,7 @@ def main():
     }
     _escribir_env(cliente_dir / ".env", env)
     (cliente_dir / "docker-compose.yml").write_text(
-        (BASE / "docker-compose.template.yml").read_text(encoding="utf-8"),
+        (BASE / "docker-compose.template.yml").read_text(encoding="utf-8").replace("\r\n", "\n"),
         encoding="utf-8",
     )
     _chown_cliente(cliente_dir)
