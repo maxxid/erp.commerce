@@ -207,6 +207,8 @@ def main():
                         choices=["trial", "basico", "pro", "enterprise"])
     parser.add_argument("--dias", type=int, default=30)
     parser.add_argument("--imagen", default="erp-comercio:latest")
+    parser.add_argument("--memoria", default="512m",
+                        help="Límite de RAM del contenedor (ej. 256m, 512m)")
     parser.add_argument("--root", default=str(ROOT_POR_DEFECTO))
     parser.add_argument("--licencia-secret", default=None)
     parser.add_argument("--admin-password", default=None,
@@ -247,6 +249,7 @@ def main():
         "SLUG": args.slug,
         "PUERTO": puerto,
         "IMAGEN": args.imagen,
+        "MEMORIA": args.memoria,
         "JWT_SECRET": secrets.token_hex(32),
         "LICENCIA_SECRET": _secreto_maestro(root, args.licencia_secret),
         "ADMIN_PASSWORD_INICIAL": admin_password,

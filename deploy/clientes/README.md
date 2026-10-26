@@ -28,6 +28,7 @@ python3 deploy/clientes/alta_cliente.py \
 
 Opcionales útiles:
 
+- `--memoria 256m`: límite de RAM del contenedor (default `512m`).
 - `--sin-nginx`: no toca nginx (para probar el contenedor solo).
 - `--root /srv/erp-clientes`: cambia la carpeta base.
 - `--licencia-secret`: si no se pasa, se lee `LICENCIA_SECRET` del entorno o se
