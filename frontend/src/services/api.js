@@ -45,6 +45,26 @@ export function esErrorDeRed(error) {
   return Boolean(error?.red) || error?.status === 0
 }
 
+// FastAPI devuelve los errores de validación (422) como una lista de objetos
+// con `loc` y `msg`. `new Error(detail)` los convertía en "[object Object]" y
+// ni el cajero ni quien mira la consola sabían qué campo estaba mal.
+function detalleDeError(data, status) {
+  const detalle = data?.detail
+  if (typeof detalle === 'string') return detalle
+  if (Array.isArray(detalle)) {
+    const partes = detalle
+      .map((d) => {
+        const campo = Array.isArray(d?.loc)
+          ? d.loc.filter((p) => p !== 'body').join('.')
+          : ''
+        return campo ? `${campo}: ${d?.msg}` : d?.msg
+      })
+      .filter(Boolean)
+    if (partes.length) return partes.join(' · ')
+  }
+  return data?.error || `Error ${status}`
+}
+
 function buildQuery(params) {
   if (!params) return ''
   const search = new URLSearchParams()
@@ -103,7 +123,7 @@ async function request(method, path, body = null, params = null, fetchOptions = 
   try { data = JSON.parse(text) } catch { data = { detail: text } }
 
   if (!response.ok) {
-    const error = new Error(data.detail || data.error || `Error ${response.status}`)
+    const error = new Error(detalleDeError(data, response.status))
     error.status = response.status
     error.data = data
     throw error

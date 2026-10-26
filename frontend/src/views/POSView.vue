@@ -1362,7 +1362,7 @@ import QuickCreateModal from '@/components/pos/QuickCreateModal.vue'
 import AperturaCajaModal from '@/components/caja/AperturaCajaModal.vue'
 import { useSounds } from '@/composables/useSounds'
 import { useConfetti } from '@/composables/useConfetti'
-import { useOfflineSales } from '@/composables/useOfflineSales'
+import { useOfflineSales, esIdTemporal } from '@/composables/useOfflineSales'
 import { useOfflineSync } from '@/composables/useOfflineSync'
 import { useOfflineCaja } from '@/composables/useOfflineCaja'
 import { useRefrescoPeriodico } from '@/composables/useRefrescoPeriodico'
@@ -2648,28 +2648,34 @@ async function confirmarVenta() {
 
   try {
     for (const item of cart.items) {
+      // El id temporal es la marca de "todavía no existe en la base": no
+      // alcanza con `_pending`, que puede haberse perdido en un intento sin red.
+      // El carrito se guarda en el navegador, así que tras un refresco el
+      // producto temporal ya no está en `products`: los datos salen del ítem.
+      if (!esIdTemporal(item.producto_id)) continue
       const prod = products.value.find(p => p.id === item.producto_id)
-      if (prod && prod._pending) {
-        try {
-          const resp = await api.post('/api/productos', {
-            codigo_barras: prod.codigo_barras,
-            nombre: prod._nombre || prod.nombre,
-            precio_venta: prod._precio || prod.precio_venta,
-            precio_costo: 0, fuente: 'manual',
-            cantidad_inicial: item.cantidad,
-            categoria_id: prod.categoria_id || 1
-          })
-          if (resp && resp.id) {
-            item.producto_id = resp.id
+      const nombre = prod?._nombre || item.nombre || prod?.nombre
+      if (!nombre) continue
+      try {
+        const resp = await api.post('/api/productos', {
+          codigo_barras: prod?.codigo_barras || item.codigo_barras || null,
+          nombre,
+          precio_venta: prod?._precio ?? item.precio_unitario ?? prod?.precio_venta ?? 0,
+          precio_costo: 0, fuente: 'manual',
+          cantidad_inicial: item.cantidad,
+          categoria_id: prod?.categoria_id || 1
+        })
+        if (resp && resp.id) {
+          item.producto_id = resp.id
+          if (prod) {
             prod.id = resp.id
             prod.stock_actual = item.cantidad
             prod._pending = false
-            toast.info(`${prod.nombre} creado con stock=${item.cantidad}. Tras la venta quedará en 0.`)
           }
-        } catch {
-          prod._pending = false
-          prod.stock_actual = item.cantidad
+          toast.info(`${nombre} creado con stock=${item.cantidad}. Tras la venta quedará en 0.`)
         }
+      } catch {
+        if (prod) prod.stock_actual = item.cantidad
       }
     }
 
@@ -2746,18 +2752,33 @@ async function confirmarVenta() {
         const saleData = {
           cliente_id: cart.cliente_id || undefined,
           comprador_cuit: cart.comprador_cuit || undefined,
-          items: cart.items.map(item => ({
-            producto_id: item.producto_id,
-            cantidad: item.cantidad,
-            precio_unitario: item.por_kilo ? item.precio_unitario : (item._precio_neto || item.precio_unitario),
-            oferta_tipo: item.oferta?.tipo || null,
-            oferta_valor: item.oferta?.valor || null,
-            oferta_info: item.oferta ? `${item.oferta.tipo === 'porcentaje' ? item.oferta.valor + '% OFF' : item.oferta.tipo === 'monto_fijo' ? '$' + item.oferta.valor + ' OFF' : '2x1'}` : null,
-            por_kilo: item.por_kilo || false,
-            peso: item.peso || null,
-            importe: item.por_kilo && item._importe ? item._importe : null,
-            medio_pago_carga: item.medio_pago_carga || null,
-          })),
+          items: cart.items.map(item => {
+            const prod = products.value.find(p => p.id === item.producto_id)
+            return {
+              producto_id: item.producto_id,
+              cantidad: item.cantidad,
+              precio_unitario: item.por_kilo ? item.precio_unitario : (item._precio_neto || item.precio_unitario),
+              oferta_tipo: item.oferta?.tipo || null,
+              oferta_valor: item.oferta?.valor || null,
+              oferta_info: item.oferta ? `${item.oferta.tipo === 'porcentaje' ? item.oferta.valor + '% OFF' : item.oferta.tipo === 'monto_fijo' ? '$' + item.oferta.valor + ' OFF' : '2x1'}` : null,
+              por_kilo: item.por_kilo || false,
+              peso: item.peso || null,
+              importe: item.por_kilo && item._importe ? item._importe : null,
+              medio_pago_carga: item.medio_pago_carga || null,
+              // Un producto que no existía en la base al momento de cobrar se
+              // guarda completo: el sync lo crea antes de meter el ítem, en vez
+              // de mandar un id temporal que el backend rechaza con 422.
+              producto_nuevo: esIdTemporal(item.producto_id) ? {
+                codigo_barras: item.codigo_barras || prod?.codigo_barras || null,
+                nombre: item.nombre || prod?.nombre || '',
+                precio_venta: item.por_kilo ? item.precio_unitario : (item._precio_neto || item.precio_unitario),
+                precio_costo: 0,
+                fuente: 'manual',
+                cantidad_inicial: item.cantidad,
+                categoria_id: prod?.categoria_id || 1,
+              } : null,
+            }
+          }),
           medio_pago: cart.medio_pago,
           efectivo_pagado: mostrarPagoMixto.value ? efectivoPagadoNum.value : 0,
           descuento: cart.descuento || 0,

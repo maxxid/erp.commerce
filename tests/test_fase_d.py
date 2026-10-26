@@ -77,7 +77,7 @@ class TestElCelularSubeAlAbrir:
         """Si no hay pendientes no se hace ni un request: es gratis."""
         texto = _leer(SINCRONIZAR)
 
-        assert "eventos.length === 0) return { subidas: 0, fallidas: 0 }" in texto
+        assert "eventos.length === 0) return { subidas: 0, fallidas: 0, errores: [] }" in texto
         assert "if (subiendo ||" in texto
 
 

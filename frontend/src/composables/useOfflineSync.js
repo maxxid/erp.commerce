@@ -12,6 +12,22 @@ function avisar() {
   window.dispatchEvent(new Event('apex-pending-caja-updated'))
 }
 
+// Un rechazo del servidor no es un corte de red: reintentarlo solo no lo
+// arregla. Se guarda el motivo para mostrarlo en el aviso en vez de dejar los
+// 422 repitiéndose cada minuto sin que nadie se entere.
+function motivoDeRechazo(error) {
+  if (typeof error?.data?.detail === 'string' && error.data.detail) return error.data.detail
+  return error?.message || 'El servidor rechazó la operación'
+}
+
+// Un 4xx (salvo timeout/throttling) dice "esto no va a funcionar tal como
+// está": reintentarlo cada minuto solo llena la consola. Un 5xx puede ser
+// transitorio y se sigue reintentando.
+function esRechazoPermanente(error) {
+  const status = Number(error?.status)
+  return status >= 400 && status < 500 && status !== 408 && status !== 429
+}
+
 /**
  * El único punto desde el que se sube lo que quedó sin conexión.
  *
@@ -22,13 +38,19 @@ function avisar() {
  *
  * Si se corta la red a mitad se deja de subir todo — lo que sigue tampoco
  * podría entrar, y seguir intentando son pantallas de 30 segundos de espera.
- * Si el servidor rechaza una operación en particular (400), esa queda encolada
- * para mirarla y se sigue con la que viene.
+ * Si el servidor rechaza una operación en particular (400/403/422), esa queda
+ * encolada con el motivo a la vista y se sigue con la que viene: reintentarla
+ * sola cada 60 s no la arregla y llenaba la consola de errores.
  */
 export function useOfflineSync() {
-  async function sincronizarPendientes() {
+  /**
+   * `forzar` reintenta también lo que el servidor ya rechazó. El refresco
+   * automático lo deja quieto (no tiene sentido martillar con lo mismo), y el
+   * botón "Sincronizar ahora" fuerza un intento nuevo después de corregir algo.
+   */
+  async function sincronizarPendientes({ forzar = false } = {}) {
     if (subiendo || typeof navigator === 'undefined' || !navigator.onLine) {
-      return { subidas: 0, fallidas: 0 }
+      return { subidas: 0, fallidas: 0, errores: [] }
     }
     subiendo = true
     try {
@@ -39,12 +61,12 @@ export function useOfflineSync() {
 
       const eventos = [
         ...ventas.pendingSales.value
-          .filter((s) => !s.synced)
+          .filter((s) => !s.synced && (forzar || !s.ultimoError))
           .map((s) => ({ cuando: s.createdAt, tipo: 'venta', id: s.id, venta: s })),
         ...caja.pendientes().map((op) => ({ cuando: op.createdAt, tipo: 'caja', id: op.id, op })),
       ].sort((a, b) => (a.cuando < b.cuando ? -1 : a.cuando > b.cuando ? 1 : 0))
 
-      if (eventos.length === 0) return { subidas: 0, fallidas: 0 }
+      if (eventos.length === 0) return { subidas: 0, fallidas: 0, errores: [] }
 
       // El estado real de la caja sólo se pide si hay operaciones de caja:
       // con ventas nomás no hace falta y salir a preguntar es un pedido más.
@@ -55,7 +77,7 @@ export function useOfflineSync() {
         } catch {
           // Sin eso no se puede saber qué aplicar dos veces: no se sube nada y
           // se reintenta en el próximo intento. Nunca se sube "a ver qué pasa".
-          return { subidas: 0, fallidas: 0 }
+          return { subidas: 0, fallidas: 0, errores: [] }
         }
       }
 
@@ -63,6 +85,7 @@ export function useOfflineSync() {
       let fallidas = 0
       let cortada = false
       let huboOperacionDeCaja = false
+      const errores = []
 
       for (const ev of eventos) {
         if (cortada) break
@@ -78,7 +101,11 @@ export function useOfflineSync() {
             }
           } catch (e) {
             fallidas++
-            if (esErrorDeRed(e)) cortada = true
+            if (esErrorDeRed(e)) {
+              cortada = true
+            } else {
+              errores.push({ tipo: 'caja', mensaje: motivoDeRechazo(e) })
+            }
           }
         } else {
           try {
@@ -87,7 +114,13 @@ export function useOfflineSync() {
             subidas++
           } catch (e) {
             fallidas++
-            if (esErrorDeRed(e)) cortada = true
+            if (esErrorDeRed(e)) {
+              cortada = true
+            } else {
+              const mensaje = motivoDeRechazo(e)
+              if (esRechazoPermanente(e)) ventas.marcarRechazada(ev.id, mensaje)
+              errores.push({ tipo: 'venta', mensaje })
+            }
           }
         }
       }
@@ -96,7 +129,7 @@ export function useOfflineSync() {
       // que dejar de mostrar lo que valía cuando estaba sin conexión.
       if (huboOperacionDeCaja) await useCajaStore().fetchEstado()
 
-      return { subidas, fallidas }
+      return { subidas, fallidas, errores }
     } finally {
       subiendo = false
       avisar()

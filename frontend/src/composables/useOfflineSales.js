@@ -25,6 +25,67 @@ export function totalDeVenta(data) {
   return Math.max(0, total - (Number(data.descuento) || 0))
 }
 
+// Los productos que no estaban en el catálogo (alta manual o traídos de una
+// fuente externa) se agregan al carrito con `Date.now() + Math.random()` como
+// id porque el servidor todavía no los conoce. Ese número tiene decimales, así
+// que el backend lo rechaza con 422 ("Input should be a valid integer") y la
+// venta quedaba reintentándose para siempre. Los ids reales son enteros.
+export function esIdTemporal(productoId) {
+  if (productoId === null || productoId === undefined || productoId === '') return true
+  return !Number.isInteger(Number(productoId))
+}
+
+function numero(valor) {
+  if (valor === null || valor === undefined || valor === '') return null
+  const n = Number(valor)
+  return Number.isFinite(n) ? n : null
+}
+
+function datosParaCrearProducto(item) {
+  const datos = item.producto_nuevo
+  if (!datos || !datos.nombre) {
+    throw new Error(
+      'La venta incluye un producto cargado sin conexión y no quedó guardado ' +
+      'su nombre: no se puede recrear en el servidor.'
+    )
+  }
+  return {
+    codigo_barras: datos.codigo_barras || null,
+    nombre: datos.nombre,
+    precio_venta: numero(datos.precio_venta) ?? 0,
+    precio_costo: numero(datos.precio_costo) ?? 0,
+    fuente: datos.fuente || 'manual',
+    cantidad_inicial: numero(datos.cantidad_inicial) ?? 0,
+    categoria_id: datos.categoria_id || 1,
+  }
+}
+
+// Arma el body con los tipos que espera el backend. Los 422 no son "sin
+// conexión": si el payload va mal, reintentarlo cada 60 s no lo arregla.
+function itemParaElServidor(item) {
+  const porKilo = Boolean(item.por_kilo)
+  let cantidad = numero(item.cantidad)
+  // En los productos por kilo lo que manda es el peso; `cantidad` puede venir
+  // vacío si el cajero tocó el campo. Con 1 alcanza para que el backend use el
+  // peso y el importe, que son los datos reales de la venta.
+  if (!(cantidad > 0) && porKilo) cantidad = 1
+  if (!(cantidad > 0)) throw new Error('El ítem no tiene una cantidad válida.')
+
+  const importe = numero(item.importe)
+  return {
+    producto_id: Number(item.producto_id),
+    cantidad,
+    precio_unitario: numero(item.precio_unitario),
+    oferta_tipo: item.oferta_tipo || null,
+    oferta_valor: numero(item.oferta_valor),
+    oferta_info: item.oferta_info || null,
+    por_kilo: porKilo,
+    peso: porKilo ? numero(item.peso) : null,
+    importe: importe != null && importe > 0 ? importe : null,
+    medio_pago_carga: item.medio_pago_carga || null,
+  }
+}
+
 export function useOfflineSales() {
   function loadPendingSales() {
     try {
@@ -69,6 +130,30 @@ export function useOfflineSales() {
     notificar()
   }
 
+  // Un producto temporal (manual o de una fuente externa) no existe en la base.
+  // Antes de meter el ítem hay que crearlo, igual que hace el POS con red. Si
+  // un intento anterior lo alcanzó a crear, el código ya existe: se busca y se
+  // reusa para no trabar la venta para siempre.
+  async function asegurarProducto(item) {
+    if (!esIdTemporal(item.producto_id)) return
+    const datos = datosParaCrearProducto(item)
+    try {
+      const producto = await api.post('/api/productos', datos)
+      if (!producto || !producto.id) {
+        throw new Error('No se pudo crear el producto del ítem.')
+      }
+      item.producto_id = producto.id
+    } catch (e) {
+      const sePuedeReusar = e?.status === 400 || e?.status === 409
+      const existente = sePuedeReusar && datos.codigo_barras
+        ? await api.post('/api/productos/lookup', { barcode: datos.codigo_barras }).catch(() => null)
+        : null
+      if (!existente || !existente.id) throw e
+      item.producto_id = existente.id
+    }
+    savePendingSales()
+  }
+
   /**
    * Sube una venta a la server: crear, meter los items de a uno, confirmar.
    *
@@ -98,18 +183,8 @@ export function useOfflineSales() {
     const items = sale.data.items || []
     for (let i = sale.itemsEnviados || 0; i < items.length; i++) {
       const item = items[i]
-      await api.post(`/api/ventas/${ventaId}/items`, {
-        producto_id: item.producto_id,
-        cantidad: item.cantidad,
-        precio_unitario: item.precio_unitario,
-        oferta_tipo: item.oferta_tipo || null,
-        oferta_valor: item.oferta_valor || null,
-        oferta_info: item.oferta_info || null,
-        por_kilo: item.por_kilo || false,
-        peso: item.peso || null,
-        importe: item.importe ?? null,
-        medio_pago_carga: item.medio_pago_carga || null,
-      })
+      await asegurarProducto(item)
+      await api.post(`/api/ventas/${ventaId}/items`, itemParaElServidor(item))
       sale.itemsEnviados = i + 1
       savePendingSales()
     }
@@ -121,6 +196,26 @@ export function useOfflineSales() {
       cliente_id: sale.data.cliente_id || undefined,
       comprador_cuit: sale.data.comprador_cuit || undefined,
     })
+  }
+
+  // El servidor rechazó la venta (400/403/422): reintentarla cada minuto no la
+  // arregla y llena la consola. Queda marcada con el motivo para que el aviso
+  // lo muestre y el cajero decida cuándo reintentar.
+  function marcarRechazada(id, mensaje) {
+    const venta = pendingSales.value.find((s) => s.id === id)
+    if (!venta) return
+    venta.ultimoError = mensaje
+    venta.ultimoIntento = new Date().toISOString()
+    savePendingSales()
+  }
+
+  // Una venta que el servidor rechaza y que no se puede reparar (por ejemplo,
+  // un producto manual de una cola vieja que no guardó el nombre) no puede
+  // quedar en el aviso para siempre. Se descarta a mano y con confirmación.
+  function descartar(id) {
+    pendingSales.value = pendingSales.value.filter((s) => s.id !== id)
+    savePendingSales()
+    notificar()
   }
 
   // No avisa: quien sincroniza avisa una sola vez al terminar, para que la
@@ -137,6 +232,8 @@ export function useOfflineSales() {
     addPendingSale,
     subirVenta,
     marcarSubida,
+    marcarRechazada,
+    descartar,
     cargarUnaVez,
   }
 }

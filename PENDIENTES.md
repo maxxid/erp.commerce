@@ -53,6 +53,25 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 
 ## ✅ Completados recientemente
 
+### Venta offline con producto manual: se terminó el 422 silencioso — 26/10/2026
+
+**El reporte**: se estaba cobrando con internet, se cortó la red, el cajero siguió atendiendo y apareció el badge de ventas offline. Al volver la conexión quedó "1 venta sin subir". Al tocar **Sincronizar ahora** no se veía actividad y la consola se llenaba de `POST /api/ventas/859/items 422 (Unprocessable Entity)`.
+
+**Causa**: los productos que no estaban en el catálogo (alta manual `*Nombre*Precio` o traídos de una fuente externa como Open Food Facts) se agregan al carrito con un id temporal `Date.now() + Math.random()`. Ese número **tiene decimales**; el backend lo valida como `int` y responde 422 ("Input should be a valid integer, got a number with a fractional part"). Como el 422 no es un error de red, `useOfflineSync` lo contaba como fallido y lo reintentaba cada 60 s **sin mostrar el motivo**: la venta no avanzaba nunca y nadie sabía por qué.
+
+Lo que se hizo:
+
+- **La cola guarda el producto completo** (`producto_nuevo`) cuando el id es temporal, y `subirVenta` lo crea con `POST /api/productos` **antes** de mandar el ítem. Si un intento anterior ya lo había creado (se cortó entre el alta y el ítem), se busca por código en `/api/productos/lookup` y se reusa: el sync sigue siendo reanudable.
+- **También en el camino con red**: el alta del producto temporal ya no depende de `_pending` ni de tener el producto en memoria. El carrito se persiste en el navegador, así que tras un refresco el producto temporal desaparece de `products` pero el ítem sigue en el carrito: ahora se recrea con los datos del ítem.
+- **El body se normaliza** antes de salir (números, `importe` > 0, `peso`/`cantidad`): un campo vacío o `0` ya no genera un 422.
+- **El rechazo se ve**: la venta queda marcada con `ultimoError`, el aviso muestra el motivo y **Sincronizar ahora** avisa con un toast. El refresco automático deja de reintentar los 4xx permanentes (sí sigue con 5xx, timeout y 429); el botón fuerza el intento.
+- **Los 422 se leen**: `api.js` convierte la lista de FastAPI (`[{loc, msg}]`) en `producto_id: Input should be...` en vez de `[object Object]`.
+- **Un detalle del reporte**: el botón "Sincronizar ahora" no aparecía cuando el catálogo había quedado sin actualizar (`productosStore.sinRed`); ahora está en esa rama también, que es justo cuando hay que reintentar.
+
+Tests: `tests/test_offline_venta_manual.py` (19). Suite: **999 en verde**.
+
+> Nota para el caso ya encolado antes de este fix: esa cola no guardó el nombre del producto temporal, así que si el ítem era manual el sync ahora lo dice con un mensaje claro en vez de reintentar en silencio; hay que volver a cargar esa venta. Las ventas nuevas sí se resuelven solas.
+
 ### Fase G2 — Réplica en vivo de la base con Litestream — 25/10/2026
 
 **Qué es**: el primer escalón de la continuidad (ver `FASE_G_CONTINUIDAD.md`). Litestream va subiendo la base a R2 **en vivo** —cada pocos segundos mientras hay ventas y un snapshot cada 15 minutos aunque no haya—, para que el día que se caiga la principal la secundaria restaure la última foto y siga cobrando.

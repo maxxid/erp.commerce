@@ -226,15 +226,16 @@ class TestUnSoloPuntoDeSubida:
         texto = _leer(SYNC)
 
         assert "if (eventos.some((e) => e.tipo === 'caja'))" in texto
-        assert "eventos.length === 0) return { subidas: 0, fallidas: 0 }" in texto
+        assert "eventos.length === 0) return { subidas: 0, fallidas: 0, errores: [] }" in texto
 
     def test_un_corte_de_red_detiene_todo_la_subida(self):
         texto = _leer(SYNC)
         cuerpo = texto[texto.index("async function sincronizarPendientes("):]
 
         assert "if (cortada) break" in cuerpo
-        assert "if (esErrorDeRed(e)) cortada = true" in cuerpo
-        assert "return { subidas: 0, fallidas: 0 }" in cuerpo, (
+        assert "if (esErrorDeRed(e)) {" in cuerpo
+        assert "cortada = true" in cuerpo
+        assert "return { subidas: 0, fallidas: 0, errores: [] }" in cuerpo, (
             "si ni siquiera se pudo preguntar el estado de la caja, no se sube "
             "nada: nunca se sube 'a ver qué pasa'"
         )

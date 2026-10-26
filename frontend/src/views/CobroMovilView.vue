@@ -12,7 +12,7 @@ import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import { useBarcodeScanner } from '@/composables/useBarcodeScanner'
-import { useOfflineSales } from '@/composables/useOfflineSales'
+import { useOfflineSales, esIdTemporal } from '@/composables/useOfflineSales'
 import { useOfflineSync } from '@/composables/useOfflineSync'
 import { useOfflineCaja } from '@/composables/useOfflineCaja'
 import { useRefrescoPeriodico } from '@/composables/useRefrescoPeriodico'
@@ -650,26 +650,32 @@ async function crearVenta() {
   }
   try {
     for (const item of cart.items) {
+      // El id temporal, no `_pending`: un intento sin red puede haber dejado
+      // el producto marcado como si ya existiera. Los datos salen del ítem
+      // porque el producto temporal puede no estar en `products`.
+      if (!esIdTemporal(item.producto_id)) continue
       const prod = products.value.find(p => p.id === item.producto_id)
-      if (prod && prod._pending) {
-        try {
-          const resp = await api.post('/api/productos', {
-            codigo_barras: prod.codigo_barras,
-            nombre: prod._nombre || prod.nombre,
-            precio_venta: prod._precio || prod.precio_venta,
-            precio_costo: 0, fuente: 'manual',
-            cantidad_inicial: item.cantidad,
-            categoria_id: prod.categoria_id || 1
-          })
-          if (resp && resp.id) {
-            item.producto_id = resp.id
+      const nombre = prod?._nombre || item.nombre || prod?.nombre
+      if (!nombre) continue
+      try {
+        const resp = await api.post('/api/productos', {
+          codigo_barras: prod?.codigo_barras || item.codigo_barras || null,
+          nombre,
+          precio_venta: prod?._precio ?? item.precio_unitario ?? prod?.precio_venta ?? 0,
+          precio_costo: 0, fuente: 'manual',
+          cantidad_inicial: item.cantidad,
+          categoria_id: prod?.categoria_id || 1
+        })
+        if (resp && resp.id) {
+          item.producto_id = resp.id
+          if (prod) {
             prod.id = resp.id
             prod.stock_actual = item.cantidad
             prod._pending = false
           }
-        } catch {
-          // continúa
         }
+      } catch {
+        // continúa
       }
     }
     const venta = await api.post('/api/ventas', { cliente_id: undefined })
@@ -696,16 +702,30 @@ async function crearVenta() {
     // cuando vuelva la red, igual que el POS.
     addPendingSale({
       cliente_id: cart.cliente_id || undefined,
-      items: cart.items.map(item => ({
-        producto_id: item.producto_id,
-        cantidad: item.cantidad,
-        precio_unitario: item._precio_neto || item.precio_unitario,
-        oferta_tipo: item.oferta?.tipo || null,
-        oferta_valor: item.oferta?.valor || null,
-        oferta_info: item.oferta ? `${item.oferta.tipo === 'porcentaje' ? item.oferta.valor + '% OFF' : item.oferta.tipo === 'monto_fijo' ? '$' + item.oferta.valor + ' OFF' : '2x1'}` : null,
-        por_kilo: item.por_kilo || false,
-        peso: item.peso || null,
-      })),
+      items: cart.items.map(item => {
+        const prod = products.value.find(p => p.id === item.producto_id)
+        return {
+          producto_id: item.producto_id,
+          cantidad: item.cantidad,
+          precio_unitario: item._precio_neto || item.precio_unitario,
+          oferta_tipo: item.oferta?.tipo || null,
+          oferta_valor: item.oferta?.valor || null,
+          oferta_info: item.oferta ? `${item.oferta.tipo === 'porcentaje' ? item.oferta.valor + '% OFF' : item.oferta.tipo === 'monto_fijo' ? '$' + item.oferta.valor + ' OFF' : '2x1'}` : null,
+          por_kilo: item.por_kilo || false,
+          peso: item.peso || null,
+          // El producto que se cargó sin conexión se guarda entero para poder
+          // crearlo al sincronizar: su id temporal no existe en la base.
+          producto_nuevo: esIdTemporal(item.producto_id) ? {
+            codigo_barras: item.codigo_barras || prod?.codigo_barras || null,
+            nombre: item.nombre || prod?.nombre || '',
+            precio_venta: item._precio_neto || item.precio_unitario,
+            precio_costo: 0,
+            fuente: 'manual',
+            cantidad_inicial: item.cantidad,
+            categoria_id: prod?.categoria_id || 1,
+          } : null,
+        }
+      }),
       medio_pago: cart.medio_pago,
       efectivo_pagado: 0,
       descuento: cart.descuento || 0,

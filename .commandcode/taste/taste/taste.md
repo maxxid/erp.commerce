@@ -16,7 +16,7 @@
 - Prefiere crear ofertas/promociones desde el reporte de vencimientos del bot con flujo ágil y botones: listar vencimientos y ofrecer botón "Crear oferta" (junto con "Cerrar"); al elegirlo, mostrar listado de productos con lotes por vencer (días y cantidad), elegir producto, luego elegir tipo de oferta (% o importe fijo) y cantidad de unidades con default la del lote más próximo a vencer; mantener la misma secuencia al portarlo a la web. Confidence: 0.9
 - El stock se gestiona por lotes (vencimiento); las funcionalidades de stock y ofertas deben considerar lotes y vencimiento. Confidence: 0.85
 - Primero terminar/completar bien una funcionalidad en Telegram antes de portarla a la versión web. Confidence: 0.9
-
-antes de portarla a la versión web. Confidence: 0.8
+- Los `.md` del repo (contexto, pendientes, guidelines, docs de cada tema) son la fuente de verdad del proyecto: al encarar una tarea, leer primero los relevantes y mantenerlos sincronizados con los cambios de código (sin dejar contradicciones entre documentos ni datos desactualizados). Confidence: 0.7
 - En mensajes del bot de Telegram con parseo HTML, evitar placeholders entre ángulos (<...>) porque Telegram los interpreta como tags; usar paréntesis o texto plano. Confidence: 0.7
+- Las acciones en background (p. ej. "Sincronizar ahora" tras ventas offline) deben dar feedback visible de progreso/resultado en la UI, no quedar en silencio. Confidence: 0.6
 - En el bot de Telegram, preferir la búsqueda por texto (/buscar) sobre comandos que exijan código de barras exacto (p. ej. /stockproducto) para consultar productos, porque tipear el código es propenso a errores; quitar esos comandos redundantes del menú. Confidence: 0.75

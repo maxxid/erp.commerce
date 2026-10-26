@@ -1,22 +1,28 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue'
-import { totalDeVenta } from '@/composables/useOfflineSales'
+import { totalDeVenta, useOfflineSales } from '@/composables/useOfflineSales'
 import { useOfflineSync } from '@/composables/useOfflineSync'
 import { useOfflineCaja } from '@/composables/useOfflineCaja'
 import { useAuthStore } from '@/stores/auth'
 import { useProductosStore } from '@/stores/productos'
+import { useToastStore } from '@/stores/toasts'
 import { formatCurrency as fc } from '@/composables/useUtils'
 
 const auth = useAuthStore()
 const productosStore = useProductosStore()
+const toast = useToastStore()
 const hayRed = ref(navigator.onLine)
 const pendingSalesCount = ref(0)
 const pendingCajaCount = ref(0)
 const montoSinSubir = ref(0)
+const ventaRechazada = ref(null)
+const confirmandoDescarte = ref(false)
 const sincronizando = ref(false)
+const errorSinSubir = computed(() => ventaRechazada.value?.mensaje || '')
 
 const { sincronizarPendientes } = useOfflineSync()
 const { pendientes: operacionesDeCajaPendientes } = useOfflineCaja()
+const { descartar } = useOfflineSales()
 
 function onOnline() {
   hayRed.value = true
@@ -29,10 +35,44 @@ async function sincronizarAhora() {
   if (sincronizando.value) return
   sincronizando.value = true
   try {
-    await sincronizarPendientes()
+    const { subidas, fallidas, errores } = await sincronizarPendientes({ forzar: true })
+    if (errores.length) {
+      const detalle = errores.length > 1
+        ? `${errores[0].mensaje} (+${errores.length - 1} más)`
+        : errores[0].mensaje
+      toast.error(`No se pudo subir ${fallidas} operación(es): ${detalle}`)
+    } else if (subidas > 0) {
+      toast.success(`${subidas} operación(es) sincronizada(s).`)
+    } else if (fallidas > 0) {
+      toast.warning('Quedaron operaciones sin subir: se reintentan al volver la conexión.')
+    } else {
+      toast.info('No hay nada pendiente para sincronizar.')
+    }
   } finally {
     sincronizando.value = false
   }
+}
+
+// El aviso es una franja fija: el motivo completo va en el `title` y acá se
+// recorta para no tapar la pantalla.
+function recortar(texto, max = 140) {
+  if (!texto) return ''
+  return texto.length > max ? `${texto.slice(0, max - 1)}…` : texto
+}
+
+// Descartar una venta borra su registro local: no se puede hacer de un toque
+// ni con un confirm() del navegador (el proyecto pide confirmación inline).
+function pedirDescarte() {
+  confirmandoDescarte.value = true
+}
+function cancelarDescarte() {
+  confirmandoDescarte.value = false
+}
+function confirmarDescarte() {
+  if (!ventaRechazada.value) return
+  descartar(ventaRechazada.value.id)
+  confirmandoDescarte.value = false
+  toast.info('Venta descartada de la cola. Si todavía no la volviste a cargar, hacelo ahora.')
 }
 
 function loadPendingCount() {
@@ -47,6 +87,14 @@ function loadPendingCount() {
       (suma, s) => suma + (typeof s.total === 'number' ? s.total : totalDeVenta(s.data)),
       0
     )
+    // Si el servidor rechazó una venta, el porqué tiene que estar a la vista:
+    // antes el 422 se reintentaba en silencio y el cajero no sabía qué pasaba.
+    const rechazada = pendientes.find((s) => s.ultimoError)
+    const nueva = rechazada ? { id: rechazada.id, mensaje: rechazada.ultimoError } : null
+    // Si la venta rechazada cambió (se subió o se descartó), la confirmación
+    // inline que estaba abierta ya no corresponde.
+    if (nueva?.id !== ventaRechazada.value?.id) confirmandoDescarte.value = false
+    ventaRechazada.value = nueva
     // Una apertura o un cierre sin subir también es plata/jornada en el aire,
     // y no tiene importe: se cuenta nomás.
     pendingCajaCount.value = operacionesDeCajaPendientes().length
@@ -54,6 +102,7 @@ function loadPendingCount() {
     pendingSalesCount.value = 0
     pendingCajaCount.value = 0
     montoSinSubir.value = 0
+    ventaRechazada.value = null
   }
 }
 
@@ -132,6 +181,24 @@ const antiguedadCatalogo = computed(() => haceCuanto(productosStore.datosDe))
         <span v-if="pendingCajaCount > 0" class="ml-1">
           {{ pendingCajaCount }} movimiento(s) de caja sin subir.
         </span>
+        <span v-if="errorSinSubir" class="ml-1" :title="errorSinSubir">
+          El servidor rechazó una: {{ recortar(errorSinSubir) }}
+          <template v-if="confirmandoDescarte">
+            ¿Descartar? Se borra de la cola y no se registra.
+            <button type="button" class="ml-1 underline font-semibold disabled:opacity-50" :disabled="sincronizando" @click="confirmarDescarte">Sí, descartar</button>
+            <button type="button" class="ml-1 underline" @click="cancelarDescarte">No</button>
+          </template>
+          <button v-else type="button" class="ml-1 underline disabled:opacity-50" :disabled="sincronizando" @click="pedirDescarte">Descartar</button>
+        </span>
+        <button
+          v-if="pendingSalesCount > 0 || pendingCajaCount > 0"
+          type="button"
+          class="ml-1.5 underline underline-offset-2 font-semibold hover:opacity-80 disabled:opacity-50"
+          :disabled="sincronizando"
+          @click="sincronizarAhora"
+        >
+          {{ sincronizando ? 'Sincronizando…' : 'Sincronizar ahora' }}
+        </button>
       </template>
       <template v-else-if="pendingSalesCount > 0 || pendingCajaCount > 0">
         <i class="fa-solid fa-clock-rotate-left mr-1.5"></i>
@@ -140,6 +207,15 @@ const antiguedadCatalogo = computed(() => haceCuanto(productosStore.datosDe))
         </span>
         <span v-else>
           {{ pendingCajaCount }} movimiento(s) de caja sin subir.
+        </span>
+        <span v-if="errorSinSubir" class="ml-1" :title="errorSinSubir">
+          El servidor rechazó una: {{ recortar(errorSinSubir) }}
+          <template v-if="confirmandoDescarte">
+            ¿Descartar? Se borra de la cola y no se registra.
+            <button type="button" class="ml-1 underline font-semibold disabled:opacity-50" :disabled="sincronizando" @click="confirmarDescarte">Sí, descartar</button>
+            <button type="button" class="ml-1 underline" @click="cancelarDescarte">No</button>
+          </template>
+          <button v-else type="button" class="ml-1 underline disabled:opacity-50" :disabled="sincronizando" @click="pedirDescarte">Descartar</button>
         </span>
         <button
           type="button"
