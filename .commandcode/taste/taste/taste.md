@@ -27,3 +27,6 @@
 - En el bot de Telegram, preferir la búsqueda por texto (/buscar) sobre comandos que exijan código de barras exacto (p. ej. /stockproducto) para consultar productos, porque tipear el código es propenso a errores; quitar esos comandos redundantes del menú. Confidence: 0.75
 - En el ERP, cuando el menú lateral está minimizado, al pasar el cursor por encima debe desplegarse automáticamente mostrando los títulos (hover-expand), para no tener que adivinar qué representa cada icono. Confidence: 0.85
 - La personalización del menú lateral debe poder hacerse desde Ajustes; inicialmente como configuración general para todos los usuarios, y debe permitir reordenar elementos, agregar/quitar/mover separadores y subtítulos (con texto editable), además de links. Confidence: 0.85
+- Para exportaciones (p. ej. ventas), el usuario prefiere CSV para uso personal, pero prioriza Excel (.xlsx) bien presentado para la mayoría de usuarios, con orientación comercial. Confidence: 0.9
+- Prefiere usar IA para parsear texto pegado de tickets/facturas de proveedor y prellenar la carga de artículos en compras, manteniendo revisión manual antes de guardar. Confidence: 0.8
+- En tickets de proveedor, el precio unitario extraído se trata como sugerido/editable porque los descuentos pueden venir como ítem separado. Confidence: 0.75

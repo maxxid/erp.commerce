@@ -17,6 +17,7 @@ from app.models.usuario import Usuario
 from app.schemas.common import RespuestaData
 from app.services import auditoria_service, config_service, planes_service
 from app.services.ia import registro
+from app.services import ticket_proveedor_service as ticket_servicio
 
 router = APIRouter(prefix="/api/ia", tags=["IA"])
 
@@ -28,6 +29,10 @@ class IAConfigUpdate(BaseModel):
     base_url: str | None = None
     modelo: str | None = None
     limite_mes: int | None = None
+
+
+class ParsearTicketRequest(BaseModel):
+    texto: str
 
 
 def _snapshot(db: Session) -> dict:
@@ -78,3 +83,48 @@ def probar_conexion(
     """Ping real contra el proveedor. 402 si el plan no incluye IA."""
     resultado = registro.probar(db)
     return RespuestaData(data=resultado, message=resultado["detalle"])
+
+
+@router.post("/parsear-ticket", response_model=RespuestaData)
+def parsear_ticket(
+    data: ParsearTicketRequest,
+    db: Session = Depends(get_db),
+    _user: Usuario = Depends(require_role("admin", "encargado", "repositor")),
+    _plan: Usuario = Depends(requiere_feature("ia")),
+):
+    """Parsea un ticket de proveedor con IA y devuelve los artículos detectados."""
+    from app.services.ia.proveedor import ErrorProveedor, IADeshabilitada, LimiteAgotado
+
+    texto = (data.texto or "").strip()
+    if not texto:
+        raise HTTPException(status_code=400, detail="El texto del ticket está vacío")
+
+    try:
+        respuesta = registro.completar(
+            db,
+            sistema=ticket_servicio.SISTEMA_IA,
+            usuario=ticket_servicio.prompt_ia(texto),
+            como_json=True,
+            max_tokens=2048,
+            temperatura=0.0,
+        )
+    except IADeshabilitada as err:
+        raise HTTPException(status_code=402, detail=str(err))
+    except LimiteAgotado as err:
+        raise HTTPException(status_code=409, detail=str(err))
+    except ErrorProveedor as err:
+        raise HTTPException(status_code=502, detail=f"El proveedor de IA falló: {err}")
+
+    try:
+        resultado = ticket_servicio.interpretar_ia(respuesta.texto)
+    except ValueError as err:
+        raise HTTPException(status_code=502, detail=f"Respuesta ilegible de la IA: {err}")
+
+    return RespuestaData(
+        data={
+            "items": resultado["items"],
+            "no_reconocidos": resultado["no_reconocidos"],
+            "tokens_out": respuesta.tokens_out or 0,
+        },
+        message=f"{len(resultado['items'])} artículo(s) detectado(s)",
+    )

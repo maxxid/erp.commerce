@@ -137,6 +137,42 @@
         </div>
       </div>
 
+      <!-- Pegar ticket del proveedor -->
+      <div class="mt-3 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+        <button
+          type="button"
+          class="w-full flex items-center justify-between px-3 py-2 bg-slate-50 dark:bg-slate-800/50 text-sm font-medium text-slate-700 dark:text-slate-200"
+          @click="ticketOpen = !ticketOpen"
+        >
+          <span><i class="fa-solid fa-receipt mr-2 text-brand-600"></i>Pegar ticket del proveedor (IA)</span>
+          <i :class="['fa-solid fa-chevron-down text-xs transition-transform', ticketOpen ? 'rotate-180' : '']"></i>
+        </button>
+        <div v-if="ticketOpen" class="p-3 space-y-2">
+          <textarea
+            v-model="ticketTexto"
+            rows="6"
+            class="w-full text-xs font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
+            placeholder="Pegá acá el texto del ticket del proveedor..."
+          ></textarea>
+          <div class="flex items-center gap-2">
+            <BaseButton variant="primary" size="sm" :loading="ticketParsing" @click="parsearTicket">
+              <i :class="ticketParsing ? 'fa-solid fa-circle-notch fa-spin' : 'fa-solid fa-wand-magic-sparkles'"></i>
+              {{ ticketParsing ? 'Analizando...' : 'Analizar con IA' }}
+            </BaseButton>
+            <p class="text-[11px] text-slate-400">Los artículos se agregan a la lista de abajo para revisar.</p>
+          </div>
+          <div v-if="ticketNoReconocidos.length" class="mt-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-2 space-y-1">
+            <p class="text-xs font-semibold text-amber-700 dark:text-amber-300">
+              <i class="fa-solid fa-triangle-exclamation mr-1"></i>
+              Líneas no reconocidas (cargalas a mano):
+            </p>
+            <ul class="text-xs text-amber-700 dark:text-amber-300 list-disc list-inside space-y-0.5">
+              <li v-for="(l, i) in ticketNoReconocidos" :key="i">{{ l }}</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
       <!-- Barra de búsqueda + escáner -->
       <div class="relative mt-4">
         <div class="flex gap-2">
@@ -723,6 +759,60 @@ const nuevaCompra = reactive({
   items: [],
 })
 const errorProveedor = ref('')
+
+// --- Pegar ticket de proveedor y parsear con IA ---
+const ticketOpen = ref(false)
+const ticketTexto = ref('')
+const ticketParsing = ref(false)
+const ticketNoReconocidos = ref([])
+
+async function parsearTicket() {
+  const texto = ticketTexto.value.trim()
+  if (!texto) {
+    toast.warning('Pegá el texto del ticket primero')
+    return
+  }
+  ticketParsing.value = true
+  ticketNoReconocidos.value = []
+  try {
+    const res = await api.post('/api/ia/parsear-ticket', { texto })
+    const items = res?.items || res?.data?.items || []
+    const noRec = res?.no_reconocidos || res?.data?.no_reconocidos || []
+    ticketNoReconocidos.value = noRec
+    let agregados = 0
+    for (const it of items) {
+      const existente = nuevaCompra.items.find(
+        (x) => it.codigo_barras && x.codigo_barras === it.codigo_barras
+      )
+      if (existente) {
+        existente.cantidad = it.cantidad || existente.cantidad
+        existente.precio = it.precio_unitario || existente.precio
+      } else {
+        const prod = productosCatalogo.value.find(
+          (p) => it.codigo_barras && p.codigo_barras === it.codigo_barras
+        )
+        if (prod) {
+          agregarItemDesdeProducto(prod)
+          const ultimo = nuevaCompra.items[nuevaCompra.items.length - 1]
+          if (ultimo) {
+            ultimo.cantidad = it.cantidad || ultimo.cantidad
+            ultimo.precio = it.precio_unitario || ultimo.precio
+          }
+        } else {
+          const item = _nuevoItem(it.nombre || '', it.codigo_barras || '', it.cantidad || 1, it.precio_unitario || 0)
+          nuevaCompra.items.push(item)
+        }
+      }
+      agregados++
+    }
+    if (agregados) toast.success(`${agregados} artículo(s) detectado(s)`)
+    else toast.info('No se detectaron artículos')
+  } catch (e) {
+    toast.error(e?.response?.data?.detail || e?.message || 'No se pudo analizar el ticket')
+  } finally {
+    ticketParsing.value = false
+  }
+}
 
 // --- Búsqueda de productos ---
 const busqueda = ref('')
