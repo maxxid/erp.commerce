@@ -104,7 +104,7 @@ def parsear_ticket(
             db,
             sistema=ticket_servicio.SISTEMA_IA,
             usuario=ticket_servicio.prompt_ia(texto),
-            como_json=True,
+            como_json=False,
             max_tokens=2048,
             temperatura=0.0,
         )

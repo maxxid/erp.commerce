@@ -45,11 +45,17 @@ Reglas:
 - Si una línea está cortada o es ambigua y no se puede interpretar como un
   artículo, agregá su texto original a no_reconocidos. No la inventes.
 - No inventes artículos que no estén en el texto.
+
+Respondé ÚNICAMENTE con el objeto JSON, sin explicaciones, sin markdown, sin
+bloques de código.
 """
 
 
 def prompt_ia(texto: str) -> str:
-    return f"Texto del ticket del proveedor:\n{texto}\n\nExtraé los artículos y devolvé solo el JSON."
+    return (
+        f"Texto del ticket del proveedor:\n{texto}\n\n"
+        "Extraé los artículos y devolvé SOLO el objeto JSON pedido, sin texto adicional."
+    )
 
 
 def interpretar_ia(crudo: str) -> dict:
