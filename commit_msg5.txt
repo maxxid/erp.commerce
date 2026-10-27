@@ -1,0 +1,3 @@
+feat(ventas): exportar a Excel (.xlsx) con openpyxl
+
+Co-authored-by: CommandCodeBot <noreply@commandcode.ai>

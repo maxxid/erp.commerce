@@ -154,6 +154,80 @@ def listar(
     )
 
 
+@router.get("/exportar")
+def exportar_ventas(
+    estado: Optional[str] = Query(None),
+    cliente_id: Optional[int] = Query(None),
+    fecha_desde: Optional[str] = Query(None),
+    fecha_hasta: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """Exporta las ventas del rango a un archivo Excel (.xlsx)."""
+    import io
+    from fastapi.responses import StreamingResponse
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+
+    desde, hasta = _rango_de_dias(fecha_desde, fecha_hasta)
+    ventas, total = venta_service.listar_ventas(
+        db, estado=estado, cliente_id=cliente_id,
+        desde=desde, hasta=hasta, page=1, page_size=100000,
+    )
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Ventas"
+
+    headers = [
+        "Número", "Fecha", "Cliente", "CUIT comprador", "Medio de pago",
+        "Estado", "Subtotal", "Descuento", "Total", "Items",
+    ]
+    header_fill = PatternFill("solid", fgColor="4F46E5")
+    header_font = Font(bold=True, color="FFFFFF")
+    for col, h in enumerate(headers, start=1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    for row_idx, v in enumerate(ventas, start=2):
+        items_txt = " | ".join(
+            f"{it.producto_nombre} x{it.cantidad} @ {it.precio_unitario}"
+            for it in (v.items or [])
+        )
+        ws.cell(row=row_idx, column=1, value=v.numero)
+        ws.cell(row=row_idx, column=2, value=v.fecha.isoformat() if v.fecha else None)
+        ws.cell(row=row_idx, column=3, value=v.cliente.nombre if v.cliente else "Consumidor Final")
+        ws.cell(row=row_idx, column=4, value=v.comprador_cuit)
+        ws.cell(row=row_idx, column=5, value=v.medio_pago)
+        ws.cell(row=row_idx, column=6, value=v.estado)
+        ws.cell(row=row_idx, column=7, value=v.subtotal)
+        ws.cell(row=row_idx, column=8, value=v.descuento)
+        ws.cell(row=row_idx, column=9, value=v.total)
+        ws.cell(row=row_idx, column=10, value=items_txt)
+
+    # Anchos
+    widths = [14, 20, 24, 14, 16, 12, 12, 12, 12, 60]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    filename = "ventas.xlsx"
+    if fecha_desde or fecha_hasta:
+        filename = f"ventas_{fecha_desde or ''}_{fecha_hasta or ''}.xlsx".replace("__", "_")
+
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.get("/{venta_id}", response_model=RespuestaData)
 def obtener(
     venta_id: int,

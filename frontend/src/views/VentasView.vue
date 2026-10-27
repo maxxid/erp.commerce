@@ -260,6 +260,31 @@ async function syncData() {
   }
 }
 
+const exportando = ref(false)
+async function exportarExcel() {
+  exportando.value = true
+  try {
+    const params = {}
+    if (filtroFecha.value) params.fecha_desde = filtroFecha.value
+    if (filtroFechaHasta.value) params.fecha_hasta = filtroFechaHasta.value
+    if (filtroEstado.value) params.estado = filtroEstado.value
+    const blob = await api.request('GET', '/api/ventas/exportar', null, params, { responseType: 'blob' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `ventas_${filtroFecha.value || 'todas'}_${filtroFechaHasta.value || ''}.xlsx`.replace(/_+$/, '')
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    toast.success('Exportación descargada')
+  } catch (e) {
+    toast.error(e?.message || 'No se pudo exportar')
+  } finally {
+    exportando.value = false
+  }
+}
+
 function toggleRow(id) {
   const idx = expandedRows.value.indexOf(id)
   if (idx >= 0) {
@@ -362,6 +387,10 @@ async function executeConfirm() {
         <BaseButton variant="secondary" size="sm" :loading="syncing" @click="syncData">
           <i :class="syncing ? 'fa-solid fa-circle-notch fa-spin' : 'fa-solid fa-arrows-rotate'"></i>
           {{ syncing ? 'Sincronizando...' : 'Sincronizar' }}
+        </BaseButton>
+        <BaseButton variant="primary" size="sm" :loading="exportando" @click="exportarExcel">
+          <i :class="exportando ? 'fa-solid fa-circle-notch fa-spin' : 'fa-solid fa-file-excel'"></i>
+          {{ exportando ? 'Exportando...' : 'Exportar Excel' }}
         </BaseButton>
         <BaseButton v-if="hasActiveFilters" variant="ghost" size="sm" @click="clearFilters">
           <i class="fa-solid fa-times mr-1"></i> Limpiar Filtros
