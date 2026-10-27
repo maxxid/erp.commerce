@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useToastStore } from '@/stores/toasts'
 import { useProductosStore } from '@/stores/productos'
 import api from '@/services/api'
