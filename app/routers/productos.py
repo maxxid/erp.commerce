@@ -587,31 +587,78 @@ def _integridad_a_409(db: Session, e: IntegrityError, codigo_barras: Optional[st
     )
 
 
+def _alta_producto(
+    db: Session,
+    data: ProductoCreate,
+    user: Usuario,
+    *,
+    tipo_evento: str,
+    forzar_fuente_manual: bool = False,
+) -> Producto:
+    """Alta de producto compartida por la pantalla de Productos y el POS.
+
+    Sólo un producto **activo** puede bloquear el alta. Si el código lo tiene
+    un borrado, `crear_producto` le cambia el código al borrado y el nuevo
+    entra con el real (ver `liberar_codigo_de_borrados`).
+    """
+    payload = data.model_dump()
+    if forzar_fuente_manual:
+        payload["fuente"] = "manual"
+    codigo = payload.get("codigo_barras")
+
+    existente = producto_service.obtener_por_barcode(db, codigo)
+    if existente:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Ya existe un producto activo con el código {codigo}: "
+                f"{existente.nombre}. Buscalo en la lista para editarlo."
+            ),
+        )
+    try:
+        producto = producto_service.crear_producto(db, payload)
+    except IntegrityError as e:
+        raise _integridad_a_409(db, e, codigo)
+    auditoria_service.registrar(db, user.id, tipo_evento, None, None, {
+        "producto_id": producto.id,
+        "nombre": producto.nombre,
+        "precio_venta": producto.precio_venta,
+        "codigo_barras": producto.codigo_barras,
+        "rol": user.rol,
+    })
+    return producto
+
+
 @router.post("", response_model=RespuestaData[ProductoOut])
 def crear(
     data: ProductoCreate,
     db: Session = Depends(get_db),
     user: Usuario = Depends(require_role("admin", "encargado")),
 ):
-    """Crea un producto manualmente."""
-    # Sólo un producto **activo** puede bloquear el alta. Si el código lo tiene
-    # un borrado, `crear_producto` le cambia el código al borrado y el nuevo
-    # entra con el real (ver `liberar_codigo_de_borrados`).
-    existente = producto_service.obtener_por_barcode(db, data.codigo_barras)
-    if existente:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Ya existe un producto activo con el código {data.codigo_barras}: "
-                f"{existente.nombre}. Buscalo en la lista para editarlo."
-            ),
-        )
-    try:
-        producto = producto_service.crear_producto(db, data.model_dump())
-    except IntegrityError as e:
-        raise _integridad_a_409(db, e, data.codigo_barras)
-    auditoria_service.registrar(db, user.id, "producto_creado", None, None,
-                               {"producto_id": producto.id, "nombre": producto.nombre, "precio_venta": producto.precio_venta})
+    """Crea un producto manualmente desde la pantalla de Productos."""
+    producto = _alta_producto(db, data, user, tipo_evento="producto_creado")
+    return RespuestaData(data=producto, message="Producto creado")
+
+
+@router.post("/pos", response_model=RespuestaData[ProductoOut])
+def crear_desde_pos(
+    data: ProductoCreate,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "encargado", "cajero")),
+):
+    """Alta rápida desde el POS o Cobro Móvil.
+
+    El cajero puede vender un producto que no está en el catálogo sin esperar
+    al encargado. Queda con `fuente='manual'` y, si lo creó un cajero, como
+    evento **pendiente** en Auditoría: puede ser una venta real o una carga
+    para tapar un faltante. El alta general (`POST /api/productos`) sigue
+    reservada a admin/encargado.
+    """
+    producto = _alta_producto(
+        db, data, user,
+        tipo_evento="producto_manual_creado",
+        forzar_fuente_manual=True,
+    )
     return RespuestaData(data=producto, message="Producto creado")
 
 

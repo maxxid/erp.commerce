@@ -58,6 +58,63 @@ def actualizar_ajuste(
     return RespuestaData(data={"clave": data.clave, "valor": data.valor}, message=f"Configuración '{data.clave}' actualizada")
 
 
+class SidebarBlock(BaseModel):
+    type: str  # 'link' | 'separator' | 'subtitle'
+    to: str | None = None
+    text: str | None = None
+
+
+class SidebarConfigRequest(BaseModel):
+    blocks: list[dict]
+
+
+@router.get("/sidebar", response_model=RespuestaData)
+def get_sidebar_config(
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """Configuración del menú lateral (orden, separadores, subtítulos).
+
+    La lee cualquier usuario autenticado para renderizar el sidebar. Si no hay
+    configuración guardada, devuelve `blocks: null` y el frontend usa el orden
+    por defecto.
+    """
+    import json
+    val = get_config(db, "sidebar_config")
+    blocks = None
+    if val:
+        try:
+            blocks = json.loads(val)
+        except (ValueError, TypeError):
+            blocks = None
+    return RespuestaData(data={"blocks": blocks})
+
+
+@router.put("/sidebar", response_model=RespuestaData)
+def set_sidebar_config(
+    data: SidebarConfigRequest,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin")),
+):
+    """Actualiza la configuración del menú lateral. Solo admin."""
+    import json
+    # Validar tipos básicos
+    clean = []
+    for b in data.blocks or []:
+        t = b.get("type")
+        if t not in ("link", "separator", "subtitle"):
+            continue
+        if t == "link" and not b.get("to"):
+            continue
+        if t == "subtitle":
+            b = {"type": "subtitle", "text": (b.get("text") or "").strip()[:60]}
+        else:
+            b = {k: v for k, v in b.items() if k in ("type", "to")}
+        clean.append(b)
+    set_config(db, "sidebar_config", json.dumps(clean), "Configuración del menú lateral")
+    return RespuestaData(data={"blocks": clean}, message="Menú lateral actualizado")
+
+
 class PosConfigRequest(BaseModel):
     showStatsPanel: bool = True
     productViewMode: str = "grilla"

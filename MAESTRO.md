@@ -365,7 +365,7 @@ El store normaliza lo que lee: un `items` que no es array, un `total` no numéri
 4. Sí → abre QuickCreateModal con código pre-cargado (si el texto son 8+ dígitos)
 5. En el modal: botón 🔍 busca en fuentes externas (deshabilita Nombre/Marca mientras busca)
 6. Si código de barras vacío al guardar → se asigna un `GEN-XXXXXXXX` interno, derivado de la hora (`nextGenCode()`, no una secuencia: la grilla del POS viene filtrada y paginada y el número se repetía, chocando con el UNIQUE de `codigo_barras`)
-7. Guardar → POST `/api/productos` → producto se agrega a la grilla local
+7. Guardar → POST `/api/productos/pos` → producto se agrega a la grilla local (el cajero puede; queda auditado como `producto_manual_creado`)
 8. No → cierra diálogo, focus vuelve al buscador
 
 ### Modal: Creación Rápida de Producto (QuickCreateModal)
@@ -377,7 +377,7 @@ El store normaliza lo que lee: un `items` que no es array, un `total` no numéri
 | **Marca** | Input text | Deshabilitado durante búsqueda externa |
 | **Precio Venta** | Input number | Requerido |
 | **Categoría** | BaseSelect | Lista de categorías |
-| **Botón "Crear Producto"** | Primary | `save()` → POST `/api/productos` → emite `created(product)` |
+| **Botón "Crear Producto"** | Primary | `save()` → POST `/api/productos/pos` → emite `created(product)` (real, no un id `Date.now()`) |
 | **Botón "Cancelar"** | Ghost | Cierra modal |
 
 **Origen:** Se abre desde el diálogo "Producto no registrado" al presionar Enter en el buscador de texto sin resultados.
@@ -392,7 +392,7 @@ El store normaliza lo que lee: un `items` que no es array, un `total` no numéri
 - `GET /api/caja/estado` — estado caja
 - `GET /api/ventas?page_size=5` — últimas transacciones
 - `POST /api/productos/lookup` — búsqueda externa de código
-- `POST /api/productos` — crear producto manual
+- `POST /api/productos/pos` — crear producto manual desde el POS (admin/encargado/cajero, auditado)
 - `POST /api/ventas` — crear venta
 - `POST /api/ventas/{id}/items` — agregar item
 - `PUT /api/ventas/{id}/confirmar` — confirmar venta

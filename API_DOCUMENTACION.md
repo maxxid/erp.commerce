@@ -186,6 +186,16 @@ Response (400):
   { "detail": "Ya existe un producto con código 7790000000001" }
 
 
+3.3b POST /api/productos/pos
+────────────────────────────
+Alta rápida desde el POS o Cobro Móvil. Requiere rol: admin, encargado o cajero.
+Es el mismo body que 3.3, pero fuerza `fuente="manual"` y registra siempre un
+evento de auditoría `producto_manual_creado` con el nombre, código, precio y rol
+de quien lo creó. Si lo creó un cajero, el evento queda en estado `sospechoso`
+(pendiente en la pestaña Auditoría); si lo creó el dueño o un encargado, queda
+`normal`. La pantalla de Productos sigue usando 3.3 (admin/encargado).
+
+
 3.4 PUT /api/productos/{id}
 ────────────────────────────
 Actualiza un producto. Requiere rol: admin, encargado.

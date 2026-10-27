@@ -20,43 +20,103 @@ const emit = defineEmits(['navigate', 'toggle-collapse', 'close-mobile'])
 const showHelp = ref(false)
 const collapsed = ref(localStorage.getItem('apex-sidebar-collapsed') === 'true')
 const isMobile = ref(false)
-const showCollapsed = computed(() => collapsed.value && !isMobile.value)
+const hovered = ref(false)
+const showCollapsed = computed(() => collapsed.value && !isMobile.value && !hovered.value)
 const isDark = ref(document.documentElement.classList.contains('dark'))
 const pendientesCount = ref(0)
 const defasadosCount = ref(0)
 
-const mainLinks = [
-  { to: '/dashboard', icon: 'fa-chart-pie', label: 'Dashboard' },
-  { to: '/pos', icon: 'fa-cash-register', label: 'POS de Ventas' },
-  { to: '/products', icon: 'fa-boxes-stacked', label: 'Productos' },
-  { to: '/etiquetas-precios', icon: 'fa-tag', label: 'Etiquetas' },
-  { to: '/caja', icon: 'fa-vault', label: 'Arqueos y Caja', roles: ['admin', 'cajero'] },
-  { to: '/ventas', icon: 'fa-receipt', label: 'Ventas' },
-  { to: '/calendario', icon: 'fa-calendar', label: 'Calendario' },
-  { to: '/compras', icon: 'fa-truck-ramp-box', label: 'Compras / Stock', roles: ['admin', 'encargado', 'repositor'] },
-  { to: '/precios-online', icon: 'fa-globe', label: 'Precios Online', roles: ['admin', 'encargado', 'repositor'] },
-  { to: '/proveedores', icon: 'fa-industry', label: 'Proveedores', roles: ['admin', 'encargado', 'repositor'] },
-  { to: '/clientes', icon: 'fa-address-book', label: 'Clientes y Ctas. Ctes', roles: ['admin', 'encargado'] }
+// Registro de metadatos de cada link del menú (icono, etiqueta, roles, muted).
+// La configuración persistida solo guarda la referencia (path `to`) y el orden;
+// icono/etiqueta/roles se resuelven acá para no duplicar datos.
+const LINK_META = {
+  '/dashboard': { icon: 'fa-chart-pie', label: 'Dashboard' },
+  '/pos': { icon: 'fa-cash-register', label: 'POS de Ventas' },
+  '/products': { icon: 'fa-boxes-stacked', label: 'Productos' },
+  '/etiquetas-precios': { icon: 'fa-tag', label: 'Etiquetas' },
+  '/caja': { icon: 'fa-vault', label: 'Arqueos y Caja', roles: ['admin', 'cajero'] },
+  '/ventas': { icon: 'fa-receipt', label: 'Ventas' },
+  '/calendario': { icon: 'fa-calendar', label: 'Calendario' },
+  '/compras': { icon: 'fa-truck-ramp-box', label: 'Compras / Stock', roles: ['admin', 'encargado', 'repositor'] },
+  '/precios-online': { icon: 'fa-globe', label: 'Precios Online', roles: ['admin', 'encargado', 'repositor'] },
+  '/proveedores': { icon: 'fa-industry', label: 'Proveedores', roles: ['admin', 'encargado', 'repositor'] },
+  '/clientes': { icon: 'fa-address-book', label: 'Clientes y Ctas. Ctes', roles: ['admin', 'encargado'] },
+  '/backups': { icon: 'fa-cloud-arrow-up', label: 'Respaldos', roles: ['admin', 'encargado'], muted: true },
+  '/facturacion': { icon: 'fa-file-invoice', label: 'Facturación', roles: ['admin', 'encargado'], muted: true },
+  '/usuarios': { icon: 'fa-users-gear', label: 'Usuarios', roles: ['admin'], muted: true },
+  '/reportes': { icon: 'fa-chart-line', label: 'Reportes', roles: ['admin', 'encargado'], muted: true },
+  '/recategorizar': { icon: 'fa-wand-magic-sparkles', label: 'Recategorizar', roles: ['admin', 'encargado'], muted: true },
+  '/licencias': { icon: 'fa-key', label: 'Licencias', roles: ['admin'], muted: true },
+  '/ajustes': { icon: 'fa-sliders', label: 'Ajustes', roles: ['admin'], muted: true },
+  '/auditoria': { icon: 'fa-shield-halved', label: 'Auditoría', roles: ['admin'], muted: true },
+  '/cobrar': { icon: 'fa-mobile-screen', label: 'Cobro Móvil' },
+  '/cargar-mercaderia': { icon: 'fa-box-open', label: 'Cargar Mercadería' },
+  '/control-stock': { icon: 'fa-clipboard-list', label: 'Control Stock' },
+  '/sectores': { icon: 'fa-location-dot', label: 'Sectores', roles: ['admin', 'encargado', 'repositor'] },
+}
+
+const DEFAULT_BLOCKS = [
+  { type: 'link', to: '/dashboard' },
+  { type: 'link', to: '/pos' },
+  { type: 'link', to: '/products' },
+  { type: 'link', to: '/etiquetas-precios' },
+  { type: 'link', to: '/caja' },
+  { type: 'link', to: '/ventas' },
+  { type: 'link', to: '/calendario' },
+  { type: 'link', to: '/compras' },
+  { type: 'link', to: '/precios-online' },
+  { type: 'link', to: '/proveedores' },
+  { type: 'link', to: '/clientes' },
+  { type: 'separator' },
+  { type: 'subtitle', text: 'Gestión' },
+  { type: 'link', to: '/backups' },
+  { type: 'link', to: '/facturacion' },
+  { type: 'link', to: '/usuarios' },
+  { type: 'link', to: '/reportes' },
+  { type: 'link', to: '/recategorizar' },
+  { type: 'link', to: '/licencias' },
+  { type: 'link', to: '/ajustes' },
+  { type: 'link', to: '/auditoria' },
+  { type: 'separator' },
+  { type: 'subtitle', text: 'Vista Móvil' },
+  { type: 'link', to: '/cobrar' },
+  { type: 'link', to: '/cargar-mercaderia' },
+  { type: 'link', to: '/control-stock' },
+  { type: 'link', to: '/sectores' },
 ]
 
-const adminLinks = [
-  { to: '/backups', icon: 'fa-cloud-arrow-up', label: 'Respaldos', roles: ['admin', 'encargado'] },
-  { to: '/facturacion', icon: 'fa-file-invoice', label: 'Facturación', roles: ['admin', 'encargado'] },
-  { to: '/usuarios', icon: 'fa-users-gear', label: 'Usuarios', roles: ['admin'] },
-  { to: '/reportes', icon: 'fa-chart-line', label: 'Reportes', roles: ['admin', 'encargado'] },
-  { to: '/recategorizar', icon: 'fa-wand-magic-sparkles', label: 'Recategorizar', roles: ['admin', 'encargado'] },
-  { to: '/licencias', icon: 'fa-key', label: 'Licencias', roles: ['admin'] },
-  { to: '/ajustes', icon: 'fa-sliders', label: 'Ajustes', roles: ['admin'] },
-  { to: '/auditoria', icon: 'fa-shield-halved', label: 'Auditoría', roles: ['admin'] }
-]
+const blocks = ref(null) // null => usar DEFAULT_BLOCKS
+const loaded = ref(false)
+
+async function loadSidebarConfig() {
+  try {
+    const res = await api.get('/api/config/sidebar')
+    const b = res?.blocks ?? res?.data?.blocks
+    blocks.value = Array.isArray(b) && b.length ? b : null
+  } catch {
+    blocks.value = null
+  } finally {
+    loaded.value = true
+  }
+}
+
+const effectiveBlocks = computed(() => blocks.value || DEFAULT_BLOCKS)
 
 function allowed(link) {
   if (!link.roles) return true
-  // Si por algún motivo no hay usuario cargado, se asume el rol con menos
-  // derechos. Antes era 'admin' y, mientras el store se hidrataba, el menú
-  // mostraba toda la sección de administración a cualquiera.
   const r = (auth.currentUser?.rol || 'repositor').toLowerCase()
   return link.roles.includes(r)
+}
+
+function linkMeta(to) {
+  return LINK_META[to] || null
+}
+
+function blockVisible(block) {
+  if (block.type !== 'link') return true
+  const meta = linkMeta(block.to)
+  if (!meta) return false
+  return allowed(meta)
 }
 
 function onNavigate() {
@@ -68,6 +128,15 @@ function toggleCollapse() {
   collapsed.value = !collapsed.value
   localStorage.setItem('apex-sidebar-collapsed', String(collapsed.value))
   emit('toggle-collapse', collapsed.value)
+  hovered.value = false
+}
+
+function onMouseEnter() {
+  if (collapsed.value && !isMobile.value) hovered.value = true
+}
+
+function onMouseLeave() {
+  hovered.value = false
 }
 
 function toggleTheme() {
@@ -104,10 +173,12 @@ let mediaQuery = null
 
 function onMediaChange(e) {
   isMobile.value = e.matches
+  if (isMobile.value) hovered.value = false
 }
 
 onMounted(() => {
   fetchBadgeCounts()
+  loadSidebarConfig()
   mediaQuery = window.matchMedia('(max-width: 767px)')
   isMobile.value = mediaQuery.matches
   mediaQuery.addEventListener('change', onMediaChange)
@@ -136,11 +207,13 @@ function doLogout() {
   ></div>
 
   <aside
-    class="fixed md:relative inset-y-0 left-0 z-50 md:z-20 w-64 shrink-0 bg-slate-900 text-slate-300 flex flex-col border-r border-slate-800 transition-transform duration-300 ease-out-expo"
+    class="fixed md:relative inset-y-0 left-0 z-50 md:z-20 w-64 shrink-0 bg-slate-900 text-slate-300 flex flex-col border-r border-slate-800 transition-all duration-200 ease-out-expo"
     :class="[
       mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
-      showCollapsed ? 'md:w-20' : 'md:w-64'
+      (collapsed && !isMobile) ? (hovered ? 'md:w-64 md:shadow-2xl md:z-30' : 'md:w-20') : 'md:w-64'
     ]"
+    @mouseenter="onMouseEnter"
+    @mouseleave="onMouseLeave"
   >
     <div class="flex-1 flex flex-col min-h-0 overflow-y-auto no-scrollbar">
       <div class="p-4 flex items-center gap-3 border-b border-slate-800 h-16">
@@ -163,80 +236,44 @@ function doLogout() {
       </div>
 
       <nav class="p-3 space-y-1">
-        <template v-for="link in mainLinks" :key="link.to">
-          <SidebarLink
-            v-if="allowed(link)"
-            :to="link.to"
-            :icon="link.icon"
-            :label="link.label"
-            :collapsed="showCollapsed"
-            @navigate="onNavigate"
-          >
-            <template v-if="link.to === '/pos' && !showCollapsed">
-              <BaseBadge
-                :variant="cajaStore.abierta ? 'success' : 'danger'"
-                size="xs"
-                :dot="true"
-                class="ml-auto"
-              >
-                {{ cajaStore.abierta ? 'ABIERTA' : 'CERRADA' }}
-              </BaseBadge>
-            </template>
-            <template v-if="link.to === '/products' && !showCollapsed">
-              <div class="ml-auto flex items-center gap-1">
-                <BaseBadge v-if="defasadosCount > 0" variant="warning" size="xs">{{ defasadosCount }}</BaseBadge>
-                <BaseBadge v-if="pendientesCount > 0" variant="danger" size="xs">{{ pendientesCount }}</BaseBadge>
-              </div>
-            </template>
-          </SidebarLink>
+        <template v-for="(block, idx) in effectiveBlocks" :key="idx">
+          <template v-if="block.type === 'separator'">
+            <hr class="border-slate-800/70 my-2">
+          </template>
+          <template v-else-if="block.type === 'subtitle'">
+            <div v-if="!showCollapsed" class="px-2 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+              {{ block.text }}
+            </div>
+          </template>
+          <template v-else-if="block.type === 'link'">
+            <SidebarLink
+              v-if="blockVisible(block)"
+              :to="block.to"
+              :icon="linkMeta(block.to).icon"
+              :label="linkMeta(block.to).label"
+              :muted="!!linkMeta(block.to).muted"
+              :collapsed="showCollapsed"
+              @navigate="onNavigate"
+            >
+              <template v-if="block.to === '/pos' && !showCollapsed">
+                <BaseBadge
+                  :variant="cajaStore.abierta ? 'success' : 'danger'"
+                  size="xs"
+                  :dot="true"
+                  class="ml-auto"
+                >
+                  {{ cajaStore.abierta ? 'ABIERTA' : 'CERRADA' }}
+                </BaseBadge>
+              </template>
+              <template v-if="block.to === '/products' && !showCollapsed">
+                <div class="ml-auto flex items-center gap-1">
+                  <BaseBadge v-if="defasadosCount > 0" variant="warning" size="xs">{{ defasadosCount }}</BaseBadge>
+                  <BaseBadge v-if="pendientesCount > 0" variant="danger" size="xs">{{ pendientesCount }}</BaseBadge>
+                </div>
+              </template>
+            </SidebarLink>
+          </template>
         </template>
-
-        <hr class="border-slate-800/70 my-2">
-
-        <template v-for="link in adminLinks" :key="link.to">
-          <SidebarLink
-            v-if="allowed(link)"
-            :to="link.to"
-            :icon="link.icon"
-            :label="link.label"
-            muted
-            :collapsed="showCollapsed"
-            @navigate="onNavigate"
-          />
-        </template>
-
-        <hr class="border-slate-800/70 my-2">
-
-        <div v-if="!showCollapsed" class="px-2 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
-          Vista Móvil
-        </div>
-        <nav v-if="!showCollapsed" class="px-2 space-y-1">
-          <SidebarLink
-            to="/cobrar"
-            icon="fa-mobile-screen"
-            label="Cobro Móvil"
-            @navigate="onNavigate"
-          />
-          <SidebarLink
-            to="/cargar-mercaderia"
-            icon="fa-box-open"
-            label="Cargar Mercadería"
-            @navigate="onNavigate"
-          />
-          <SidebarLink
-            to="/control-stock"
-            icon="fa-clipboard-list"
-            label="Control Stock"
-            @navigate="onNavigate"
-          />
-          <SidebarLink
-            v-if="allowed({ roles: ['admin', 'encargado', 'repositor'] })"
-            to="/sectores"
-            icon="fa-location-dot"
-            label="Sectores"
-            @navigate="onNavigate"
-          />
-        </nav>
 
         <hr class="border-slate-800/70 my-2">
 

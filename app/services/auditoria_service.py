@@ -14,7 +14,14 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from app.models.auditoria import Auditoria
-from app.models.venta import Venta
+from app.models.venta import Venta, VentaItem
+
+# Un carrito es "abandonado" a los 10 minutos sin confirmar. Pasada una semana
+# ya no es una alerta para mirar: es ruido de pruebas o de carritos que
+# quedaron colgados. Antes se listaban TODOS los pendientes históricos en cada
+# carga del tab y no se podían descartar (eran virtuales, sin fila en la base).
+ABANDONO_MINUTOS = 10
+ABANDONO_VENTANA_DIAS = 7
 
 
 def registrar(
@@ -56,6 +63,7 @@ def listar(
     tipo: Optional[str] = None,
     page: int = 1,
     page_size: int = 50,
+    estado: Optional[str] = None,
 ) -> tuple:
     """Lista eventos de auditoría con filtros."""
     query = db.query(Auditoria)
@@ -63,6 +71,8 @@ def listar(
         query = query.filter(Auditoria.usuario_id == usuario_id)
     if tipo:
         query = query.filter(Auditoria.tipo == tipo)
+    if estado:
+        query = query.filter(Auditoria.estado == estado)
 
     total = query.count()
     eventos = (
@@ -111,7 +121,15 @@ def _evaluar_riesgo(tipo: str, detalle: Optional[dict] = None, medio_pago: str =
                     "venta_modificada_post_efectivo", "venta_anulada_post_efectivo",
                     "carrito_vaciado", "descuento_100pct"]
 
+    # El alta manual desde el POS depende de quién la hizo: la del cajero se
+    # revisa, la del dueño o encargado es una carga normal.
+    if tipo == "producto_manual_creado":
+        rol = (detalle or {}).get("rol")
+        return "sospechoso" if rol == "cajero" else "normal"
+
     riesgo_sospechoso = [
+        # Un carrito abandonado es una alerta por definición.
+        "carrito_abandonado",
         "item_quitado", "item_modificado", "descuento_manual", "precio_manual",
         "cliente_telefono_editado", "telefono_dueño_editado",
         "venta_cliente_sin_verificar", "venta_empleado_particular",
@@ -162,6 +180,65 @@ def _es_sospechoso(e: Auditoria, detalle: dict) -> bool:
     return True
 
 
+def _registrar_carritos_abandonados(db: Session) -> int:
+    """Convierte los carritos abandonados en eventos reales de auditoría.
+
+    Antes se generaban al vuelo en cada GET con un id `abandon_<venta>`, así
+    que se repetían en cada carga, no respetaban la paginación y el botón de
+    descartar solo cambiaba la fila en memoria: al refrescar volvían. Como no
+    existían en la tabla, tampoco se podía saber quién los había revisado.
+
+    Ahora se registran una sola vez. Sólo se miran los últimos
+    `ABANDONO_VENTANA_DIAS` días: un carrito de hace un mes no es una alerta.
+    """
+    ahora = datetime.now(timezone.utc)
+    limite = ahora - timedelta(minutes=ABANDONO_MINUTOS)
+    ventana = ahora - timedelta(days=ABANDONO_VENTANA_DIAS)
+
+    candidatas = (
+        db.query(Venta)
+        .filter(
+            Venta.estado == "pendiente",
+            Venta.created_at < limite,
+            Venta.created_at >= ventana,
+        )
+        .all()
+    )
+
+    creados = 0
+    for venta in candidatas:
+        items_count = (
+            db.query(VentaItem).filter(VentaItem.venta_id == venta.id).count()
+        )
+        # Un carrito vacío no es una alerta: no hay nada que revisar.
+        if items_count == 0:
+            continue
+        ya_registrado = (
+            db.query(Auditoria.id)
+            .filter(
+                Auditoria.tipo == "carrito_abandonado",
+                Auditoria.venta_id == venta.id,
+            )
+            .first()
+        )
+        if ya_registrado:
+            continue
+        registrar(
+            db,
+            usuario_id=venta.usuario_id,
+            tipo="carrito_abandonado",
+            venta_id=venta.id,
+            venta_numero=venta.numero,
+            detalle={
+                "items": items_count,
+                "subtotal": venta.subtotal,
+                "abandonado_desde": venta.created_at.isoformat() if venta.created_at else "",
+            },
+        )
+        creados += 1
+    return creados
+
+
 def listar_con_carritos_abandonados(
     db: Session,
     usuario_id: Optional[int] = None,
@@ -170,48 +247,17 @@ def listar_con_carritos_abandonados(
     page: int = 1,
     page_size: int = 50,
 ) -> tuple:
-    """Lista eventos de auditoría + detecta carritos abandonados (ventas pendientes sin items o sin confirmar)."""
-    eventos, total = listar(db, usuario_id=usuario_id, tipo=tipo, page=page, page_size=page_size)
-    data = [_evento_to_dict(e) for e in eventos]
-
-    # Si hay filtro de estado, filtrar resultados en memoria
-    if estado:
-        data = [d for d in data if d.get("estado") == estado]
-
-    # Detectar carritos abandonados: ventas en estado "pendiente" hace más de 10 min sin confirmar
-    # (solo si no estamos filtrando por tipo específico)
-    # Solo se registran si tenían al menos 1 item (carritos vacíos se ignoran)
-    if not tipo and not estado:
-        limite = datetime.now(timezone.utc) - timedelta(minutes=10)
-        abandonadas = (
-            db.query(Venta)
-            .filter(Venta.estado == "pendiente", Venta.created_at < limite)
-            .all()
-        )
-        for v in abandonadas:
-            from app.models.venta import VentaItem
-            items_count = db.query(VentaItem).filter(VentaItem.venta_id == v.id).count()
-            if items_count == 0:
-                continue
-            usuario_nombre = v.usuario.nombre if v.usuario else ""
-            data.insert(0, {
-                "id": f"abandon_{v.id}",
-                "usuario_id": v.usuario_id,
-                "usuario_nombre": usuario_nombre,
-                "tipo": "carrito_abandonado",
-                "venta_id": v.id,
-                "venta_numero": v.numero,
-                "detalle": {
-                    "items": items_count,
-                    "subtotal": v.subtotal,
-                    "abandonado_desde": v.created_at.isoformat() if v.created_at else "",
-                },
-                "estado": "sospechoso",
-                "created_at": v.created_at.isoformat() if v.created_at else None,
-            })
-            total += 1
-
-    return data, total
+    """Lista los eventos de auditoría, registrando antes los carritos abandonados."""
+    _registrar_carritos_abandonados(db)
+    eventos, total = listar(
+        db,
+        usuario_id=usuario_id,
+        tipo=tipo,
+        page=page,
+        page_size=page_size,
+        estado=estado,
+    )
+    return [_evento_to_dict(e) for e in eventos], total
 
 
 def cambiar_estado(db: Session, evento_id: int, auditor_id: int, estado: str, nota: Optional[str] = None) -> dict:

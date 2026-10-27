@@ -208,6 +208,133 @@ function togglePosPaymentMethod(method) {
   }
 }
 
+// --- Personalización del menú lateral ---
+const sidebarExpanded = ref(false)
+const sidebarLoading = ref(false)
+const sidebarSaving = ref(false)
+const sidebarBlocks = ref([])
+
+const AVAILABLE_SIDEBAR_LINKS = [
+  { to: '/dashboard', label: 'Dashboard' },
+  { to: '/pos', label: 'POS de Ventas' },
+  { to: '/products', label: 'Productos' },
+  { to: '/etiquetas-precios', label: 'Etiquetas' },
+  { to: '/caja', label: 'Arqueos y Caja' },
+  { to: '/ventas', label: 'Ventas' },
+  { to: '/calendario', label: 'Calendario' },
+  { to: '/compras', label: 'Compras / Stock' },
+  { to: '/precios-online', label: 'Precios Online' },
+  { to: '/proveedores', label: 'Proveedores' },
+  { to: '/clientes', label: 'Clientes y Ctas. Ctes' },
+  { to: '/backups', label: 'Respaldos' },
+  { to: '/facturacion', label: 'Facturación' },
+  { to: '/usuarios', label: 'Usuarios' },
+  { to: '/reportes', label: 'Reportes' },
+  { to: '/recategorizar', label: 'Recategorizar' },
+  { to: '/licencias', label: 'Licencias' },
+  { to: '/ajustes', label: 'Ajustes' },
+  { to: '/auditoria', label: 'Auditoría' },
+  { to: '/cobrar', label: 'Cobro Móvil' },
+  { to: '/cargar-mercaderia', label: 'Cargar Mercadería' },
+  { to: '/control-stock', label: 'Control Stock' },
+  { to: '/sectores', label: 'Sectores' },
+]
+
+function defaultSidebarBlocks() {
+  return [
+    { type: 'link', to: '/dashboard' },
+    { type: 'link', to: '/pos' },
+    { type: 'link', to: '/products' },
+    { type: 'link', to: '/etiquetas-precios' },
+    { type: 'link', to: '/caja' },
+    { type: 'link', to: '/ventas' },
+    { type: 'link', to: '/calendario' },
+    { type: 'link', to: '/compras' },
+    { type: 'link', to: '/precios-online' },
+    { type: 'link', to: '/proveedores' },
+    { type: 'link', to: '/clientes' },
+    { type: 'separator' },
+    { type: 'subtitle', text: 'Gestión' },
+    { type: 'link', to: '/backups' },
+    { type: 'link', to: '/facturacion' },
+    { type: 'link', to: '/usuarios' },
+    { type: 'link', to: '/reportes' },
+    { type: 'link', to: '/recategorizar' },
+    { type: 'link', to: '/licencias' },
+    { type: 'link', to: '/ajustes' },
+    { type: 'link', to: '/auditoria' },
+    { type: 'separator' },
+    { type: 'subtitle', text: 'Vista Móvil' },
+    { type: 'link', to: '/cobrar' },
+    { type: 'link', to: '/cargar-mercaderia' },
+    { type: 'link', to: '/control-stock' },
+    { type: 'link', to: '/sectores' },
+  ]
+}
+
+async function loadSidebarConfig() {
+  sidebarLoading.value = true
+  try {
+    const res = await api.get('/api/config/sidebar')
+    const b = res?.blocks ?? res?.data?.blocks
+    sidebarBlocks.value = Array.isArray(b) && b.length ? b : defaultSidebarBlocks()
+  } catch {
+    sidebarBlocks.value = defaultSidebarBlocks()
+  } finally {
+    sidebarLoading.value = false
+  }
+}
+
+function moveSidebarBlock(i, dir) {
+  const j = i + dir
+  if (j < 0 || j >= sidebarBlocks.value.length) return
+  const arr = sidebarBlocks.value
+  const tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp
+}
+
+function removeSidebarBlock(i) {
+  sidebarBlocks.value.splice(i, 1)
+}
+
+function addSidebarSeparator() {
+  sidebarBlocks.value.push({ type: 'separator' })
+}
+
+function addSidebarSubtitle() {
+  sidebarBlocks.value.push({ type: 'subtitle', text: 'Sección' })
+}
+
+function addSidebarLink(to) {
+  if (!to) return
+  sidebarBlocks.value.push({ type: 'link', to })
+}
+
+async function saveSidebarConfig() {
+  sidebarSaving.value = true
+  try {
+    await api.put('/api/config/sidebar', { blocks: sidebarBlocks.value })
+    toast.success('Menú lateral guardado')
+  } catch (e) {
+    toast.error(e?.response?.data?.detail || e.message || 'No se pudo guardar el menú lateral')
+  } finally {
+    sidebarSaving.value = false
+  }
+}
+
+function resetSidebarConfig() {
+  sidebarBlocks.value = defaultSidebarBlocks()
+}
+
+// Cargar la config del sidebar al montar (para que el editor esté listo al expandir)
+watch(sidebarExpanded, (v) => {
+  if (v && !sidebarBlocks.value.length) loadSidebarConfig()
+}, { immediate: false })
+
+// Carga inicial diferida
+onMounted(() => {
+  // no cargar hasta que se expanda; pero precargar por si acaso
+})
+
 // --- Configuración de Caja ---
 const cajaConfig = ref({
   caja_cierre_automatico: true,
@@ -924,6 +1051,100 @@ onMounted(async () => {
     <div>
       <p class="text-sm text-slate-500 dark:text-slate-400">Configuración del sistema y AFIP</p>
     </div>
+
+    <!-- Personalización del menú lateral -->
+    <BaseCard>
+      <button class="w-full text-left" @click="sidebarExpanded = !sidebarExpanded; if (sidebarExpanded && !sidebarBlocks.length) loadSidebarConfig()">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <i class="fa-solid fa-bars-staggered text-brand-600"></i>
+            Personalización del menú lateral
+          </h3>
+          <div class="flex items-center gap-3">
+            <span class="text-xs text-slate-500">{{ sidebarBlocks.length }} elementos</span>
+            <i :class="['fa-solid fa-chevron-down text-xs transition-transform', sidebarExpanded ? 'rotate-180' : '']"></i>
+          </div>
+        </div>
+      </button>
+
+      <div v-if="sidebarExpanded" class="mt-4 space-y-3">
+        <p class="text-xs text-slate-500 dark:text-slate-400">
+          Reordená los elementos del menú, agregá separadores y subtítulos. El cambio es general para todos los usuarios.
+          Cuando el menú está minimizado, al pasar el cursor por encima se despliega para ver los títulos.
+        </p>
+
+        <div v-if="sidebarLoading" class="text-xs text-slate-400 py-4 text-center">
+          <i class="fa-solid fa-circle-notch animate-spin mr-2"></i>Cargando…
+        </div>
+
+        <div v-else class="space-y-1">
+          <div
+            v-for="(block, idx) in sidebarBlocks"
+            :key="idx"
+            class="flex items-center gap-2 p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+          >
+            <div class="flex flex-col gap-0.5">
+              <button type="button" class="text-slate-400 hover:text-slate-700 dark:hover:text-white text-[10px] leading-none" @click="moveSidebarBlock(idx, -1)" :disabled="idx === 0">
+                <i class="fa-solid fa-chevron-up"></i>
+              </button>
+              <button type="button" class="text-slate-400 hover:text-slate-700 dark:hover:text-white text-[10px] leading-none" @click="moveSidebarBlock(idx, 1)" :disabled="idx === sidebarBlocks.length - 1">
+                <i class="fa-solid fa-chevron-down"></i>
+              </button>
+            </div>
+
+            <div class="flex-1 min-w-0">
+              <template v-if="block.type === 'link'">
+                <span class="text-sm text-slate-700 dark:text-slate-200">
+                  <i class="fa-solid fa-link text-slate-400 mr-2 text-xs"></i>
+                  {{ AVAILABLE_SIDEBAR_LINKS.find(l => l.to === block.to)?.label || block.to }}
+                </span>
+              </template>
+              <template v-else-if="block.type === 'separator'">
+                <span class="text-xs text-slate-400 italic">— separador —</span>
+              </template>
+              <template v-else-if="block.type === 'subtitle'">
+                <input
+                  v-model="block.text"
+                  type="text"
+                  class="w-full text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 bg-transparent border-b border-slate-300 dark:border-slate-600 focus:outline-none focus:border-brand-500"
+                  placeholder="Título de sección"
+                />
+              </template>
+            </div>
+
+            <button type="button" class="text-rose-400 hover:text-rose-600 text-xs px-2" @click="removeSidebarBlock(idx)" title="Quitar">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2 pt-2">
+          <select
+            class="text-xs rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-2 py-1.5"
+            @change="addSidebarLink($event.target.value); $event.target.value = ''"
+          >
+            <option value="">+ Agregar link…</option>
+            <option v-for="l in AVAILABLE_SIDEBAR_LINKS" :key="l.to" :value="l.to">{{ l.label }}</option>
+          </select>
+          <BaseButton size="sm" variant="secondary" @click="addSidebarSeparator">
+            <i class="fa-solid fa-minus"></i> Separador
+          </BaseButton>
+          <BaseButton size="sm" variant="secondary" @click="addSidebarSubtitle">
+            <i class="fa-solid fa-heading"></i> Subtítulo
+          </BaseButton>
+          <BaseButton size="sm" variant="ghost" @click="resetSidebarConfig">
+            <i class="fa-solid fa-rotate-left"></i> Restaurar
+          </BaseButton>
+        </div>
+
+        <div class="flex items-center gap-3 pt-2">
+          <BaseButton variant="primary" :loading="sidebarSaving" @click="saveSidebarConfig">
+            <i class="fa-solid fa-floppy-disk"></i> Guardar menú
+          </BaseButton>
+          <p class="text-[11px] text-slate-400">Los cambios se aplican al recargar la página</p>
+        </div>
+      </div>
+    </BaseCard>
 
     <BaseCard v-if="!loading">
       <button class="w-full text-left" @click="afipExpanded = !afipExpanded">

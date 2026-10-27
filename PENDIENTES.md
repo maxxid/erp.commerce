@@ -53,6 +53,20 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 
 ## ✅ Completados recientemente
 
+### Alta manual para cajeros y carritos abandonados que se descartan — 26/10/2026
+
+**Los dos reportes**: (1) un cajero no podía crear el producto manual que estaba vendiendo; (2) la pestaña Auditoría tenía una cantidad exagerada de "carritos abandonados" viejos y el botón **Descartar** decía que descartaba pero al refrescar volvían.
+
+**Alta manual (1)**: `POST /api/productos` exige admin/encargado, así que el POS le respondía 403 al cajero y la venta quedaba a medias. Se agregó **`POST /api/productos/pos`** (admin/encargado/cajero) que fuerza `fuente='manual'` y **siempre** registra auditoría `producto_manual_creado`: si lo hizo un cajero queda **sospechoso** (pendiente), si lo hizo el dueño o un encargado queda normal. La pantalla de Productos sigue restringida a admin/encargado y la matriz de permisos lo documenta. También se corrigió el modal rápido del POS, que emitía `resp.data` (undefined) y terminaba agregando un producto con un id falso `Date.now()`: la venta de ese producto después daba 400.
+
+**Carritos abandonados (2)**: se generaban al vuelo en cada GET con `id = abandon_<venta>`. No eran filas de la tabla, así que no respetaban la paginación, se repetían en cada carga (55 carritos históricos en producción) y el frontend solo cambiaba la fila en memoria; el PATCH no tenía nada que actualizar. Ahora:
+- Se registran **una sola vez** como eventos reales de `auditoria` (`carrito_abandonado`), con `venta_id` y detalle.
+- Solo se miran los últimos **7 días** (y más de 10 min sin confirmar): los carritos de junio a octubre dejaron de ser alertas.
+- El **Descartar/OK/Fraude** usa el mismo PATCH que cualquier evento y el estado sobrevive al refresco. El filtro por estado ahora se aplica en SQL.
+- En la vista se sacaron los 20 eventos de demo que aparecían cuando la API devolvía vacío, se definió `suspiciousToday` (se usaba en el template y no existía) y el filtro por área ahora mapea los tipos del backend (`venta_confirmada` → Ventas, etc.); antes cualquier filtro daba cero.
+
+Tests: `tests/test_producto_pos_y_auditoria.py` (19). Suite: **1018 en verde**.
+
 ### Venta offline con producto manual: se terminó el 422 silencioso — 26/10/2026
 
 **El reporte**: se estaba cobrando con internet, se cortó la red, el cajero siguió atendiendo y apareció el badge de ventas offline. Al volver la conexión quedó "1 venta sin subir". Al tocar **Sincronizar ahora** no se veía actividad y la consola se llenaba de `POST /api/ventas/859/items 422 (Unprocessable Entity)`.

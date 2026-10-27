@@ -110,7 +110,7 @@ class TestElSyncCreaElProducto:
         cuerpo = texto[texto.index("async function asegurarProducto("):]
 
         assert "if (!esIdTemporal(item.producto_id)) return" in cuerpo
-        assert "api.post('/api/productos', datos)" in cuerpo
+        assert "api.post('/api/productos/pos', datos)" in cuerpo
 
     def test_si_el_intento_anterior_ya_lo_creo_lo_reusa(self):
         """El sync es reanudable: sin esto, el reintento choca con "ya existe"

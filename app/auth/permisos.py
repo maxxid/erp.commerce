@@ -104,6 +104,7 @@ MATRIZ = (
             {"accion": "Ver productos, precios y etiquetas", "roles": ROLES},
             {"accion": "Ver los precios online y el análisis de precios", "roles": ("admin", "encargado", "repositor")},
             {"accion": "Crear y editar productos", "roles": ("admin", "encargado")},
+            {"accion": "Crear un producto manual desde el POS (queda en Auditoría)", "roles": ("admin", "encargado", "cajero")},
             {"accion": "Ajustar el stock y cargar lotes", "roles": ("admin", "encargado")},
             {"accion": "Dar de baja un producto", "roles": ("admin",)},
         ),

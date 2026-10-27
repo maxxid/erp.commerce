@@ -122,7 +122,7 @@ async function save() {
 
   saving.value = true
   try {
-    const resp = await api.post('/api/productos', {
+    const resp = await api.post('/api/productos/pos', {
       codigo_barras: barcode,
       nombre: form.nombre.trim(),
       marca: form.marca?.trim() || '',
@@ -130,7 +130,10 @@ async function save() {
       categoria_id: form.categoria_id
     })
     toast.success('Producto creado')
-    emit('created', resp?.data || { id: Date.now(), codigo_barras: barcode, nombre: form.nombre.trim(), marca: form.marca?.trim() || '', precio_venta: form.precio_venta || 0, categoria_id: form.categoria_id })
+    // `api.post` ya desenvuelve el `data`: sin id real no se emite nada. Antes
+    // se inventaba un `Date.now()` y la venta de ese producto daba 400.
+    if (!resp || !resp.id) throw new Error('El servidor no devolvió el producto creado')
+    emit('created', resp)
     onClose()
   } catch (e) {
     formError.value = e?.response?.data?.detail || e.message || 'Error al guardar el producto'

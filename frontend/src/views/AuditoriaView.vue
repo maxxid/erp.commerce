@@ -155,6 +155,12 @@
                 <div class="text-slate-400 dark:text-slate-500 font-mono-data">{{ formatCurrency(row.total) }}</div>
               </div>
             </template>
+            <template v-else-if="row.event === 'producto_manual_creado'">
+              <div class="space-y-0.5">
+                <div>{{ row.producto }} · <span class="font-mono-data font-semibold">{{ formatCurrency(row.total) }}</span></div>
+                <div class="text-slate-400 dark:text-slate-500">{{ row.codigo_barras }} · creado por {{ row.rol_creador }}</div>
+              </div>
+            </template>
             <template v-else>
               <span class="truncate block" :title="row.description">{{ row.description }}</span>
             </template>
@@ -172,7 +178,6 @@
           <!-- Acciones para eventos sospechosos -->
           <div v-else class="flex items-center gap-1">
             <button
-              v-if="!String(row.id).startsWith('abandon_')"
               type="button"
               :disabled="auditando === row.id"
               class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-800/60 transition disabled:opacity-50"
@@ -191,7 +196,6 @@
               <i class="fa-solid fa-eye-slash text-[8px]"></i>
             </button>
             <button
-              v-if="!String(row.id).startsWith('abandon_')"
               type="button"
               :disabled="auditando === row.id"
               class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-400 hover:bg-orange-200 dark:hover:bg-orange-800/60 transition disabled:opacity-50"
@@ -215,7 +219,7 @@
 import { ref, computed, onUnmounted, onMounted } from 'vue'
 import api from '@/services/api'
 import { useToastStore } from '@/stores/toasts'
-import { formatCurrency, formatDateTime, timeAgo, parseFechaUTC } from '@/composables/useUtils'
+import { formatCurrency, formatDateTime, timeAgo, parseFechaUTC, esHoy } from '@/composables/useUtils'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseBadge from '@/components/ui/BaseBadge.vue'
@@ -223,28 +227,9 @@ import BaseTable from '@/components/ui/BaseTable.vue'
 
 const toast = useToastStore()
 
-const logs = ref([
-  { id: 1, timestamp: '2026-06-22 18:45:12', user: 'admin.sistema', type: 'Ventas', event: 'venta_anulada', action: 'Anulación de ticket', description: 'Ticket #001045 anulado. Motivo: error de carga.', total_anulado: 8500, medio_pago: 'Efectivo', suspicious: false },
-  { id: 2, timestamp: '2026-06-22 17:30:00', user: 'maria.gomez', type: 'Caja', event: 'cierre_caja', action: 'Cierre de caja', description: 'Cierre de caja diario. Balance: $345,200. Diferencia: $0', suspicious: false },
-  { id: 3, timestamp: '2026-06-22 16:15:45', user: 'carlos.lopez', type: 'Compras', event: 'registro_compra', action: 'Registro de compra', description: 'Compra registrada a Frigorífico Las Pampas por $156,800', suspicious: false },
-  { id: 4, timestamp: '2026-06-22 15:40:00', user: 'cliente.anonimo', type: 'Ventas', event: 'carrito_abandonado', action: 'Carrito abandonado', description: 'Carrito con 5 items por $12,300 abandonado sin confirmar', items_count: 5, subtotal: 12300, abandoned_min: 45, suspicious: false },
-  { id: 5, timestamp: '2026-06-22 15:10:22', user: 'cliente.anonimo', type: 'Ventas', event: 'item_quitado', action: 'Item quitado del carrito', description: 'Producto "Aceite girasol 1.5L" quitado del carrito activo', producto: 'Aceite girasol 1.5L', qty: 2, subtotal_change: 3200, suspicious: false },
-  { id: 6, timestamp: '2026-06-22 14:22:10', user: 'admin.sistema', type: 'Productos', event: 'modificacion_precio', action: 'Modificación de precio', description: 'Producto "Leche entera 1L": precio actualizado de $1,050 a $1,134 (+8%)', suspicious: false },
-  { id: 7, timestamp: '2026-06-22 14:00:00', user: 'cliente.anonimo', type: 'Ventas', event: 'carrito_creado', action: 'Carrito creado', description: 'Nuevo carrito iniciado con 1 item', items_count: 1, subtotal: 1200, suspicious: false },
-  { id: 8, timestamp: '2026-06-22 13:30:18', user: 'laura.diaz', type: 'Ventas', event: 'venta_confirmada', action: 'Venta realizada', description: 'Ticket #001098 generado por $23,400. Pago: Efectivo', total: 23400, medio_pago: 'Efectivo', suspicious: false },
-  { id: 9, timestamp: '2026-06-22 12:05:33', user: 'cliente.anonimo', type: 'Ventas', event: 'carrito_abandonado', action: 'Carrito abandonado', description: 'Carrito con 8 items por $18,700 abandonado sin confirmar', items_count: 8, subtotal: 18700, abandoned_min: 120, suspicious: false },
-  { id: 10, timestamp: '2026-06-22 11:30:18', user: 'maria.gomez', type: 'Clientes', event: 'creacion_cliente', action: 'Creación de cliente', description: 'Nuevo cliente creado: Comercio La Amistad (CUIT 30-11223344-5)', suspicious: false },
-  { id: 11, timestamp: '2026-06-22 10:15:00', user: 'admin.sistema', type: 'Caja', event: 'retiro_efectivo', action: 'Retiro de efectivo', description: 'Retiro de caja por $180,000. Concepto: transferencia bancaria', suspicious: false },
-  { id: 12, timestamp: '2026-06-22 09:45:22', user: 'pedro.sanchez', type: 'Productos', event: 'ajuste_stock', action: 'Ajuste de stock', description: 'Stock de "Aceite girasol 1.5L" ajustado de 15 a 45 unidades. Diferencia: +30', suspicious: false },
-  { id: 13, timestamp: '2026-06-22 09:10:00', user: 'cliente.anonimo', type: 'Ventas', event: 'item_quitado', action: 'Item quitado del carrito', description: 'Producto "Yerba mate 1kg" quitado del carrito activo', producto: 'Yerba mate 1kg', qty: 3, subtotal_change: 5700, suspicious: false },
-  { id: 14, timestamp: '2026-06-22 08:05:10', user: 'carlos.lopez', type: 'Caja', event: 'apertura_caja', action: 'Apertura de caja', description: 'Apertura de caja. Monto inicial: $50,000', suspicious: false },
-  { id: 15, timestamp: '2026-06-22 03:12:00', user: 'carlos.lopez', type: 'Ventas', event: 'venta_confirmada', action: 'Venta fuera de horario', description: 'WARN: Ticket #001099 generado a las 03:12 AM por $98,500 desde IP 189.45.x.x — fuera de rango horario habitual', total: 98500, medio_pago: 'Transferencia', suspicious: true },
-  { id: 16, timestamp: '2026-06-21 23:00:00', user: 'admin.sistema', type: 'Sistema', event: 'backup', action: 'Backup manual', description: 'Backup manual generado. Archivo: backup_20260621_2300.zip (128 MB)', suspicious: false },
-  { id: 17, timestamp: '2026-06-21 18:30:00', user: 'laura.diaz', type: 'Ventas', event: 'venta_anulada', action: 'Venta anulada luego ejecutada', description: 'WARN: Ticket #001078 anulado y re-emitido como #001079 con $2,400 menos. Posible manipulación de precio', total_anulado: 2400, medio_pago: 'Tarjeta de débito', suspicious: true },
-  { id: 18, timestamp: '2026-06-21 15:45:00', user: 'maria.gomez', type: 'Clientes', event: 'modificacion_limite', action: 'Modificación de límite', description: 'Límite de crédito de "Carnicería Don Pedro" aumentado de $300,000 a $500,000', suspicious: false },
-  { id: 19, timestamp: '2026-06-21 12:30:00', user: 'cliente.anonimo', type: 'Ventas', event: 'carrito_abandonado', action: 'Carrito abandonado', description: 'Carrito con 12 items por $34,500 abandonado sin confirmar', items_count: 12, subtotal: 34500, abandoned_min: 180, suspicious: false },
-  { id: 20, timestamp: '2026-06-21 10:00:00', user: 'admin.sistema', type: 'Sistema', event: 'actualizacion_licencia', action: 'Actualización de licencia', description: 'Licencia LIC-A7B3-9F2C-4D8E renovada para Supermercado La Esquina', suspicious: false },
-])
+// Sin datos mock: si la API falla o no hay eventos, la tabla queda vacía. Antes
+// el fallback mostraba 20 movimientos de demo que no existían en la base.
+const logs = ref([])
 
 const activeFilter = ref('todo')
 const autoRefresh = ref(false)
@@ -260,7 +245,21 @@ const filters = [
   { key: 'Compras', label: 'Compras' },
   { key: 'Productos', label: 'Productos' },
   { key: 'Clientes', label: 'Clientes' },
+  { key: 'Sistema', label: 'Sistema' },
 ]
+
+// El backend manda tipos (`venta_confirmada`, `producto_creado`, ...) y el
+// filtro de arriba habla de áreas. Sin este mapeo, cualquier filtro daba cero:
+// compara `venta_confirmada === 'Ventas'`.
+function categoriaDe(tipo) {
+  if (!tipo) return 'Sistema'
+  if (/^(venta|carrito|item_|descuento|medio_pago|cliente_telefono)/.test(tipo)) return 'Ventas'
+  if (/(caja|retiro|egreso|pago_proveedor)/.test(tipo)) return 'Caja'
+  if (/^(producto|revision_stock|recategorizacion|etiquetas|lote)/.test(tipo)) return 'Productos'
+  if (/^cliente/.test(tipo)) return 'Clientes'
+  if (/^(compra|proveedor)/.test(tipo)) return 'Compras'
+  return 'Sistema'
+}
 
 const stateFilters = [
   { key: 'todo', label: 'Todos' },
@@ -280,10 +279,14 @@ const countByEstado = computed(() => ({
   fraude: logs.value.filter(l => l.estado === 'fraude').length,
 }))
 
+const suspiciousToday = computed(() =>
+  logs.value.filter(l => l.estado === 'sospechoso' && l.creada_en && esHoy(l.creada_en)).length
+)
+
 const filteredLogs = computed(() => {
   let result = logs.value
   if (activeFilter.value !== 'todo') {
-    result = result.filter(l => l.type === activeFilter.value)
+    result = result.filter(l => l.categoria === activeFilter.value)
   }
   if (activeState.value !== 'todo') {
     result = result.filter(l => l.estado === activeState.value)
@@ -293,22 +296,19 @@ const filteredLogs = computed(() => {
 
 async function setEstado(log, estado) {
   if (auditando.value === log.id) return
-  if (String(log.id).startsWith('abandon_')) {
-    const idx = logs.value.findIndex(l => l.id === log.id)
-    if (idx !== -1) logs.value[idx] = { ...logs.value[idx], estado }
-    toast.success('Estado actualizado')
-    return
-  }
   auditando.value = log.id
   try {
+    // Los carritos abandonados también son filas reales ahora: este PATCH es
+    // el que hace que el descarte sobreviva al refresco.
     await api.patch(`/api/auditoria/${log.id}/estado`, { estado })
     const idx = logs.value.findIndex(l => l.id === log.id)
     if (idx !== -1) logs.value[idx] = { ...logs.value[idx], estado }
     toast.success('Estado actualizado')
   } catch (e) {
     toast.error(e.message || 'Error al actualizar')
+  } finally {
+    auditando.value = null
   }
-  auditando.value = null
 }
 
 function estadoBadgeVariant(estado) {
@@ -334,6 +334,7 @@ function eventEmoji(event) {
     venta_editada: '\u270F\uFE0F',
     venta_confirmada: '\u2713',
     medio_pago_corregido: '\u21C4',
+    producto_manual_creado: '\u270E',
   }
   return map[event] || ''
 }
@@ -347,6 +348,7 @@ function eventLabel(log) {
     carrito_creado: 'Carrito creado',
     venta_confirmada: 'Venta confirmada',
     medio_pago_corregido: 'Medio de pago corregido',
+    producto_manual_creado: 'Producto manual creado',
   }
   return map[log.event] || log.type
 }
@@ -360,6 +362,7 @@ function eventBadgeClass(log) {
     carrito_creado: 'bg-slate-100 text-slate-700',
     venta_confirmada: 'bg-emerald-100 text-emerald-800',
     medio_pago_corregido: 'bg-amber-100 text-amber-800',
+    producto_manual_creado: 'bg-purple-100 text-purple-800',
   }
   if (map[log.event]) return map[log.event]
   const typeMap = {
@@ -370,7 +373,7 @@ function eventBadgeClass(log) {
     Clientes: 'bg-cyan-50 text-cyan-700',
     Sistema: 'bg-slate-100 text-slate-700',
   }
-  return typeMap[log.type] || 'bg-slate-50 text-slate-600'
+  return typeMap[log.categoria] || 'bg-slate-50 text-slate-600'
 }
 
 function rowBgClass(log) {
@@ -383,7 +386,7 @@ async function refreshLogs() {
   syncing.value = true
   try {
     const data = await api.get('/api/auditoria')
-    if (data && data.length) {
+    if (Array.isArray(data)) {
       logs.value = data.map(e => ({
         id: e.id,
         timestamp: e.created_at ? formatDateTime(e.created_at) : '',
@@ -391,6 +394,7 @@ async function refreshLogs() {
         user: e.usuario_nombre || e.user || 'Sistema',
         type: e.tipo,
         event: e.tipo,
+        categoria: categoriaDe(e.tipo),
         action: e.venta_numero ? `Ticket #${e.venta_numero}` : e.tipo,
         description: typeof e.detalle === 'object' ? JSON.stringify(e.detalle) : (e.detalle || ''),
         estado: e.estado || 'sospechoso',
@@ -400,17 +404,19 @@ async function refreshLogs() {
         subtotal: e.detalle?.subtotal || 0,
         abandoned_min: e.detalle?.abandonado_desde ? Math.floor((Date.now() - parseFechaUTC(e.detalle.abandonado_desde)) / 60000) : 0,
         // venta
-        total: e.detalle?.total || e.detalle?.subtotal || 0,
+        total: e.detalle?.total || e.detalle?.subtotal || e.detalle?.precio_venta || 0,
         medio_pago: e.detalle?.medio_pago || '',
         medio_pago_antes: e.detalle?.medio_pago_antes || '',
         total_anulado: e.detalle?.total_anulado || 0,
-        // item quitado
-        producto: e.detalle?.producto || '',
+        // item quitado / producto manual
+        producto: e.detalle?.producto || e.detalle?.nombre || '',
+        codigo_barras: e.detalle?.codigo_barras || '',
+        rol_creador: e.detalle?.rol || '',
         qty: e.detalle?.qty || 0,
         subtotal_change: e.detalle?.subtotal_change || 0,
       }))
     }
-  } catch { /* fallback to mock */ }
+  } catch { /* sin red: se mantiene lo último que se pudo leer */ }
   lastRefresh.value = new Date().toLocaleTimeString()
   syncing.value = false
 }

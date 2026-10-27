@@ -138,7 +138,7 @@ export function useOfflineSales() {
     if (!esIdTemporal(item.producto_id)) return
     const datos = datosParaCrearProducto(item)
     try {
-      const producto = await api.post('/api/productos', datos)
+      const producto = await api.post('/api/productos/pos', datos)
       if (!producto || !producto.id) {
         throw new Error('No se pudo crear el producto del ítem.')
       }

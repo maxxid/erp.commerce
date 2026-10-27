@@ -5,7 +5,10 @@
 - Tratar los archivos base/fundamentales (p. ej. CONTEXTO.md) como de alto riesgo: verificar minuciosamente antes de finalizar cambios para evitar errores. Confidence: 0.8
 - En los listados del bot de Telegram, preferir salidas compactas: colocar info secundaria (como la marca) en la misma línea que el nombre, evitando líneas adicionales. Confidence: 0.85
 - En el /help del bot de Telegram, preferir segmentar/agrupar los comandos por categoría (con encabezados), en lugar de una lista plana mezclada. Confidence: 0.75
-- Las acciones destructivas/administrativas (p. ej. anular ventas) deben restringirse al rol dueño/admin, no a los cajeros. Confidence: 0.8
+- Las acciones destructivas/administrativas (p. ej. anular ventas, editar el catálogo) deben restringirse al rol dueño/admin/encargado, no a los cajeros; en cambio, las acciones operativas que el cajero necesita para completar una venta (p. ej. dar de alta manualmente un producto desde el POS) sí deben permitirse, siempre que queden auditadas. Confidence: 0.85
+- Todo permiso que se amplía a un rol menor (p. ej. habilitar al cajero a crear productos manuales) debe quedar registrado como acción de interés para el auditor, con nombre, código, precio y rol del que la hizo, y quedar pendiente/sospechoso cuando la hizo el rol inferior. Confidence: 0.8
+- Los paneles de alertas/auditoría no deben llenarse con eventos históricos o viejos (p. ej. carritos abandonados de meses atrás): limitar a una ventana reciente y accionable en lugar de listar todo el histórico. Confidence: 0.75
+- Los botones de acción (p. ej. "Descartar") tienen que persistir el cambio en el backend y sobrevivir al refresco; está mal un cambio solo en memoria con toast de éxito que se pierde al recargar. Confidence: 0.8
 - Las acciones destructivas requieren confirmación inline antes de ejecutarse. Confidence: 0.75
 - Prefiere implementar todas las funcionalidades solicitadas en una sola fase/pass en lugar de despliegues incrementales. Confidence: 0.7
 - Valora y acepta sugerencias proactivas de nuevas funcionalidades y mejoras. Confidence: 0.75
@@ -19,4 +22,7 @@
 - Los `.md` del repo (contexto, pendientes, guidelines, docs de cada tema) son la fuente de verdad del proyecto: al encarar una tarea, leer primero los relevantes y mantenerlos sincronizados con los cambios de código (sin dejar contradicciones entre documentos ni datos desactualizados). Confidence: 0.7
 - En mensajes del bot de Telegram con parseo HTML, evitar placeholders entre ángulos (<...>) porque Telegram los interpreta como tags; usar paréntesis o texto plano. Confidence: 0.7
 - Las acciones en background (p. ej. "Sincronizar ahora" tras ventas offline) deben dar feedback visible de progreso/resultado en la UI, no quedar en silencio. Confidence: 0.6
+- Prefiere que los cambios se lleven hasta el final: commit + push a origin y deploy a producción (git pull manual por SSH en el servidor), en lugar de dejarlos en el working tree esperando confirmación paso a paso. Confidence: 0.7
 - En el bot de Telegram, preferir la búsqueda por texto (/buscar) sobre comandos que exijan código de barras exacto (p. ej. /stockproducto) para consultar productos, porque tipear el código es propenso a errores; quitar esos comandos redundantes del menú. Confidence: 0.75
+- En el ERP, cuando el menú lateral está minimizado, al pasar el cursor por encima debe desplegarse automáticamente mostrando los títulos (hover-expand), para no tener que adivinar qué representa cada icono. Confidence: 0.85
+- La personalización del menú lateral debe poder hacerse desde Ajustes; inicialmente como configuración general para todos los usuarios, y debe permitir reordenar elementos, agregar/quitar/mover separadores y subtítulos (con texto editable), además de links. Confidence: 0.85

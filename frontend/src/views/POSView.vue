@@ -2657,7 +2657,7 @@ async function confirmarVenta() {
       const nombre = prod?._nombre || item.nombre || prod?.nombre
       if (!nombre) continue
       try {
-        const resp = await api.post('/api/productos', {
+        const resp = await api.post('/api/productos/pos', {
           codigo_barras: prod?.codigo_barras || item.codigo_barras || null,
           nombre,
           precio_venta: prod?._precio ?? item.precio_unitario ?? prod?.precio_venta ?? 0,
