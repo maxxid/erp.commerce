@@ -30,3 +30,4 @@
 - Para exportaciones (p. ej. ventas), el usuario prefiere CSV para uso personal, pero prioriza Excel (.xlsx) bien presentado para la mayoría de usuarios, con orientación comercial. Confidence: 0.9
 - Prefiere usar IA para parsear texto pegado de tickets/facturas de proveedor y prellenar la carga de artículos en compras, manteniendo revisión manual antes de guardar. Confidence: 0.8
 - En tickets de proveedor, el precio unitario extraído se trata como sugerido/editable porque los descuentos pueden venir como ítem separado. Confidence: 0.75
+- En el parseo de tickets de proveedor con IA, las líneas que no se reconocen deben mostrarse al operador (p. ej. en una sección destacada) para carga manual, en lugar de descartarse silenciosamente. Confidence: 0.8

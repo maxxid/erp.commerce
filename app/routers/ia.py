@@ -7,7 +7,7 @@ plan, pero probarla sí, para que el upsell salga del backend y no de una
 condición replicada en el frontend.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 

@@ -1,0 +1,3 @@
+fix(ia): import faltante de HTTPException en parsear-ticket
+
+Co-authored-by: CommandCodeBot <noreply@commandcode.ai>
