@@ -144,7 +144,15 @@ class ProveedorOpenAICompat(ProveedorIA):
 def _parsear(data, modelo: str, reintentos: int) -> IARespuesta:
     try:
         mensaje = data["choices"][0]["message"]
-        texto = mensaje.get("content") or ""
+        # Algunos modelos de razonamiento (gpt-oss, o1, ...) devuelven el
+        # razonamiento en un campo aparte y dejan `content` vacío si se
+        # quedaron sin tokens. Caemos a esos campos como fallback.
+        texto = (
+            mensaje.get("content")
+            or mensaje.get("reasoning_content")
+            or mensaje.get("reasoning")
+            or ""
+        )
     except (KeyError, IndexError, TypeError) as err:
         raise ErrorProveedor("estructura de respuesta inesperada") from err
     uso = data.get("usage") or {}
