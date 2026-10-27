@@ -1,5 +1,6 @@
 # Taste
 - En el bot de Telegram, los mensajes destinados a compartirse con el cajero deben ser detallados y autocontenidos (producto, código, precio original/oferta, vigencia, lote, margen) para poder reenviarlos sin explicación adicional. No enviar una segunda versión con formato WhatsApp para copiar/pegar; mostrar solo la versión Telegram. Confidence: 0.9
+- El usuario ya realiza hard refresh por su cuenta; evitar sugerirlo repetidamente cuando reporta un bug. Confidence: 0.7
 - Comunicarse en español en las interacciones con el usuario. Confidence: 0.9
 - Cuando falte contexto, inspeccionar los archivos relevantes antes de actuar en lugar de asumir. Confidence: 0.85
 - Tratar los archivos base/fundamentales (p. ej. CONTEXTO.md) como de alto riesgo: verificar minuciosamente antes de finalizar cambios para evitar errores. Confidence: 0.8

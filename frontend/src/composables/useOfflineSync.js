@@ -25,6 +25,10 @@ function motivoDeRechazo(error) {
 // transitorio y se sigue reintentando.
 function esRechazoPermanente(error) {
   const status = Number(error?.status)
+  // Un error lanzado en el cliente (sin status HTTP, p. ej. un producto
+  // manual sin nombre) no se va a arreglar reintentando: se marca como
+  // rechazado para que aparezca el botón "Descartar".
+  if (!Number.isFinite(status)) return true
   return status >= 400 && status < 500 && status !== 408 && status !== 429
 }
 
