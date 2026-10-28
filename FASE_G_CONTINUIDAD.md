@@ -177,7 +177,7 @@ Cada paso = un commit + deploy con la suite en verde (regla del proyecto). Orden
 | Dato | Valor |
 |---|---|
 | Repositorio | `https://github.com/maxxid/erp.commerce` (rama `master`) |
-| Servidor principal | `ubuntu@136.248.245.145`, región **Santiago** (home region) de Oracle Cloud · **`VM.Standard.E2.1.Micro`**: x86_64, 2 vCPU, **1 GB de RAM**, sin swap (se le agregaron **2 GB** el 26/10/2026) |
+| Servidor principal | `ubuntu@136.248.245.145`, región **Santiago** (home region) de Oracle Cloud · **`VM.Standard.E2.1.Micro`**: x86_64, **1/8 OCPU** (2 hilos visibles), **1 GB de RAM**, sin swap (se le agregaron **2 GB** el 26/10/2026) |
 | SSH | `ssh -i "C:\Users\maxib\Documents\Oracle-Cloud-Ubuntu\ssh-key-2026-06-20.key" ubuntu@136.248.245.145 '<comando>'` |
 | Repo en el servidor | `/opt/erp-comercio` (**el pull hay que hacerlo con `cd /opt/erp-comercio && sudo -u erp git pull origin master`**; sin el `cd` falla con "not a git repository") |
 | Base de datos | `/data/erp/erp_comercio.db` (`DATABASE_URL=sqlite:////data/erp/erp_comercio.db` está en el unit file) |

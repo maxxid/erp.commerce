@@ -10,7 +10,7 @@
 
 Un **contenedor por cliente** en una **VM dedicada a clientes**, con **su propia base SQLite**, **su subdominio** y **su licencia**. Sin `tenant_id` y sin reescribir el código.
 
-La VM actual del ERP es una `VM.Standard.E2.1.Micro` (2 vCPU, **1 GB**) y no tiene lugar para clientes: el ensayo del 26/10/2026 corrió **un** contenedor de 256 MB y dejó al ERP con ~420 MB disponibles. Para vender clientes hace falta una VM aparte (ver §9).
+La VM actual del ERP es una `VM.Standard.E2.1.Micro` (**1/8 OCPU**, **1 GB**) y no tiene lugar para clientes: el ensayo del 26/10/2026 corrió **un** contenedor de 256 MB y dejó al ERP con ~420 MB disponibles. Para vender clientes hace falta una VM aparte (ver §9).
 
 Para el cliente es "su ERP en `clienteN.erp.imprenta.store`". Para nosotros es un servicio de Docker Compose más, con su carpeta de datos y su backup.
 
@@ -51,7 +51,7 @@ Para el cliente es "su ERP en `clienteN.erp.imprenta.store`". Para nosotros es u
 ```
 
 - El **ERP del dueño queda fuera de Docker** en la Fase 1: así no se toca el unit `erp-comercio`, ni Litestream, ni la continuidad de `FASE_G_CONTINUIDAD.md`.
-- **Los clientes necesitan su propia VM.** La actual (`VM.Standard.E2.1.Micro`, 2 vCPU, 1 GB) es la del ERP y no tiene RAM para más: el ensayo con un contenedor de 256 MB dejó ~420 MB libres, y un cliente real puede necesitar 128-256 MB. No prometer 4-6 clientes en esta máquina.
+- **La VM de clientes puede ser una A1.Flex de 2 OCPU/12 GB** (free, si hay capacidad). Alcanza para 4-6 clientes; el límite real es la CPU, no la RAM. Si se necesita más, una A1 paga o una VM más grande.
 - Cada cliente escucha **solo en loopback** (`127.0.0.1:51xx`). Nginx es la única puerta.
 - Todos los contenedores usan la **misma imagen**; cambia el `.env`, no el código. (Si algún día un cliente necesita una versión distinta, se le cambia el tag.)
 - La imagen construida en la VM actual es **amd64**. Si la VM de clientes es A1 (ARM), hay que construirla para `linux/arm64` o multi-arch.
@@ -221,7 +221,7 @@ docker compose up -d
 |---|---|---|
 | RAM por cliente | `512m` (usar `256m` en una VM de 1 GB) | Medido: 129 MB reales en reposo con la app completa |
 | CPU por cliente | `0.5` | Medido: 0,34 % en reposo |
-| Clientes por VM | 4-6 solo con **≥8 GB** | En la `E2.1.Micro` actual: **0 para producción** (el ensayo usó 1 y se detuvo) |
+| Clientes por VM | 4-6 con **12 GB** (A1 free) | En la `E2.1.Micro` actual: **0 para producción** (el ensayo usó 1 y se detuvo); más clientes con una VM mayor |
 
 ### Monitoreo
 
@@ -245,13 +245,13 @@ docker compose up -d
 | Recurso | Costo | Nota |
 |---|---|---|
 | VM del ERP (`VM.Standard.E2.1.Micro`) | $0 | **No sirve para clientes**: 1 GB, compartida con el POS |
-| VM de clientes | $0 si hay A1.Flex free, o ~USD 15/mes | A1.Flex (ARM) 4 OCPU/24 GB si hay capacidad en la cuenta; si no, una VM paga |
+| VM de clientes | $0 si hay A1.Flex free, o ~USD 15/mes | A1.Flex (ARM): **2 OCPU/12 GB** free (1 VM de 2/12 o 2 de 1/6; Oracle lo bajó de 4/24 en junio de 2026); si no hay capacidad, una VM paga |
 | Almacenamiento | Incluido en el disco de la VM de clientes | Cada base arranca en ~0,4 MB |
 | R2 | $0 hasta 10 GB | Los respaldos de todos comparten bucket, separados por slug |
 | Cloudflare / TLS | $0 | Wildcard cuando G1 mueva el DNS |
 | **Total extra** | **$0 a ~USD 15/mes** | Depende de si hay capacidad A1 free |
 
-> La VM actual se verificó el 26/10/2026: `VM.Standard.E2.1.Micro`, x86_64, 2 vCPU, 956 MB, sin swap (se le agregó 2 GB). `HOSTING.md` y este documento deben decir lo mismo.
+> La VM actual se verificó el 26/10/2026: `VM.Standard.E2.1.Micro`, x86_64, **1/8 OCPU** (2 hilos visibles), 956 MB, sin swap (se le agregó 2 GB). `HOSTING.md` y este documento deben decir lo mismo.
 
 ---
 

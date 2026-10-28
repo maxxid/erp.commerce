@@ -3,9 +3,9 @@
 > **Instrucción para el Agente:** Setup inicial de la VM Oracle Cloud. Leer solo si se aprovisiona o migra de hosting. No leer por defecto.
 
 ## Resumen
-La instancia **actual** (`erp-comercio`, región Santiago) es una **`VM.Standard.E2.1.Micro`**: x86_64, 2 vCPU, **1 GB de RAM**, 45 GB de disco y **sin swap** (se le agregaron 2 GB el 26/10/2026). Alcanza para el ERP solo; **no para clientes multi-instance** (ver `MULTITENANT.md` §9).
+La instancia **actual** (`erp-comercio`, región Santiago) es una **`VM.Standard.E2.1.Micro`**: x86_64, **1/8 OCPU** (la consola muestra 1 core; el guest ve 2 hilos), **1 GB de RAM**, 45 GB de disco y **sin swap** (se le agregaron 2 GB el 26/10/2026). Alcanza para el ERP solo; **no para clientes multi-instance** (ver `MULTITENANT.md` §9).
 
-> El plan de abajo describe cómo crear una **VM nueva**. Oracle Cloud ofrece una A1.Flex ARM gratis de 4 OCPU/24 GB **en total por cuenta**, pero esta cuenta hoy tiene una E2.1.Micro. Antes de sumar clientes, verificar en la consola de OCI qué shape es la instancia real y cuánta capacidad A1 queda libre.
+> El plan de abajo describe cómo crear una **VM nueva**. Oracle Cloud ofrece una A1.Flex ARM gratis de **2 OCPU/12 GB en total por cuenta** (cambió de 4/24 en junio de 2026: equivale a 1.500 OCPU-horas y 9.000 GB-horas por mes). Podés hacer **una VM de 2/12 o dos de 1/6**. Esta cuenta hoy tiene una E2.1.Micro; antes de sumar clientes, verificar en la consola de OCI qué shape es la instancia real y cuánta capacidad A1 queda libre.
 
 ## Paso a paso
 
@@ -15,7 +15,7 @@ La instancia **actual** (`erp-comercio`, región Santiago) es una **`VM.Standard
 3. Nombre: `erp-comercio`
 4. Image: **Ubuntu 22.04**
 5. Shape: **VM.Standard.A1.Flex** (ARM, Always Free)
-   - OCPU: 4, RAM: 24 GB
+   - OCPU: **2** en total, RAM: **12 GB** en total (1 VM de 2/12 o 2 de 1/6)
 6. Descargá la **SSH key** (o subí tu pública)
 7. **Create**
 

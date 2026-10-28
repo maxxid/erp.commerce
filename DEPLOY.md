@@ -155,7 +155,7 @@ sudo systemctl restart litestream
 
 ## Clientes en Docker (multi-cliente — Fase 1)
 
-> **La VM actual es `VM.Standard.E2.1.Micro` (2 vCPU, 1 GB)** y comparte RAM con
+> **La VM actual es `VM.Standard.E2.1.Micro` (1/8 OCPU, 1 GB)** y comparte RAM con
 > el POS. El 26/10/2026 se ensayó con **un** `cliente-demo` de 256 MB y se detuvo;
 > Docker quedó instalado pero **deshabilitado**. Para clientes reales hace falta
 > una VM aparte (A1.Flex free o paga, ver `MULTITENANT.md` §9).
