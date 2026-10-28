@@ -37,7 +37,7 @@
           </div>
           <div class="flex items-center justify-between gap-2 mt-1">
             <p class="text-[10px] text-slate-400">Lo que hay físicamente en el cajón ahora</p>
-            <BaseButton variant="ghost" size="xs" @click="abrirContador">
+            <BaseButton variant="ghost" size="xs" @click="abrirContador('contado')">
               <i class="fa-solid fa-money-bill-wave"></i> Contar billetes
             </BaseButton>
           </div>
@@ -56,7 +56,12 @@
               placeholder="0"
             />
           </div>
-          <p class="text-[10px] text-slate-400 mt-1">Cuánto efectivo querés dejar para vender (fondo / cambio)</p>
+           <div class="flex items-center justify-between gap-2 mt-1">
+             <p class="text-[10px] text-slate-400">Cuánto efectivo querés dejar para vender (fondo / cambio)</p>
+             <BaseButton variant="ghost" size="xs" @click="abrirContador('dejo')">
+               <i class="fa-solid fa-money-bill-wave"></i> Contar billetes
+             </BaseButton>
+           </div>
         </div>
 
         <div v-if="retiro > 0" class="border-t border-slate-200 dark:border-slate-700 pt-4">
@@ -154,8 +159,8 @@
 
       <ContadorBilletesModal
         v-model="showContador"
-        titulo="Contar efectivo — Apertura de caja"
-        :valor-actual="contado"
+        :titulo="contadorDestino === 'dejo' ? 'Contar efectivo — Fondo (dejo en caja)' : 'Contar efectivo — Conté en el cajón'"
+        :valor-actual="valorActualContador"
         @aplicar="aplicarConteo"
       />
     </div>
@@ -208,6 +213,7 @@ const motivo_retiro = ref('')
 const saldos_cuentas = reactive(cuentasEnCero())
 const abrirCuentasDigitales = ref(false)
 const showContador = ref(false)
+const contadorDestino = ref('contado')
 
 const cuentas = MEDIOS_CUENTA.map(v => ({ valor: v, label: MEDIO_LABELS_CUENTA[v] }))
 
@@ -220,6 +226,9 @@ const efectivoUltimoCierre = computed(() => {
 })
 
 const retiro = computed(() => Math.max(0, (Number(contado.value) || 0) - (Number(dejo.value) || 0)))
+const valorActualContador = computed(() =>
+  contadorDestino.value === 'dejo' ? dejo.value : contado.value
+)
 
 const cuentasConSaldo = computed(() =>
   cuentas
@@ -244,12 +253,17 @@ watch(() => props.modelValue, (abiertoNuevo) => {
   Object.assign(saldos_cuentas, cuentasEnCero())
 })
 
-function abrirContador() {
+function abrirContador(destino = 'contado') {
+  contadorDestino.value = destino
   showContador.value = true
 }
 
 function aplicarConteo(total) {
-  contado.value = total
+  if (contadorDestino.value === 'dejo') {
+    dejo.value = total
+  } else {
+    contado.value = total
+  }
   toast.success(`Total contado: ${fc(total)}`)
 }
 
