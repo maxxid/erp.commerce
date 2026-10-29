@@ -11,6 +11,7 @@
         </BaseButton>
         <BaseButton variant="primary" size="sm" @click="abrirModalNuevaCompra">
           <i class="fa-solid fa-plus"></i> Cargar Mercadería
+          <span v-if="borradorInfo" class="ml-1 px-1.5 py-0.5 rounded-full bg-amber-400 text-amber-950 text-[9px] font-bold uppercase tracking-wide">Borrador</span>
         </BaseButton>
       </div>
     </div>
@@ -115,6 +116,21 @@
       :closeOnOverlay="false"
       :closeOnEsc="false"
     >
+      <div
+        v-if="borradorRestaurado"
+        class="mb-3 px-3 py-2 rounded-xl border border-amber-300 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-900/20 text-xs text-amber-800 dark:text-amber-200 flex items-center justify-between gap-2"
+      >
+        <span><i class="fa-solid fa-file-pen mr-1.5"></i>Borrador restaurado{{ borradorHora ? ` (guardado ${borradorHora})` : '' }}. Se guarda solo mientras cargás.</span>
+        <span v-if="!confirmarDescarte">
+          <button type="button" class="font-bold underline" @click="confirmarDescarte = true">Descartar</button>
+        </span>
+        <span v-else class="flex items-center gap-2">
+          ¿Descartar borrador?
+          <button type="button" class="font-bold underline" @click="descartarBorrador">Sí, descartar</button>
+          <button type="button" class="font-bold underline" @click="confirmarDescarte = false">No</button>
+        </span>
+      </div>
+
       <!-- Proveedor + Notas -->
       <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
         <BaseSelect
@@ -299,11 +315,12 @@
                     @click="cambiarCantidad(item, -1)"
                   >−</button>
                   <input
-                    v-model.number="item.cantidad"
+                    :value="item.cantidad"
                     type="number"
                     min="1"
                     :data-qty-key="item._key"
                     class="w-14 text-center text-sm font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg py-1 outline-none focus:border-brand-500 transition"
+                    @input="onCantidadInput(item, $event)"
                   >
                   <button
                     type="button"
@@ -319,15 +336,27 @@
                     type="number"
                     min="0"
                     step="0.01"
-                    placeholder="0.00"
+                    placeholder="P. unit."
+                    title="Precio unitario"
+                    @input="item._modo = 'unitario'"
                     class="w-full text-right text-sm font-mono-data bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 outline-none focus:border-brand-500 transition"
                   >
                 </div>
 
                 <!-- Subtotal -->
-                <span class="w-20 text-right text-sm font-mono-data font-bold text-slate-700 dark:text-slate-300 shrink-0">
-                  {{ fc(item.cantidad * item.precio || 0) }}
-                </span>
+                <div class="w-28 shrink-0">
+                  <input
+                    :value="subtotalMostrado(item)"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="Subtotal"
+                    title="Subtotal: si lo escribís, el precio unitario se calcula solo"
+                    :class="item._modo === 'subtotal' ? 'border-brand-500' : 'border-slate-200 dark:border-slate-700'"
+                    class="w-full text-right text-sm font-mono-data font-bold bg-white dark:bg-slate-900 border rounded-lg px-2 py-1.5 outline-none focus:border-brand-500 transition"
+                    @input="onSubtotalInput(item, $event)"
+                  >
+                </div>
 
                 <!-- Delete -->
                 <button
@@ -512,6 +541,14 @@
         <div class="flex gap-2">
           <BaseButton variant="secondary" class="flex-1" @click="showModalCompra = false">
             Cancelar
+          </BaseButton>
+          <BaseButton
+            variant="secondary"
+            class="flex-1"
+            :disabled="saving || !hayContenidoBorrador"
+            @click="guardarBorradorYCerrar"
+          >
+            <i class="fa-solid fa-floppy-disk"></i> Guardar borrador
           </BaseButton>
           <BaseButton
             variant="primary"
@@ -760,6 +797,108 @@ const nuevaCompra = reactive({
 })
 const errorProveedor = ref('')
 
+const BORRADOR_KEY = 'compras_borrador_v1'
+const borradorInfo = ref(false)
+const borradorRestaurado = ref(false)
+const borradorHora = ref('')
+const confirmarDescarte = ref(false)
+let _borradorTimer = null
+
+const hayContenidoBorrador = computed(() =>
+  nuevaCompra.items.length > 0 || !!nuevaCompra.proveedor_id || !!(nuevaCompra.notas || '').trim()
+)
+
+function leerBorrador() {
+  try {
+    const raw = localStorage.getItem(BORRADOR_KEY)
+    if (!raw) return null
+    const d = JSON.parse(raw)
+    if (!d || !Array.isArray(d.items)) return null
+    return d
+  } catch {
+    return null
+  }
+}
+
+function escribirBorrador() {
+  try {
+    if (!hayContenidoBorrador.value) {
+      localStorage.removeItem(BORRADOR_KEY)
+      borradorInfo.value = false
+      return
+    }
+    const guardadoEn = new Date().toISOString()
+    localStorage.setItem(BORRADOR_KEY, JSON.stringify({
+      proveedor_id: nuevaCompra.proveedor_id,
+      notas: nuevaCompra.notas,
+      items: nuevaCompra.items.map(i => ({ ...i, _lookup: false })),
+      guardadoEn,
+    }))
+    borradorInfo.value = true
+    borradorHora.value = new Date(guardadoEn).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+  } catch {
+    toast.error('No se pudo guardar el borrador en este navegador')
+  }
+}
+
+function borrarBorrador() {
+  clearTimeout(_borradorTimer)
+  try { localStorage.removeItem(BORRADOR_KEY) } catch { }
+  borradorInfo.value = false
+  borradorRestaurado.value = false
+  confirmarDescarte.value = false
+  borradorHora.value = ''
+}
+
+function descartarBorrador() {
+  borrarBorrador()
+  nuevaCompra.proveedor_id = null
+  nuevaCompra.notas = ''
+  nuevaCompra.items = []
+  toast.info('Borrador descartado')
+}
+
+function guardarBorradorYCerrar() {
+  clearTimeout(_borradorTimer)
+  escribirBorrador()
+  toast.success(`Borrador guardado (${nuevaCompra.items.length} ítem${nuevaCompra.items.length === 1 ? '' : 's'})`)
+  showModalCompra.value = false
+}
+
+watch(nuevaCompra, () => {
+  if (!showModalCompra.value) return
+  clearTimeout(_borradorTimer)
+  _borradorTimer = setTimeout(escribirBorrador, 600)
+}, { deep: true })
+
+function redondear2(n) {
+  return Math.round((Number(n) + Number.EPSILON) * 100) / 100
+}
+
+function subtotalMostrado(item) {
+  if (item._modo === 'subtotal') return item._subtotal ?? ''
+  const t = (Number(item.cantidad) || 0) * (Number(item.precio) || 0)
+  return t ? redondear2(t) : ''
+}
+
+function recalcularPrecioDesdeSubtotal(item) {
+  const cant = Number(item.cantidad) || 0
+  const sub = Number(item._subtotal) || 0
+  item.precio = cant > 0 ? sub / cant : 0
+}
+
+function onSubtotalInput(item, e) {
+  const v = e.target.value
+  item._modo = 'subtotal'
+  item._subtotal = v === '' ? '' : Number(v)
+  recalcularPrecioDesdeSubtotal(item)
+}
+
+function onCantidadInput(item, e) {
+  item.cantidad = Number(e.target.value) || 0
+  if (item._modo === 'subtotal') recalcularPrecioDesdeSubtotal(item)
+}
+
 // --- Pegar ticket de proveedor y parsear con IA ---
 const ticketOpen = ref(false)
 const ticketTexto = ref('')
@@ -853,6 +992,8 @@ function _nuevoItem(producto = '', codigo_barras = '', cantidad = 1, precio = 0)
     codigo_barras,
     cantidad,
     precio,
+    _modo: 'unitario',
+    _subtotal: '',
     marca: '',
     precio_venta: 0,
     vencimiento: '',
@@ -905,6 +1046,7 @@ function ciclarOrden() {
 }
 
 onMounted(async () => {
+  borradorInfo.value = !!leerBorrador()
   await Promise.all([fetchCompras(), fetchProveedores(), fetchProductosCatalogo(), fetchCategorias(), fetchSectores()])
   const detalleId = route.query.detalle
   if (detalleId) {
@@ -916,6 +1058,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   clearTimeout(_debounceTimer)
+  clearTimeout(_borradorTimer)
   closeCamera()
 })
 
@@ -1063,9 +1206,15 @@ async function openDetailModal(compra) {
 }
 
 function abrirModalNuevaCompra() {
-  nuevaCompra.proveedor_id = null
-  nuevaCompra.notas = ''
-  nuevaCompra.items = []
+  const borrador = leerBorrador()
+  nuevaCompra.proveedor_id = borrador?.proveedor_id || null
+  nuevaCompra.notas = borrador?.notas || ''
+  nuevaCompra.items = borrador ? borrador.items.map(i => ({ ...i, _lookup: false })) : []
+  borradorRestaurado.value = !!borrador
+  confirmarDescarte.value = false
+  borradorHora.value = borrador?.guardadoEn
+    ? new Date(borrador.guardadoEn).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+    : ''
   errorProveedor.value = ''
   busqueda.value = ''
   resultados.value = []
@@ -1200,6 +1349,7 @@ function agregarItemDesdeProducto(prod) {
 
 function cambiarCantidad(item, delta) {
   item.cantidad = Math.max(1, (Number(item.cantidad) || 0) + delta)
+  if (item._modo === 'subtotal') recalcularPrecioDesdeSubtotal(item)
 }
 
 // --- Última compra (bajo demanda al expandir fila) ---
@@ -1318,6 +1468,7 @@ async function guardarCompra() {
     } else {
       toast.success('Mercadería cargada y recibida')
     }
+    borrarBorrador()
     showModalCompra.value = false
     await fetchCompras()
     await fetchProductosCatalogo()

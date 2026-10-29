@@ -2,7 +2,7 @@
 // así cada deploy cambia los bytes del SW y el browser lo instala solo
 // (limpia los caches viejos en activate y deja de servir un index.html
 // obsoleto que pedía chunks hasheados que ya no existen).
-const CACHE_VERSION = 'apex-erp-cc98646'
+const CACHE_VERSION = 'apex-erp-d3d9109'
 const STATIC_CACHE = `${CACHE_VERSION}-static`
 const DATA_CACHE = `${CACHE_VERSION}-data`
 
