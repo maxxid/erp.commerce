@@ -1,7 +1,7 @@
 """Schemas para Producto."""
 
 from pydantic import BaseModel, Field
-from typing import Optional, Any
+from typing import Optional, Any, List
 from datetime import datetime
 
 
@@ -79,6 +79,7 @@ class ProductoOut(ProductoBase):
     flag_revision_stock: Optional[bool] = False
     deficit_stock: Optional[float] = 0.0
     es_recarga: bool = False
+    proveedor_ids: List[int] = []
     created_at: datetime
     updated_at: Optional[datetime] = None
 

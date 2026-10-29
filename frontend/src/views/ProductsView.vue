@@ -46,6 +46,7 @@ function colorDeFila(row) {
 const searchInput = ref('')
 const searchQuery = ref('')
 const filterCategory = ref(null)
+const filterProveedor = ref(null)
 const filterStockBajo = ref(false)
 const filterPrecioDefasado = ref(false)
 const syncing = ref(false)
@@ -111,6 +112,7 @@ function clearSearch() {
 const activeFilterCount = computed(() => {
   let n = 0
   if (filterCategory.value) n++
+  if (filterProveedor.value) n++
   if (filterStockBajo.value) n++
   if (filterPrecioDefasado.value) n++
   if (filterEnOferta.value) n++
@@ -126,6 +128,7 @@ const hasSearch = computed(() => searchQuery.value.trim().length > 0)
 
 function clearAllFilters() {
   filterCategory.value = null
+  filterProveedor.value = null
   filterStockBajo.value = false
   filterPrecioDefasado.value = false
   filterEnOferta.value = false
@@ -298,6 +301,9 @@ const filteredProducts = computed(() => {
 
     if (filterCategory.value) {
       list = list.filter(p => p && p.categoria_id === filterCategory.value)
+    }
+    if (filterProveedor.value) {
+      list = list.filter(p => p && Array.isArray(p.proveedor_ids) && p.proveedor_ids.includes(filterProveedor.value))
     }
     if (filterStockBajo.value) {
       list = list.filter(p => esStockBajo(p))
@@ -953,6 +959,13 @@ function formatFecha(fechaStr) {
       <BaseSelect
         v-model="filterCategory"
         :options="[{ value: null, label: 'Todas las categorías' }, ...categories.map(c => ({ value: c.id, label: c.nombre }))]"
+        option-value="value"
+        option-label="label"
+        class="sm:w-56"
+      />
+      <BaseSelect
+        v-model="filterProveedor"
+        :options="[{ value: null, label: 'Todos los proveedores' }, ...proveedores.map(p => ({ value: p.id, label: p.nombre }))]"
         option-value="value"
         option-label="label"
         class="sm:w-56"

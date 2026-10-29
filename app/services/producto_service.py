@@ -3,7 +3,7 @@
 from typing import Optional, List
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
-from app.models.producto import Producto
+from app.models.producto import Producto, producto_proveedor
 from app.models.categoria import Categoria
 from app.models.lote import Lote
 from app.services.texto_service import normalizar_producto_campos, title_case_es
@@ -63,8 +63,14 @@ def listar_productos(
             .group_by(Lote.producto_id)
             .all()
         )
+        provs = {}
+        for pid, prov_id in db.query(
+            producto_proveedor.c.producto_id, producto_proveedor.c.proveedor_id
+        ).filter(producto_proveedor.c.producto_id.in_(ids)).all():
+            provs.setdefault(pid, []).append(prov_id)
         for p in productos:
             p.stock_actual = float(sumas.get(p.id, 0) or 0)
+            p.proveedor_ids = provs.get(p.id, [])
 
     return productos, total
 
