@@ -241,7 +241,8 @@ def _dibujar_etiqueta(
     min_barcode_y = y + padding + 2 * mm
     if barcode_y < min_barcode_y:
         barcode_y = min_barcode_y
-    _dibujar_codigo_barras(c, inner_x, barcode_y, inner_w, barcode_h, codigo_num)
+    if not getattr(prod, "es_grupo", False):
+        _dibujar_codigo_barras(c, inner_x, barcode_y, inner_w, barcode_h, codigo_num)
 
 
 def _dibujar_etiqueta_sencilla(

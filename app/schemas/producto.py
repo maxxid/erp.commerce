@@ -62,6 +62,8 @@ class ProductoUpdate(BaseModel):
     precio_por_unidad: Optional[float] = None
     controla_stock: Optional[bool] = None
     es_recarga: Optional[bool] = None
+    grupo_etiqueta: Optional[str] = None
+    etiqueta_propia: Optional[bool] = None
 
 
 class ProductoOut(ProductoBase):
@@ -79,6 +81,8 @@ class ProductoOut(ProductoBase):
     flag_revision_stock: Optional[bool] = False
     deficit_stock: Optional[float] = 0.0
     es_recarga: bool = False
+    grupo_etiqueta: Optional[str] = None
+    etiqueta_propia: bool = False
     proveedor_ids: List[int] = []
     created_at: datetime
     updated_at: Optional[datetime] = None

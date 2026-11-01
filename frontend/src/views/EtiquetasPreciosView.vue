@@ -42,6 +42,7 @@ const filtros = reactive({
   categoria_id: null,
   sector_id: null,
   orden: 'fecha_desc',
+  agrupar: true,
 })
 
 const presetActivo = ref('30d')
@@ -71,6 +72,8 @@ const ordenOptions = [
   { value: 'fecha_desc', label: 'Más recientes' },
   { value: 'fecha_asc', label: 'Más antiguos' },
   { value: 'nombre', label: 'Nombre (A-Z)' },
+  { value: 'precio_asc', label: 'Precio (menor a mayor)' },
+  { value: 'precio_desc', label: 'Precio (mayor a menor)' },
   { value: 'categoria', label: 'Categoría' },
   { value: 'sector', label: 'Sector (ubicación)' },
 ]
@@ -114,6 +117,7 @@ const productosFiltrados = computed(() => {
       || normalizeStr(p.marca).includes(q)
       || normalizeStr(p.codigo_barras).includes(q)
       || normalizeStr(p.categoria_nombre).includes(q)
+      || (p.variantes || []).some(v => normalizeStr(v.nombre).includes(q) || normalizeStr(v.codigo_barras).includes(q))
     )
   }
   return lista
@@ -162,6 +166,7 @@ const previewLabel = computed(() => {
     precio,
     esKilo: p.tipo_venta === 'kilo' && p.precio_por_kilo,
     codigo: p.codigo_barras,
+    esGrupo: !!p.es_grupo,
   }
 })
 
@@ -183,6 +188,90 @@ function toggleSelectAll() {
     productosFiltrados.value.forEach(p => selectedProductos.value.delete(p.id))
   } else {
     productosFiltrados.value.forEach(p => selectedProductos.value.add(p.id))
+  }
+}
+
+// Las filas de grupo cubren varios productos: toda acción sobre productos
+// (sector, marcar impreso, agrupar) tiene que aplicarse a todos ellos.
+function expandirIds(rowIds) {
+  const porId = new Map(productos.value.map(p => [p.id, p]))
+  return [...new Set(rowIds.flatMap(id => {
+    const fila = porId.get(id)
+    return fila?.ids?.length ? fila.ids : [id]
+  }))]
+}
+
+const expandidos = ref(new Set())
+
+function toggleExpandido(id) {
+  if (expandidos.value.has(id)) {
+    expandidos.value.delete(id)
+  } else {
+    expandidos.value.add(id)
+  }
+}
+
+const gruposExistentes = ref([])
+const grupoNombre = ref('')
+const agrupando = ref(false)
+const confirmandoDesagrupar = ref(false)
+
+async function cargarGrupos() {
+  try {
+    const data = await api.get('/api/productos/grupos-etiqueta')
+    gruposExistentes.value = Array.isArray(data) ? data : (data?.data || [])
+  } catch {
+    gruposExistentes.value = []
+  }
+}
+
+async function agruparSeleccionados() {
+  const nombre = grupoNombre.value.trim()
+  const ids = expandirIds([...selectedProductos.value])
+  if (!nombre) {
+    toast.warning('Escribí el nombre del grupo (ej: Ades 1 L)')
+    return
+  }
+  if (ids.length < 2) {
+    toast.warning('Seleccioná al menos 2 productos para agrupar')
+    return
+  }
+  agrupando.value = true
+  try {
+    const resp = await api.post('/api/productos/asignar-grupo-etiqueta', { productos_ids: ids, grupo: nombre })
+    toast.success(`${resp?.asignados ?? ids.length} producto(s) → grupo "${resp?.grupo || nombre}"`)
+    grupoNombre.value = ''
+    await Promise.all([cargarGrupos(), cargarPreview(true)])
+  } catch (e) {
+    toast.error(e?.data?.detail || 'Error al agrupar')
+  } finally {
+    agrupando.value = false
+  }
+}
+
+async function desagruparSeleccionados() {
+  const ids = expandirIds([...selectedProductos.value])
+  confirmandoDesagrupar.value = false
+  if (!ids.length) return
+  agrupando.value = true
+  try {
+    const resp = await api.post('/api/productos/asignar-grupo-etiqueta', { productos_ids: ids, grupo: null })
+    toast.success(`${resp?.asignados ?? ids.length} producto(s) sacados del grupo`)
+    await Promise.all([cargarGrupos(), cargarPreview(true)])
+  } catch (e) {
+    toast.error(e?.data?.detail || 'Error al desagrupar')
+  } finally {
+    agrupando.value = false
+  }
+}
+
+async function darEtiquetaPropia(variante) {
+  try {
+    await api.post('/api/productos/etiqueta-propia', { productos_ids: [variante.id], propia: true })
+    toast.success(`${variante.nombre}: ahora tiene su propia etiqueta`)
+    await cargarPreview(true)
+  } catch (e) {
+    toast.error(e?.data?.detail || 'Error al separar la etiqueta')
   }
 }
 
@@ -228,7 +317,8 @@ async function cargarSectores() {
 }
 
 async function asignarSectorSeleccionados() {
-  const ids = [...selectedProductos.value]
+  const filasSel = [...selectedProductos.value]
+  const ids = expandirIds(filasSel)
   if (!ids.length) {
     toast.warning('Seleccioná los productos a los que querés asignar el sector')
     return
@@ -243,7 +333,7 @@ async function asignarSectorSeleccionados() {
     // Se arregla en pantalla sin recargar: si el filtro es "sin sector", los
     // recién asignados se van solos de la lista y ya podés agarrar el próximo
     // grupo sin esperar nada.
-    const set = new Set(ids)
+    const set = new Set(filasSel)
     productos.value = productos.value.map(p => set.has(p.id)
       ? { ...p, sector_id: sectorAsignar.value ?? null, sector_nombre: sector?.nombre || null }
       : p)
@@ -263,7 +353,7 @@ async function cambiarSectorFila(row, valor) {
   const sector = sectores.value.find(s => s.id === valor) || null
   try {
     await api.post('/api/productos/asignar-sector', {
-      productos_ids: [p.id],
+      productos_ids: p.ids?.length ? p.ids : [p.id],
       sector_id: valor ?? null,
     })
     p.sector_id = valor ?? null
@@ -295,6 +385,7 @@ async function cargarPreview(silent = false) {
     if (filtros.categoria_id) params.set('categoria_id', String(filtros.categoria_id))
     if (filtros.sector_id) params.set('sector_id', String(filtros.sector_id))
     params.set('orden', filtros.orden)
+    params.set('agrupar', String(filtros.agrupar))
     params.set('page', '1')
     params.set('page_size', '500')
 
@@ -335,7 +426,10 @@ function parsearDetalle409(e) {
   return null
 }
 
-async function generarPDF(forzar = false) {
+const preciosModal = ref(false)
+const preciosModalData = ref([])
+
+async function generarPDF(forzar = false, preciosConfirmados = false) {
   // Lo que se ve es lo que se imprime: si hay selección, esa; si no, todo lo
   // filtrado. Nunca imprime productos que están escondidos por el filtro.
   const idsAImprimir = selectedProductos.value.size > 0
@@ -345,6 +439,16 @@ async function generarPDF(forzar = false) {
   if (!idsAImprimir.length) {
     toast.error('No hay productos para generar etiquetas')
     return
+  }
+
+  if (!preciosConfirmados) {
+    const aImprimir = new Set(idsAImprimir)
+    const conAviso = productos.value.filter(p => aImprimir.has(p.id) && p.precios_distintos)
+    if (conAviso.length) {
+      preciosModalData.value = conAviso
+      preciosModal.value = true
+      return
+    }
   }
 
   generando.value = true
@@ -389,13 +493,18 @@ async function generarPDF(forzar = false) {
 
 function confirmarGenerarConStockCero() {
   stockCeroModal.value = false
-  generarPDF(true)
+  generarPDF(true, true)
+}
+
+function confirmarGenerarConPreciosDistintos() {
+  preciosModal.value = false
+  generarPDF(false, true)
 }
 
 async function marcarImpreso() {
-  const idsAMarcar = selectedProductos.value.size > 0
+  const idsAMarcar = expandirIds(selectedProductos.value.size > 0
     ? [...selectedProductos.value]
-    : productosFiltrados.value.map(p => p.id)
+    : productosFiltrados.value.map(p => p.id))
 
   if (!idsAMarcar.length) {
     toast.error('No hay productos para marcar')
@@ -427,6 +536,7 @@ function actualizarDescripcion(id, valor) {
 onMounted(async () => {
   await cargarCategorias()
   await cargarSectores()
+  await cargarGrupos()
   await cargarHistorial()
   await cargarPreview(true)
 })
@@ -518,6 +628,10 @@ onMounted(async () => {
               <input type="checkbox" v-model="filtros.solo_con_stock" class="w-3.5 h-3.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
               <span class="text-xs text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">Solo con stock</span>
             </label>
+            <label class="flex items-center gap-2.5 cursor-pointer group" title="Las variantes del mismo grupo (sabores, colores) salen en una sola etiqueta">
+              <input type="checkbox" v-model="filtros.agrupar" class="w-3.5 h-3.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
+              <span class="text-xs text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">Agrupar variantes</span>
+            </label>
           </div>
 
           <BaseButton @click="cargarPreview" :loading="loading" variant="secondary" size="sm" class="w-full">
@@ -589,7 +703,7 @@ onMounted(async () => {
                 <div class="border-t border-slate-400 my-1"></div>
                 <div class="text-[7px] text-slate-700 leading-tight line-clamp-2 min-h-[14px]">{{ previewLabel.descripcion || previewLabel.nombre }}</div>
                 <!-- Barcode mockup -->
-                <div class="flex items-end gap-[1px] h-[18px] my-1 justify-center overflow-hidden">
+                <div v-if="!previewLabel.esGrupo" class="flex items-end gap-[1px] h-[18px] my-1 justify-center overflow-hidden">
                   <div v-for="i in 40" :key="i" class="bg-slate-800" :style="{ width: (i % 3 === 0 ? '2px' : '1px'), height: (i % 5 === 0 ? '100%' : '80%') }"></div>
                 </div>
                 <div class="flex items-baseline justify-between">
@@ -598,7 +712,7 @@ onMounted(async () => {
                   </span>
                   <span class="text-[6px] text-slate-400">{{ new Date().toLocaleDateString('es-AR') }}</span>
                 </div>
-                <div class="text-center text-[6px] font-mono text-slate-500 mt-0.5 truncate">{{ previewLabel.codigo }}</div>
+                <div v-if="!previewLabel.esGrupo" class="text-center text-[6px] font-mono text-slate-500 mt-0.5 truncate">{{ previewLabel.codigo }}</div>
               </template>
             </div>
           </div>
@@ -727,6 +841,45 @@ onMounted(async () => {
               Asignar
             </BaseButton>
           </div>
+          <div class="basis-full flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <span class="text-xs text-slate-500 dark:text-slate-400"><i class="fa-solid fa-layer-group mr-1"></i>Una etiqueta para varias variantes:</span>
+            <input
+              v-model="grupoNombre"
+              list="grupos-etiqueta-lista"
+              type="text"
+              maxlength="100"
+              placeholder="Nombre del grupo (ej: Ades 1 L)"
+              class="w-56 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-2.5 py-1.5 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 outline-none"
+              @keydown.enter="agruparSeleccionados"
+            />
+            <datalist id="grupos-etiqueta-lista">
+              <option v-for="g in gruposExistentes" :key="g" :value="g"></option>
+            </datalist>
+            <BaseButton
+              size="sm"
+              variant="primary"
+              :loading="agrupando"
+              :disabled="selectedProductos.size < 1 || !grupoNombre.trim()"
+              @click="agruparSeleccionados"
+            >
+              Agrupar
+            </BaseButton>
+            <template v-if="!confirmandoDesagrupar">
+              <BaseButton
+                size="sm"
+                variant="ghost"
+                :disabled="!selectedProductos.size || agrupando"
+                @click="confirmandoDesagrupar = true"
+              >
+                Sacar del grupo
+              </BaseButton>
+            </template>
+            <span v-else class="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+              ¿Sacar de su grupo los {{ selectedProductos.size }} seleccionado(s)?
+              <button type="button" class="font-bold text-rose-600 underline" @click="desagruparSeleccionados">Sí, sacar</button>
+              <button type="button" class="font-bold underline" @click="confirmandoDesagrupar = false">No</button>
+            </span>
+          </div>
         </div>
 
         <BaseCard v-if="productos.length && productosFiltrados.length" padding="none">
@@ -758,8 +911,54 @@ onMounted(async () => {
             </template>
             <template #nombre="{ row }">
               <div class="min-w-0">
-                <div class="text-xs font-medium text-slate-800 dark:text-slate-100 truncate">{{ row.nombre }}</div>
-                <div class="text-[10px] text-slate-400 truncate">{{ row.categoria_nombre || row.codigo_barras }}</div>
+                <div class="flex items-center gap-1.5 min-w-0">
+                  <i v-if="row.es_grupo" class="fa-solid fa-layer-group text-brand-500 text-[10px] shrink-0" title="Etiqueta de grupo: una sola etiqueta para varias variantes"></i>
+                  <span class="text-xs font-medium text-slate-800 dark:text-slate-100 truncate">{{ row.nombre }}</span>
+                </div>
+                <div class="text-[10px] text-slate-400 truncate">
+                  {{ row.es_grupo ? `${row.variantes.length} variantes · ${row.categoria_nombre || 'sin categoría'}` : (row.categoria_nombre || row.codigo_barras) }}
+                </div>
+                <div v-if="row.es_grupo" class="flex items-center gap-1.5 mt-1 flex-wrap">
+                  <button
+                    type="button"
+                    class="text-[10px] font-semibold text-brand-600 dark:text-brand-400 hover:underline"
+                    @click.stop="toggleExpandido(row.id)"
+                  >
+                    {{ expandidos.has(row.id) ? 'Ocultar variantes' : 'Ver variantes' }}
+                  </button>
+                  <button
+                    v-if="row.precios_distintos"
+                    type="button"
+                    class="px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 text-[10px] font-bold"
+                    title="Hay variantes con distinto precio: puede ser un precio sin actualizar o una oferta a propósito"
+                    @click.stop="toggleExpandido(row.id)"
+                  >
+                    <i class="fa-solid fa-triangle-exclamation mr-0.5"></i>Precios distintos
+                  </button>
+                  <span
+                    v-if="row.sectores_distintos"
+                    class="px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-[10px] font-medium"
+                    title="Las variantes están en sectores distintos; se muestra el del representante"
+                  >Sectores distintos</span>
+                </div>
+                <ul v-if="row.es_grupo && expandidos.has(row.id)" class="mt-1.5 space-y-1" @click.stop>
+                  <li
+                    v-for="v in row.variantes"
+                    :key="v.id"
+                    class="flex items-center gap-2 text-[10px] px-2 py-1 rounded-lg"
+                    :class="v.distinto ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200' : 'bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300'"
+                  >
+                    <span class="flex-1 min-w-0 truncate">{{ v.nombre }}</span>
+                    <span class="font-mono-data font-bold shrink-0">{{ formatCurrency(v.precio_venta) }}</span>
+                    <button
+                      v-if="v.distinto"
+                      type="button"
+                      class="shrink-0 font-bold underline"
+                      title="Imprimir este producto con su propia etiqueta (oferta, edición especial). Si fue un descuido, corregí el precio en Productos."
+                      @click="darEtiquetaPropia(v)"
+                    >Etiqueta propia</button>
+                  </li>
+                </ul>
               </div>
             </template>
             <template #motivo="{ row }">
@@ -849,6 +1048,41 @@ onMounted(async () => {
         </div>
       </div>
       <p v-else class="text-sm text-slate-400 text-center py-6">Sin impresiones previas</p>
+    </BaseModal>
+
+    <!-- Modal: grupos con precios distintos -->
+    <BaseModal v-model="preciosModal" title="Grupos con precios distintos" size="md">
+      <div class="space-y-3">
+        <p class="text-sm text-slate-600 dark:text-slate-300">
+          En estos grupos hay variantes con un precio diferente al de la etiqueta. Puede ser un precio sin actualizar o una oferta a propósito. La etiqueta del grupo se imprime con el precio más común.
+        </p>
+        <ul class="max-h-56 overflow-y-auto space-y-2">
+          <li
+            v-for="g in preciosModalData"
+            :key="g.id"
+            class="px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800/40 text-xs"
+          >
+            <div class="flex items-center justify-between gap-3">
+              <span class="font-semibold text-slate-700 dark:text-slate-200 truncate">{{ g.nombre }}</span>
+              <span class="font-mono-data font-bold text-brand-600 dark:text-brand-400 shrink-0">{{ formatCurrency(g.precio_venta) }}</span>
+            </div>
+            <div
+              v-for="v in g.variantes.filter(x => x.distinto)"
+              :key="v.id"
+              class="flex items-center justify-between gap-3 mt-1 text-amber-700 dark:text-amber-300"
+            >
+              <span class="truncate">{{ v.nombre }}</span>
+              <span class="font-mono-data shrink-0">{{ formatCurrency(v.precio_venta) }}</span>
+            </div>
+          </li>
+        </ul>
+      </div>
+      <template #footer>
+        <div class="flex justify-end gap-2">
+          <BaseButton variant="secondary" size="sm" @click="preciosModal = false">Revisar</BaseButton>
+          <BaseButton variant="primary" size="sm" @click="confirmarGenerarConPreciosDistintos">Imprimir igual</BaseButton>
+        </div>
+      </template>
     </BaseModal>
 
     <!-- Modal: stock cero -->

@@ -249,6 +249,13 @@ def _migrate_new_columns():
             conn.execute(sa.text("ALTER TABLE productos ADD COLUMN es_recarga BOOLEAN NOT NULL DEFAULT 0"))
             conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_productos_es_recarga ON productos (es_recarga)"))
             conn.commit()
+        if "grupo_etiqueta" not in existentes_prod:
+            conn.execute(sa.text("ALTER TABLE productos ADD COLUMN grupo_etiqueta VARCHAR(100)"))
+            conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_productos_grupo_etiqueta ON productos (grupo_etiqueta)"))
+            conn.commit()
+        if "etiqueta_propia" not in existentes_prod:
+            conn.execute(sa.text("ALTER TABLE productos ADD COLUMN etiqueta_propia BOOLEAN NOT NULL DEFAULT 0"))
+            conn.commit()
         # Lo que la IA ya miró (escaneo incremental del panel). En la base de
         # producción ya existe por un ALTER manual; acá queda para el resto.
         if "ia_analizado" not in existentes_prod:

@@ -17,7 +17,7 @@ from app.schemas.etiquetas import (
 )
 from app.schemas.common import RespuestaLista, RespuestaData
 from app.services.etiquetas_service import (
-    obtener_productos_para_etiquetar, verificar_stock_cero,
+    construir_filas_etiquetas, verificar_stock_cero,
     obtener_historial, guardar_historial, marcar_como_impreso
 )
 from app.services.etiquetas_pdf import generar_etiquetas_pdf
@@ -36,7 +36,8 @@ def listar_para_etiquetar(
     solo_con_stock: bool = Query(False),
     categoria_id: Optional[int] = Query(None),
     sector_id: Optional[int] = Query(None),
-    orden: str = Query('fecha_desc', pattern='^(fecha_desc|fecha_asc|nombre|categoria|sector)$'),
+    orden: str = Query('fecha_desc', pattern='^(fecha_desc|fecha_asc|nombre|categoria|sector|precio_asc|precio_desc)$'),
+    agrupar: bool = Query(True),
     page: int = Query(1, ge=1),
     page_size: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
@@ -52,47 +53,20 @@ def listar_para_etiquetar(
         categoria_id=categoria_id,
         sector_id=sector_id,
         orden=orden,
+        agrupar=agrupar,
     )
-    
-    productos = obtener_productos_para_etiquetar(db, filtros)
-    
-    total = len(productos)
+
+    filas = construir_filas_etiquetas(db, filtros)
+
+    total = len(filas)
     start = (page - 1) * page_size
     end = start + page_size
-    productos_paginados = productos[start:end]
-    
-    data = []
-    for p in productos_paginados:
-        es_nuevo = p.created_at and filtros.desde <= p.created_at.date() <= filtros.hasta
-        es_cambio = (
-            (p.precio_etiqueta is None or p.precio_etiqueta != p.precio_venta)
-            and p.updated_at and filtros.desde <= p.updated_at.date() <= filtros.hasta
-        )
-        if es_nuevo and es_cambio:
-            motivo = 'ambos'
-        elif es_nuevo:
-            motivo = 'nuevo'
-        else:
-            motivo = 'cambio_precio'
 
-        data.append(EtiquetaProductoOut(
-            id=p.id,
-            codigo_barras=p.codigo_barras,
-            nombre=p.nombre,
-            marca=p.marca,
-            descripcion=p.descripcion,
-            precio_venta=float(p.precio_venta or 0),
-            precio_etiqueta=float(p.precio_etiqueta) if p.precio_etiqueta else None,
-            tipo_venta=p.tipo_venta,
-            precio_por_kilo=float(p.precio_por_kilo) if p.precio_por_kilo else None,
-            categoria_id=p.categoria_id,
-            categoria_nombre=p.categoria.nombre if p.categoria else None,
-            sector_id=p.sector_id,
-            sector_nombre=p.sector.nombre if p.sector else None,
-            stock_actual=float(p.stock_actual or 0),
-            motivo=motivo,
-        ))
-    
+    data = [
+        EtiquetaProductoOut(**{k: getattr(f, k) for k in EtiquetaProductoOut.model_fields})
+        for f in filas[start:end]
+    ]
+
     return RespuestaLista(
         data=data, total=total, page=page, page_size=page_size,
         message=f"{total} producto(s) para etiquetar"
@@ -110,8 +84,12 @@ def generar_pdf_etiquetas(
     # hacía que cualquier filtro nuevo se perdiera silenciosamente acá.
     filtros = data.filtros
 
-    productos = obtener_productos_para_etiquetar(db, filtros)
-    
+    productos = construir_filas_etiquetas(db, filtros)
+
+    if data.productos_ids is not None:
+        elegidos = set(data.productos_ids)
+        productos = [f for f in productos if f.id in elegidos]
+
     if not productos:
         raise HTTPException(status_code=404, detail="No hay productos para etiquetar en ese período")
     

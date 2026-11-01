@@ -421,6 +421,7 @@ El store normaliza lo que lee: un `items` que no es array, un `total` no numéri
 | **Toggle "Bajo stock"** | `filterStockBajo = !filterStockBajo` — mutuamente excluyente con precio |
 | **Toggle "Precio <= costo"** | `filterPrecioDefasado = !filterPrecioDefasado` — mutuamente excluyente con stock |
 | **Toggle "En oferta"** | `filterEnOferta = !filterEnOferta` — independiente |
+| **Select de proveedor** | `filterProveedor` — muestra los productos asignados a ese proveedor (`proveedor_ids` viene en `GET /api/productos`, sale de la tabla `producto_proveedor`). Suma al contador de filtros activos y lo resetea "Limpiar filtros" |
 
 ### Tabla de Productos
 
@@ -449,6 +450,8 @@ El store normaliza lo que lee: un `items` que no es array, un `total` no numéri
 | Precio venta | Input number | — |
 | Stock inicial | Input number | Solo en creación |
 | Stock mínimo | Input number | 0 = alerta deshabilitada, con hint text |
+| Grupo de etiqueta | Input text | Opcional. Las variantes con el mismo grupo (sabores, colores) comparten **una sola etiqueta** de precio en Etiquetas. No afecta stock, lotes ni ventas. Mayúsculas/espacios no parten el grupo ("ades 1 l" = "Ades 1 L"). Solo se edita al **editar** un producto (en el alta no se pide) |
+| Etiqueta propia | Toggle | Solo si hay grupo. Imprime este producto con su etiqueta individual aunque tenga grupo (oferta, edición especial con otro precio) |
 | **Controlar stock** | BaseToggle | Desactivado en fraccionados: vender no descuenta lotes, no genera movimientos ni alertas (solo queda registrado lo vendido) |
 | Categoría | BaseSelect + botón `+` | Quick-create inline: nombre + botón Crear |
 | Proveedor | Combobox + botón `+` | Quick-create inline: nombre + CUIT |
@@ -976,6 +979,8 @@ Cada medio se concilia por separado: se registra un `cierre_parcial` con `medio_
 | **Datos** | Select Proveedor | Lista de proveedores |
 | **Datos** | Notas | Textarea opcional |
 | **Items** | Grilla dinámica | Filas agregables automáticamente |
+| **Items** | Precio unitario ↔ Subtotal | Los dos campos son editables. Si se escribe el **unitario**, el subtotal se calcula (cantidad × precio). Si se escribe el **subtotal** (ej. 6 u. → $9.000), el unitario se calcula solo ($1.500) y, si luego cambia la cantidad, se mantiene el subtotal y se recalcula el unitario. El campo activo se marca con borde de color. El unitario conserva todos los decimales para que el total no tenga errores de redondeo |
+| **Borrador** | Autoguardado | Mientras se carga, proveedor/notas/ítems se guardan solos en el navegador (`localStorage` `compras_borrador_v1`, 600 ms de debounce). Botón **Guardar borrador** guarda y cierra; al reabrir "Cargar Mercadería" se restaura con un aviso y botón **Descartar** (con confirmación inline). El botón de la pantalla muestra la etiqueta "Borrador" si hay uno. Se borra al **Guardar y Recibir**. Vive en ese navegador: no se comparte entre dispositivos |
 
 #### Grilla de Items (dinámica)
 
@@ -1973,6 +1978,27 @@ Cajero escribe en buscador de texto → Enter
 |-------|--------|
 | `Enter` en usuario | Foco a password |
 | `Enter` en password | Ejecuta login |
+
+---
+
+## Etiquetas de Precios
+
+**Ruta:** `/etiquetas-precios` — **Componente:** `EtiquetasPreciosView.vue` — **Backend:** `app/routers/etiquetas.py`, `app/services/etiquetas_service.py`, `app/services/etiquetas_pdf.py`
+
+| Elemento | Comportamiento |
+|----------|----------------|
+| **Orden** | Más recientes, más antiguos, nombre, **precio (menor a mayor / mayor a menor)**, categoría, sector. Lo resuelve el backend (`orden`); los sin precio quedan al final |
+| **Agrupar variantes** | Checkbox (activo por defecto, `agrupar`). Los productos con el mismo **grupo de etiqueta** salen en **una sola fila/etiqueta** ("Ades 1 L — 4 variantes") |
+| **Fila de grupo** | Ícono de capas, cantidad de variantes y "Ver variantes" (lista con el precio de cada una). Nombre y descripción de la etiqueta = nombre del grupo (editable). Stock = suma de las variantes que cubre |
+| **Precios distintos** | Si una variante tiene otro precio, la fila muestra la advertencia "Precios distintos" y la variante distinta se resalta. La etiqueta usa el precio más común. Desde la lista, **"Etiqueta propia"** saca esa variante del grupo y la imprime aparte (a propósito); si fue un descuido se corrige el precio en Productos. Al generar el PDF con grupos así, se pide confirmación ("Revisar" / "Imprimir igual") |
+| **Variante nueva en grupo ya etiquetado** | No genera etiqueta si otra variante del grupo ya tiene impreso ese mismo precio |
+| **Agrupar / Sacar del grupo** | En la barra de selección: se eligen productos, se escribe el nombre del grupo (autocompleta con los existentes) y "Agrupar" (mínimo 2). "Sacar del grupo" pide confirmación inline. Solo admin/encargado |
+| **Etiqueta de grupo** | Nunca lleva código de barras (modelo "completa"); el modelo "sencilla" no lo lleva de todos modos |
+| **Marcar impreso** | Sobre una fila de grupo actualiza `precio_etiqueta` de todas las variantes que comparten el precio impreso; las de otro precio quedan pendientes |
+| **Generar PDF** | Imprime la selección si la hay (`productos_ids` = id de fila); si no, todo lo filtrado en pantalla |
+| **Sector / descripción** | Las acciones sobre una fila de grupo se aplican a todas sus variantes |
+
+Endpoints nuevos: `POST /api/productos/asignar-grupo-etiqueta`, `POST /api/productos/etiqueta-propia`, `GET /api/productos/grupos-etiqueta`. Columnas nuevas en `productos`: `grupo_etiqueta`, `etiqueta_propia` (migración automática al arrancar).
 
 ---
 

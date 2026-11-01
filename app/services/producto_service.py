@@ -137,6 +137,24 @@ def _generar_codigo_barras(db: Session) -> str:
     return f"MAN-{seq:010d}"
 
 
+def resolver_grupo_etiqueta(db: Session, nombre: Optional[str]) -> Optional[str]:
+    """Limpia el nombre de un grupo de etiqueta y reusa la grafía de uno existente.
+
+    "ades 1 l" y "Ades 1 L" son el mismo grupo: se guarda siempre como el primero
+    que se cargó, así no se parten las variantes por una mayúscula.
+    """
+    limpio = " ".join((nombre or "").split())[:100]
+    if not limpio:
+        return None
+    clave = limpio.lower()
+    for (existente,) in db.query(Producto.grupo_etiqueta).filter(
+        Producto.grupo_etiqueta.isnot(None)
+    ).distinct().all():
+        if existente and existente.strip().lower() == clave:
+            return existente
+    return limpio
+
+
 def crear_producto(db: Session, data: dict) -> Producto:
     """Crea un producto nuevo con stock inicial."""
     cantidad_inicial = data.pop("cantidad_inicial", 0) or data.pop("stock_actual", 0) or 0
@@ -180,11 +198,14 @@ def actualizar_producto(db: Session, producto: Producto, data: dict) -> Producto
         "precio_venta", "precio_etiqueta", "imagen_url", "sku", "propiedades", "fuente",
         "categoria_id", "stock_minimo", "observaciones", "fecha_vencimiento",
         "tipo_venta", "precio_por_kilo", "precio_por_unidad", "controla_stock",
-        "es_recarga",
+        "es_recarga", "etiqueta_propia",
     ]
     for field in updatable:
         if field in data and data[field] is not None:
             setattr(producto, field, data[field])
+
+    if "grupo_etiqueta" in data:
+        producto.grupo_etiqueta = resolver_grupo_etiqueta(db, data["grupo_etiqueta"])
 
     # Borrar el campo de codigo no deja el producto sin el: se le asigna uno
     # interno, porque la columna es NOT NULL y UNIQUE.

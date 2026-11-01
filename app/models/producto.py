@@ -76,6 +76,13 @@ class Producto(Base):
     # real del dinero cargado (que sale de una cuenta digital, no del cajón).
     es_recarga = Column(Boolean, default=False, server_default=false(), nullable=False, index=True)
 
+    # Variantes que comparten una sola etiqueta de góndola (ej. Ades 1 L en 4
+    # sabores). Solo afecta la impresión de etiquetas: stock, lotes y ventas
+    # siguen siendo por producto. etiqueta_propia saca al producto de su grupo
+    # (precio distinto a propósito: oferta, edición especial).
+    grupo_etiqueta = Column(String(100), nullable=True, index=True)
+    etiqueta_propia = Column(Boolean, default=False, server_default=false(), nullable=False)
+
     # Bandera de revisión: se activa cuando un producto se vende por encima de su
     # stock real (suma de lotes). Indica posible error humano de carga (ej. se
     # cargó un lote de 10 y había 12) y requiere conteo/corrección posterior.

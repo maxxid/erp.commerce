@@ -200,6 +200,80 @@ def asignar_sector(
     )
 
 
+class AsignarGrupoEtiquetaRequest(BaseModel):
+    productos_ids: list[int]
+    grupo: Optional[str] = None   # None o vacío = sacar del grupo
+
+
+class EtiquetaPropiaRequest(BaseModel):
+    productos_ids: list[int]
+    propia: bool = True
+
+
+@router.get("/grupos-etiqueta", response_model=RespuestaData)
+def listar_grupos_etiqueta(
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+):
+    """Nombres de los grupos de etiqueta existentes (para autocompletar)."""
+    nombres = sorted(
+        {g.strip() for (g,) in db.query(Producto.grupo_etiqueta).filter(
+            Producto.activo == True, Producto.grupo_etiqueta.isnot(None)
+        ).distinct().all() if g and g.strip()},
+        key=str.lower,
+    )
+    return RespuestaData(data=nombres, message=f"{len(nombres)} grupo(s)")
+
+
+@router.post("/asignar-grupo-etiqueta", response_model=RespuestaData)
+def asignar_grupo_etiqueta(
+    data: AsignarGrupoEtiquetaRequest,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "encargado")),
+):
+    """Agrupa productos bajo una sola etiqueta (o los saca del grupo con grupo vacío)."""
+    if not data.productos_ids:
+        raise HTTPException(status_code=400, detail="No se indicaron productos")
+
+    grupo = producto_service.resolver_grupo_etiqueta(db, data.grupo)
+    filtro = (Producto.id.in_(data.productos_ids), Producto.activo == True)
+    afectados = db.query(func.count(Producto.id)).filter(*filtro).scalar() or 0
+    db.query(Producto).filter(*filtro).update(
+        {"grupo_etiqueta": grupo, "etiqueta_propia": False}, synchronize_session=False
+    )
+    db.commit()
+
+    accion = f"Agrupados en '{grupo}'" if grupo else "Sacados del grupo"
+    return RespuestaData(
+        data={"asignados": afectados, "grupo": grupo},
+        message=f"{accion}: {afectados} producto(s)",
+    )
+
+
+@router.post("/etiqueta-propia", response_model=RespuestaData)
+def marcar_etiqueta_propia(
+    data: EtiquetaPropiaRequest,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "encargado")),
+):
+    """Imprime al producto con etiqueta individual aunque pertenezca a un grupo."""
+    if not data.productos_ids:
+        raise HTTPException(status_code=400, detail="No se indicaron productos")
+
+    filtro = (Producto.id.in_(data.productos_ids), Producto.activo == True)
+    afectados = db.query(func.count(Producto.id)).filter(*filtro).scalar() or 0
+    db.query(Producto).filter(*filtro).update(
+        {"etiqueta_propia": data.propia}, synchronize_session=False
+    )
+    db.commit()
+
+    accion = "con etiqueta propia" if data.propia else "de vuelta en su grupo"
+    return RespuestaData(
+        data={"afectados": afectados, "propia": data.propia},
+        message=f"{afectados} producto(s) {accion}",
+    )
+
+
 @router.post("/marcar-etiquetado", response_model=RespuestaData)
 def marcar_etiquetado(
     data: MarcarEtiquetadoRequest,

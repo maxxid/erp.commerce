@@ -264,6 +264,8 @@ const defaultForm = () => ({
   observaciones: '',
   tipo_venta: 'unidad',
   controla_stock: true,
+  grupo_etiqueta: '',
+  etiqueta_propia: false,
 })
 
 const form = reactive(defaultForm())
@@ -521,6 +523,8 @@ function openEditModal(product) {
     observaciones: product.observaciones || '',
     tipo_venta: product.tipo_venta || 'unidad',
     controla_stock: product.controla_stock !== false,
+    grupo_etiqueta: product.grupo_etiqueta || '',
+    etiqueta_propia: !!product.etiqueta_propia,
   })
   showModal.value = true
 }
@@ -1396,6 +1400,24 @@ function formatFecha(fechaStr) {
               <span class="text-[10px] text-slate-400">0 = sin alerta de bajo stock</span>
             </template>
           </BaseInput>
+        </div>
+
+        <div class="space-y-2">
+          <BaseInput
+            v-model="form.grupo_etiqueta"
+            label="Grupo de etiqueta"
+            placeholder="Ej: Ades 1 L (opcional)"
+          >
+            <template #hint>
+              <span class="text-[10px] text-slate-400">Las variantes con el mismo grupo (sabores, colores) comparten una sola etiqueta de precio</span>
+            </template>
+          </BaseInput>
+          <BaseToggle
+            v-if="form.grupo_etiqueta"
+            v-model="form.etiqueta_propia"
+            label="Etiqueta propia"
+            description="Imprimir este producto con su propia etiqueta aunque tenga grupo (oferta, edición especial con otro precio)."
+          />
         </div>
 
         <BaseToggle
