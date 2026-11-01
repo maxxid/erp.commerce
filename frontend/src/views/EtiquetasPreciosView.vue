@@ -241,6 +241,7 @@ async function agruparSeleccionados() {
     const resp = await api.post('/api/productos/asignar-grupo-etiqueta', { productos_ids: ids, grupo: nombre })
     toast.success(`${resp?.asignados ?? ids.length} producto(s) → grupo "${resp?.grupo || nombre}"`)
     grupoNombre.value = ''
+    selectedProductos.value.clear()
     await Promise.all([cargarGrupos(), cargarPreview(true)])
   } catch (e) {
     toast.error(e?.data?.detail || 'Error al agrupar')
@@ -257,6 +258,7 @@ async function desagruparSeleccionados() {
   try {
     const resp = await api.post('/api/productos/asignar-grupo-etiqueta', { productos_ids: ids, grupo: null })
     toast.success(`${resp?.asignados ?? ids.length} producto(s) sacados del grupo`)
+    selectedProductos.value.clear()
     await Promise.all([cargarGrupos(), cargarPreview(true)])
   } catch (e) {
     toast.error(e?.data?.detail || 'Error al desagrupar')
@@ -377,7 +379,6 @@ const MAX_PAGINAS = 40
 
 async function cargarPreview(silent = false) {
   loading.value = true
-  selectedProductos.value.clear()
   try {
     const params = new URLSearchParams()
     params.set('desde', filtros.desde)
@@ -423,9 +424,17 @@ async function cargarPreview(silent = false) {
   }
 }
 
+const viendoTodoCatalogo = computed(() => !filtros.incluir_cambios_precio && !filtros.incluir_nuevos)
+
 function verTodoCatalogo() {
   filtros.incluir_cambios_precio = false
   filtros.incluir_nuevos = false
+  cargarPreview()
+}
+
+function volverAPendientes() {
+  filtros.incluir_cambios_precio = true
+  filtros.incluir_nuevos = true
   cargarPreview()
 }
 
@@ -653,6 +662,24 @@ onMounted(async () => {
           <BaseButton @click="cargarPreview" :loading="loading" variant="secondary" size="sm" class="w-full">
             <i class="fa-solid fa-arrows-rotate mr-1.5"></i> Actualizar vista previa
           </BaseButton>
+          <BaseButton
+            v-if="!viendoTodoCatalogo"
+            @click="verTodoCatalogo"
+            :disabled="loading"
+            variant="ghost"
+            size="sm"
+            class="w-full"
+            title="Lista todos los productos con precio, sin importar las fechas"
+          >
+            <i class="fa-solid fa-list mr-1.5"></i> Ver todo el catálogo
+          </BaseButton>
+          <div
+            v-else
+            class="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-brand-50 dark:bg-brand-950/30 border border-brand-200 dark:border-brand-800/50 text-xs text-brand-700 dark:text-brand-300"
+          >
+            <span><i class="fa-solid fa-list mr-1.5"></i>Viendo todo el catálogo</span>
+            <button type="button" class="font-bold underline" @click="volverAPendientes">Solo pendientes</button>
+          </div>
         </BaseCard>
 
         <!-- Formato de etiqueta -->

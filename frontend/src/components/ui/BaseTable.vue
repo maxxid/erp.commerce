@@ -17,7 +17,9 @@ const props = defineProps({
   maxHeight: { type: String, default: '' },
   rowClass: { type: Function, default: null },
   expandedRows: { type: Array, default: () => [] },
-  rowKey: { type: String, default: 'id' }
+  rowKey: { type: String, default: 'id' },
+  sortKey: { type: String, default: '' },
+  sortDir: { type: String, default: 'asc' }
 })
 
 const emit = defineEmits(['sort', 'row-click'])
@@ -107,7 +109,13 @@ const mobileCols = computed(() =>
             >
               <span class="flex items-center gap-1" :class="{ 'justify-end': col.align === 'right', 'justify-center': col.align === 'center' }">
                 <slot :name="'header-' + col.key">{{ col.label }}</slot>
-                <i v-if="col.sortable" class="fa-solid fa-sort text-slate-300 dark:text-slate-600 text-[10px]"></i>
+                <i
+                  v-if="col.sortable"
+                  class="fa-solid text-[10px]"
+                  :class="col.key === sortKey
+                    ? [sortDir === 'desc' ? 'fa-sort-down' : 'fa-sort-up', 'text-brand-500']
+                    : ['fa-sort', 'text-slate-300 dark:text-slate-600']"
+                ></i>
               </span>
             </th>
           </tr>

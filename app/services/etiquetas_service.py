@@ -171,6 +171,7 @@ def _fila_individual(p: Producto, filtros) -> FilaEtiqueta:
         sector_nombre=p.sector.nombre if p.sector else None,
         stock_actual=float(p.stock_actual or 0),
         motivo=_motivo(p, filtros),
+        grupo=(p.grupo_etiqueta or '').strip() or None,
         ids=[p.id],
     )
 
