@@ -100,6 +100,7 @@ const selectedProductos = ref(new Set())
 // a pegarle al backend, así se filtra al toque mientras se asignan sectores.
 const busqueda = ref('')
 const soloSinSector = ref(false)
+const ocultarAgrupados = ref(false)
 
 // Mismo criterio que Productos: minúsculas y sin tildes.
 const normalizeStr = v => {
@@ -107,9 +108,19 @@ const normalizeStr = v => {
   return s === 'null' || s === 'undefined' ? '' : s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 }
 
+const estaAgrupado = p => !!(p.es_grupo || p.grupo)
+
+// Una fila de grupo muestra la marca común o, si hay varias, todas las que tiene.
+function marcaDeFila(row) {
+  if (row.marca) return row.marca
+  const marcas = [...new Set((row.variantes || []).map(v => v.marca).filter(Boolean))]
+  return marcas.join(', ')
+}
+
 const productosFiltrados = computed(() => {
   let lista = productos.value
   if (soloSinSector.value) lista = lista.filter(p => !p.sector_id)
+  if (ocultarAgrupados.value) lista = lista.filter(p => !estaAgrupado(p))
   const q = normalizeStr(busqueda.value).trim()
   if (q) {
     lista = lista.filter(p =>
@@ -117,12 +128,17 @@ const productosFiltrados = computed(() => {
       || normalizeStr(p.marca).includes(q)
       || normalizeStr(p.codigo_barras).includes(q)
       || normalizeStr(p.categoria_nombre).includes(q)
-      || (p.variantes || []).some(v => normalizeStr(v.nombre).includes(q) || normalizeStr(v.codigo_barras).includes(q))
+      || normalizeStr(p.grupo).includes(q)
+      || (p.variantes || []).some(v =>
+        normalizeStr(v.nombre).includes(q)
+        || normalizeStr(v.marca).includes(q)
+        || normalizeStr(v.codigo_barras).includes(q))
     )
   }
   return lista
 })
 
+const agrupadosCount = computed(() => productos.value.filter(estaAgrupado).length)
 const sinSectorCount = computed(() => productos.value.filter(p => !p.sector_id).length)
 
 // La selección vive sobre lo que se ve: si el filtro cambia, lo que quedó
@@ -136,18 +152,60 @@ watch(productosFiltrados, (lista) => {
 
 const tableColumns = [
   { key: 'select', label: '', width: 'w-10', align: 'center', mobile: false },
-  { key: 'nombre', label: 'Producto' },
+  { key: 'nombre', label: 'Producto', sortable: true },
+  { key: 'marca', label: 'Marca', width: 'w-28', mobile: false, sortable: true },
   { key: 'motivo', label: '', width: 'w-24', mobile: false },
-  { key: 'sector_nombre', label: 'Sector', width: 'w-28', mobile: false },
+  { key: 'sector_nombre', label: 'Sector', width: 'w-28', mobile: false, sortable: true },
   { key: 'descripcion', label: 'Descripción', width: 'w-56', mobile: false },
-  { key: 'precio', label: 'Precio', align: 'right', width: 'w-28' },
-  { key: 'stock', label: 'Stock', align: 'right', width: 'w-16', mobile: false },
+  { key: 'precio', label: 'Precio', align: 'right', width: 'w-28', sortable: true },
+  { key: 'stock', label: 'Stock', align: 'right', width: 'w-16', mobile: false, sortable: true },
 ]
 
-const tableRows = computed(() => productosFiltrados.value.map(p => ({
-  ...p,
-  precio: p.tipo_venta === 'kilo' && p.precio_por_kilo ? p.precio_por_kilo : p.precio_venta,
-})))
+// Orden por encabezado: se aplica sobre lo ya cargado y pisa el orden del
+// selector mientras esté activo (asc → desc → vuelve al orden del selector).
+const sortKey = ref('')
+const sortDir = ref('asc')
+
+function onSort(key) {
+  if (sortKey.value !== key) {
+    sortKey.value = key
+    sortDir.value = 'asc'
+  } else if (sortDir.value === 'asc') {
+    sortDir.value = 'desc'
+  } else {
+    sortKey.value = ''
+    sortDir.value = 'asc'
+  }
+}
+
+function valorOrden(row, key) {
+  if (key === 'nombre') return normalizeStr(row.nombre)
+  if (key === 'marca') return row.marca_visible ? normalizeStr(row.marca_visible) : null
+  if (key === 'sector_nombre') return row.sector_nombre ? normalizeStr(row.sector_nombre) : null
+  if (key === 'precio') return Number(row.precio) || 0
+  if (key === 'stock') return Number(row.stock_actual) || 0
+  return null
+}
+
+const tableRows = computed(() => {
+  const filas = productosFiltrados.value.map(p => ({
+    ...p,
+    precio: p.tipo_venta === 'kilo' && p.precio_por_kilo ? p.precio_por_kilo : p.precio_venta,
+    marca_visible: marcaDeFila(p),
+  }))
+  if (!sortKey.value) return filas
+  const dir = sortDir.value === 'desc' ? -1 : 1
+  const key = sortKey.value
+  return filas.sort((a, b) => {
+    const va = valorOrden(a, key)
+    const vb = valorOrden(b, key)
+    if (va === null && vb === null) return 0
+    if (va === null) return 1
+    if (vb === null) return -1
+    const cmp = typeof va === 'string' ? va.localeCompare(vb, 'es') : va - vb
+    return cmp !== 0 ? cmp * dir : String(a.nombre).localeCompare(String(b.nombre), 'es')
+  })
+})
 
 const sinStockCount = computed(() => productosFiltrados.value.filter(p => (p.stock_actual || 0) <= 0).length)
 const totalEtiquetas = computed(() => productos.value.length)
@@ -280,6 +338,7 @@ async function darEtiquetaPropia(variante) {
 function limpiarBusqueda() {
   busqueda.value = ''
   soloSinSector.value = false
+  ocultarAgrupados.value = false
 }
 
 function toggleProducto(id) {
@@ -843,6 +902,22 @@ onMounted(async () => {
               :class="soloSinSector ? 'bg-white/25 text-white' : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'"
             >{{ sinSectorCount }}</span>
           </button>
+          <button
+            type="button"
+            class="px-3 py-[7px] rounded-lg text-xs font-semibold border flex items-center gap-1.5 transition-all"
+            :class="ocultarAgrupados
+              ? 'bg-brand-600 text-white border-brand-600 shadow-sm shadow-brand-600/20'
+              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-brand-300 dark:hover:border-brand-700'"
+            title="Oculta los productos que ya pertenecen a un grupo de etiqueta, para quedarte con los que faltan agrupar"
+            @click="ocultarAgrupados = !ocultarAgrupados"
+          >
+            <i :class="ocultarAgrupados ? 'fa-solid fa-eye-slash' : 'fa-solid fa-layer-group'"></i>
+            {{ ocultarAgrupados ? 'Agrupados ocultos' : 'Ocultar agrupados' }}
+            <span
+              class="px-1.5 py-0.5 rounded-full text-[10px] font-bold"
+              :class="ocultarAgrupados ? 'bg-white/25 text-white' : 'bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300'"
+            >{{ agrupadosCount }}</span>
+          </button>
         </div>
 
         <!-- Barra de selección y asignación masiva -->
@@ -931,6 +1006,9 @@ onMounted(async () => {
             :rows="tableRows"
             :loading="loading"
             :row-class="filaSeleccionadaClass"
+            :sort-key="sortKey"
+            :sort-dir="sortDir"
+            @sort="onSort"
             empty-title="No hay productos"
             empty-text="Ajustá los filtros y dale a Actualizar"
             empty-icon="fa-tag"
@@ -1003,6 +1081,11 @@ onMounted(async () => {
                   </li>
                 </ul>
               </div>
+            </template>
+            <template #marca="{ row }">
+              <span class="block max-w-[120px] truncate text-xs text-slate-600 dark:text-slate-300" :title="row.marca_visible">
+                {{ row.marca_visible || '—' }}
+              </span>
             </template>
             <template #motivo="{ row }">
               <BaseBadge :variant="motivoBadge(row.motivo).variant" size="xs">

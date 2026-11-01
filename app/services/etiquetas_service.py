@@ -225,6 +225,7 @@ def _fila_grupo(restantes: List[Producto], miembros: List[Producto], filtros) ->
             {
                 "id": m.id,
                 "nombre": m.nombre,
+                "marca": (m.marca or "").strip() or None,
                 "codigo_barras": m.codigo_barras,
                 "precio_venta": float(m.precio_venta or 0),
                 "precio_etiqueta": float(m.precio_etiqueta) if m.precio_etiqueta else None,

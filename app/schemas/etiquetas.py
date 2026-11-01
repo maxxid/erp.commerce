@@ -22,6 +22,7 @@ class VarianteEtiquetaOut(BaseModel):
     """Producto que forma parte de una etiqueta de grupo."""
     id: int
     nombre: str
+    marca: Optional[str] = None
     codigo_barras: str
     precio_venta: float
     precio_etiqueta: Optional[float] = None
