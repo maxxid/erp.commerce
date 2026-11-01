@@ -97,7 +97,9 @@ def obtener_productos_para_etiquetar(
     else:
         query = query.order_by(Categoria.nombre.asc().nullslast(), Producto.nombre.asc())
     
-    return query.all()
+    # Desempate estable: la pantalla pide por páginas y sin esto un empate de
+    # fecha/precio podía repetir o saltear productos entre página y página.
+    return query.order_by(Producto.id.asc()).all()
 
 
 @dataclass

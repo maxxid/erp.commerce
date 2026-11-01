@@ -372,6 +372,9 @@ async function cargarHistorial() {
   }
 }
 
+const POR_PAGINA = 500
+const MAX_PAGINAS = 40
+
 async function cargarPreview(silent = false) {
   loading.value = true
   selectedProductos.value.clear()
@@ -386,11 +389,24 @@ async function cargarPreview(silent = false) {
     if (filtros.sector_id) params.set('sector_id', String(filtros.sector_id))
     params.set('orden', filtros.orden)
     params.set('agrupar', String(filtros.agrupar))
-    params.set('page', '1')
-    params.set('page_size', '500')
+    params.set('page_size', String(POR_PAGINA))
 
-    const data = await api.get(`/api/etiquetas/precios?${params}`)
-    productos.value = Array.isArray(data) ? data : (data?.data || [])
+    // El backend topa cada página en 500: se piden todas hasta que una venga corta.
+    const vistos = new Set()
+    const todos = []
+    for (let pagina = 1; pagina <= MAX_PAGINAS; pagina++) {
+      params.set('page', String(pagina))
+      const data = await api.get(`/api/etiquetas/precios?${params}`)
+      const lote = Array.isArray(data) ? data : (data?.data || [])
+      for (const fila of lote) {
+        if (!vistos.has(fila.id)) {
+          vistos.add(fila.id)
+          todos.push(fila)
+        }
+      }
+      if (lote.length < POR_PAGINA) break
+    }
+    productos.value = todos
     descripcionesEditadas.value = {}
     if (!silent) {
       if (productos.value.length) {
