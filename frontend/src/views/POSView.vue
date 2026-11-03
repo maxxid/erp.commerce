@@ -1517,6 +1517,7 @@ function handleTextSearchEnter() {
     // En modo texto con un único resultado, Enter lo agrega al carrito.
     if (q && filteredPOSProducts.value.length === 1) {
       addToCart(filteredPOSProducts.value[0])
+      posLookupCode.value = ''
     }
     return
   }
@@ -2276,10 +2277,6 @@ let timerEntradaManual = null
 
 function handlePOSInput() {
   const val = posLookupCode.value.trim()
-  if (val.length >= 13 && !val.startsWith('*')) {
-    triggerPOSLookup()
-    return
-  }
   clearTimeout(timerEntradaManual)
   // Solo cuando ya hay algo despues del segundo '*': con el precio a medias se
   // sigue escribiendo y el input se deja como esta.
