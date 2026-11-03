@@ -31,3 +31,4 @@
 - Prefiere usar IA para parsear texto pegado de tickets/facturas de proveedor y prellenar la carga de artículos en compras, manteniendo revisión manual antes de guardar. Confidence: 0.8
 - En tickets de proveedor, el precio unitario extraído se trata como sugerido/editable porque los descuentos pueden venir como ítem separado. Confidence: 0.75
 - En el parseo de tickets de proveedor con IA, las líneas que no se reconocen deben mostrarse al operador (p. ej. en una sección destacada) para carga manual, en lugar de descartarse silenciosamente. Confidence: 0.8
+- Prefiere mantener un archivo de estructura del repo (ubicaciones de archivos y vinculaciones padre-hijo, p. ej. `ESTRUCTURA.md`) y que al iniciar una sesión se lean primero los archivos de contexto/estructura (`CONTEXTO.md` + `ESTRUCTURA.md`) en lugar de escanear el repo, para ahorrar tokens y arrancar rápido. Confidence: 0.85

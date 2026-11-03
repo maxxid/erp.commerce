@@ -101,6 +101,7 @@ const selectedProductos = ref(new Set())
 const busqueda = ref('')
 const soloSinSector = ref(false)
 const ocultarAgrupados = ref(false)
+const soloSeleccionados = ref(false)
 
 // Mismo criterio que Productos: minúsculas y sin tildes.
 const normalizeStr = v => {
@@ -118,6 +119,7 @@ function marcaDeFila(row) {
 }
 
 const productosFiltrados = computed(() => {
+  if (soloSeleccionados.value) return productos.value.filter(p => selectedProductos.value.has(p.id))
   let lista = productos.value
   if (soloSinSector.value) lista = lista.filter(p => !p.sector_id)
   if (ocultarAgrupados.value) lista = lista.filter(p => !estaAgrupado(p))
@@ -141,13 +143,28 @@ const productosFiltrados = computed(() => {
 const agrupadosCount = computed(() => productos.value.filter(estaAgrupado).length)
 const sinSectorCount = computed(() => productos.value.filter(p => !p.sector_id).length)
 
-// La selección vive sobre lo que se ve: si el filtro cambia, lo que quedó
-// afuera se deselecciona solo, así "Asignar a N" nunca incluye invisibles.
-watch(productosFiltrados, (lista) => {
-  const visibles = new Set(lista.map(p => p.id))
+// La selección sobrevive a las búsquedas y filtros: se arma de a poco buscando
+// distintas cosas. Solo se descarta lo que ya no existe en la lista cargada
+// (por ejemplo tras actualizar). Lo seleccionado que el filtro esconde se avisa
+// en la barra y se ve con "Solo seleccionados".
+watch(productos, (lista) => {
+  const existentes = new Set(lista.map(p => p.id))
   for (const id of [...selectedProductos.value]) {
-    if (!visibles.has(id)) selectedProductos.value.delete(id)
+    if (!existentes.has(id)) selectedProductos.value.delete(id)
   }
+})
+
+watch(() => selectedProductos.value.size, (n) => {
+  if (n === 0) soloSeleccionados.value = false
+})
+
+const fueraDeVistaCount = computed(() => {
+  const visibles = new Set(productosFiltrados.value.map(p => p.id))
+  let n = 0
+  for (const id of selectedProductos.value) {
+    if (!visibles.has(id)) n++
+  }
+  return n
 })
 
 const tableColumns = [
@@ -339,6 +356,7 @@ function limpiarBusqueda() {
   busqueda.value = ''
   soloSinSector.value = false
   ocultarAgrupados.value = false
+  soloSeleccionados.value = false
 }
 
 function toggleProducto(id) {
@@ -918,6 +936,23 @@ onMounted(async () => {
               :class="ocultarAgrupados ? 'bg-white/25 text-white' : 'bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300'"
             >{{ agrupadosCount }}</span>
           </button>
+          <button
+            v-if="selectedProductos.size"
+            type="button"
+            class="px-3 py-[7px] rounded-lg text-xs font-semibold border flex items-center gap-1.5 transition-all"
+            :class="soloSeleccionados
+              ? 'bg-brand-600 text-white border-brand-600 shadow-sm shadow-brand-600/20'
+              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-brand-300 dark:hover:border-brand-700'"
+            title="Muestra solo los productos seleccionados, aunque no coincidan con la búsqueda o los filtros"
+            @click="soloSeleccionados = !soloSeleccionados"
+          >
+            <i class="fa-solid fa-square-check"></i>
+            Solo seleccionados
+            <span
+              class="px-1.5 py-0.5 rounded-full text-[10px] font-bold"
+              :class="soloSeleccionados ? 'bg-white/25 text-white' : 'bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300'"
+            >{{ selectedProductos.size }}</span>
+          </button>
         </div>
 
         <!-- Barra de selección y asignación masiva -->
@@ -928,6 +963,7 @@ onMounted(async () => {
           <span class="text-xs text-slate-500 dark:text-slate-400">
             Viendo <b class="text-slate-800 dark:text-white">{{ productosFiltrados.length }}</b><span v-if="productosFiltrados.length !== totalEtiquetas"> de {{ totalEtiquetas }}</span>
             <span v-if="selectedProductos.size"> · <b class="text-brand-600 dark:text-brand-400">{{ selectedProductos.size }}</b> sel.</span>
+            <span v-if="fueraDeVistaCount" class="text-amber-600 dark:text-amber-400"> ({{ fueraDeVistaCount }} fuera de esta vista)</span>
           </span>
           <div class="ml-auto flex flex-wrap items-center gap-2">
             <button

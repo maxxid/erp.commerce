@@ -100,15 +100,15 @@
           <BaseInput
             ref="barcodeInput"
             v-model="posLookupCode"
-            label="Código de Barras"
-            placeholder="Escanear o escribir código..."
+            label="Buscar producto"
+            placeholder="Escanear o buscar por nombre, marca o código..."
             input-class="font-mono-data"
             size="lg"
           @input="handlePOSInput"
-          @enter="triggerPOSLookup()"
+          @enter="handleUnifiedEnter()"
           >
             <template #label>
-              Código de Barras
+              Buscar producto
               <span class="relative inline-flex align-middle">
                 <button
                   ref="barcodeHelpBtn"
@@ -298,6 +298,9 @@
                   <BaseButton size="sm" block @click="addManualToCart">
                     <i class="fa-solid fa-plus mr-1"></i> Agregar al carrito
                   </BaseButton>
+                  <BaseButton size="sm" variant="secondary" block @click="createBarcode = lookupProduct._barcode; showCreateModal = true">
+                    <i class="fa-solid fa-box mr-1"></i> Crear producto
+                  </BaseButton>
                 </div>
               </div>
               <!-- Not found (simple error) -->
@@ -309,19 +312,7 @@
           </Transition>
         </BaseCard>
 
-        <BaseInput
-          ref="textSearchRef"
-          v-model="posTextSearch"
-          placeholder="Buscar producto por nombre, marca o código..."
-          size="md"
-          @enter="handleTextSearchEnter"
-        >
-          <template #prefix>
-            <i class="fa-solid fa-magnifying-glass text-slate-400"></i>
-          </template>
-        </BaseInput>
-
-        <!-- Category chips -->
+         <!-- Category chips -->
         <div class="flex flex-wrap gap-2">
           <button
             type="button"
@@ -1413,7 +1404,6 @@ const { firstSaleOfDay } = useConfetti()
 const posPrefs = usePosPreferencesStore()
 
 const posLookupCode = ref('')
-const posTextSearch = ref('')
 const selectedPOSCategory = ref(null)
 const filterPorKilo = ref(false)
 const posVistaProductos = ref('grilla') // 'grilla' | 'lista'
@@ -1469,7 +1459,6 @@ const nombreCarritoRef = ref(null)
 const hasSuspicious = computed(() => carritoStore.sospechosos.length > 0)
 const showSusWarning = ref(true)
 
-const textSearchRef = ref(null)
 const barcodeInput = ref(null)
 const barcodeHelpBtn = ref(null)
 const showBarcodeHelp = ref(false)
@@ -1488,11 +1477,10 @@ const {
   continuous: true,
   cooldownMs: 600,
   onDetect: async (raw) => {
-    posLookupCode.value = raw
     // Cerrar el teclado virtual si estaba abierto: el foco del input después
     // de agregar al carrito lo volvería a abrir y taparía la vista.
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
-    await triggerPOSLookup()
+    await triggerPOSLookup({ code: raw })
   },
 })
 
@@ -1524,8 +1512,14 @@ const createBarcode = ref('')
 const nextGenCode = () => `GEN-${String(Date.now()).slice(-8)}`
 
 function handleTextSearchEnter() {
-  const q = posTextSearch.value.trim()
-  if (!q || filteredPOSProducts.value.length > 0) return
+  const q = posLookupCode.value.trim()
+  if (!q || filteredPOSProducts.value.length > 0) {
+    // En modo texto con un único resultado, Enter lo agrega al carrito.
+    if (q && filteredPOSProducts.value.length === 1) {
+      addToCart(filteredPOSProducts.value[0])
+    }
+    return
+  }
   // Check if query looks like a barcode (mostly digits)
   createBarcode.value = /^\d{8,}$/.test(q) ? q : ''
   showMissingDialog.value = true
@@ -1540,10 +1534,11 @@ function onProductCreated(product) {
   // Add to local products list so it appears immediately
   products.value.push(product)
   // Clear search and select the new product
-  posTextSearch.value = ''
+  posLookupCode.value = ''
   selectedPOSCategory.value = product.categoria_id || null
   toast.success(`${product.nombre} creado. Podés agregarlo al carrito desde la grilla.`)
   showCreateModal.value = false
+  closeLookupPanel()
 }
 
 function crearCarrito() {
@@ -1783,6 +1778,15 @@ const normalizeStr = v => {
   return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 }
 
+// Detecta el modo del input unificado a partir de su valor.
+function detectarModo(valor) {
+  const v = String(valor ?? '').trim()
+  if (!v) return 'vacio'
+  if (v.startsWith('*')) return 'manual'
+  if (/^\d{8,}$/.test(v)) return 'codigo'
+  return 'texto'
+}
+
 const filteredPOSProducts = computed(() => {
   let list = products.value
   if (selectedPOSCategory.value) {
@@ -1791,17 +1795,17 @@ const filteredPOSProducts = computed(() => {
   if (filterPorKilo.value) {
     list = list.filter(p => p.tipo_venta === 'kilo')
   }
-  if (posTextSearch.value.trim()) {
-    const q = normalizeStr(posTextSearch.value).trim()
-    if (q) {
-      list = list.filter(p => {
-        if (!p) return false
-        const nombre = normalizeStr(p.nombre || '')
-        const marca = normalizeStr(p.marca || '')
-        const codigo = normalizeStr(p.codigo_barras || '')
-        return nombre.includes(q) || marca.includes(q) || codigo.includes(q)
-      })
-    }
+  // El filtro de texto solo aplica en modo texto (no código ni manual).
+  const modo = detectarModo(posLookupCode.value)
+  const q = modo === 'texto' ? normalizeStr(posLookupCode.value).trim() : ''
+  if (q) {
+    list = list.filter(p => {
+      if (!p) return false
+      const nombre = normalizeStr(p.nombre || '')
+      const marca = normalizeStr(p.marca || '')
+      const codigo = normalizeStr(p.codigo_barras || '')
+      return nombre.includes(q) || marca.includes(q) || codigo.includes(q)
+    })
   }
   return list
 })
@@ -2027,8 +2031,9 @@ function refocusBarcode() {
   nextTick(() => barcodeInput.value?.focus())
 }
 
-async function triggerPOSLookup({ automatico = false } = {}) {
-  const raw = posLookupCode.value.trim()
+async function triggerPOSLookup({ automatico = false, code = null } = {}) {
+  const fromInput = code == null
+  const raw = (code != null ? String(code) : posLookupCode.value).trim()
   if (!raw) return
 
   if (raw.startsWith('*')) {
@@ -2037,12 +2042,10 @@ async function triggerPOSLookup({ automatico = false } = {}) {
     const nombre = (parts[1] || '').trim()
     const precio = parseFloat(parts[2] || '0')
     if (!nombre || !(precio > 0)) {
-      // A medio escribir no se avisa ni se borra nada: el operador todavia esta
-      // tipeando el precio. El aviso queda para cuando el error fue el Enter.
       if (!automatico) toast.warning('Formato: *Nombre*Precio. Ej: *COCA 1.5L*1500')
       return
     }
-    posLookupCode.value = ''
+    if (fromInput) posLookupCode.value = ''
     const cleanCode = `GEN-${String(Date.now()).slice(-8)}`
     const tempProd = {
       id: Date.now() + Math.random(),
@@ -2062,7 +2065,7 @@ async function triggerPOSLookup({ automatico = false } = {}) {
   const local = products.value.find(p => p.codigo_barras === raw)
   if (local) {
     addToCart(local)
-    posLookupCode.value = ''
+    if (fromInput) posLookupCode.value = ''
     if (!lookupBadges.value.some(b => b.includes(raw))) {
       lookupBadges.value.unshift(raw)
       if (lookupBadges.value.length > 10) lookupBadges.value.pop()
@@ -2072,7 +2075,7 @@ async function triggerPOSLookup({ automatico = false } = {}) {
   }
 
   // 2. No está en local, buscar en API - mostrar panel con animación
-  posLookupCode.value = ''
+  if (fromInput) posLookupCode.value = ''
   const lookupId = Date.now()
   lookupProduct._searchingExternal = true
   lookupProduct._barcode = raw
@@ -2100,7 +2103,7 @@ async function triggerPOSLookup({ automatico = false } = {}) {
         })
       }
       addToCart(localHit || products.value[products.value.length - 1])
-      posLookupCode.value = ''
+      if (fromInput) posLookupCode.value = ''
       if (!lookupBadges.value.some(b => b.includes(raw))) {
         lookupBadges.value.unshift(raw)
         if (lookupBadges.value.length > 10) lookupBadges.value.pop()
@@ -2287,6 +2290,15 @@ function handlePOSInput() {
   lookupProduct.id = null
 }
 
+function handleUnifiedEnter() {
+  const modo = detectarModo(posLookupCode.value)
+  if (modo === 'manual' || modo === 'codigo') {
+    triggerPOSLookup()
+  } else {
+    handleTextSearchEnter()
+  }
+}
+
 function addManualToCart() {
   const nombre = lookupProduct._manualNombre?.trim()
   const precio = lookupProduct._manualPrecio || 0
@@ -2355,7 +2367,6 @@ function addToCart(product, qty = 1, price = null) {
     })
   }
 
-  posLookupCode.value = ''
   lookupProduct.id = null
   lookupProduct._searched = false
   recalcCart()

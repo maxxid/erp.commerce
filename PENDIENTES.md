@@ -6,7 +6,67 @@
 
 ---
 
-## 📍 Roadmap: convergencia híbrida mobile
+## Contexto de sesión (movido desde CONTEXTO.md)
+
+### 🧠 Conocimiento del dominio
+
+- **Tipo de cambio de día:** Si la caja se abrió ayer y hoy es otro día, `caja_service.caja_abierta()` la cierra automáticamente al consultar el estado
+- **Stock en tránsito vs real:** al crear OC, sube `stock_transito`; al recibir, baja tránsito y sube `stock_actual`
+- **Soft delete:** Productos, clientes, proveedores no se borran físicamente, se desactivan con `activo=False`
+- **Anular venta:** revierte stock (`MovimientoStock` tipo `venta_anulada`), revierte caja, revierte saldo cta. cte.
+- **Facturación ARCA:** backend usa `curl` directo (no zeep) por issues SSL con servers legacy; se ejecuta vía `/usr/bin/openssl` y `curl -sk` cuando hace falta CMS
+- **Webhooks MP:** validan firma HMAC-SHA256 con `webhook_secret` configurable; el secret se borra desde Ajustes
+- **Cta. Corriente:** medio de pago propio del ERP (no MP), incrementa saldo cliente sin pasar por pasarela
+
+### ⚠️ Gotchas recordados
+
+- **No usar zeep para WSFE** — SSL con ARCA legacy rompe. Usar `curl` directo.
+- **TRA de AFIP** necesita timezone `-03:00` (Argentina), no UTC.
+- **Cert/key de AFIP** se desencriptan y escriben a temp files antes de usar SSL mutuo.
+- **CSR de AFIP** debe tener `serialNumber=CUIT` (requerido por ARCA).
+- **Webhooks MP:** `order.processed` es el evento, no `payment`. Y no validar firma en webhooks QR según docs.
+- **Sandbox MP:** URL = `api.mercadopago.com` (no `sandbox.mercadopago.com` que ya no existe).
+- **MP provincia:** 24 valores válidos; default Jujuy / San Salvador. Ciudad debe matchear.
+- **MP `unit_measure`** es obligatorio en items de orden o falla.
+- **Auto-emisión FE:** `venta_service.confirmar_venta()` consulta `get_factura_auto_por_medio()` antes de emitir — respetá ese toggle.
+- **No romper features existentes** — siempre verificar contra `MAESTRO.md` antes de cambiar algo.
+- **Build antes de commitear frontend** — `npm run build` + commitear el `dist/` actualizado.
+- **Migraciones SQLite:** usar el patrón `PRAGMA table_info` + `ALTER TABLE ... IF NOT EXISTS` (no hay Alembic todavía).
+
+### 🆘 Si algo no anda
+
+1. **Backend no arranca:** ver `iniciar.bat` para stack trace; `app/main.py` es el entry.
+2. **Frontend no compila:** `cd frontend && npm run build` para ver error; `dist/` es lo que se sirve.
+3. **Endpoint nuevo no aparece:** reiniciar uvicorn (no HMR en backend).
+4. **Cambio en schema no se aplica:** `_migrate_new_columns()` en `app/main.py:243-259` — agregar bloque siguiendo el patrón.
+5. **Factura rechazada:** revisar `app/services/afip_service.py` y los logs SOAP; el modal muestra el motivo.
+6. **Webhook MP no procesa:** ver `MERCADOPAGO.md` troubleshooting + logs en `app/services/mercadopago_service.py`.
+
+### 🟢 Dónde estamos ahora (snapshot 09–10/08/2026 — último commit `3a494b7`)
+
+**Tareas cerradas en esa sesión (en orden):**
+1. **Producto ↔ Proveedor (UI rica)** — `ProductoProveedoresManager.vue` integrado en el modal de edición. Backend ya estaba desde el 08/08.
+2. **Lotes + FEFO (MVP + UI rica)** — backend completo + frontend (manager en producto, vencimiento en Compras, alertas en Dashboard, reporte en Reportes). Migración auto crea "Lote inicial" para stock preexistente.
+3. **ProductsView UX** — buscador con debounce + clear, filtros independientes (sin exclusión mutua), botón "Limpiar filtros" + contador de filtros activos, badges con contraste correcto.
+4. **ProductsView bug fix** — el buscador fallaba silenciosamente cuando la API devolvía campos con tipo raro (BigInt/Number/Object). Vue 3 en computeds con excepción mantiene valor anterior sin re-renderizar. Fix: `safeStr()` + `Number()` + try/catch con logging.
+5. **BaseModal scroll** — modal crecía sin límite y no se podía scrollear. Fix: max-height + flex-col + overflow-y-auto en body + footer slot para botones fijos.
+
+**Pendiente de validación manual en browser (no testeado aún):**
+- Lotes/FEFO end-to-end: migración inicial → recepción con vencimiento → venta consume por FEFO → anulación revierte → alertas Dashboard → reporte valorizado
+- ProductsView: buscador con datos reales (especialmente con campos null/tipo raro)
+- BaseModal: scroll en modal de producto + edición con varios proveedores y lotes
+
+**Próximo frente sugerido** (a discutir): refinar Lotes (bloqueo de venta de lotes vencidos en POS) o pasar a **MercadoPago: select de ciudad por provincia** o **Reportes exportables CSV**.
+
+**Decisiones de diseño Lotes ya cerradas** (referencia):
+- Todos los productos usan lotes · 1 lote por item en recepción · FEFO automático en ventas/ajustes/anulación · `fecha_vencimiento` vive solo en lote.
+
+### 📋 Reglas de código & estilo (Project Taste)
+
+1. **Arquitectura:** mantener separación estricta de responsabilidades entre rutas, controladores y servicios.
+2. **Manejo de errores:** retornar errores tipados; evitar bloques `try/catch` vacíos o genéricos sin logging.
+3. **Librerías:** no agregar nuevas dependencias externas sin confirmación previa del usuario.
+4. **Patrones preferidos:** funciones puras, composición sobre herencia, manejo explícito de tipos.
 
 Estrategia: **responsive en las vistas existentes + pantallas dedicadas solo para flujos lineales del piso** (la convención ya existe: `/cobrar`, `/cargar-mercaderia`, `/control-stock` con `meta.bare`). Breakpoint único `md` (768px), CSS para layout y JS solo para features (cámara, sonidos).
 

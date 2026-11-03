@@ -7,6 +7,36 @@
 
 ---
 
+## Cómo usar este documento (ahorro de tokens)
+
+Lee **solo la sección relevante** a tu tarea. Mapa rápido tarea → sección:
+
+| Tarea | Sección |
+|---|---|
+| POS, carritos, escáner, recargas, venta por peso | §4 POS |
+| Productos, ofertas, proveedor-producto, control de stock | §5 Productos |
+| Caja, apertura/cierre, arqueo, cuentas digitales, denominaciones | §6 Caja |
+| Ventas, anulación, corrección de medio de pago | §7 Ventas |
+| Clientes, deuda, cta. cte. | §8 Clientes |
+| Proveedores | §9 Proveedores |
+| Compras, recepción, borrador | §10 Compras |
+| Precios online, scraping, análisis de compra | §11 Precios Online |
+| Calendario | §12 Calendario |
+| Reportes, vendido por peso, recargas | §13 Reportes |
+| Usuarios, permisos | §14 Usuarios |
+| Licencias, planes | §15 Licencias |
+| Auditoría, carritos abandonados | §16 Auditoría |
+| Backups, catálogo central, R2 | §17 Backups |
+| Atajos, command palette, dark mode | §18 Elementos Globales |
+| Flujos críticos (venta, caja, compra, anulación, etc.) | §19 Flujos Funcionales Críticos |
+| Reglas de negocio | §20 Reglas de Negocio |
+| Atajos de teclado | §21 Atajos de Teclado |
+| Etiquetas de precio, grupos de variantes | sección "Etiquetas de Precios" (al final) |
+
+No leas el documento completo. Si una tarea toca un módulo, lee solo su sección + §19/§20 si aplica.
+
+---
+
 ## Índice
 
 1. [Estructura General](#1-estructura-general)
