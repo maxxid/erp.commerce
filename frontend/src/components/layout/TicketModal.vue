@@ -4,7 +4,10 @@
          @click.self="$emit('close')">
       <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full max-h-[90vh] overflow-y-auto">
         <div class="flex items-center justify-between p-4 border-b border-slate-100">
-          <h3 class="font-bold text-slate-900 text-sm">Ticket de Venta</h3>
+          <div>
+            <h3 class="font-bold text-slate-900 text-sm">Ticket de Venta</h3>
+            <p class="text-[10px] text-slate-400">Enter/Esc cerrar · P imprimir<span v-if="ticket.venta_id"> · F factura</span></p>
+          </div>
           <div class="flex items-center gap-2">
             <button v-if="ticket.venta_id" @click="$emit('emitir-factura', ticket.venta_id)" class="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1">
               <i class="fa-solid fa-file-invoice"></i> FE
@@ -12,7 +15,7 @@
             <button @click="printTicket" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1">
               <i class="fa-solid fa-print"></i> Imprimir
             </button>
-            <button @click="$emit('close')" class="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 flex items-center justify-center transition">
+            <button ref="closeBtn" aria-label="Cerrar" @click="$emit('close')" class="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-brand-500/50 outline-none flex items-center justify-center transition">
               <i class="fa-solid fa-xmark text-xs"></i>
             </button>
           </div>
@@ -92,13 +95,58 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch, nextTick, onUnmounted } from 'vue'
 
-defineProps({
+const props = defineProps({
   show: Boolean,
   ticket: { type: Object, default: () => ({ items: [] }) }
 })
-defineEmits(['close', 'emitir-factura'])
+const emit = defineEmits(['close', 'emitir-factura'])
+
+const closeBtn = ref(null)
+let abiertoEn = 0
+const MS_IGNORAR_TECLAS = 300
+
+function onKeydown(e) {
+  if (e.ctrlKey || e.metaKey || e.altKey) return
+  const key = e.key
+  const el = document.activeElement
+  const reciente = Date.now() - abiertoEn < MS_IGNORAR_TECLAS
+
+  if (key === 'Escape') {
+    e.preventDefault()
+    if (!e.repeat) emit('close')
+    return
+  }
+  if (key === 'Enter') {
+    if (el && el.tagName === 'BUTTON' && el !== closeBtn.value && !reciente) return
+    e.preventDefault()
+    if (!reciente && !e.repeat) emit('close')
+    return
+  }
+  if (reciente || e.repeat) return
+  if (el && ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)) return
+  const k = String(key).toLowerCase()
+  if (k === 'p') {
+    e.preventDefault()
+    printTicket()
+  } else if (k === 'f' && props.ticket.venta_id) {
+    e.preventDefault()
+    emit('emitir-factura', props.ticket.venta_id)
+  }
+}
+
+watch(() => props.show, (visible) => {
+  if (visible) {
+    abiertoEn = Date.now()
+    document.addEventListener('keydown', onKeydown)
+    nextTick(() => closeBtn.value?.focus())
+  } else {
+    document.removeEventListener('keydown', onKeydown)
+  }
+}, { immediate: true })
+
+onUnmounted(() => document.removeEventListener('keydown', onKeydown))
 
 function itemSubtotal(item) {
   if (item.subtotal != null) return item.subtotal
