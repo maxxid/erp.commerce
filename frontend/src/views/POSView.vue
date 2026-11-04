@@ -2388,7 +2388,7 @@ const recargaForm = reactive({ monto: 1000, error: '', medio_pago_carga: '' })
 const recargaHabilitada = computed(() => !!recargaCfg.value.producto_id)
 const puedeConfigurarRecargas = computed(() => ['admin', 'encargado'].includes(auth.currentUser?.rol))
 const medioPagoCargaLabel = computed(() => {
-  const found = mediosPago.find(m => m.value === recargaCfg.value.medio_pago_carga)
+  const found = mediosPago.value.find(m => m.value === recargaCfg.value.medio_pago_carga)
   return found ? found.label : recargaCfg.value.medio_pago_carga
 })
 const mediosPagoCargaDisponibles = computed(() => [
@@ -2491,7 +2491,7 @@ function agregarRecargaAlCarrito() {
 }
 
 function handlePagoKeydown(event) {
-  const pagos = mediosPago.map(m => m.value)
+  const pagos = mediosPago.value.map(m => m.value)
   const key = event.key
   if (key >= '1' && key <= '7') {
     // El atajo va hasta cuántos medios hay hoy: con menos de 7 habilitados,
