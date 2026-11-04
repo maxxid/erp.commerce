@@ -106,6 +106,7 @@
             size="lg"
           @input="handlePOSInput"
           @enter="handleUnifiedEnter()"
+          @keydown="handleBuscadorKeydown"
           >
             <template #label>
               Buscar producto
@@ -134,6 +135,7 @@
                       <li><i class="fa-solid fa-bolt text-amber-500 mr-1"></i>Si no existe, se busca online y podés crearlo.</li>
                       <li><i class="fa-solid fa-plus text-brand-500 mr-1"></i>Alta rápida: <code class="font-mono bg-slate-100 dark:bg-slate-700 px-1 rounded">*Nombre*Precio</code> + Enter.</li>
                       <li><i class="fa-solid fa-rotate-right text-slate-400 mr-1"></i>Lo escaneado queda en "Escaneos Recientes".</li>
+                      <li><i class="fa-solid fa-keyboard text-slate-400 mr-1"></i>Tab: pasa al medio de pago (←→ elige, Enter va a Confirmar).</li>
                     </ul>
                   </div>
                 </Teleport>
@@ -710,16 +712,17 @@
           </div>
 
           <!-- Payment method segmented -->
-          <div ref="pagoSection" tabindex="0" @keydown="handlePagoKeydown">
+          <div ref="pagoSection" tabindex="0" class="rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50 focus-visible:ring-offset-2" @keydown="handlePagoKeydown">
             <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase block mb-2">
               Medio de Pago
-              <span class="text-slate-300 dark:text-slate-600 ml-2 font-normal">Atajos: 1-{{ mediosPago.length }}, ←→, Enter</span>
+              <span class="text-slate-300 dark:text-slate-600 ml-2 font-normal">Atajos: 1-{{ mediosPago.length }}, ←→, Enter/Tab = ir a Confirmar</span>
             </label>
             <div class="grid gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl" :class="columnasMediosPago">
               <button
                 v-for="(medio, idx) in mediosPago"
                 :key="medio.value"
                 type="button"
+                tabindex="-1"
                 class="flex flex-col items-center gap-1 py-2 px-1 rounded-lg text-[10px] font-semibold transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 min-w-0"
                 :class="cart.medio_pago === medio.value
                   ? 'bg-white dark:bg-slate-700 text-brand-600 dark:text-brand-400 shadow-sm'
@@ -823,8 +826,10 @@
             size="lg"
             :loading="confirmando"
             :disabled="!cart.items.length"
-            class="!bg-emerald-600 hover:!bg-emerald-700 !shadow-emerald-500/20"
+            ref="confirmBtn"
+            class="!bg-emerald-600 hover:!bg-emerald-700 !shadow-emerald-500/20 focus-visible:!ring-2 focus-visible:!ring-emerald-500/60 focus-visible:!ring-offset-2"
             @click="confirmarVenta"
+            @keydown="handleConfirmKeydown"
           >
             <i :class="confirmando ? 'fa-solid fa-circle-notch fa-spin' : 'fa-solid fa-check-circle'"></i>
             {{ confirmando ? 'Procesando...' : 'Confirmar Venta' }}
@@ -1460,6 +1465,8 @@ const hasSuspicious = computed(() => carritoStore.sospechosos.length > 0)
 const showSusWarning = ref(true)
 
 const barcodeInput = ref(null)
+const pagoSection = ref(null)
+const confirmBtn = ref(null)
 const barcodeHelpBtn = ref(null)
 const showBarcodeHelp = ref(false)
 const barcodeHelpPos = reactive({ top: null, left: null })
@@ -2504,7 +2511,34 @@ function handlePagoKeydown(event) {
     cart.medio_pago = pagos[Math.min(pagos.length - 1, idx + 1)]
   } else if (key === 'Enter') {
     event.preventDefault()
-    confirmarVenta()
+    if (!event.repeat) enfocarConfirmar()
+  } else if (key === 'Tab') {
+    if (event.shiftKey) {
+      event.preventDefault()
+      barcodeInput.value?.focus()
+    } else if (cart.items.length) {
+      event.preventDefault()
+      enfocarConfirmar()
+    }
+  }
+}
+
+function enfocarConfirmar() {
+  confirmBtn.value?.$el?.focus()
+}
+
+function handleBuscadorKeydown(event) {
+  if (event.key !== 'Tab' || event.shiftKey || !cart.items.length) return
+  const panelAbierto = lookupProduct._loading || lookupProduct._searchingExternal || lookupProduct.id || lookupProduct._searched || lookupProduct._manualEntry
+  if (panelAbierto) return
+  event.preventDefault()
+  pagoSection.value?.focus()
+}
+
+function handleConfirmKeydown(event) {
+  if (event.key === 'Tab' && event.shiftKey) {
+    event.preventDefault()
+    pagoSection.value?.focus()
   }
 }
 
@@ -2632,6 +2666,7 @@ function removeFromCart(idx) {
 }
 
 async function confirmarVenta() {
+  if (confirmando.value) return
   if (!cart.items.length || cart.total <= 0) {
     if (!cart.items.length) toast.warning('El carrito está vacío')
     return
