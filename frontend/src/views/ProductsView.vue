@@ -1147,7 +1147,9 @@ function formatFecha(fechaStr) {
       </template>
       <template #nombre="{ row }">
         <div class="flex items-center gap-1.5 min-w-0">
-          <p class="text-xs font-bold text-slate-900 dark:text-white truncate max-w-[180px]">{{ row.nombre }}</p>
+          <div class="min-h-[2.5em] flex items-center">
+            <p class="text-xs font-bold text-slate-900 dark:text-white line-clamp-2 max-w-[180px] break-words">{{ row.nombre }}</p>
+          </div>
           <span
             v-if="row.activo === false"
             class="shrink-0 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide rounded bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-300"
