@@ -53,6 +53,11 @@ const ofertasFiltradasGestion = computed(() => {
   return ofertasConEstado.value.filter(o => o.estado === 'desactivada')
 })
 
+const ofertasDelProducto = computed(() => {
+  if (!ofertasProductoTarget.value) return []
+  return (ofertas.value || []).filter(o => o.producto_id === ofertasProductoTarget.value.id)
+})
+
 // Color del puntito de la columna Categoría: el que está guardado en la base,
 // y si no, el color por defecto del rubro.
 function colorDeFila(row) {
@@ -105,6 +110,8 @@ const showOfertaModal = ref(false)
 const editingOferta = ref(null)
 const showOfertasGestion = ref(false)
 const ofertaTab = ref('activas')
+const showOfertasProducto = ref(false)
+const ofertasProductoTarget = ref(null)
 const deleteOfertaTarget = ref(null)
 const savingOferta = ref(false)
 const deletingOferta = ref(false)
@@ -791,6 +798,43 @@ function closeOfertaModal() {
   editingOferta.value = null
 }
 
+function abrirOfertasProducto(product) {
+  ofertasProductoTarget.value = product
+  showOfertasProducto.value = true
+}
+
+async function toggleOfertaActiva(oferta) {
+  try {
+    await api.put(`/api/ofertas/${oferta.id}`, { activo: !oferta.activo })
+    toast.success(oferta.activo ? 'Oferta desactivada' : 'Oferta activada')
+    productosStore.refreshOfertas()
+  } catch (e) {
+    toast.error(e.message || 'Error al cambiar estado')
+  }
+}
+
+async function duplicarOferta(oferta) {
+  try {
+    const payload = {
+      producto_id: oferta.producto_id,
+      tipo: oferta.tipo,
+      valor: oferta.valor,
+      requiere_cantidad: oferta.requiere_cantidad,
+      fecha_inicio: null,
+      fecha_fin: null,
+      max_unidades: oferta.max_unidades,
+      descripcion: oferta.descripcion || ''
+    }
+    const resp = await api.post('/api/ofertas', payload)
+    toast.success('Oferta duplicada (borrador)')
+    await productosStore.refreshOfertas()
+    const nueva = (productosStore.ofertas || []).find(o => o.id === resp.id)
+    if (nueva) openEditOfertaModal(nueva)
+  } catch (e) {
+    toast.error(e.message || 'Error al duplicar')
+  }
+}
+
 async function saveOferta() {
   if (!ofertaForm.producto_id) {
     toast.error('Seleccioná un producto')
@@ -1181,9 +1225,10 @@ function formatFecha(fechaStr) {
             <p class="text-xs font-bold text-slate-900 dark:text-white line-clamp-2 max-w-[260px] break-words">{{ row.nombre }}</p>
           </div>
           <i
-            v-if="row._oferta"
-            class="fa-solid fa-tag text-[10px] text-orange-500 shrink-0"
-            title="Oferta activa"
+            class="fa-solid fa-tag text-[10px] shrink-0 cursor-pointer transition"
+            :class="row._oferta ? 'text-orange-500 hover:text-orange-600' : 'text-slate-300 dark:text-slate-600 hover:text-slate-500'"
+            title="Ofertas del producto"
+            @click.stop="abrirOfertasProducto(row)"
           ></i>
           <span
             v-if="row.activo === false"
@@ -1647,6 +1692,63 @@ function formatFecha(fechaStr) {
       </div>
       <template #footer>
         <BaseButton variant="secondary" class="w-full" @click="showOfertasGestion = false">Cerrar</BaseButton>
+      </template>
+    </BaseModal>
+
+    <!-- Ofertas del producto modal -->
+    <BaseModal v-model="showOfertasProducto" :title="`Ofertas de ${ofertasProductoTarget?.nombre || ''}`" size="lg">
+      <div class="space-y-4">
+        <div class="flex items-center justify-between">
+          <p class="text-xs text-slate-500 dark:text-slate-400">Un producto puede tener varias ofertas. Activá, desactivá, duplicá o editá cada una.</p>
+          <BaseButton variant="primary" size="xs" @click="openCreateOfertaModal(ofertasProductoTarget?.id); showOfertasProducto = false">
+            <i class="fa-solid fa-plus"></i> Nueva oferta
+          </BaseButton>
+        </div>
+        <div v-if="ofertasDelProducto.length" class="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+          <table class="w-full text-xs">
+            <thead class="bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 uppercase text-[10px]">
+              <tr>
+                <th class="px-3 py-2 text-left">#</th>
+                <th class="px-3 py-2 text-left">Tipo</th>
+                <th class="px-3 py-2 text-right">Valor</th>
+                <th class="px-3 py-2 text-left">Vigencia</th>
+                <th class="px-3 py-2 text-center">Estado</th>
+                <th class="px-3 py-2 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+              <tr v-for="o in ofertasDelProducto" :key="o.id" class="hover:bg-slate-50 dark:hover:bg-slate-800/60">
+                <td class="px-3 py-2 font-mono-data text-slate-500 dark:text-slate-400">{{ o.id }}</td>
+                <td class="px-3 py-2 text-slate-600 dark:text-slate-300">{{ o.tipo }}</td>
+                <td class="px-3 py-2 text-right font-mono-data whitespace-nowrap">{{ o.tipo === '2x1' ? '2x1' : o.tipo === 'porcentaje' ? o.valor + '%' : '$' + o.valor }}</td>
+                <td class="px-3 py-2 text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                  {{ o.fecha_inicio ? formatDateShort(o.fecha_inicio) : '—' }} → {{ o.fecha_fin ? formatDateShort(o.fecha_fin) : '∞' }}
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <BaseBadge :variant="o.activo ? 'success' : 'default'" size="xs">{{ o.activo ? 'Activa' : 'Inactiva' }}</BaseBadge>
+                </td>
+                <td class="px-3 py-2 text-right whitespace-nowrap">
+                  <button type="button" class="text-slate-400 hover:text-emerald-600 mr-2" :title="o.activo ? 'Desactivar' : 'Activar'" @click="toggleOfertaActiva(o)">
+                    <i :class="o.activo ? 'fa-solid fa-toggle-on' : 'fa-solid fa-toggle-off'" class="text-[11px]"></i>
+                  </button>
+                  <button type="button" class="text-slate-400 hover:text-brand-600 mr-2" title="Duplicar" @click="duplicarOferta(o)">
+                    <i class="fa-solid fa-copy text-[10px]"></i>
+                  </button>
+                  <button type="button" class="text-slate-400 hover:text-brand-600 mr-2" title="Editar" @click="openEditOfertaModal(o); showOfertasProducto = false">
+                    <i class="fa-solid fa-pen text-[10px]"></i>
+                  </button>
+                  <button type="button" class="text-slate-400 hover:text-rose-600" title="Eliminar" @click="confirmDeleteOferta(o)">
+                    <i class="fa-solid fa-trash text-[10px]"></i>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-else class="py-8 text-center text-xs text-slate-400">Este producto no tiene ofertas. Creá una nueva.</div>
+      </div>
+      <template #footer>
+        <BaseButton variant="secondary" class="w-full" @click="showOfertasProducto = false">Cerrar</BaseButton>
       </template>
     </BaseModal>
 
