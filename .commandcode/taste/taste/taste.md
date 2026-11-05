@@ -32,3 +32,5 @@
 - En tickets de proveedor, el precio unitario extraído se trata como sugerido/editable porque los descuentos pueden venir como ítem separado. Confidence: 0.75
 - En el parseo de tickets de proveedor con IA, las líneas que no se reconocen deben mostrarse al operador (p. ej. en una sección destacada) para carga manual, en lugar de descartarse silenciosamente. Confidence: 0.8
 - Prefiere mantener un archivo de estructura del repo (ubicaciones de archivos y vinculaciones padre-hijo, p. ej. `ESTRUCTURA.md`) y que al iniciar una sesión se lean primero los archivos de contexto/estructura (`CONTEXTO.md` + `ESTRUCTURA.md`) en lugar de escanear el repo, para ahorrar tokens y arrancar rápido. Confidence: 0.85
+- En columnas de tablas (grid), los valores monetarios/precios deben quedar en una sola línea sin partir el símbodo de moneda y el número (usar whitespace-nowrap). Confidence: 0.7
+- En columnas de tablas, los iconos genéricos/decorativos son innecesarios y ocupan espacio valioso; preferir achicarlos o quitarlos. Confidence: 0.65
