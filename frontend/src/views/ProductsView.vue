@@ -36,6 +36,23 @@ const products = computed(() => (mostrarBorrados.value ? borrados.value : produc
 const categories = computed(() => productosStore.categorias)
 const ofertas = computed(() => productosStore.ofertas)
 
+const ofertasConEstado = computed(() => {
+  const now = new Date()
+  return (ofertas.value || []).map(o => {
+    const prod = products.value.find(p => p.id === o.producto_id)
+    let estado = 'activa'
+    if (!o.activo) estado = 'desactivada'
+    else if (o.fecha_fin && new Date(o.fecha_fin) < now) estado = 'vencida'
+    return { ...o, estado, producto_nombre: prod ? prod.nombre : `Producto #${o.producto_id}` }
+  })
+})
+
+const ofertasFiltradasGestion = computed(() => {
+  if (ofertaTab.value === 'activas') return ofertasConEstado.value.filter(o => o.estado === 'activa')
+  if (ofertaTab.value === 'vencidas') return ofertasConEstado.value.filter(o => o.estado === 'vencida')
+  return ofertasConEstado.value.filter(o => o.estado === 'desactivada')
+})
+
 // Color del puntito de la columna Categoría: el que está guardado en la base,
 // y si no, el color por defecto del rubro.
 function colorDeFila(row) {
@@ -86,6 +103,8 @@ const loadingView = ref(false)
 const filterPendientes = ref(false)
 const showOfertaModal = ref(false)
 const editingOferta = ref(null)
+const showOfertasGestion = ref(false)
+const ofertaTab = ref('activas')
 const deleteOfertaTarget = ref(null)
 const savingOferta = ref(false)
 const deletingOferta = ref(false)
@@ -274,13 +293,12 @@ const tableColumns = [
   { key: 'image', label: '', width: 'w-10' },
   { key: 'nombre', label: 'Nombre' },
   { key: 'codigo_barras', label: 'Código' },
-  { key: 'marca', label: 'Marca' },
+  { key: 'marca', label: 'Marca', width: 'w-28' },
   { key: 'precio_costo', label: 'Costo', align: 'right' },
   { key: 'precio_venta', label: 'Precio', align: 'right' },
   { key: 'stock_actual', label: 'Stock', align: 'right' },
   { key: 'vencimiento', label: 'Vto.', align: 'center', width: 'w-36' },
   { key: 'categoria', label: 'Categoría' },
-  { key: 'oferta', label: 'Oferta', align: 'center', width: 'w-24' },
   { key: 'acciones', label: '', align: 'right', width: 'w-24' }
 ]
 
@@ -940,7 +958,10 @@ function formatFecha(fechaStr) {
         <BaseButton variant="primary" size="sm" @click="openCreateModal(searchQuery || null)">
           <i class="fa-solid fa-plus"></i> Nuevo Producto
         </BaseButton>
-        <BaseButton variant="secondary" size="sm" @click="openCreateOfertaModal()">
+        <BaseButton variant="secondary" size="sm" @click="showOfertasGestion = true">
+          <i class="fa-solid fa-tags"></i> Gestionar ofertas
+        </BaseButton>
+        <BaseButton variant="primary" size="sm" @click="openCreateOfertaModal()">
           <i class="fa-solid fa-tag"></i> Nueva Oferta
         </BaseButton>
       </div>
@@ -1157,8 +1178,13 @@ function formatFecha(fechaStr) {
       <template #nombre="{ row }">
         <div class="flex items-center gap-1.5 min-w-0">
           <div class="min-h-[2.5em] flex items-center">
-            <p class="text-xs font-bold text-slate-900 dark:text-white line-clamp-2 max-w-[180px] break-words">{{ row.nombre }}</p>
+            <p class="text-xs font-bold text-slate-900 dark:text-white line-clamp-2 max-w-[260px] break-words">{{ row.nombre }}</p>
           </div>
+          <i
+            v-if="row._oferta"
+            class="fa-solid fa-tag text-[10px] text-orange-500 shrink-0"
+            title="Oferta activa"
+          ></i>
           <span
             v-if="row.activo === false"
             class="shrink-0 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide rounded bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-300"
@@ -1183,7 +1209,9 @@ function formatFecha(fechaStr) {
         </div>
       </template>
       <template #marca="{ row }">
-        <span class="text-xs text-slate-600 dark:text-slate-300">{{ row.marca || '\u2014' }}</span>
+        <div class="min-h-[2.5em] flex items-center">
+          <span class="text-xs text-slate-600 dark:text-slate-300 line-clamp-2 break-words">{{ row.marca || '\u2014' }}</span>
+        </div>
       </template>
       <template #precio_costo="{ row }">
         <span class="text-xs font-mono-data text-slate-600 dark:text-slate-300 whitespace-nowrap">{{ fc(row.precio_costo) }}</span>
@@ -1246,14 +1274,6 @@ function formatFecha(fechaStr) {
             <span class="text-xs text-slate-500 dark:text-slate-400 truncate">{{ row.categoria }}</span>
           </span>
         </template>
-      <template #oferta="{ row }">
-        <div v-if="row._oferta" class="flex items-center justify-center gap-1">
-          <BaseBadge :variant="ofertaTipoColor(row._oferta.tipo)" size="xs">
-            {{ row._oferta.tipo === '2x1' ? '2x1' : row._oferta.tipo === 'porcentaje' ? row._oferta.valor + '%' : '$' + row._oferta.valor }}
-          </BaseBadge>
-        </div>
-        <span v-else class="text-slate-300 dark:text-slate-600 text-xs">—</span>
-      </template>
       <template #acciones="{ row }">
         <div class="flex items-center justify-end gap-1">
           <button
@@ -1571,6 +1591,62 @@ function formatFecha(fechaStr) {
             {{ saving ? 'Guardando...' : (editingProduct ? 'Actualizar' : 'Crear Producto') }}
           </BaseButton>
         </div>
+      </template>
+    </BaseModal>
+
+    <!-- Gestion de ofertas modal -->
+    <BaseModal v-model="showOfertasGestion" title="Gestionar ofertas" size="lg">
+      <div class="space-y-4">
+        <div class="flex gap-2">
+          <button
+            v-for="tab in ['activas','vencidas','desactivadas']"
+            :key="tab"
+            type="button"
+            class="px-3 py-1.5 rounded-lg text-xs font-semibold transition border"
+            :class="ofertaTab === tab
+              ? 'bg-brand-600 text-white border-brand-600'
+              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'"
+            @click="ofertaTab = tab"
+          >
+            {{ tab.charAt(0).toUpperCase() + tab.slice(1) }}
+            <span class="ml-1 opacity-70">({{ ofertasConEstado.filter(o => o.estado === (tab === 'activas' ? 'activa' : tab === 'vencidas' ? 'vencida' : 'desactivada')).length }})</span>
+          </button>
+        </div>
+        <div v-if="ofertasFiltradasGestion.length" class="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+          <table class="w-full text-xs">
+            <thead class="bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 uppercase text-[10px]">
+              <tr>
+                <th class="px-3 py-2 text-left">Producto</th>
+                <th class="px-3 py-2 text-left">Tipo</th>
+                <th class="px-3 py-2 text-right">Valor</th>
+                <th class="px-3 py-2 text-left">Vigencia</th>
+                <th class="px-3 py-2 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+              <tr v-for="o in ofertasFiltradasGestion" :key="o.id" class="hover:bg-slate-50 dark:hover:bg-slate-800/60">
+                <td class="px-3 py-2 font-medium text-slate-900 dark:text-white">{{ o.producto_nombre }}</td>
+                <td class="px-3 py-2 text-slate-600 dark:text-slate-300">{{ o.tipo }}</td>
+                <td class="px-3 py-2 text-right font-mono-data">{{ o.tipo === '2x1' ? '2x1' : o.tipo === 'porcentaje' ? o.valor + '%' : '$' + o.valor }}</td>
+                <td class="px-3 py-2 text-slate-500 dark:text-slate-400">
+                  {{ o.fecha_inicio ? formatDateShort(o.fecha_inicio) : '—' }} → {{ o.fecha_fin ? formatDateShort(o.fecha_fin) : '∞' }}
+                </td>
+                <td class="px-3 py-2 text-right">
+                  <button type="button" class="text-slate-400 hover:text-brand-600 mr-2" title="Editar" @click="openEditOfertaModal(o); showOfertasGestion = false">
+                    <i class="fa-solid fa-pen text-[10px]"></i>
+                  </button>
+                  <button type="button" class="text-slate-400 hover:text-rose-600" title="Eliminar" @click="confirmDeleteOferta(o)">
+                    <i class="fa-solid fa-trash text-[10px]"></i>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-else class="py-8 text-center text-xs text-slate-400">No hay ofertas en esta categoría.</div>
+      </div>
+      <template #footer>
+        <BaseButton variant="secondary" class="w-full" @click="showOfertasGestion = false">Cerrar</BaseButton>
       </template>
     </BaseModal>
 
