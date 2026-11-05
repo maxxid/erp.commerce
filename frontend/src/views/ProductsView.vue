@@ -271,7 +271,7 @@ const defaultForm = () => ({
 const form = reactive(defaultForm())
 
 const tableColumns = [
-  { key: 'image', label: '', width: 'w-16' },
+  { key: 'image', label: '', width: 'w-10' },
   { key: 'nombre', label: 'Nombre' },
   { key: 'codigo_barras', label: 'Código' },
   { key: 'marca', label: 'Marca' },
@@ -912,6 +912,15 @@ async function quickCreateSector() {
   showSectorQuick.value = false
 }
 
+async function copiarCodigo(code) {
+  try {
+    await navigator.clipboard.writeText(String(code))
+    toast.success('Código copiado')
+  } catch {
+    toast.error('No se pudo copiar')
+  }
+}
+
 function formatFecha(fechaStr) {
   return formatDateShort(fechaStr)
 }
@@ -1141,8 +1150,8 @@ function formatFecha(fechaStr) {
       empty-icon="fa-box-open"
     >
       <template #image="{ row }">
-        <div class="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 dark:text-slate-500">
-          <i class="fa-solid fa-box text-sm"></i>
+        <div class="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 dark:text-slate-500">
+          <i class="fa-solid fa-box text-[10px]"></i>
         </div>
       </template>
       <template #nombre="{ row }">
@@ -1158,16 +1167,29 @@ function formatFecha(fechaStr) {
         </div>
       </template>
       <template #codigo_barras="{ row }">
-        <span class="text-xs font-mono-data text-slate-500 dark:text-slate-400">{{ row.codigo_barras }}</span>
+        <div class="flex items-center gap-1">
+          <span class="text-xs font-mono-data text-slate-500 dark:text-slate-400" :title="row.codigo_barras">
+            {{ row.codigo_barras ? '\u2026' + String(row.codigo_barras).slice(-5) : '\u2014' }}
+          </span>
+          <button
+            v-if="row.codigo_barras"
+            type="button"
+            class="text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 transition"
+            title="Copiar código completo"
+            @click.stop="copiarCodigo(row.codigo_barras)"
+          >
+            <i class="fa-solid fa-copy text-[9px]"></i>
+          </button>
+        </div>
       </template>
       <template #marca="{ row }">
         <span class="text-xs text-slate-600 dark:text-slate-300">{{ row.marca || '\u2014' }}</span>
       </template>
       <template #precio_costo="{ row }">
-        <span class="text-xs font-mono-data text-slate-600 dark:text-slate-300">{{ fc(row.precio_costo) }}</span>
+        <span class="text-xs font-mono-data text-slate-600 dark:text-slate-300 whitespace-nowrap">{{ fc(row.precio_costo) }}</span>
       </template>
       <template #precio_venta="{ row }">
-        <span class="text-xs font-mono-data font-bold text-brand-600 dark:text-brand-400">
+        <span class="text-xs font-mono-data font-bold text-brand-600 dark:text-brand-400 whitespace-nowrap">
           {{ fc(row.tipo_venta === 'kilo' ? row.precio_por_kilo : row.precio_venta) }}
           <span v-if="row.tipo_venta === 'kilo'" class="text-[9px] text-amber-500">/kg</span>
         </span>
