@@ -948,9 +948,11 @@ def listar_proveedores_producto(
         producto_proveedor.c.notas,
     ).where(producto_proveedor.c.producto_id == producto_id)
     rows = {r.proveedor_id: r._mapping for r in db.execute(stmt)}
+    ultimos = analisis_precios_service.ultimo_precio_por_proveedor(db, producto_id)
     data = []
     for p in producto.proveedores:
         meta = rows.get(p.id, {})
+        ultimo = ultimos.get(p.id)
         data.append(ProductoProveedorOut(
             id=p.id, nombre=p.nombre, cuit=p.cuit,
             codigo_proveedor=meta.get("codigo_proveedor"),
@@ -959,6 +961,9 @@ def listar_proveedores_producto(
             es_principal=meta.get("es_principal") or 0,
             activo=meta.get("activo") if meta.get("activo") is not None else 1,
             notas=meta.get("notas"),
+            ultimo_precio_pagado=ultimo["precio_unitario"] if ultimo else None,
+            ultima_fecha_pago=ultimo["fecha"] if ultimo else None,
+            ultima_compra_numero=ultimo["numero"] if ultimo else None,
         ).model_dump())
     return RespuestaData(data=data)
 

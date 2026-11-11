@@ -30,3 +30,6 @@ class ProductoProveedorOut(BaseModel):
     es_principal: int = 0
     activo: int = 1
     notas: Optional[str] = None
+    ultimo_precio_pagado: Optional[float] = None
+    ultima_fecha_pago: Optional[str] = None
+    ultima_compra_numero: Optional[str] = None

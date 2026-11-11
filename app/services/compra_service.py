@@ -10,11 +10,40 @@ Reglas de negocio:
 
 from typing import Optional, List, Tuple
 from datetime import datetime
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.models.compra import Compra, CompraItem
-from app.models.producto import Producto
+from app.models.producto import Producto, producto_proveedor
 from app.services import stock_service, lote_service
 from app.services.proveedor_pago_service import sincronizar_deuda_compra
+
+
+def _asegurar_vinculo_proveedor(db: Session, producto_id: int, proveedor_id: int) -> None:
+    """Vincula el producto con el proveedor de la compra si todavía no existe.
+
+    El `costo` es el precio de lista manual: no se toca al recibir. Si es el
+    primer vínculo activo del producto, queda como principal.
+    """
+    existe = db.execute(
+        select(producto_proveedor.c.producto_id).where(
+            producto_proveedor.c.producto_id == producto_id,
+            producto_proveedor.c.proveedor_id == proveedor_id,
+        )
+    ).first()
+    if existe:
+        return
+    ya_tiene_activo = db.execute(
+        select(producto_proveedor.c.producto_id).where(
+            producto_proveedor.c.producto_id == producto_id,
+            producto_proveedor.c.activo == 1,
+        ).limit(1)
+    ).first()
+    db.execute(producto_proveedor.insert().values(
+        producto_id=producto_id,
+        proveedor_id=proveedor_id,
+        activo=1,
+        es_principal=0 if ya_tiene_activo else 1,
+    ))
 
 
 def generar_numero_compra(db: Session) -> str:
@@ -182,6 +211,7 @@ def recibir_compra(
                 )
                 if item.precio_unitario:
                     producto.precio_costo = item.precio_unitario
+                _asegurar_vinculo_proveedor(db, producto.id, compra.proveedor_id)
             producto.stock_transito = max(0, (producto.stock_transito or 0) - cantidad_recibir)
 
     if todos_recibidos:

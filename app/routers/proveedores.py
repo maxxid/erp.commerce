@@ -3,6 +3,7 @@
 from typing import Optional
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 from app.database import get_db
@@ -12,6 +13,7 @@ from app.schemas.common import RespuestaData, RespuestaLista
 from app.auth.dependencies import get_current_user, require_role
 from app.models.usuario import Usuario
 from app.services import proveedor_pago_service as pp
+from app.services import proveedor_stock_service, proveedor_stock_pdf
 
 router = APIRouter(prefix="/api/proveedores", tags=["Proveedores"])
 
@@ -68,6 +70,59 @@ def _prov_to_dict(p):
             "notas": p.notas, "activo": p.activo,
             "saldo_cta_corriente": round(p.saldo_cta_corriente or 0.0, 2),
             "created_at": p.created_at.isoformat() if p.created_at else None} if p else None
+
+
+def _slug(texto: str, fallback: str) -> str:
+    slug = "".join(c if c.isalnum() or c in "-_" else "-" for c in (texto or "").lower())
+    return "-".join(p for p in slug.split("-") if p)[:60] or fallback
+
+
+@router.get("/stock-bajo/pdf")
+def stock_bajo_pdf(
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "encargado", "repositor")),
+):
+    """PDF con los productos a reponer de todos los proveedores."""
+    grupos = proveedor_stock_service.grupos_reposicion(db)
+    try:
+        pdf = proveedor_stock_pdf.generar_stock_proveedores_pdf(grupos)
+    except proveedor_stock_pdf.ReportlabNoDisponible as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="stock-proveedores.pdf"'},
+    )
+
+
+@router.get("/{proveedor_id}/stock-bajo/pdf")
+def stock_bajo_proveedor_pdf(
+    proveedor_id: int,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_role("admin", "encargado", "repositor")),
+):
+    """PDF con los productos a reponer de un proveedor."""
+    proveedor = db.query(Proveedor).filter(Proveedor.id == proveedor_id).first()
+    if not proveedor:
+        raise HTTPException(status_code=404, detail="Proveedor no encontrado")
+
+    grupos = proveedor_stock_service.grupos_reposicion(db, proveedor_id=proveedor_id)
+    grupo = grupos[0] if grupos else {
+        "id": proveedor.id, "nombre": proveedor.nombre,
+        "telefono": proveedor.telefono, "email": proveedor.email,
+        "productos": [],
+    }
+    try:
+        pdf = proveedor_stock_pdf.generar_stock_proveedor_pdf(grupo)
+    except proveedor_stock_pdf.ReportlabNoDisponible as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+    slug = _slug(proveedor.nombre, f"proveedor-{proveedor.id}")
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="stock-{slug}.pdf"'},
+    )
 
 
 @router.get("/{proveedor_id}", response_model=RespuestaData)

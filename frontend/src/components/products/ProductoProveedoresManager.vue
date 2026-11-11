@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useToastStore } from '@/stores/toasts'
-import { formatCurrency as fc } from '@/composables/useUtils'
+import { formatCurrency as fc, formatDateShort } from '@/composables/useUtils'
 import api from '@/services/api'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
@@ -45,6 +45,26 @@ const addOptions = computed(() => [
   { value: null, label: 'Seleccionar proveedor...' },
   ...availableProveedores.value.map(p => ({ value: p.id, label: p.nombre })),
 ])
+
+const itemsConComparacion = computed(() => {
+  const conPago = items.value.filter(i => i.ultimo_precio_pagado != null)
+  const hayComparacion = conPago.length >= 2
+  const conFecha = conPago.filter(i => i.ultima_fecha_pago)
+  const maxFecha = hayComparacion && conFecha.length
+    ? Math.max(...conFecha.map(i => new Date(i.ultima_fecha_pago).getTime()))
+    : null
+  const minPrecio = hayComparacion
+    ? Math.min(...conPago.map(i => Number(i.ultimo_precio_pagado)))
+    : null
+
+  return items.value.map(i => ({
+    ...i,
+    esUltimo: hayComparacion && !!i.ultima_fecha_pago
+      && new Date(i.ultima_fecha_pago).getTime() === maxFecha,
+    esMasBarato: hayComparacion && i.ultimo_precio_pagado != null
+      && Number(i.ultimo_precio_pagado) === minPrecio,
+  }))
+})
 
 async function load() {
   if (!props.productoId) {
@@ -187,7 +207,7 @@ async function executeRemove() {
 
     <ul v-else class="space-y-2">
       <li
-        v-for="item in items"
+        v-for="item in itemsConComparacion"
         :key="item.id"
         class="p-3 bg-white dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl"
       >
@@ -201,6 +221,12 @@ async function executeRemove() {
               <BaseBadge v-if="item.es_principal" variant="brand" size="xs">
                 <i class="fa-solid fa-star text-[8px]"></i> Principal
               </BaseBadge>
+              <BaseBadge v-if="item.esUltimo" variant="warning" size="xs">
+                <i class="fa-solid fa-clock-rotate-left text-[8px]"></i> Último
+              </BaseBadge>
+              <BaseBadge v-if="item.esMasBarato" variant="success" size="xs">
+                <i class="fa-solid fa-arrow-down-short-wide text-[8px]"></i> Más barato
+              </BaseBadge>
               <BaseBadge v-if="!item.activo" variant="default" size="xs">Inactivo</BaseBadge>
             </div>
             <div class="flex items-center gap-3 mt-1 text-[11px] text-slate-500 dark:text-slate-400 font-medium">
@@ -208,7 +234,10 @@ async function executeRemove() {
                 <i class="fa-solid fa-barcode text-slate-400"></i> {{ item.codigo_proveedor }}
               </span>
               <span v-if="item.costo != null">
-                <i class="fa-solid fa-coins text-slate-400"></i> {{ fc(item.costo) }}
+                <i class="fa-solid fa-coins text-slate-400"></i> Lista: {{ fc(item.costo) }}
+              </span>
+              <span v-if="item.ultimo_precio_pagado != null" class="text-emerald-600 dark:text-emerald-400">
+                <i class="fa-solid fa-receipt text-emerald-500"></i> Últ. pago: {{ fc(item.ultimo_precio_pagado) }}<template v-if="item.ultima_fecha_pago"> · {{ formatDateShort(item.ultima_fecha_pago) }}</template>
               </span>
               <span v-if="item.plazo_entrega_dias != null">
                 <i class="fa-solid fa-clock text-slate-400"></i> {{ item.plazo_entrega_dias }}d
@@ -289,7 +318,7 @@ async function executeRemove() {
         <div class="grid grid-cols-2 gap-4">
           <BaseInput
             v-model.number="editForm.costo"
-            label="Costo"
+            label="Costo de lista"
             type="number"
             step="0.01"
             min="0"

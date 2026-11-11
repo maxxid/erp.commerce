@@ -113,6 +113,13 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 
 ## ✅ Completados recientemente
 
+### Comparación de precios por proveedor + PDF de reposición — 11/11/2026
+
+- **Ficha del producto**: `GET /api/productos/{id}/proveedores` ahora devuelve `ultimo_precio_pagado`, `ultima_fecha_pago` y `ultima_compra_numero` por proveedor (se derivan de `compra_items` recibidas/parciales). El manager muestra "Últ. pago" con fecha y badges **Último** (compra más reciente) y **Más barato** (menor último precio pagado), y rotula el costo manual como "Costo de lista". Un producto comprado a dos proveedores se ve en ambos.
+- **Auto-vínculo**: al recibir una compra se crea la fila en `producto_proveedor` si no existía (no pisa `costo`; queda principal si es el primer vínculo activo). Backfill idempotente al arrancar (`_backfill_vinculos_proveedor`) para las compras históricas.
+- **PDF de reposición**: `GET /api/proveedores/stock-bajo/pdf` (global, con resumen y una sección por proveedor) y `GET /api/proveedores/{id}/stock-bajo/pdf` (un proveedor). Agrupa con `stock_service.filtro_reposicion` y suma proveedores con vínculo activo **o** con compras recibidas/parciales; los productos sin proveedor van a "Sin proveedor". Columnas: código, producto, marca, stock, mínimo, reponer, últ. pago, últ. compra, costo lista y venta. Botón global y botón por fila en Proveedores.
+- **Tests**: `tests/test_proveedor_reposicion.py` (agrupación, último precio, anuladas, faltante, auto-vínculo, PDF). Suite completa: 2 fallas preexistentes por fechas hardcodeadas (`test_planes_licencia`, `test_salud_backup`).
+
 ### Filtro por proveedor, Compras (subtotal ↔ unitario + borrador) y Etiquetas (orden por precio + grupos de variantes) — 01/11/2026
 
 - **Productos → filtro por Proveedor**: select junto al de categorías; `GET /api/productos` ahora trae `proveedor_ids` (de `producto_proveedor`). Cuenta en "filtros activos" y lo limpia "Limpiar filtros".

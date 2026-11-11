@@ -8,6 +8,17 @@
         <BaseButton
           variant="secondary"
           size="md"
+          :loading="descargandoGlobal"
+          :disabled="descargandoGlobal"
+          @click="descargarStockGlobal"
+          title="PDF de productos con bajo o sin stock, agrupados por proveedor"
+        >
+          <i :class="descargandoGlobal ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-file-pdf'"></i>
+          PDF bajo stock
+        </BaseButton>
+        <BaseButton
+          variant="secondary"
+          size="md"
           :loading="syncing"
           :disabled="syncing"
           @click="syncProveedores"
@@ -79,6 +90,18 @@
         </template>
         <template #actions="{ row }">
           <div class="flex items-center gap-2">
+            <BaseButton
+              variant="ghost"
+              size="sm"
+              icon-only
+              :loading="descargandoId === row.id"
+              :disabled="descargandoId === row.id"
+              @click="descargarStockProveedor(row)"
+              title="PDF de productos a reponer de este proveedor"
+            >
+              <i v-if="descargandoId === row.id" class="fa-solid fa-circle-notch animate-spin"></i>
+              <i v-else class="fa-solid fa-file-pdf"></i>
+            </BaseButton>
             <BaseButton
               variant="ghost"
               size="sm"
@@ -277,6 +300,8 @@ const syncing = ref(false)
 const saving = ref(false)
 const togglingId = ref(null)
 const loading = ref(true)
+const descargandoId = ref(null)
+const descargandoGlobal = ref(false)
 
 const suppliers = ref([])
 
@@ -332,6 +357,41 @@ async function syncProveedores() {
     toast.error('No se pudieron sincronizar los proveedores')
   } finally {
     syncing.value = false
+  }
+}
+
+async function descargarPdf(url, filename) {
+  const blob = await api.request('GET', url, null, null, { responseType: 'blob' })
+  const link = document.createElement('a')
+  link.href = URL.createObjectURL(blob)
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(link.href)
+}
+
+async function descargarStockProveedor(row) {
+  if (descargandoId.value) return
+  descargandoId.value = row.id
+  try {
+    await descargarPdf(`/api/proveedores/${row.id}/stock-bajo/pdf`, `stock-proveedor-${row.id}.pdf`)
+  } catch (e) {
+    toast.error(e?.data?.detail || e.message || 'No se pudo generar el PDF')
+  } finally {
+    descargandoId.value = null
+  }
+}
+
+async function descargarStockGlobal() {
+  if (descargandoGlobal.value) return
+  descargandoGlobal.value = true
+  try {
+    await descargarPdf('/api/proveedores/stock-bajo/pdf', 'stock-proveedores.pdf')
+  } catch (e) {
+    toast.error(e?.data?.detail || e.message || 'No se pudo generar el PDF')
+  } finally {
+    descargandoGlobal.value = false
   }
 }
 

@@ -59,6 +59,11 @@ def _ultimo_por_proveedor(historial: List[dict]) -> dict:
     return ultimo
 
 
+def ultimo_precio_por_proveedor(db: Session, producto_id: int) -> dict:
+    """Ultimo precio pagado a cada proveedor del producto: {proveedor_id: fila}."""
+    return _ultimo_por_proveedor(_consultar_historial(db, producto_id))
+
+
 def _consultar_proveedores(db: Session, producto_id: int) -> List[dict]:
     """Costo de lista actual por proveedor, con el ultimo precio pagado."""
     # select() con columnas explicitas: db.query(Entidad, tabla_core) aplana la

@@ -113,6 +113,7 @@ def crear_app() -> FastAPI:
     def on_startup():
         Base.metadata.create_all(bind=engine)
         _migrate_new_columns()
+        _backfill_vinculos_proveedor()
         _migrate_lotes_iniciales()
         _seed_denominaciones()
         _seed_database()
@@ -442,6 +443,33 @@ def _migrate_new_columns():
                 )
             )
             conn.commit()
+    finally:
+        conn.close()
+
+
+def _backfill_vinculos_proveedor():
+    """Vincula productos con los proveedores de sus compras recibidas.
+
+    Idempotente: sólo inserta las combinaciones que todavía no existen. Así lo
+    comprado antes de que existiera el auto-vínculo también aparece en la ficha
+    del producto y en el reporte por proveedor.
+    """
+    from app.database import engine
+    import sqlalchemy as sa
+    conn = engine.connect()
+    try:
+        conn.execute(sa.text(
+            "INSERT INTO producto_proveedor "
+            "(producto_id, proveedor_id, activo, es_principal, created_at, updated_at) "
+            "SELECT DISTINCT ci.producto_id, c.proveedor_id, 1, 0, "
+            "       CURRENT_TIMESTAMP, CURRENT_TIMESTAMP "
+            "FROM compra_items ci JOIN compras c ON c.id = ci.compra_id "
+            "WHERE c.estado IN ('recibida', 'parcial') "
+            "  AND NOT EXISTS (SELECT 1 FROM producto_proveedor pp "
+            "                  WHERE pp.producto_id = ci.producto_id "
+            "                    AND pp.proveedor_id = c.proveedor_id)"
+        ))
+        conn.commit()
     finally:
         conn.close()
 
