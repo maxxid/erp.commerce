@@ -327,10 +327,12 @@ const filteredProducts = computed(() => {
     }
 
     if (filterCategory.value) {
-      list = list.filter(p => p && p.categoria_id === filterCategory.value)
+      const catId = Number(filterCategory.value)
+      list = list.filter(p => p && Number(p.categoria_id) === catId)
     }
     if (filterProveedor.value) {
-      list = list.filter(p => p && Array.isArray(p.proveedor_ids) && p.proveedor_ids.includes(filterProveedor.value))
+      const provId = Number(filterProveedor.value)
+      list = list.filter(p => p && Array.isArray(p.proveedor_ids) && p.proveedor_ids.some(id => Number(id) === provId))
     }
     if (filterStockBajo.value) {
       list = list.filter(p => esStockBajo(p))
