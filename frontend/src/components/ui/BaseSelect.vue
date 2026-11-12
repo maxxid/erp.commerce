@@ -24,9 +24,28 @@ const sizeClass = computed(() => {
   return { sm: 'px-3 py-1.5 text-[16px] md:text-xs', md: 'px-3.5 py-2.5 text-[16px] md:text-sm', lg: 'px-4 py-3 text-base' }[props.size]
 })
 
+function getOptionValue(opt) {
+  return opt && typeof opt === 'object' ? opt[props.optionValue] : opt
+}
+
+function sameValue(a, b) {
+  if (a === b) return true
+  if (a == null || b == null) return false
+  return String(a) === String(b)
+}
+
+const selectedKey = computed(() => {
+  const idx = props.options.findIndex(opt => sameValue(getOptionValue(opt), props.modelValue))
+  if (idx === -1) return props.placeholder ? '__placeholder__' : ''
+  return String(idx)
+})
+
 function onChange(e) {
-  emit('update:modelValue', e.target.value)
-  emit('change', e.target.value)
+  const idx = e.target.selectedIndex - (props.placeholder ? 1 : 0)
+  const opt = idx >= 0 ? props.options[idx] : undefined
+  const value = opt === undefined ? null : getOptionValue(opt)
+  emit('update:modelValue', value)
+  emit('change', value)
 }
 </script>
 
@@ -43,7 +62,7 @@ function onChange(e) {
     <div class="relative">
       <select
         :id="inputId"
-        :value="modelValue"
+        :value="selectedKey"
         :disabled="disabled || loading"
         :required="required"
         :aria-invalid="!!error"
@@ -58,11 +77,11 @@ function onChange(e) {
         style="background-image: url(&quot;data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e&quot;); background-size: 1.25em 1.25em; background-position: right 0.5rem center; background-repeat: no-repeat; padding-right: 2.5rem;"
         @change="onChange"
       >
-        <option v-if="placeholder" value="" disabled>{{ placeholder }}</option>
+        <option v-if="placeholder" value="__placeholder__" disabled>{{ placeholder }}</option>
         <option
           v-for="(opt, idx) in options"
           :key="idx"
-          :value="typeof opt === 'object' ? opt[optionValue] : opt"
+          :value="String(idx)"
         >
           {{ typeof opt === 'object' ? opt[optionLabel] : opt }}
         </option>

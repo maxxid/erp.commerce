@@ -113,6 +113,11 @@ Usable con el pulgar en 360×740, targets ≥44px, inputs sin zoom, modales full
 
 ## ✅ Completados recientemente
 
+### Fix `BaseSelect`: "Todos/Todas" enviaba el texto como filtro — 11/11/2026
+
+- `BaseSelect` emitía `e.target.value`; para opciones con `value: null` Vue borra el atributo y el DOM devuelve el **texto** de la opción, así que en Etiquetas mandaba `sector_id=Todos` / `categoria_id=Todas` y el backend respondía 422 `int_parsing`.
+- Ahora el select usa un índice interno y emite el valor real de la opción (`number`, `null`, `string` o `boolean`), y muestra la opción correcta también cuando el valor es `null`. Arregla de paso los filtros de Productos proveedor/categoría.
+
 ### Comparación de precios por proveedor + PDF de reposición — 11/11/2026
 
 - **Ficha del producto**: `GET /api/productos/{id}/proveedores` ahora devuelve `ultimo_precio_pagado`, `ultima_fecha_pago` y `ultima_compra_numero` por proveedor (se derivan de `compra_items` recibidas/parciales). El manager muestra "Últ. pago" con fecha y badges **Último** (compra más reciente) y **Más barato** (menor último precio pagado), y rotula el costo manual como "Costo de lista". Un producto comprado a dos proveedores se ve en ambos.
