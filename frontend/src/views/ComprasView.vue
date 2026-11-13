@@ -272,6 +272,17 @@
             <span v-if="nuevaCompra.items.length" class="text-sm font-mono-data font-bold text-slate-800 dark:text-slate-200">
               Total: {{ fc(totalCompra) }}
             </span>
+            <span
+              v-if="totalMargen"
+              class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono-data font-bold whitespace-nowrap"
+              :class="totalMargen.ok
+                ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300'
+                : 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-300'"
+              title="Ganancia bruta de la compra (venta − costo), según los precios de venta cargados"
+            >
+              <i :class="['fa-solid text-[9px]', totalMargen.ok ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down']"></i>
+              Ganancia: {{ fcMargen(totalMargen.importe) }} ({{ totalMargen.pct }}%)
+            </span>
           </div>
         </div>
 
@@ -420,6 +431,19 @@
                       class="w-20 px-2 py-1 text-[11px] font-mono-data bg-white dark:bg-slate-900 border rounded-lg outline-none focus:border-brand-500 transition"
                       :class="esNuevoProducto(item) ? 'border-amber-300 dark:border-amber-700 focus:border-amber-500' : 'border-slate-200 dark:border-slate-700'"
                     >
+                    <!-- Margen unitario: verde si hay ganancia, rojo si se vende a pérdida -->
+                    <span
+                      v-if="margenItem(item)"
+                      class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-mono-data font-bold whitespace-nowrap"
+                      :class="margenItem(item).ok
+                        ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300'
+                        : 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-300'"
+                      :title="`Costo ${fc(item.precio)} · Venta ${fc(item.precio_venta)} · Ganancia por unidad ${fc(margenItem(item).importe)} · Total ${item.cantidad} u: ${fc(margenItem(item).importe * (Number(item.cantidad) || 0))}`"
+                    >
+                      <i :class="['fa-solid text-[8px]', margenItem(item).ok ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down']"></i>
+                      {{ margenItem(item).pct }}%
+                      <span class="font-normal opacity-80">{{ fcMargen(margenItem(item).importe) }}</span>
+                    </span>
                   </div>
 
                   <!-- Sector (todos): reubicación al cargar la mercadería -->
@@ -886,6 +910,36 @@ function recalcularPrecioDesdeSubtotal(item) {
   const sub = Number(item._subtotal) || 0
   item.precio = cant > 0 ? sub / cant : 0
 }
+
+function margenItem(item) {
+  const costo = Number(item.precio) || 0
+  const venta = Number(item.precio_venta) || 0
+  if (costo <= 0 || venta <= 0) return null
+  const importe = redondear2(venta - costo)
+  return {
+    importe,
+    pct: Math.round((importe / venta) * 100),
+    ok: importe >= 0,
+  }
+}
+
+function fcMargen(n) {
+  return `${n >= 0 ? '+' : '−'}${fc(Math.abs(n))}`
+}
+
+const totalMargen = computed(() => {
+  let importe = 0
+  let venta = 0
+  for (const i of nuevaCompra.items) {
+    const m = margenItem(i)
+    if (!m) continue
+    const cant = Number(i.cantidad) || 0
+    importe += m.importe * cant
+    venta += (Number(i.precio_venta) || 0) * cant
+  }
+  if (!venta) return null
+  return { importe: redondear2(importe), pct: Math.round((importe / venta) * 100), ok: importe >= 0 }
+})
 
 function onSubtotalInput(item, e) {
   const v = e.target.value
