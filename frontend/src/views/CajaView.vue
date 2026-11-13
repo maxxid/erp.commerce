@@ -9,6 +9,9 @@
           <i :class="syncing ? 'fa-solid fa-circle-notch animate-spin' : 'fa-solid fa-arrows-rotate'"></i>
           {{ syncing ? 'Sincronizando...' : 'Sincronizar' }}
         </BaseButton>
+        <BaseButton variant="secondary" size="sm" @click="abrirAjustesCaja" title="Ajustes del tab Caja">
+          <i class="fa-solid fa-gear"></i> Ajustes
+        </BaseButton>
         <BaseBadge :variant="cajaStore.abierta ? 'success' : 'danger'" size="sm" dot>
           {{ cajaStore.abierta ? 'Caja Abierta' : 'Caja Cerrada' }}
         </BaseBadge>
@@ -53,38 +56,13 @@
       La caja está cerrada. Abrila para registrar operaciones.
     </div>
 
-    <BaseCard padding="none">
-      <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-        <h3 class="font-bold text-slate-900 text-sm">Movimientos del Día</h3>
-        <BaseButton v-if="cajaStore.abierta" variant="primary" size="xs" @click="showNuevoMovimiento = true">
-          <i class="fa-solid fa-plus"></i> Nuevo Movimiento
-        </BaseButton>
-      </div>
-      <div class="overflow-x-auto">
-        <BaseTable v-if="movements.length" :columns="movementColumns" :rows="movements">
-          <template #fecha="{ row }">
-            <span class="text-xs font-mono-data">{{ formatFechaHora(row.fecha) }}</span>
-          </template>
-          <template #tipo="{ row }">
-            <span class="inline-flex items-center gap-1">
-              <BaseBadge :variant="row.tipo === 'Ingreso' ? 'success' : 'danger'" size="xs">{{ row.tipo }}</BaseBadge>
-              <BaseBadge v-if="row.externo" variant="warning" size="xs" title="No salió de ninguna caja del sistema: no modifica el esperado de ningún medio">externo</BaseBadge>
-            </span>
-          </template>
-          <template #monto="{ row }">
-            <span class="font-mono-data font-bold" :class="row.tipo === 'Ingreso' ? 'text-emerald-600' : 'text-rose-600'">
-              {{ row.tipo === 'Ingreso' ? '+' : '-' }} {{ fc(row.monto) }}
-            </span>
-          </template>
-        </BaseTable>
-        <EmptyState v-else icon="fa-receipt" title="Sin movimientos" text="No hay movimientos registrados." />
-      </div>
-    </BaseCard>
-
     <!-- Historial de Sesiones de Caja -->
     <BaseCard padding="none">
       <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between flex-wrap gap-2">
-        <h3 class="font-bold text-slate-900 dark:text-white text-sm">Historial de Caja</h3>
+        <button type="button" class="flex items-center gap-2 hover:opacity-80 transition" @click="panelHistorial = !panelHistorial">
+          <i :class="panelHistorial ? 'fa-solid fa-chevron-down' : 'fa-solid fa-chevron-right'" class="text-slate-400 text-xs"></i>
+          <h3 class="font-bold text-slate-900 dark:text-white text-sm">Historial de Caja</h3>
+        </button>
         <div class="flex items-center gap-2 flex-wrap">
           <div class="flex gap-1">
             <button
@@ -118,6 +96,7 @@
         </div>
       </div>
 
+      <div v-show="panelHistorial">
       <!-- Filtro de fechas personalizadas -->
       <div v-if="showFechasPersonalizadas && filtroHistorial === 'personalizado' && vistaHistorial === 'lista'" class="px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 flex items-center gap-3">
         <div class="flex items-center gap-2">
@@ -276,6 +255,40 @@
         <EmptyState v-else icon="fa-clock-rotate-left" title="Sin sesiones" text="No hay sesiones de caja en este período." />
       </div>
       </div>
+      </div>
+    </BaseCard>
+
+    <BaseCard padding="none">
+      <button type="button" class="w-full px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition" @click="panelMovimientos = !panelMovimientos">
+        <h3 class="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-2">
+          <i :class="panelMovimientos ? 'fa-solid fa-chevron-down' : 'fa-solid fa-chevron-right'" class="text-slate-400 text-xs"></i>
+          Movimientos del Día
+        </h3>
+        <div class="flex items-center gap-2" @click.stop>
+          <BaseButton v-if="cajaStore.abierta" variant="primary" size="xs" @click="showNuevoMovimiento = true">
+            <i class="fa-solid fa-plus"></i> Nuevo Movimiento
+          </BaseButton>
+        </div>
+      </button>
+      <div v-show="panelMovimientos" class="overflow-x-auto">
+        <BaseTable v-if="movements.length" :columns="movementColumns" :rows="movements">
+          <template #fecha="{ row }">
+            <span class="text-xs font-mono-data">{{ formatFechaHora(row.fecha) }}</span>
+          </template>
+          <template #tipo="{ row }">
+            <span class="inline-flex items-center gap-1">
+              <BaseBadge :variant="row.tipo === 'Ingreso' ? 'success' : 'danger'" size="xs">{{ row.tipo }}</BaseBadge>
+              <BaseBadge v-if="row.externo" variant="warning" size="xs" title="No salió de ninguna caja del sistema: no modifica el esperado de ningún medio">externo</BaseBadge>
+            </span>
+          </template>
+          <template #monto="{ row }">
+            <span class="font-mono-data font-bold" :class="row.tipo === 'Ingreso' ? 'text-emerald-600' : 'text-rose-600'">
+              {{ row.tipo === 'Ingreso' ? '+' : '-' }} {{ fc(row.monto) }}
+            </span>
+          </template>
+        </BaseTable>
+        <EmptyState v-else icon="fa-receipt" title="Sin movimientos" text="No hay movimientos registrados." />
+      </div>
     </BaseCard>
 
     <!-- Modal Detalle de Sesión -->
@@ -387,6 +400,57 @@
           <div class="bg-brand-50 dark:bg-brand-900/20 rounded-xl p-3 text-center">
             <div class="text-[10px] uppercase tracking-wider text-brand-600 font-semibold">Saldo Final</div>
             <div class="font-mono-data font-bold text-lg text-brand-700">{{ fc(sesionSeleccionada.saldo_final) }}</div>
+          </div>
+        </div>
+
+        <!-- Arqueo por caja: esperado vs real (siempre visible) -->
+        <div class="space-y-2">
+          <h4 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <i class="fa-solid fa-scale-balanced text-brand-600"></i>Importes por caja (esperado vs real)
+          </h4>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead class="bg-slate-100 dark:bg-slate-800">
+                <tr>
+                  <th class="px-3 py-2 text-left font-semibold text-slate-600 dark:text-slate-300">Medio</th>
+                  <th class="px-3 py-2 text-right font-semibold text-slate-600 dark:text-slate-300">Esperado</th>
+                  <th class="px-3 py-2 text-right font-semibold text-slate-600 dark:text-slate-300">Real</th>
+                  <th class="px-3 py-2 text-right font-semibold text-slate-600 dark:text-slate-300">Diferencia</th>
+                  <th class="px-3 py-2 text-center font-semibold text-slate-600 dark:text-slate-300">Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="c in cierresMetodoResumen" :key="c.medio_pago" class="border-b border-slate-100 dark:border-slate-800">
+                  <td class="px-3 py-2 capitalize font-medium text-slate-700 dark:text-slate-200">{{ MEDIO_LABELS[c.medio_pago] || c.medio_pago }}</td>
+                  <td class="px-3 py-2 text-right font-mono-data text-slate-700 dark:text-slate-200">{{ fc(c.esperado) }}</td>
+                  <td class="px-3 py-2 text-right font-mono-data font-semibold" :class="c.monto_real == null ? 'text-slate-400' : (Math.abs(c.diferencia || 0) < 0.01 ? 'text-emerald-600' : 'text-amber-600')">
+                    {{ c.monto_real == null ? '—' : fc(c.monto_real) }}
+                  </td>
+                  <td class="px-3 py-2 text-right font-mono-data font-semibold" :class="(c.diferencia || 0) === 0 ? 'text-slate-500' : ((c.diferencia || 0) > 0 ? 'text-emerald-600' : 'text-rose-600')">
+                    {{ c.monto_real == null ? '—' : ((c.diferencia > 0 ? '+' : '') + fc(c.diferencia || 0)) }}
+                  </td>
+                  <td class="px-3 py-2 text-center">
+                    <BaseBadge v-if="c.monto_real == null" variant="warning" size="xs">Sin contar</BaseBadge>
+                    <BaseBadge v-else-if="Math.abs(c.diferencia || 0) < 0.01" variant="success" size="xs">OK</BaseBadge>
+                    <BaseBadge v-else variant="danger" size="xs">Discrepancia</BaseBadge>
+                  </td>
+                </tr>
+                <tr v-if="!cierresMetodoResumen.length">
+                  <td colspan="5" class="px-3 py-4 text-center text-slate-400">Sin datos de arqueo cargados.</td>
+                </tr>
+              </tbody>
+              <tfoot v-if="cierresMetodoResumen.length">
+                <tr class="bg-slate-50 dark:bg-slate-800/50 font-bold">
+                  <td class="px-3 py-2 text-slate-700 dark:text-slate-200">Totales</td>
+                  <td class="px-3 py-2 text-right font-mono-data text-slate-900 dark:text-white">{{ fc(totalesResumen.esperado) }}</td>
+                  <td class="px-3 py-2 text-right font-mono-data text-slate-900 dark:text-white">{{ fc(totalesResumen.real) }}</td>
+                  <td class="px-3 py-2 text-right font-mono-data" :class="totalesResumen.diferencia === 0 ? 'text-slate-500' : (totalesResumen.diferencia > 0 ? 'text-emerald-600' : 'text-rose-600')">
+                    {{ (totalesResumen.diferencia > 0 ? '+' : '') + fc(totalesResumen.diferencia) }}
+                  </td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
           </div>
         </div>
 
@@ -930,11 +994,55 @@
       :medio-por-defecto="contadorContexto?.metodo?.valor || 'transferencia'"
       @aplicar="aplicarConteoTransferencias"
     />
+    <!-- Modal Ajustes de Caja -->
+    <BaseModal v-model="showAjustesCaja" title="Ajustes del tab Caja" size="md">
+      <div class="space-y-4">
+        <div v-if="cargandoAjustes" class="flex items-center justify-center py-8 text-slate-400">
+          <i class="fa-solid fa-circle-notch animate-spin mr-2"></i> Cargando configuración...
+        </div>
+        <template v-else>
+          <div class="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex-1">
+                <div class="text-sm font-bold text-slate-900 dark:text-white">Cierre automático por cambio de día</div>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                  Si está activo, al llegar la hora de cambio de día la caja del día anterior queda cerrada automáticamente y marcada para conciliar. Si lo desactivás, la caja se mantiene abierta hasta que la cierres a mano.
+                </p>
+              </div>
+              <label class="inline-flex items-center cursor-pointer shrink-0">
+                <input type="checkbox" v-model="ajustesCaja.caja_cierre_automatico" class="sr-only peer" :disabled="guardandoAjustes" />
+                <div class="relative w-11 h-6 bg-slate-300 dark:bg-slate-600 rounded-full peer peer-checked:bg-brand-500 transition">
+                  <div class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition peer-checked:translate-x-5"></div>
+                </div>
+              </label>
+            </div>
+          </div>
+          <div class="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4">
+            <label class="text-sm font-bold text-slate-900 dark:text-white block mb-1">Hora de cambio de día</label>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400 mb-2">
+              Hora local (AR) a la que arranca la jornada comercial. Default 06:00.
+            </p>
+            <BaseSelect
+              v-model.number="ajustesCaja.caja_cierre_automatico_hora"
+              :options="horasCambioDia"
+              :disabled="!ajustesCaja.caja_cierre_automatico || guardandoAjustes"
+            />
+          </div>
+          <div class="flex gap-2 pt-2">
+            <BaseButton variant="secondary" class="flex-1" :disabled="guardandoAjustes" @click="showAjustesCaja = false">Cancelar</BaseButton>
+            <BaseButton variant="primary" class="flex-1" :loading="guardandoAjustes" :disabled="guardandoAjustes" @click="guardarAjustesCaja">
+              <i class="fa-solid fa-check"></i> Guardar
+            </BaseButton>
+          </div>
+        </template>
+      </div>
+    </BaseModal>
+
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toasts'
 import { useCajaStore } from '@/stores/caja'
@@ -980,6 +1088,59 @@ const saving = ref(false)
 const guardandoRetiroActual = ref(false)
 
 const showNuevoMovimiento = ref(false)
+
+// Paneles colapsables (persisten en localStorage)
+const panelHistorial = ref(JSON.parse(localStorage.getItem('apex-caja-panel-historial') ?? 'true'))
+const panelMovimientos = ref(JSON.parse(localStorage.getItem('apex-caja-panel-movimientos') ?? 'true'))
+watch(panelHistorial, v => localStorage.setItem('apex-caja-panel-historial', JSON.stringify(v)))
+watch(panelMovimientos, v => localStorage.setItem('apex-caja-panel-movimientos', JSON.stringify(v)))
+
+// Ajustes del tab Caja (auto-cierre, hora cambio de día)
+const showAjustesCaja = ref(false)
+const cargandoAjustes = ref(false)
+const guardandoAjustes = ref(false)
+const ajustesCaja = reactive({ caja_cierre_automatico: true, caja_cierre_automatico_hora: 6 })
+const horasCambioDia = Array.from({ length: 24 }, (_, h) => ({ value: h, label: `${String(h).padStart(2, '0')}:00` }))
+
+async function abrirAjustesCaja() {
+  showAjustesCaja.value = true
+  cargandoAjustes.value = true
+  try {
+    const data = await api.get('/api/caja/config')
+    ajustesCaja.caja_cierre_automatico = !!data?.caja_cierre_automatico
+    ajustesCaja.caja_cierre_automatico_hora = Number(data?.caja_cierre_automatico_hora ?? 6)
+  } catch (e) {
+    toast.error('Error al cargar los ajustes de caja')
+  } finally {
+    cargandoAjustes.value = false
+  }
+}
+
+async function guardarAjustesCaja() {
+  guardandoAjustes.value = true
+  try {
+    await api.put('/api/caja/config', {
+      caja_cierre_automatico: ajustesCaja.caja_cierre_automatico,
+      caja_cierre_automatico_hora: ajustesCaja.caja_cierre_automatico_hora,
+    })
+    toast.success('Ajustes guardados')
+    showAjustesCaja.value = false
+    await cajaStore.cargarEstado?.()
+  } catch (e) {
+    toast.error('Error al guardar: ' + (e?.response?.data?.detail || e?.message || ''))
+  } finally {
+    guardandoAjustes.value = false
+  }
+}
+
+// Resumen de arqueo por caja (esperado vs real) para el modal de detalle de sesión
+const cierresMetodoResumen = computed(() => sesionSeleccionada.value?.cierres_metodo || [])
+const totalesResumen = computed(() => {
+  const arr = cierresMetodoResumen.value
+  const esperado = arr.reduce((s, c) => s + (Number(c.esperado) || 0), 0)
+  const real = arr.reduce((s, c) => s + (c.monto_real != null ? Number(c.monto_real) : 0), 0)
+  return { esperado, real, diferencia: real - esperado }
+})
 const showCierreModal = ref(false)
 const showAperturaModal = ref(false)
 const cierreComentario = ref('')

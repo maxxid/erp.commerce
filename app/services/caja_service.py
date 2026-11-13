@@ -151,22 +151,36 @@ def caja_abierta(db: Session, sucursal_id: int = 1) -> bool:
         # Cierre total: la caja quedó cerrada
         if m.tipo == "cierre" and not m.medio_pago:
             return False
-        # Apertura: caja abierta solo si corresponde al día actual
+        # Apertura: si el cierre automático está activo, la caja solo sigue
+        # abierta si la apertura corresponde al día comercial actual.
+        # Si está desactivado, una apertura sin cierre total posterior se
+        # considera abierta aunque sea de un día anterior.
         if _es_apertura_de_caja(m):
+            try:
+                auto = config_service.get_caja_cierre_automatico(db)
+            except Exception:
+                auto = True
+            if not auto:
+                return True
             return _es_apertura_del_dia_actual(db, m.created_at)
     # Sin aperturas ni cierres registrados: caja cerrada
     return False
 
 
-def cerrar_sesion_anterior_automaticamente(db: Session, sucursal_id: int = 1) -> bool:
+def cerrar_sesion_anterior_automaticamente(db: Session, sucursal_id: int = 1, force: bool = False) -> bool:
     """Registra un cierre total automático si la última apertura quedó abierta
     un día anterior (zona Argentina). Devuelve True si se registró el cierre.
 
     Mantiene el historial consistente: cada jornada queda cerrada aunque el
     operador se haya olvidado de hacer el cierre manual al salir.
+
+    Con ``force=True`` ignora la configuración y cierra igual: lo usa ``abrir_caja``
+    para no dejar sesiones huérfanas al arrancar una jornada nueva. El cierre queda
+    marcado con ``fue_automatico=True`` para que aparezca en el historial con el
+    botón de conciliación.
     """
     # Verificar si el cierre automático está habilitado en configuración
-    if not config_service.get_caja_cierre_automatico(db):
+    if not force and not config_service.get_caja_cierre_automatico(db):
         return False
     
     movimientos = (
@@ -234,8 +248,11 @@ def abrir_caja(
     Raises:
         ValueError: Si ya hay una caja abierta.
     """
-    # Auto-cierre por cambio de día antes de abrir una nueva jornada
-    cerrar_sesion_anterior_automaticamente(db, sucursal_id)
+    # Auto-cierre por cambio de día antes de abrir una nueva jornada.
+    # Se fuerza aunque la config esté desactivada: no podemos dejar dos
+    # aperturas sin cierre en medio. Queda marcado como "automático" en
+    # el historial para que aparezca con el botón de conciliación.
+    cerrar_sesion_anterior_automaticamente(db, sucursal_id, force=True)
     if caja_abierta(db, sucursal_id):
         raise ValueError("Ya hay una caja abierta. Ciérrela primero.")
 
